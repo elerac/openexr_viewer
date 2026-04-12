@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenEXR Viewer</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+      <div id="error-banner" class="error-banner hidden"></div>
+
+      <main class="main-layout">
+        <div class="right-stack">
+          <aside class="histogram-panel">
+            <div class="histogram-heading">
+              <h2>Histogram</h2>
+              <div class="histogram-controls">
+                <div class="histogram-control">
+                  <label for="histogram-x-axis-select">X</label>
+                  <select id="histogram-x-axis-select">
+                    <option value="ev">EV</option>
+                    <option value="linear">Linear</option>
+                  </select>
+                </div>
+                <div class="histogram-control">
+                  <label for="histogram-y-axis-select">Y</label>
+                  <select id="histogram-y-axis-select">
+                    <option value="sqrt">Sqrt</option>
+                    <option value="log">Log</option>
+                    <option value="linear">Linear</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <svg id="histogram-svg" class="histogram-svg" aria-label="Display image histogram"></svg>
+          </aside>
+
+          <aside class="side-panel">
+            <h1>Inspector</h1>
+            <div class="control-block">
+              <button id="reset-view-button" type="button">Reset</button>
+            </div>
+            <div class="control-block">
+              <label for="exposure-slider">Exposure (EV)</label>
+              <div class="exposure-input-row">
+                <input id="exposure-slider" type="range" min="-10" max="10" step="0.1" value="0" />
+                <input id="exposure-value" type="number" min="-10" max="10" step="0.1" value="0.0" />
+              </div>
+            </div>
+
+            <section class="readout-block">
+              <h2>View</h2>
+              <dl>
+                <dt>Zoom</dt>
+                <dd id="zoom-readout">-</dd>
+                <dt>Pan</dt>
+                <dd id="pan-readout">-</dd>
+              </dl>
+            </section>
+
+            <section id="probe-panel" class="readout-block">
+              <h2>Probe</h2>
+              <p id="probe-mode">Hover</p>
+              <p id="probe-coords">(x: -, y: -)</p>
+              <div id="probe-color-preview" class="probe-color-preview is-empty">
+                <span id="probe-color-swatch" class="probe-color-swatch" aria-hidden="true"></span>
+                <div class="probe-color-values" aria-label="Probe RGB values">
+                  <div class="probe-color-row">
+                    <span class="probe-color-channel">R:</span>
+                    <span id="probe-color-r-value" class="probe-color-number"></span>
+                  </div>
+                  <div class="probe-color-row">
+                    <span class="probe-color-channel">G:</span>
+                    <span id="probe-color-g-value" class="probe-color-number"></span>
+                  </div>
+                  <div class="probe-color-row">
+                    <span class="probe-color-channel">B:</span>
+                    <span id="probe-color-b-value" class="probe-color-number"></span>
+                  </div>
+                </div>
+              </div>
+              <div id="probe-values" class="probe-values"></div>
+            </section>
+          </aside>
+        </div>
+
+        <section id="viewer-container" class="viewer-container">
+          <canvas id="gl-canvas"></canvas>
+          <canvas id="overlay-canvas"></canvas>
+          <div id="drop-overlay" class="drop-overlay hidden">Drop .exr file(s) to load</div>
+          <div id="loading-overlay" class="loading-overlay hidden" role="status" aria-live="polite">
+            <div class="loading-spinner" aria-hidden="true"></div>
+            <span>Loading image...</span>
+          </div>
+        </section>
+
+        <aside class="image-panel">
+          <h2>Image</h2>
+          <section class="panel-section">
+            <p class="panel-section-label">Load</p>
+            <div class="button-stack">
+              <button id="open-file-button" type="button">Open</button>
+              <button id="reload-all-opened-images-button" type="button">Reload All</button>
+              <button id="reload-opened-image-button" type="button">Reload</button>
+              <button id="close-opened-image-button" type="button">Close</button>
+              <button id="close-all-opened-images-button" type="button">Close All</button>
+            </div>
+            <input id="file-input" type="file" accept=".exr,image/exr" hidden />
+          </section>
+          <div class="control-block">
+            <label for="opened-images-select">Opened Images</label>
+            <select id="opened-images-select" multiple></select>
+            <p class="control-hint">Drag filenames to reorder sessions.</p>
+          </div>
+
+          <div id="layer-control" class="control-block hidden">
+            <label for="layer-select">Layer</label>
+            <select id="layer-select" multiple></select>
+          </div>
+
+          <div class="control-block">
+            <label for="rgb-group-select">Channel</label>
+            <select id="rgb-group-select" multiple></select>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

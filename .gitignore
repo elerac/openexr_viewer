@@ -1,0 +1,21 @@
+node_modules
+dist
+.vite
+.playwright
+playwright-report
+coverage
+output
+test-results
+.vscode
+.DS_Store
+
+# Python
+.venv
+pyproject.toml
+.python-version
+uv.lock
+*.py
+
+# OpenEXR files (ignore all .exr files except for public/cbox_rgb.exr)
+*.exr
+!public/cbox_rgb.exr
