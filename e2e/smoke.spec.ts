@@ -45,15 +45,10 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'false');
   await expect(colormapButton).toHaveAttribute('aria-expanded', 'false');
   await expect(colormapRangeControl).toBeHidden();
-  await expect(colormapAutoRangeButton).toBeDisabled();
-  await expect(colormapVminInput).toBeDisabled();
-  await expect(colormapVmaxInput).toBeDisabled();
-  await expect(colormapVmaxSlider).toBeDisabled();
-  const autoMin = Number(await colormapVminInput.inputValue());
-  const autoMax = Number(await colormapVmaxInput.inputValue());
-  expect(Number.isFinite(autoMin)).toBe(true);
-  expect(Number.isFinite(autoMax)).toBe(true);
-  expect(autoMax).toBeGreaterThan(autoMin);
+  await expect(colormapAutoRangeButton).toHaveCount(0);
+  await expect(colormapVminInput).toBeHidden();
+  await expect(colormapVmaxInput).toBeHidden();
+  await expect(colormapVmaxSlider).toBeHidden();
 
   const normalCanvasSamples = await sampleCanvasRgbGrid(page);
   expect(normalCanvasSamples.length).toBeGreaterThan(0);
@@ -68,6 +63,11 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(colormapVminInput).toBeEnabled();
   await expect(colormapVmaxInput).toBeEnabled();
   await expect(colormapVmaxSlider).toBeEnabled();
+  const autoMin = Number(await colormapVminInput.inputValue());
+  const autoMax = Number(await colormapVmaxInput.inputValue());
+  expect(Number.isFinite(autoMin)).toBe(true);
+  expect(Number.isFinite(autoMax)).toBe(true);
+  expect(autoMax).toBeGreaterThan(autoMin);
   await expect
     .poll(async () => {
       return await page.evaluate(() => {
