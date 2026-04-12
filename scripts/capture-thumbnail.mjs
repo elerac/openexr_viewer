@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 import { chromium } from '@playwright/test';
-import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -14,7 +14,6 @@ const host = '127.0.0.1';
 const port = Number(process.env.THUMBNAIL_PREVIEW_PORT ?? 4174);
 const appPath = normalizePath(process.env.PLAYWRIGHT_APP_PATH ?? '/openexr_viewer/');
 const appUrl = `http://${host}:${port}${appPath}`;
-const previewTimeoutMs = Number(process.env.THUMBNAIL_PREVIEW_TIMEOUT_MS ?? 30000);
 const viewerTimeoutMs = Number(process.env.THUMBNAIL_VIEWER_TIMEOUT_MS ?? 60000);
 const viewport = {
   width: Number(process.env.THUMBNAIL_WIDTH ?? 1440),
@@ -25,42 +24,18 @@ if (!existsSync(distIndex)) {
   throw new Error('dist/index.html was not found. Run `npm run build` before capturing the thumbnail.');
 }
 
-const builtHtml = readFileSync(distIndex, 'utf8');
-const previewEnv = { ...process.env };
-if (builtHtml.includes('/openexr_viewer/assets/')) {
-  previewEnv.GITHUB_PAGES = 'true';
-}
-
 mkdirSync(dirname(thumbnailPath), { recursive: true });
 
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const preview = spawn(
-  npmCommand,
-  ['run', 'preview', '--', '--host', host, '--port', String(port), '--strictPort'],
-  {
-    cwd: repoRoot,
-    env: previewEnv,
-    stdio: ['ignore', 'pipe', 'pipe']
-  }
-);
-
-let previewLog = '';
-let previewExit = null;
-
-preview.stdout.on('data', collectPreviewLog);
-preview.stderr.on('data', collectPreviewLog);
-preview.on('exit', (code, signal) => {
-  previewExit = { code, signal };
-});
+const server = createStaticServer();
 
 try {
+  await startServer(server);
   console.log(`Capturing thumbnail from ${appUrl}`);
-  await waitForPreview(appUrl);
   await captureThumbnail();
   const { size } = statSync(thumbnailPath);
   console.log(`Saved ${thumbnailPath} (${size} bytes)`);
 } finally {
-  await stopPreview();
+  await stopServer(server);
 }
 
 async function captureThumbnail() {
@@ -150,31 +125,6 @@ async function waitForViewerReady(page) {
   throw new Error(`Timed out waiting for the default EXR to render. Last state: ${JSON.stringify(lastState)}`);
 }
 
-async function waitForPreview(url) {
-  const deadline = Date.now() + previewTimeoutMs;
-  let lastError = 'preview server has not responded yet';
-
-  while (Date.now() < deadline) {
-    if (previewExit) {
-      throw new Error(`vite preview exited early (${formatPreviewExit()}).\n${previewLog}`);
-    }
-
-    try {
-      const response = await fetch(url);
-      if (response.ok) {
-        return;
-      }
-      lastError = `HTTP ${response.status} ${response.statusText}`;
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
-    }
-
-    await waitMs(250);
-  }
-
-  throw new Error(`Timed out waiting for vite preview at ${url}: ${lastError}\n${previewLog}`);
-}
-
 async function waitForNextPaint(page) {
   await page.evaluate(
     () =>
@@ -186,38 +136,129 @@ async function waitForNextPaint(page) {
   );
 }
 
-async function stopPreview() {
-  if (previewExit || preview.killed) {
-    return;
-  }
+function createStaticServer() {
+  return createServer((request, response) => {
+    if (!request.url) {
+      sendText(response, 400, 'Missing request URL');
+      return;
+    }
 
-  await new Promise((resolve) => {
-    const forceKill = setTimeout(() => {
-      preview.kill('SIGKILL');
-      resolve();
-    }, 5000);
+    const url = new URL(request.url, appUrl);
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      response.setHeader('Allow', 'GET, HEAD');
+      sendText(response, 405, 'Method not allowed');
+      return;
+    }
 
-    preview.once('exit', () => {
-      clearTimeout(forceKill);
-      resolve();
-    });
+    const filePath = resolveStaticPath(url.pathname);
+    if (!filePath) {
+      sendText(response, 403, `Forbidden: ${url.pathname}`);
+      return;
+    }
 
-    preview.kill('SIGTERM');
+    if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+      sendText(response, 404, `Not found: ${url.pathname}`);
+      return;
+    }
+
+    response.statusCode = 200;
+    response.setHeader('Content-Type', contentTypeFor(filePath));
+
+    if (request.method === 'HEAD') {
+      response.end();
+      return;
+    }
+
+    createReadStream(filePath).pipe(response);
   });
 }
 
-function collectPreviewLog(chunk) {
-  previewLog += chunk.toString();
-  if (previewLog.length > 8000) {
-    previewLog = previewLog.slice(-8000);
+function resolveStaticPath(pathname) {
+  const decodedPath = decodeURIComponent(pathname);
+  const pathWithinDist = toDistRelativePath(decodedPath);
+  const normalizedRelativePath = pathWithinDist === '' ? 'index.html' : pathWithinDist;
+  const filePath = resolve(distDir, normalizedRelativePath);
+
+  if (filePath !== distDir && !filePath.startsWith(`${distDir}${sep}`)) {
+    return null;
   }
+
+  return filePath;
 }
 
-function formatPreviewExit() {
-  if (!previewExit) {
-    return 'still running';
+function toDistRelativePath(pathname) {
+  if (pathname === appPath.slice(0, -1) || pathname === appPath) {
+    return 'index.html';
   }
-  return previewExit.signal ? `signal ${previewExit.signal}` : `code ${previewExit.code}`;
+
+  if (pathname.startsWith(appPath)) {
+    return pathname.slice(appPath.length);
+  }
+
+  return pathname.replace(/^\/+/, '');
+}
+
+function startServer(server) {
+  return new Promise((resolve, reject) => {
+    const onError = (error) => {
+      server.off('listening', onListening);
+      reject(error);
+    };
+    const onListening = () => {
+      server.off('error', onError);
+      resolve();
+    };
+
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(port, host);
+  });
+}
+
+async function stopServer(server) {
+  server.closeAllConnections?.();
+
+  await new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error && error.code !== 'ERR_SERVER_NOT_RUNNING') {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+function sendText(response, statusCode, message) {
+  response.statusCode = statusCode;
+  response.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  response.end(message);
+}
+
+function contentTypeFor(filePath) {
+  switch (extname(filePath)) {
+    case '.html':
+      return 'text/html; charset=utf-8';
+    case '.js':
+      return 'text/javascript; charset=utf-8';
+    case '.css':
+      return 'text/css; charset=utf-8';
+    case '.wasm':
+      return 'application/wasm';
+    case '.exr':
+      return 'image/aces';
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.png':
+      return 'image/png';
+    case '.svg':
+      return 'image/svg+xml';
+    case '.json':
+      return 'application/json; charset=utf-8';
+    default:
+      return 'application/octet-stream';
+  }
 }
 
 function normalizePath(value) {
