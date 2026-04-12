@@ -106,7 +106,10 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'false');
   await expect(colormapButton).toHaveAttribute('aria-expanded', 'false');
   await expect(colormapRangeControl).toBeHidden();
-  await expect(colormapAutoRangeButton).toBeDisabled();
+  await expect(colormapAutoRangeButton).toHaveCount(0);
+  await expect(colormapVminInput).toBeHidden();
+  await expect(colormapVmaxInput).toBeHidden();
+  await expect(colormapVmaxSlider).toBeHidden();
 
   const zoomBeforeWheel = (await page.locator('#zoom-readout').innerText()).trim();
   await page.mouse.wheel(0, -500);
