@@ -38,8 +38,27 @@
 
           <aside class="side-panel">
             <h1>Inspector</h1>
-            <div class="control-block">
+            <div class="control-block inspector-button-row">
               <button id="reset-view-button" type="button">Reset</button>
+              <button id="colormap-toggle-button" type="button" aria-pressed="false" aria-controls="colormap-range-control" aria-expanded="false">Colormap</button>
+            </div>
+            <div id="colormap-range-control" class="control-block colormap-range-control hidden">
+              <div class="colormap-range-heading">
+                <span>Colormap Range</span>
+                <button id="colormap-auto-range-button" type="button">Auto Range</button>
+              </div>
+              <div id="colormap-range-slider" class="colormap-range-slider" aria-label="Colormap vmin and vmax">
+                <div class="colormap-range-track" aria-hidden="true"></div>
+                <div class="colormap-range-fill" aria-hidden="true"></div>
+                <input id="colormap-vmin-slider" class="colormap-range-thumb colormap-range-thumb-min" type="range" min="0" max="1" step="0.001" value="0" aria-label="Colormap vmin" />
+                <input id="colormap-vmax-slider" class="colormap-range-thumb colormap-range-thumb-max" type="range" min="0" max="1" step="0.001" value="1" aria-label="Colormap vmax" />
+              </div>
+              <div class="colormap-range-input-row">
+                <label for="colormap-vmin-input">vmin</label>
+                <input id="colormap-vmin-input" type="number" step="any" value="0" />
+                <label for="colormap-vmax-input">vmax</label>
+                <input id="colormap-vmax-input" type="number" step="any" value="1" />
+              </div>
             </div>
             <div class="control-block">
               <label for="exposure-slider">Exposure (EV)</label>

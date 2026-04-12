@@ -28,6 +28,9 @@ uniform vec2 uImageSize;
 uniform vec2 uPan;
 uniform float uZoom;
 uniform float uExposure;
+uniform bool uUseColormap;
+uniform float uColormapMin;
+uniform float uColormapMax;
 out vec4 outColor;
 
 vec3 linearToSrgb(vec3 linear) {
@@ -46,6 +49,21 @@ vec3 checker(vec2 screen) {
   return mix(vec3(0.09), vec3(0.12), tile);
 }
 
+vec3 redBlackGreenColormap(float value, float vmin, float vmax) {
+  if (vmax <= vmin) {
+    return vec3(0.0);
+  }
+
+  float midpoint = (vmin + vmax) * 0.5;
+  if (value <= midpoint) {
+    float t = clamp((value - vmin) / (midpoint - vmin), 0.0, 1.0);
+    return mix(vec3(1.0, 0.0, 0.0), vec3(0.0), t);
+  }
+
+  float t = clamp((value - midpoint) / (vmax - midpoint), 0.0, 1.0);
+  return mix(vec3(0.0), vec3(0.0, 1.0, 0.0), t);
+}
+
 void main() {
   vec2 screen = vec2(gl_FragCoord.x - 0.5, uViewport.y - gl_FragCoord.y - 0.5);
   vec2 imagePos = uPan + (screen - uViewport * 0.5) / uZoom;
@@ -57,6 +75,12 @@ void main() {
 
   ivec2 pixel = ivec2(floor(imagePos));
   vec3 linear = texelFetch(uTexture, pixel, 0).rgb;
+  if (uUseColormap) {
+    float luminance = dot(linear, vec3(0.2126, 0.7152, 0.0722));
+    outColor = vec4(redBlackGreenColormap(luminance, uColormapMin, uColormapMax), 1.0);
+    return;
+  }
+
   linear = max(linear * exp2(uExposure), vec3(0.0));
   vec3 srgb = linearToSrgb(linear);
 
@@ -70,6 +94,9 @@ interface Uniforms {
   pan: WebGLUniformLocation;
   zoom: WebGLUniformLocation;
   exposure: WebGLUniformLocation;
+  useColormap: WebGLUniformLocation;
+  colormapMin: WebGLUniformLocation;
+  colormapMax: WebGLUniformLocation;
 }
 
 export class WebGlExrRenderer {
@@ -120,12 +147,24 @@ export class WebGlExrRenderer {
     const pan = gl.getUniformLocation(this.program, 'uPan');
     const zoom = gl.getUniformLocation(this.program, 'uZoom');
     const exposure = gl.getUniformLocation(this.program, 'uExposure');
+    const useColormap = gl.getUniformLocation(this.program, 'uUseColormap');
+    const colormapMin = gl.getUniformLocation(this.program, 'uColormapMin');
+    const colormapMax = gl.getUniformLocation(this.program, 'uColormapMax');
 
-    if (!viewport || !imageSize || !pan || !zoom || !exposure) {
+    if (
+      !viewport ||
+      !imageSize ||
+      !pan ||
+      !zoom ||
+      !exposure ||
+      !useColormap ||
+      !colormapMin ||
+      !colormapMax
+    ) {
       throw new Error('Failed to resolve shader uniforms.');
     }
 
-    this.uniforms = { viewport, imageSize, pan, zoom, exposure };
+    this.uniforms = { viewport, imageSize, pan, zoom, exposure, useColormap, colormapMin, colormapMax };
 
     gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);
@@ -218,6 +257,9 @@ export class WebGlExrRenderer {
     gl.uniform2f(this.uniforms.pan, state.panX, state.panY);
     gl.uniform1f(this.uniforms.zoom, state.zoom);
     gl.uniform1f(this.uniforms.exposure, state.exposureEv);
+    gl.uniform1i(this.uniforms.useColormap, state.visualizationMode === 'redBlackGreen' ? 1 : 0);
+    gl.uniform1f(this.uniforms.colormapMin, state.colormapRange?.min ?? 0);
+    gl.uniform1f(this.uniforms.colormapMax, state.colormapRange?.max ?? 0);
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }

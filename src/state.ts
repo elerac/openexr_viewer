@@ -2,6 +2,7 @@ import {
   DecodedExrImage,
   DecodedLayer,
   DisplayChannelMapping,
+  DisplayLuminanceRange,
   ImagePixel,
   PixelSample,
   ViewerState,
@@ -61,6 +62,9 @@ const HISTOGRAM_NORMALIZATION_PERCENTILE = 0.995;
 export function createInitialState(): ViewerState {
   return {
     exposureEv: 0,
+    visualizationMode: 'rgb',
+    colormapRange: null,
+    colormapRangeMode: 'alwaysAuto',
     zoom: 1,
     panX: 0,
     panY: 0,
@@ -309,6 +313,39 @@ export function buildDisplayTexture(
   }
 
   return out;
+}
+
+export function computeDisplayTextureLuminanceRange(
+  displayTexture: Float32Array
+): DisplayLuminanceRange | null {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  let finiteCount = 0;
+
+  for (let i = 0; i < displayTexture.length; i += 4) {
+    const r = displayTexture[i + 0];
+    const g = displayTexture[i + 1];
+    const b = displayTexture[i + 2];
+    const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+    if (!Number.isFinite(luminance)) {
+      continue;
+    }
+
+    finiteCount += 1;
+    if (luminance < min) {
+      min = luminance;
+    }
+    if (luminance > max) {
+      max = luminance;
+    }
+  }
+
+  if (finiteCount === 0) {
+    return null;
+  }
+
+  return { min, max };
 }
 
 export function sanitizeDisplayValue(value: number): number {

@@ -21,6 +21,11 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - Duplicate filenames are disambiguated as `name.exr (2)`, `name.exr (3)`, etc.
 - Visible loading indicator while large EXR files are decoding/loading.
 - Exposure control: slider + numeric input (`-10` to `+10` EV, step `0.1`).
+- Colormap toggle:
+  - Maps current display luminance over the full active image from red at `vmin`, through black at the midpoint, to green at `vmax`.
+  - `vmin`/`vmax` can be adjusted with one dual-handle slider or numeric inputs.
+  - `Auto Range` has two modes: highlighted always-auto mode follows each image/layer/channel, while one-time/manual mode preserves the current min/max across targets.
+  - Leaves histogram and raw numeric probe values unchanged.
 - Nearest-neighbor rendering at all zoom levels (no interpolation).
 - Zoom range: `0.125x` to `512x`, wheel zoom anchored to cursor.
 - Pan with left mouse drag.
@@ -127,7 +132,7 @@ npm run test:e2e
 
 ## Implementation Notes
 
-- Display path: `linear * 2^EV`, then sRGB encode for screen.
+- Display path: normal RGB uses `linear * 2^EV`, then sRGB encode for screen; colormap mode maps raw display luminance directly to red/black/green.
 - Texture sampling uses `NEAREST` for both `MIN_FILTER` and `MAG_FILTER`.
 - EXR WASM is initialized through a local adapter module backed by a vendored wasm loader, avoiding app-level deep imports into `exrs` internals.
 - Performance path for large images/channel sets:

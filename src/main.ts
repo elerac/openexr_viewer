@@ -7,6 +7,7 @@ import {
   buildDisplayTexture,
   buildViewerStateForLayer,
   buildSessionDisplayName,
+  computeDisplayTextureLuminanceRange,
   createInitialState,
   extractRgbChannelGroups,
   findSelectedRgbGroup,
@@ -23,9 +24,11 @@ import { ViewerUi } from './ui';
 import {
   DecodedExrImage,
   DecodedLayer,
+  DisplayLuminanceRange,
   ImagePixel,
   OpenedImageSession,
   SessionSource,
+  VisualizationMode,
   ViewerState,
   ZERO_CHANNEL
 } from './types';
@@ -106,6 +109,15 @@ async function bootstrap(): Promise<void> {
     onRgbGroupChange: (mapping) => {
       void applyRgbViewChangeWithLoading(mapping);
     },
+    onColormapToggle: () => {
+      toggleColormapMode();
+    },
+    onColormapRangeChange: (range) => {
+      setColormapRange(range);
+    },
+    onColormapAutoRange: () => {
+      applyAutoColormapRange();
+    },
     onResetView: () => {
       resetAllState();
     }
@@ -166,6 +178,10 @@ async function bootstrap(): Promise<void> {
       ui.setExposure(state.exposureEv);
     }
 
+    if (sessionChanged || state.visualizationMode !== previous.visualizationMode) {
+      ui.setColormapEnabled(state.visualizationMode === 'redBlackGreen');
+    }
+
     if (
       sessionChanged ||
       state.zoom !== previous.zoom ||
@@ -207,7 +223,8 @@ async function bootstrap(): Promise<void> {
         }
 
         const textureKey = buildTextureRevisionKey(state);
-        if (textureKey !== activeSession.textureRevisionKey || !activeSession.displayTexture) {
+        const textureDirty = textureKey !== activeSession.textureRevisionKey || !activeSession.displayTexture;
+        if (textureDirty) {
           activeSession.displayTexture = buildDisplayTexture(
             layer,
             activeImage.width,
@@ -217,14 +234,45 @@ async function bootstrap(): Promise<void> {
             state.displayB,
             activeSession.displayTexture ?? undefined
           );
+          activeSession.displayLuminanceRange = computeDisplayTextureLuminanceRange(
+            activeSession.displayTexture
+          );
           activeSession.textureRevisionKey = textureKey;
+        }
+
+        if (
+          textureDirty &&
+          state.colormapRangeMode === 'alwaysAuto' &&
+          !sameDisplayLuminanceRange(state.colormapRange, activeSession.displayLuminanceRange)
+        ) {
+          store.setState({
+            colormapRange: cloneDisplayLuminanceRange(activeSession.displayLuminanceRange)
+          });
+          return;
+        }
+
+        if (
+          sessionChanged ||
+          state.colormapRange !== previous.colormapRange ||
+          state.colormapRangeMode !== previous.colormapRangeMode ||
+          textureDirty
+        ) {
+          ui.setColormapRange(
+            state.colormapRange,
+            activeSession.displayLuminanceRange,
+            state.colormapRangeMode === 'alwaysAuto'
+          );
         }
 
         const needsUpload =
           uploadedSessionId !== activeSession.id || uploadedTextureRevisionKey !== activeSession.textureRevisionKey;
 
         if (needsUpload && activeSession.displayTexture) {
-          renderer.setDisplayTexture(activeImage.width, activeImage.height, activeSession.displayTexture);
+          renderer.setDisplayTexture(
+            activeImage.width,
+            activeImage.height,
+            activeSession.displayTexture
+          );
           uploadedSessionId = activeSession.id;
           uploadedTextureRevisionKey = activeSession.textureRevisionKey;
         }
@@ -240,6 +288,9 @@ async function bootstrap(): Promise<void> {
           state.displayR !== previous.displayR ||
           state.displayG !== previous.displayG ||
           state.displayB !== previous.displayB ||
+          state.visualizationMode !== previous.visualizationMode ||
+          state.colormapRange !== previous.colormapRange ||
+          state.colormapRangeMode !== previous.colormapRangeMode ||
           state.lockedPixel !== previous.lockedPixel ||
           state.hoveredPixel !== previous.hoveredPixel;
 
@@ -255,7 +306,9 @@ async function bootstrap(): Promise<void> {
               displayG: state.displayG,
               displayB: state.displayB
             },
-            state.exposureEv
+            state.exposureEv,
+            state.visualizationMode,
+            state.colormapRange
           );
         }
       } else {
@@ -266,11 +319,14 @@ async function bootstrap(): Promise<void> {
           displayG: ZERO_CHANNEL,
           displayB: ZERO_CHANNEL
         });
+        ui.setColormapRange(null, null);
         ui.setProbeReadout('Hover', null, null);
         ui.clearHistogram();
       }
     } else {
       invalidateHistogramCache();
+      ui.setColormapEnabled(false);
+      ui.setColormapRange(null, null);
       ui.setProbeReadout('Hover', null, null);
       ui.clearHistogram();
     }
@@ -286,7 +342,10 @@ async function bootstrap(): Promise<void> {
       state.activeLayer !== previous.activeLayer ||
       state.displayR !== previous.displayR ||
       state.displayG !== previous.displayG ||
-      state.displayB !== previous.displayB;
+      state.displayB !== previous.displayB ||
+      state.visualizationMode !== previous.visualizationMode ||
+      state.colormapRange !== previous.colormapRange ||
+      state.colormapRangeMode !== previous.colormapRangeMode;
 
     if (shouldRender) {
       renderer.render(state);
@@ -425,6 +484,9 @@ async function bootstrap(): Promise<void> {
     const sessionState = buildViewerStateForLayer(
       {
         exposureEv: 0,
+        visualizationMode: 'rgb',
+        colormapRange: null,
+        colormapRangeMode: 'alwaysAuto',
         activeLayer: 0,
         displayR: ZERO_CHANNEL,
         displayG: ZERO_CHANNEL,
@@ -447,7 +509,8 @@ async function bootstrap(): Promise<void> {
       decoded,
       state: sessionState,
       textureRevisionKey: '',
-      displayTexture: null
+      displayTexture: null,
+      displayLuminanceRange: null
     };
 
     sessions = [...sessions, session];
@@ -529,7 +592,8 @@ async function bootstrap(): Promise<void> {
         decoded,
         state: nextState,
         textureRevisionKey: '',
-        displayTexture: null
+        displayTexture: null,
+        displayLuminanceRange: null
       };
 
       sessions = sessions.map((current) => (current.id === sessionId ? reloadedSession : current));
@@ -585,6 +649,55 @@ async function bootstrap(): Promise<void> {
         ui.setRgbViewLoading(false);
       }
     }
+  }
+
+  function toggleColormapMode(): void {
+    if (!getActiveSession()) {
+      return;
+    }
+
+    const currentMode = store.getState().visualizationMode;
+    store.setState({
+      visualizationMode: currentMode === 'redBlackGreen' ? 'rgb' : 'redBlackGreen'
+    });
+  }
+
+  function setColormapRange(range: DisplayLuminanceRange): void {
+    if (!getActiveSession() || !Number.isFinite(range.min) || !Number.isFinite(range.max)) {
+      return;
+    }
+
+    const nextRange = range.min <= range.max
+      ? { min: range.min, max: range.max }
+      : { min: range.max, max: range.min };
+
+    const currentState = store.getState();
+    if (
+      currentState.colormapRangeMode === 'oneTime' &&
+      sameDisplayLuminanceRange(currentState.colormapRange, nextRange)
+    ) {
+      return;
+    }
+
+    store.setState({
+      colormapRange: nextRange,
+      colormapRangeMode: 'oneTime'
+    });
+  }
+
+  function applyAutoColormapRange(): void {
+    const activeSession = getActiveSession();
+    if (!activeSession) {
+      return;
+    }
+
+    const nextRange = cloneDisplayLuminanceRange(activeSession.displayLuminanceRange);
+    const currentMode = store.getState().colormapRangeMode;
+
+    store.setState({
+      colormapRange: nextRange,
+      colormapRangeMode: currentMode === 'alwaysAuto' ? 'oneTime' : 'alwaysAuto'
+    });
   }
 
   function setActiveLayer(layerIndex: number): void {
@@ -776,6 +889,9 @@ async function bootstrap(): Promise<void> {
     if (!activeSession) {
       store.setState({
         exposureEv: 0,
+        visualizationMode: 'rgb',
+        colormapRange: null,
+        colormapRangeMode: 'alwaysAuto',
         hoveredPixel: null,
         lockedPixel: null
       });
@@ -788,6 +904,9 @@ async function bootstrap(): Promise<void> {
     const nextState = buildViewerStateForLayer(
       {
         exposureEv: 0,
+        visualizationMode: 'rgb',
+        colormapRange: null,
+        colormapRangeMode: 'alwaysAuto',
         activeLayer: 0,
         displayR: ZERO_CHANNEL,
         displayG: ZERO_CHANNEL,
@@ -804,6 +923,7 @@ async function bootstrap(): Promise<void> {
 
     activeSession.state = nextState;
     activeSession.textureRevisionKey = '';
+    activeSession.displayLuminanceRange = null;
 
     store.setState(nextState);
   }
@@ -882,6 +1002,9 @@ async function bootstrap(): Promise<void> {
 
     store.setState({
       exposureEv: 0,
+      visualizationMode: 'rgb',
+      colormapRange: null,
+      colormapRangeMode: 'alwaysAuto',
       zoom: 1,
       panX: 0,
       panY: 0,
@@ -930,6 +1053,7 @@ async function bootstrap(): Promise<void> {
       }
 
       session.displayTexture = null;
+      session.displayLuminanceRange = null;
       session.textureRevisionKey = '';
     }
 
@@ -965,7 +1089,9 @@ async function bootstrap(): Promise<void> {
     lockedPixel: ImagePixel | null,
     hoveredPixel: ImagePixel | null,
     displayMapping: { displayR: string; displayG: string; displayB: string },
-    exposureEv: number
+    exposureEv: number,
+    visualizationMode: VisualizationMode,
+    colormapRange: DisplayLuminanceRange | null
   ): void {
     const targetPixel = resolveActiveProbePixel(lockedPixel, hoveredPixel);
     const mode = resolveProbeMode(lockedPixel);
@@ -976,7 +1102,14 @@ async function bootstrap(): Promise<void> {
     }
 
     const sample = samplePixelValues(layer, width, height, targetPixel);
-    ui.setProbeReadout(mode, sample, buildProbeColorPreview(sample, displayMapping, exposureEv));
+    ui.setProbeReadout(
+      mode,
+      sample,
+      buildProbeColorPreview(sample, displayMapping, exposureEv, {
+        mode: visualizationMode,
+        colormapRange
+      })
+    );
   }
 
   async function decodeExrFromSessionSource(source: SessionSource): Promise<DecodedExrImage> {
@@ -1053,6 +1186,9 @@ async function bootstrap(): Promise<void> {
         displayR: currentState.displayR,
         displayG: currentState.displayG,
         displayB: currentState.displayB,
+        visualizationMode: currentState.visualizationMode,
+        colormapRange: currentState.colormapRange,
+        colormapRangeMode: currentState.colormapRangeMode,
         hoveredPixel,
         lockedPixel
       },
@@ -1105,6 +1241,25 @@ async function bootstrap(): Promise<void> {
 
   function buildTextureRevisionKey(state: ViewerState): string {
     return `${state.activeLayer}:${state.displayR}:${state.displayG}:${state.displayB}`;
+  }
+
+  function cloneDisplayLuminanceRange(range: DisplayLuminanceRange | null): DisplayLuminanceRange | null {
+    return range ? { min: range.min, max: range.max } : null;
+  }
+
+  function sameDisplayLuminanceRange(
+    a: DisplayLuminanceRange | null,
+    b: DisplayLuminanceRange | null
+  ): boolean {
+    if (!a && !b) {
+      return true;
+    }
+
+    if (!a || !b) {
+      return false;
+    }
+
+    return a.min === b.min && a.max === b.max;
   }
 
   function waitForNextPaint(): Promise<void> {

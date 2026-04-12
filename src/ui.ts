@@ -1,4 +1,4 @@
-import { DisplayChannelMapping, PixelSample, ViewerState } from './types';
+import { DisplayChannelMapping, DisplayLuminanceRange, PixelSample, ViewerState } from './types';
 import { ProbeColorPreview } from './probe';
 import {
   computeHistogramRenderCeiling,
@@ -36,6 +36,9 @@ export interface UiCallbacks {
   onHistogramYAxisChange: (value: HistogramYAxisMode) => void;
   onLayerChange: (layerIndex: number) => void;
   onRgbGroupChange: (mapping: DisplayChannelMapping) => void;
+  onColormapToggle: () => void;
+  onColormapRangeChange: (range: DisplayLuminanceRange) => void;
+  onColormapAutoRange: () => void;
   onResetView: () => void;
 }
 
@@ -43,6 +46,14 @@ interface Elements {
   openFileButton: HTMLButtonElement;
   fileInput: HTMLInputElement;
   resetViewButton: HTMLButtonElement;
+  colormapToggleButton: HTMLButtonElement;
+  colormapRangeControl: HTMLDivElement;
+  colormapAutoRangeButton: HTMLButtonElement;
+  colormapRangeSlider: HTMLDivElement;
+  colormapVminSlider: HTMLInputElement;
+  colormapVmaxSlider: HTMLInputElement;
+  colormapVminInput: HTMLInputElement;
+  colormapVmaxInput: HTMLInputElement;
   exposureSlider: HTMLInputElement;
   exposureValue: HTMLInputElement;
   histogramXAxisSelect: HTMLSelectElement;
@@ -111,6 +122,9 @@ export class ViewerUi {
       }
     | null = null;
   private hasRgbGroups = false;
+  private currentColormapRange: DisplayLuminanceRange | null = null;
+  private currentAutoColormapRange: DisplayLuminanceRange | null = null;
+  private isColormapEnabled = false;
 
   constructor(private readonly callbacks: UiCallbacks) {
     this.elements = resolveElements();
@@ -128,6 +142,8 @@ export class ViewerUi {
     this.elements.reloadOpenedImageButton.disabled = true;
     this.elements.closeOpenedImageButton.disabled = true;
     this.elements.closeAllOpenedImagesButton.disabled = true;
+    this.elements.colormapToggleButton.disabled = true;
+    this.setColormapRangeControlsDisabled(true);
     this.elements.layerSelect.disabled = true;
     this.elements.rgbGroupSelect.disabled = true;
   }
@@ -164,6 +180,8 @@ export class ViewerUi {
     this.isLoading = loading;
     this.elements.openFileButton.disabled = loading;
     this.elements.resetViewButton.disabled = loading;
+    this.elements.colormapToggleButton.disabled = loading || this.openedImageCount === 0;
+    this.setColormapRangeControlsDisabled(loading || this.openedImageCount === 0);
     this.elements.exposureValue.disabled = loading;
     this.elements.openedImagesSelect.disabled = loading || this.openedImageCount === 0;
     this.elements.reloadAllOpenedImagesButton.disabled = loading || this.openedImageCount === 0;
@@ -199,6 +217,34 @@ export class ViewerUi {
   setExposure(exposureEv: number): void {
     this.elements.exposureSlider.value = exposureEv.toFixed(1);
     this.elements.exposureValue.value = exposureEv.toFixed(1);
+  }
+
+  setColormapEnabled(enabled: boolean): void {
+    this.isColormapEnabled = enabled;
+    this.elements.colormapToggleButton.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    this.elements.colormapToggleButton.setAttribute('aria-expanded', enabled ? 'true' : 'false');
+    this.elements.colormapRangeControl.classList.toggle('hidden', !enabled);
+    this.setColormapRangeControlsDisabled(this.isLoading || this.openedImageCount === 0 || !this.currentColormapRange);
+  }
+
+  setColormapRange(
+    range: DisplayLuminanceRange | null,
+    autoRange: DisplayLuminanceRange | null,
+    alwaysAuto = false
+  ): void {
+    this.currentColormapRange = cloneRange(range);
+    this.currentAutoColormapRange = cloneRange(autoRange);
+    this.elements.colormapAutoRangeButton.setAttribute('aria-pressed', alwaysAuto ? 'true' : 'false');
+
+    const controlsDisabled = this.isLoading || this.openedImageCount === 0 || !range;
+    this.setColormapRangeControlsDisabled(controlsDisabled);
+
+    if (!range) {
+      this.setColormapRangeValues({ min: 0, max: 1 }, { min: 0, max: 1 });
+      return;
+    }
+
+    this.setColormapRangeValues(range, autoRange ?? range);
   }
 
   setHistogramViewOptions(options: HistogramViewOptions): void {
@@ -266,6 +312,8 @@ export class ViewerUi {
     this.elements.reloadOpenedImageButton.disabled = this.isLoading || this.openedImageCount === 0;
     this.elements.closeOpenedImageButton.disabled = this.isLoading || this.openedImageCount === 0;
     this.elements.closeAllOpenedImagesButton.disabled = this.isLoading || this.openedImageCount === 0;
+    this.elements.colormapToggleButton.disabled = this.isLoading || this.openedImageCount === 0;
+    this.setColormapRangeControlsDisabled(this.isLoading || this.openedImageCount === 0 || !this.currentColormapRange);
   }
 
   setLayerOptions(items: Array<{ index: number; label: string }>, activeIndex: number): void {
@@ -785,6 +833,38 @@ export class ViewerUi {
       this.callbacks.onResetView();
     });
 
+    this.elements.colormapToggleButton.addEventListener('click', () => {
+      if (this.elements.colormapToggleButton.disabled) {
+        return;
+      }
+
+      this.callbacks.onColormapToggle();
+    });
+
+    this.elements.colormapAutoRangeButton.addEventListener('click', () => {
+      if (this.elements.colormapAutoRangeButton.disabled) {
+        return;
+      }
+
+      this.callbacks.onColormapAutoRange();
+    });
+
+    this.elements.colormapVminSlider.addEventListener('input', () => {
+      this.commitColormapMin(Number(this.elements.colormapVminSlider.value));
+    });
+
+    this.elements.colormapVmaxSlider.addEventListener('input', () => {
+      this.commitColormapMax(Number(this.elements.colormapVmaxSlider.value));
+    });
+
+    this.elements.colormapVminInput.addEventListener('change', () => {
+      this.commitColormapMin(Number(this.elements.colormapVminInput.value));
+    });
+
+    this.elements.colormapVmaxInput.addEventListener('change', () => {
+      this.commitColormapMax(Number(this.elements.colormapVmaxInput.value));
+    });
+
     this.elements.exposureSlider.addEventListener('input', (event) => {
       const target = event.currentTarget as HTMLInputElement;
       this.callbacks.onExposureChange(Number(target.value));
@@ -1063,6 +1143,70 @@ export class ViewerUi {
     select.size = Math.max(2, Math.min(maxRows, optionCount));
     select.classList.remove('single-row-listbox');
   }
+
+  private setColormapRangeControlsDisabled(disabled: boolean): void {
+    const effectiveDisabled = disabled || !this.isColormapEnabled;
+    this.elements.colormapAutoRangeButton.disabled = effectiveDisabled || !this.currentAutoColormapRange;
+    this.elements.colormapVminSlider.disabled = effectiveDisabled;
+    this.elements.colormapVmaxSlider.disabled = effectiveDisabled;
+    this.elements.colormapVminInput.disabled = effectiveDisabled;
+    this.elements.colormapVmaxInput.disabled = effectiveDisabled;
+  }
+
+  private setColormapRangeValues(range: DisplayLuminanceRange, autoRange: DisplayLuminanceRange): void {
+    const bounds = buildColormapSliderBounds(range, autoRange);
+    const step = formatColormapRangeStep(bounds.min, bounds.max);
+    const vmin = clamp(range.min, bounds.min, bounds.max);
+    const vmax = clamp(range.max, bounds.min, bounds.max);
+    const span = Math.max(Number.EPSILON, bounds.max - bounds.min);
+    const minPct = ((vmin - bounds.min) / span) * 100;
+    const maxPct = ((vmax - bounds.min) / span) * 100;
+
+    this.elements.colormapVminSlider.min = formatColormapInputValue(bounds.min);
+    this.elements.colormapVminSlider.max = formatColormapInputValue(bounds.max);
+    this.elements.colormapVminSlider.step = step;
+    this.elements.colormapVminSlider.value = formatColormapInputValue(vmin);
+
+    this.elements.colormapVmaxSlider.min = formatColormapInputValue(bounds.min);
+    this.elements.colormapVmaxSlider.max = formatColormapInputValue(bounds.max);
+    this.elements.colormapVmaxSlider.step = step;
+    this.elements.colormapVmaxSlider.value = formatColormapInputValue(vmax);
+    this.elements.colormapRangeSlider.style.setProperty('--colormap-vmin-pct', `${minPct}%`);
+    this.elements.colormapRangeSlider.style.setProperty('--colormap-vmax-pct', `${maxPct}%`);
+
+    if (document.activeElement !== this.elements.colormapVminInput) {
+      this.elements.colormapVminInput.value = formatColormapInputValue(range.min);
+    }
+    if (document.activeElement !== this.elements.colormapVmaxInput) {
+      this.elements.colormapVmaxInput.value = formatColormapInputValue(range.max);
+    }
+  }
+
+  private commitColormapMin(value: number): void {
+    const current = this.currentColormapRange;
+    if (!current || !Number.isFinite(value)) {
+      this.setColormapRangeValues(current ?? { min: 0, max: 1 }, this.currentAutoColormapRange ?? current ?? { min: 0, max: 1 });
+      return;
+    }
+
+    this.callbacks.onColormapRangeChange({
+      min: value,
+      max: Math.max(value, current.max)
+    });
+  }
+
+  private commitColormapMax(value: number): void {
+    const current = this.currentColormapRange;
+    if (!current || !Number.isFinite(value)) {
+      this.setColormapRangeValues(current ?? { min: 0, max: 1 }, this.currentAutoColormapRange ?? current ?? { min: 0, max: 1 });
+      return;
+    }
+
+    this.callbacks.onColormapRangeChange({
+      min: Math.min(current.min, value),
+      max: value
+    });
+  }
 }
 
 function resolveElements(): Elements {
@@ -1070,6 +1214,14 @@ function resolveElements(): Elements {
     openFileButton: requireElement('open-file-button', HTMLButtonElement),
     fileInput: requireElement('file-input', HTMLInputElement),
     resetViewButton: requireElement('reset-view-button', HTMLButtonElement),
+    colormapToggleButton: requireElement('colormap-toggle-button', HTMLButtonElement),
+    colormapRangeControl: requireElement('colormap-range-control', HTMLDivElement),
+    colormapAutoRangeButton: requireElement('colormap-auto-range-button', HTMLButtonElement),
+    colormapRangeSlider: requireElement('colormap-range-slider', HTMLDivElement),
+    colormapVminSlider: requireElement('colormap-vmin-slider', HTMLInputElement),
+    colormapVmaxSlider: requireElement('colormap-vmax-slider', HTMLInputElement),
+    colormapVminInput: requireElement('colormap-vmin-input', HTMLInputElement),
+    colormapVmaxInput: requireElement('colormap-vmax-input', HTMLInputElement),
     exposureSlider: requireElement('exposure-slider', HTMLInputElement),
     exposureValue: requireElement('exposure-value', HTMLInputElement),
     histogramXAxisSelect: requireElement('histogram-x-axis-select', HTMLSelectElement),
@@ -1132,6 +1284,47 @@ function toFiles(files: FileList | null | undefined): File[] {
     return [];
   }
   return Array.from(files);
+}
+
+function cloneRange(range: DisplayLuminanceRange | null): DisplayLuminanceRange | null {
+  return range ? { min: range.min, max: range.max } : null;
+}
+
+function buildColormapSliderBounds(
+  range: DisplayLuminanceRange,
+  autoRange: DisplayLuminanceRange
+): DisplayLuminanceRange {
+  let min = Math.min(range.min, range.max, autoRange.min, autoRange.max);
+  let max = Math.max(range.min, range.max, autoRange.min, autoRange.max);
+
+  if (max <= min) {
+    const margin = Math.max(1, Math.abs(min) * 0.1);
+    min -= margin;
+    max += margin;
+  }
+
+  return { min, max };
+}
+
+function formatColormapInputValue(value: number): string {
+  if (!Number.isFinite(value)) {
+    return '0';
+  }
+
+  return Number(value.toPrecision(7)).toString();
+}
+
+function formatColormapRangeStep(min: number, max: number): string {
+  const span = Math.abs(max - min);
+  if (!Number.isFinite(span) || span <= 0) {
+    return 'any';
+  }
+
+  return Number((span / 1000).toPrecision(4)).toString();
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 export function getListboxOptionIndexAtClientY(clientY: number, metrics: ListboxHitTestMetrics): number {

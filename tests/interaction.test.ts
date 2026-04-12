@@ -4,6 +4,9 @@ import { ViewerState } from '../src/types';
 
 const state: ViewerState = {
   exposureEv: 0,
+  visualizationMode: 'rgb',
+  colormapRange: null,
+  colormapRangeMode: 'alwaysAuto',
   zoom: 16,
   panX: 100,
   panY: 200,

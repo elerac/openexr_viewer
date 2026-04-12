@@ -1,5 +1,13 @@
 export const ZERO_CHANNEL = '__ZERO__';
 
+export type VisualizationMode = 'rgb' | 'redBlackGreen';
+export type ColormapRangeMode = 'alwaysAuto' | 'oneTime';
+
+export interface DisplayLuminanceRange {
+  min: number;
+  max: number;
+}
+
 export interface ImagePixel {
   ix: number;
   iy: number;
@@ -19,6 +27,9 @@ export interface DecodedExrImage {
 
 export interface ViewerState {
   exposureEv: number;
+  visualizationMode: VisualizationMode;
+  colormapRange: DisplayLuminanceRange | null;
+  colormapRangeMode: ColormapRangeMode;
   zoom: number;
   panX: number;
   panY: number;
@@ -61,6 +72,7 @@ export interface OpenedImageSession {
   state: ViewerState;
   textureRevisionKey: string;
   displayTexture: Float32Array | null;
+  displayLuminanceRange: DisplayLuminanceRange | null;
 }
 
 export interface ViewportInfo {

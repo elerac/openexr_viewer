@@ -5,7 +5,9 @@ import {
   buildDisplayTexture,
   buildViewerStateForLayer,
   buildSessionDisplayName,
+  computeDisplayTextureLuminanceRange,
   computeHistogramRenderCeiling,
+  createInitialState,
   extractRgbChannelGroups,
   findSelectedRgbGroup,
   persistActiveSessionState,
@@ -38,6 +40,12 @@ function createImage(layers: DecodedLayer[]): DecodedExrImage {
 }
 
 describe('state helpers', () => {
+  it('defaults to normal RGB visualization mode', () => {
+    expect(createInitialState().visualizationMode).toBe('rgb');
+    expect(createInitialState().colormapRange).toBeNull();
+    expect(createInitialState().colormapRangeMode).toBe('alwaysAuto');
+  });
+
   it('builds RGBA display texture from selected channels', () => {
     const layer = createLayer();
     const texture = buildDisplayTexture(layer, 2, 2, 'R', 'G', 'B');
@@ -77,6 +85,32 @@ describe('state helpers', () => {
 
     expect(Array.from(texture.slice(0, 12))).toEqual([0, 2, 3, 1, 0, 2, 3, 1, 0, 2, 3, 1]);
     expect(Array.from(texture.slice(12, 16))).toEqual([1, 2, 3, 1]);
+  });
+
+  it('computes finite luminance range from a display texture', () => {
+    const texture = new Float32Array([
+      1, 0, 0, 1,
+      0, 1, 0, 1,
+      0, 0, 1, 1
+    ]);
+
+    const range = computeDisplayTextureLuminanceRange(texture);
+
+    expect(range?.min).toBeCloseTo(0.0722, 6);
+    expect(range?.max).toBeCloseTo(0.7152, 6);
+  });
+
+  it('keeps collapsed luminance ranges explicit and returns null for empty textures', () => {
+    const flatTexture = new Float32Array([
+      0.25, 0.25, 0.25, 1,
+      0.25, 0.25, 0.25, 1
+    ]);
+
+    expect(computeDisplayTextureLuminanceRange(flatTexture)).toEqual({
+      min: 0.25,
+      max: 0.25
+    });
+    expect(computeDisplayTextureLuminanceRange(new Float32Array())).toBeNull();
   });
 
   it('returns exact raw channel values for a probed pixel', () => {
@@ -243,6 +277,9 @@ describe('state helpers', () => {
     const nextState = buildViewerStateForLayer(
       {
         exposureEv: 0,
+        visualizationMode: 'rgb',
+        colormapRange: null,
+        colormapRangeMode: 'alwaysAuto',
         zoom: 1,
         panX: 0,
         panY: 0,
@@ -269,6 +306,9 @@ describe('state helpers', () => {
     const nextState = buildViewerStateForLayer(
       {
         exposureEv: 0,
+        visualizationMode: 'rgb',
+        colormapRange: null,
+        colormapRangeMode: 'alwaysAuto',
         zoom: 1,
         panX: 0,
         panY: 0,
@@ -294,6 +334,9 @@ describe('state helpers', () => {
     const nextState = buildViewerStateForLayer(
       {
         exposureEv: 0,
+        visualizationMode: 'rgb',
+        colormapRange: null,
+        colormapRangeMode: 'alwaysAuto',
         zoom: 1,
         panX: 0,
         panY: 0,
@@ -433,6 +476,9 @@ describe('state helpers', () => {
   it('persists active session state without mutating others', () => {
     const baseState: ViewerState = {
       exposureEv: 0,
+      visualizationMode: 'rgb',
+      colormapRange: null,
+      colormapRangeMode: 'alwaysAuto',
       zoom: 1,
       panX: 0,
       panY: 0,

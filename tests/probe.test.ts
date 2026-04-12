@@ -69,4 +69,44 @@ describe('probe helpers', () => {
       bValue: '0'
     });
   });
+
+  it('maps probe swatch colors through the red-black-green colormap', () => {
+    const selection = {
+      displayR: 'Y',
+      displayG: 'Y',
+      displayB: 'Y'
+    };
+    const visualization = {
+      mode: 'redBlackGreen' as const,
+      colormapRange: { min: 0, max: 2 }
+    };
+
+    expect(
+      buildProbeColorPreview({ x: 0, y: 0, values: { Y: 0 } }, selection, 0, visualization)?.cssColor
+    ).toBe('rgb(255, 0, 0)');
+    expect(
+      buildProbeColorPreview({ x: 0, y: 0, values: { Y: 1 } }, selection, 0, visualization)?.cssColor
+    ).toBe('rgb(0, 0, 0)');
+    expect(
+      buildProbeColorPreview({ x: 0, y: 0, values: { Y: 2 } }, selection, 0, visualization)?.cssColor
+    ).toBe('rgb(0, 255, 0)');
+  });
+
+  it('renders collapsed colormap probe ranges as black', () => {
+    const preview = buildProbeColorPreview(
+      { x: 0, y: 0, values: { Y: 1 } },
+      {
+        displayR: 'Y',
+        displayG: 'Y',
+        displayB: 'Y'
+      },
+      0,
+      {
+        mode: 'redBlackGreen',
+        colormapRange: { min: 1, max: 1 }
+      }
+    );
+
+    expect(preview?.cssColor).toBe('rgb(0, 0, 0)');
+  });
 });

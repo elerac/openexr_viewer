@@ -1,10 +1,22 @@
-import { DisplayChannelMapping, ImagePixel, PixelSample, ZERO_CHANNEL } from './types';
+import {
+  DisplayChannelMapping,
+  DisplayLuminanceRange,
+  ImagePixel,
+  PixelSample,
+  VisualizationMode,
+  ZERO_CHANNEL
+} from './types';
 
 export interface ProbeColorPreview {
   cssColor: string;
   rValue: string;
   gValue: string;
   bValue: string;
+}
+
+export interface ProbeVisualizationOptions {
+  mode: VisualizationMode;
+  colormapRange: DisplayLuminanceRange | null;
 }
 
 export function resolveActiveProbePixel(
@@ -21,25 +33,53 @@ export function resolveProbeMode(lockedPixel: ImagePixel | null): 'Hover' | 'Loc
 export function buildProbeColorPreview(
   sample: PixelSample | null,
   selection: DisplayChannelMapping,
-  exposureEv: number
+  exposureEv: number,
+  visualization: ProbeVisualizationOptions = { mode: 'rgb', colormapRange: null }
 ): ProbeColorPreview | null {
   if (!sample) {
     return null;
   }
 
+  const rawR = readProbeChannel(sample, selection.displayR);
+  const rawG = readProbeChannel(sample, selection.displayG);
+  const rawB = readProbeChannel(sample, selection.displayB);
   const exposureScale = 2 ** exposureEv;
-  const bytes = [
-    toSrgbByte(readProbeChannel(sample, selection.displayR) * exposureScale),
-    toSrgbByte(readProbeChannel(sample, selection.displayG) * exposureScale),
-    toSrgbByte(readProbeChannel(sample, selection.displayB) * exposureScale)
-  ];
+  const bytes =
+    visualization.mode === 'redBlackGreen'
+      ? mapRedBlackGreenToRgbBytes(
+          0.2126 * rawR + 0.7152 * rawG + 0.0722 * rawB,
+          visualization.colormapRange
+        )
+      : [
+          toSrgbByte(rawR * exposureScale),
+          toSrgbByte(rawG * exposureScale),
+          toSrgbByte(rawB * exposureScale)
+        ];
 
   return {
     cssColor: `rgb(${bytes[0]}, ${bytes[1]}, ${bytes[2]})`,
-    rValue: formatProbeRgbValue(readProbeChannel(sample, selection.displayR)),
-    gValue: formatProbeRgbValue(readProbeChannel(sample, selection.displayG)),
-    bValue: formatProbeRgbValue(readProbeChannel(sample, selection.displayB))
+    rValue: formatProbeRgbValue(rawR),
+    gValue: formatProbeRgbValue(rawG),
+    bValue: formatProbeRgbValue(rawB)
   };
+}
+
+export function mapRedBlackGreenToRgbBytes(
+  value: number,
+  range: DisplayLuminanceRange | null
+): [number, number, number] {
+  if (!range || !Number.isFinite(value) || range.max <= range.min) {
+    return [0, 0, 0];
+  }
+
+  const midpoint = (range.min + range.max) * 0.5;
+  if (value <= midpoint) {
+    const t = clampUnit((value - range.min) / (midpoint - range.min));
+    return [Math.round(255 * (1 - t)), 0, 0];
+  }
+
+  const t = clampUnit((value - midpoint) / (range.max - midpoint));
+  return [0, Math.round(255 * t), 0];
 }
 
 function readProbeChannel(sample: PixelSample, channelName: string): number {
@@ -59,6 +99,10 @@ function toSrgbByte(value: number): number {
       : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055;
 
   return Math.max(0, Math.min(255, Math.round(srgb * 255)));
+}
+
+function clampUnit(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }
 
 function formatProbeRgbValue(value: number): string {
