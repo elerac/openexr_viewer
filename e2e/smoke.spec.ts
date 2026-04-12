@@ -50,7 +50,7 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(layerControl).toBeHidden();
   await expect(rgbGroupSelect).toBeEnabled();
 
-  await page.getByRole('button', { name: 'Close' }).click();
+  await page.locator('#close-opened-image-button').click();
   await expect(openedImages.locator('option')).toHaveCount(0, { timeout: 30000 });
   await expect(layerControl).toBeHidden();
   await expect(probeCoords).toHaveText('(x: -, y: -)');
