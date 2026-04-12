@@ -5,6 +5,9 @@ export default defineConfig({
   retries: 0,
   use: {
     baseURL: 'http://127.0.0.1:4173',
+    launchOptions: {
+      args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader']
+    },
     trace: 'on-first-retry'
   },
   projects: [

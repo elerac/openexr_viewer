@@ -20,6 +20,17 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   const colormapVminInput = page.locator('#colormap-vmin-input');
   const colormapVmaxInput = page.locator('#colormap-vmax-input');
   const colormapVmaxSlider = page.locator('#colormap-vmax-slider');
+  const getViewerPoint = async (xRatio: number, yRatio: number) => {
+    const box = await viewer.boundingBox();
+    if (!box) {
+      throw new Error('Viewer container is not visible.');
+    }
+
+    return {
+      x: box.x + box.width * xRatio,
+      y: box.y + box.height * yRatio
+    };
+  };
 
   await page.waitForTimeout(1500);
 
@@ -112,13 +123,17 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(colormapVmaxSlider).toBeHidden();
 
   const zoomBeforeWheel = (await page.locator('#zoom-readout').innerText()).trim();
+  const wheelPoint = await getViewerPoint(0.5, 0.5);
+  await page.mouse.move(wheelPoint.x, wheelPoint.y);
   await page.mouse.wheel(0, -500);
   await expect(page.locator('#zoom-readout')).not.toHaveText(zoomBeforeWheel);
 
   const panBeforeDrag = (await page.locator('#pan-readout').innerText()).trim();
-  await page.mouse.move(300, 300);
+  const dragStart = await getViewerPoint(0.45, 0.45);
+  const dragEnd = await getViewerPoint(0.55, 0.5);
+  await page.mouse.move(dragStart.x, dragStart.y);
   await page.mouse.down();
-  await page.mouse.move(360, 330);
+  await page.mouse.move(dragEnd.x, dragEnd.y);
   await page.mouse.up();
   await expect(page.locator('#pan-readout')).not.toHaveText(panBeforeDrag);
 
