@@ -45,7 +45,7 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await page.mouse.up();
   await expect(page.locator('#pan-readout')).not.toHaveText(panBeforeDrag);
 
-  await page.getByRole('button', { name: 'Reload' }).click();
+  await page.getByRole('button', { name: 'Reload', exact: true }).click();
   await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr');
   await expect(layerControl).toBeHidden();
   await expect(rgbGroupSelect).toBeEnabled();
