@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "capture:thumbnail": "node scripts/capture-thumbnail.mjs",
     "preview": "vite preview",
     "test": "vitest run --dir tests",
     "test:watch": "vitest --dir tests",

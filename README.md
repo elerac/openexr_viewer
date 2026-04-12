@@ -2,6 +2,8 @@
 
 Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-like interaction and exact value inspection.
 
+![OpenEXR Viewer thumbnail](https://elerac.github.io/openexr_viewer/thumbnail.jpg)
+
 ## Current MVP Features
 
 - OpenEXR decode via a browser-safe `exrs` WASM adapter with full layer/channel extraction.

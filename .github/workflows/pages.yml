@@ -46,6 +46,9 @@ jobs:
       - name: Build static site
         run: npm run build
 
+      - name: Capture README thumbnail
+        run: npm run capture:thumbnail
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6
 
