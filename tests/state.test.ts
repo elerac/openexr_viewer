@@ -47,6 +47,20 @@ describe('state helpers', () => {
     expect(Array.from(texture.slice(12, 16))).toEqual([3, 13, 23, 1]);
   });
 
+  it('builds grayscale display texture when one channel drives RGB', () => {
+    const layer: DecodedLayer = {
+      name: 'gray',
+      channelNames: ['Y'],
+      channelData: new Map([
+        ['Y', new Float32Array([0.25, 0.5, 0.75, 1])]
+      ])
+    };
+    const texture = buildDisplayTexture(layer, 2, 2, 'Y', 'Y', 'Y');
+
+    expect(Array.from(texture.slice(0, 4))).toEqual([0.25, 0.25, 0.25, 1]);
+    expect(Array.from(texture.slice(12, 16))).toEqual([1, 1, 1, 1]);
+  });
+
   it('sanitizes non-finite values in the display texture', () => {
     const channelData = new Map<string, Float32Array>();
     channelData.set('R', new Float32Array([NaN, Infinity, -Infinity, 1]));
@@ -376,6 +390,26 @@ describe('state helpers', () => {
       displayR: 'HOGE.R',
       displayG: 'HOGE.G',
       displayB: 'HOGE.B'
+    });
+  });
+
+  it('uses single-channel layers as grayscale default display mapping', () => {
+    const defaults = pickDefaultDisplayChannels(['Y']);
+
+    expect(defaults).toEqual({
+      displayR: 'Y',
+      displayG: 'Y',
+      displayB: 'Y'
+    });
+  });
+
+  it('uses the non-alpha channel as grayscale default display mapping', () => {
+    const defaults = pickDefaultDisplayChannels(['Y', 'A']);
+
+    expect(defaults).toEqual({
+      displayR: 'Y',
+      displayG: 'Y',
+      displayB: 'Y'
     });
   });
 

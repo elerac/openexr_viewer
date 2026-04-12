@@ -43,7 +43,7 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - Not affected by exposure slider.
 - Channel controls:
   - `Channel` selector for grouped channels such as `HOGE.R/G/B`, `FUGA.R/G/B`.
-  - When a selected layer does not expose the previous channel mapping, the viewer falls back to bare `R/G/B`, then the first RGB group, then the first three channels.
+  - When a selected layer does not expose the previous channel mapping, the viewer falls back to bare `R/G/B`, then the first RGB group, then a single grayscale channel mapped across RGB, then the first three channels.
 - Reset button resets view and display state, including exposure.
   - Reset also restores histogram axes to the default mode (`X = EV`, `Y = Linear`).
 

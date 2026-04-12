@@ -193,6 +193,15 @@ export function pickDefaultDisplayChannels(channelNames: string[]): DisplayChann
     };
   }
 
+  const grayscaleChannel = pickGrayscaleDisplayChannel(names);
+  if (grayscaleChannel) {
+    return {
+      displayR: grayscaleChannel,
+      displayG: grayscaleChannel,
+      displayB: grayscaleChannel
+    };
+  }
+
   return {
     displayR: names[0] ?? ZERO_CHANNEL,
     displayG: names[1] ?? ZERO_CHANNEL,
@@ -1028,4 +1037,17 @@ function parseRgbChannel(channelName: string): { base: string; suffix: RgbSuffix
 function buildRgbGroupLabel(base: string, hasAlpha: boolean): string {
   const channelsLabel = hasAlpha ? 'R,G,B,A' : 'R,G,B';
   return base.length > 0 ? `${base}.(${channelsLabel})` : channelsLabel;
+}
+
+function pickGrayscaleDisplayChannel(channelNames: string[]): string | null {
+  if (channelNames.length === 1) {
+    return channelNames[0] ?? null;
+  }
+
+  const nonAlphaChannels = channelNames.filter((channelName) => !isAlphaChannel(channelName));
+  return nonAlphaChannels.length === 1 ? nonAlphaChannels[0] ?? null : null;
+}
+
+function isAlphaChannel(channelName: string): boolean {
+  return channelName === 'A' || channelName.endsWith('.A');
 }
