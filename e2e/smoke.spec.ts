@@ -81,16 +81,22 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
       });
     })
     .toBeCloseTo(0, 1);
-  const colormapCanvasSamples = await sampleCanvasRgbGrid(page);
-  expect(colormapCanvasSamples).not.toEqual(normalCanvasSamples);
+  const colormapCanvasSamples = await waitForCanvasSamplesToChange(
+    page,
+    normalCanvasSamples,
+    'canvas should re-render after enabling colormap'
+  );
 
   const manualMax = (autoMin + autoMax) * 0.5;
   await colormapVmaxInput.fill(String(manualMax));
   await colormapVmaxInput.dispatchEvent('change');
   await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'false');
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(manualMax, 5);
-  const adjustedColormapCanvasSamples = await sampleCanvasRgbGrid(page);
-  expect(adjustedColormapCanvasSamples).not.toEqual(colormapCanvasSamples);
+  await waitForCanvasSamplesToChange(
+    page,
+    colormapCanvasSamples,
+    'canvas should re-render after updating vmax'
+  );
 
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr');
@@ -175,4 +181,32 @@ async function sampleCanvasRgbGrid(page: Page): Promise<number[]> {
 
     return samples;
   });
+}
+
+async function waitForCanvasSamplesToChange(
+  page: Page,
+  previousSamples: number[],
+  message: string
+): Promise<number[]> {
+  let nextSamples: number[] = [];
+
+  await expect
+    .poll(
+      async () => {
+        nextSamples = await sampleCanvasRgbGrid(page);
+        return !areSamplesEqual(nextSamples, previousSamples);
+      },
+      { message }
+    )
+    .toBe(true);
+
+  return nextSamples;
+}
+
+function areSamplesEqual(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return a.every((value, index) => value === b[index]);
 }
