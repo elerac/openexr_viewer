@@ -155,8 +155,6 @@ npm run test:e2e
   Register the file in `public/colormaps/manifest.json`:
   ```json
   {
-    "version": 1,
-    "defaultIndex": 0,
     "colormaps": [
       {
         "label": "Red / Black / Green",

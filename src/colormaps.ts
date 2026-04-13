@@ -6,8 +6,6 @@ export interface ColormapAsset {
 }
 
 export interface ColormapManifest {
-  version: number;
-  defaultIndex: number;
   colormaps: ColormapAsset[];
 }
 
@@ -62,18 +60,9 @@ export function parseColormapManifest(input: unknown): ColormapRegistry {
     throw new Error('Invalid colormap manifest: expected an object.');
   }
 
-  if (input.version !== 1) {
-    throw new Error('Unsupported colormap manifest version.');
-  }
-
   const colormaps = input.colormaps;
   if (!Array.isArray(colormaps) || colormaps.length === 0) {
     throw new Error('Invalid colormap manifest: expected at least one colormap.');
-  }
-
-  const defaultIndex = input.defaultIndex;
-  if (!Number.isInteger(defaultIndex) || defaultIndex < 0 || defaultIndex >= colormaps.length) {
-    throw new Error('Invalid colormap manifest: defaultIndex is out of range.');
   }
 
   const labels = new Set<string>();
@@ -88,7 +77,7 @@ export function parseColormapManifest(input: unknown): ColormapRegistry {
   });
 
   return {
-    defaultId: createColormapId(defaultIndex),
+    defaultId: DEFAULT_COLORMAP_ID,
     assets,
     options: assets.map((asset, index) => ({
       id: createColormapId(index),

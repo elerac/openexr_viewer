@@ -13,8 +13,6 @@ import {
 describe('NumPy colormap LUT parsing', () => {
   it('derives palette ids from manifest order', () => {
     const registry = parseColormapManifest({
-      version: 1,
-      defaultIndex: 0,
       colormaps: [
         { label: 'Red / Black / Green', file: 'red_black_green.npy' },
         { label: 'Blue / Yellow', file: 'blue_yellow.npy' }
@@ -33,24 +31,11 @@ describe('NumPy colormap LUT parsing', () => {
     expect(getColormapAsset(registry, 'blue-yellow')).toBeNull();
   });
 
-  it('honors manifest defaultIndex', () => {
-    const registry = parseColormapManifest({
-      version: 1,
-      defaultIndex: 1,
-      colormaps: [
-        { label: 'A', file: 'a.npy' },
-        { label: 'B', file: 'b.npy' }
-      ]
-    });
-
-    expect(registry.defaultId).toBe('1');
-  });
-
   it('rejects invalid manifest entries', () => {
-    expect(() => parseColormapManifest({ version: 2, defaultIndex: 0, colormaps: [] })).toThrow(/version/);
-    expect(() => parseColormapManifest({ version: 1, defaultIndex: 1, colormaps: [{ label: 'A', file: 'a.npy' }] })).toThrow(/defaultIndex/);
-    expect(() => parseColormapManifest({ version: 1, defaultIndex: 0, colormaps: [{ label: '', file: 'a.npy' }] })).toThrow(/label/);
-    expect(() => parseColormapManifest({ version: 1, defaultIndex: 0, colormaps: [{ label: 'A', file: '../a.npy' }] })).toThrow(/relative/);
+    expect(() => parseColormapManifest([])).toThrow(/object/);
+    expect(() => parseColormapManifest({ colormaps: [] })).toThrow(/at least one colormap/);
+    expect(() => parseColormapManifest({ colormaps: [{ label: '', file: 'a.npy' }] })).toThrow(/label/);
+    expect(() => parseColormapManifest({ colormaps: [{ label: 'A', file: '../a.npy' }] })).toThrow(/relative/);
   });
 
   it('parses float32 RGB LUTs', () => {
