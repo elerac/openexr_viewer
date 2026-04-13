@@ -95,6 +95,11 @@ export function getColormapAsset(registry: ColormapRegistry, id: string): Colorm
   return index === null ? null : registry.assets[index] ?? null;
 }
 
+export function findColormapIdByLabel(registry: ColormapRegistry, label: string): string | null {
+  const normalizedLabel = label.trim().toLocaleLowerCase();
+  return registry.options.find((option) => option.label.toLocaleLowerCase() === normalizedLabel)?.id ?? null;
+}
+
 export async function loadColormapLut(registry: ColormapRegistry, id: string): Promise<ColormapLut> {
   const asset = getColormapAsset(registry, id);
   if (!asset) {

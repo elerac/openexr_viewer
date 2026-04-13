@@ -3,9 +3,12 @@ import {
   DecodedExrImage,
   DecodedLayer,
   DisplayChannelMapping,
+  DisplaySelection,
+  DisplaySourceKind,
   DisplayLuminanceRange,
   ImagePixel,
   PixelSample,
+  StokesParameter,
   ViewerState,
   ZERO_CHANNEL
 } from './types';
@@ -56,9 +59,35 @@ export interface RgbChannelGroup {
   a?: string;
 }
 
+export interface ScalarStokesChannels {
+  s0: string;
+  s1: string;
+  s2: string;
+  s3: string;
+}
+
+export interface RgbStokesChannels {
+  r: ScalarStokesChannels;
+  g: ScalarStokesChannels;
+  b: ScalarStokesChannels;
+}
+
+export interface StokesDisplayOption {
+  displaySource: Exclude<DisplaySourceKind, 'channels'>;
+  stokesParameter: StokesParameter;
+  label: string;
+}
+
 const HISTOGRAM_DEFAULT_EV_REFERENCE = 1;
 const HISTOGRAM_EPSILON = 1e-12;
 const HISTOGRAM_NORMALIZATION_PERCENTILE = 0.995;
+const LUMINANCE_WEIGHTS = { r: 0.2126, g: 0.7152, b: 0.0722 };
+const STOKES_PARAMETER_LABELS: Record<StokesParameter, string> = {
+  aolp: 'AoLP',
+  dolp: 'DoLP',
+  dop: 'DoP',
+  docp: 'DoCP'
+};
 
 export function createInitialState(): ViewerState {
   return {
@@ -72,6 +101,8 @@ export function createInitialState(): ViewerState {
     panX: 0,
     panY: 0,
     activeLayer: 0,
+    displaySource: 'channels',
+    stokesParameter: null,
     displayR: ZERO_CHANNEL,
     displayG: ZERO_CHANNEL,
     displayB: ZERO_CHANNEL,
@@ -162,6 +193,8 @@ export function buildViewerStateForLayer(
     return {
       ...currentState,
       activeLayer: 0,
+      displaySource: 'channels',
+      stokesParameter: null,
       displayR: ZERO_CHANNEL,
       displayG: ZERO_CHANNEL,
       displayB: ZERO_CHANNEL
@@ -171,7 +204,7 @@ export function buildViewerStateForLayer(
   return {
     ...currentState,
     activeLayer,
-    ...resolveDisplayChannelsForLayer(layer.channelNames, currentState)
+    ...resolveDisplaySelectionForLayer(layer.channelNames, currentState)
   };
 }
 
@@ -236,6 +269,27 @@ export function resolveDisplayChannelsForLayer(
   return pickDefaultDisplayChannels(channelNames);
 }
 
+export function resolveDisplaySelectionForLayer(
+  channelNames: string[],
+  currentSelection: DisplaySelection
+): DisplaySelection {
+  const channelMapping = resolveDisplayChannelsForLayer(channelNames, currentSelection);
+
+  if (isStokesDisplaySelection(currentSelection) && isStokesDisplayAvailable(channelNames, currentSelection)) {
+    return {
+      ...channelMapping,
+      displaySource: currentSelection.displaySource,
+      stokesParameter: currentSelection.stokesParameter
+    };
+  }
+
+  return {
+    ...channelMapping,
+    displaySource: 'channels',
+    stokesParameter: null
+  };
+}
+
 export function extractRgbChannelGroups(channelNames: string[]): RgbChannelGroup[] {
   const grouped = new Map<string, Partial<Record<RgbSuffix, string>>>();
 
@@ -290,6 +344,76 @@ export function findSelectedRgbGroup(
   return groups.find((group) => group.r === displayR && group.g === displayG && group.b === displayB) ?? null;
 }
 
+export function detectScalarStokesChannels(channelNames: string[]): ScalarStokesChannels | null {
+  const channels = new Set(channelNames);
+  return channels.has('S0') && channels.has('S1') && channels.has('S2') && channels.has('S3')
+    ? { s0: 'S0', s1: 'S1', s2: 'S2', s3: 'S3' }
+    : null;
+}
+
+export function detectRgbStokesChannels(channelNames: string[]): RgbStokesChannels | null {
+  const channels = new Set(channelNames);
+  const build = (suffix: 'R' | 'G' | 'B'): ScalarStokesChannels | null => {
+    const s0 = `S0.${suffix}`;
+    const s1 = `S1.${suffix}`;
+    const s2 = `S2.${suffix}`;
+    const s3 = `S3.${suffix}`;
+    return channels.has(s0) && channels.has(s1) && channels.has(s2) && channels.has(s3)
+      ? { s0, s1, s2, s3 }
+      : null;
+  };
+
+  const r = build('R');
+  const g = build('G');
+  const b = build('B');
+  return r && g && b ? { r, g, b } : null;
+}
+
+export function getStokesDisplayOptions(channelNames: string[]): StokesDisplayOption[] {
+  const options: StokesDisplayOption[] = [];
+  if (detectScalarStokesChannels(channelNames)) {
+    options.push(
+      { displaySource: 'stokesScalar', stokesParameter: 'aolp', label: 'Stokes AoLP' },
+      { displaySource: 'stokesScalar', stokesParameter: 'dolp', label: 'Stokes DoLP' },
+      { displaySource: 'stokesScalar', stokesParameter: 'dop', label: 'Stokes DoP' },
+      { displaySource: 'stokesScalar', stokesParameter: 'docp', label: 'Stokes DoCP' }
+    );
+  }
+
+  if (detectRgbStokesChannels(channelNames)) {
+    options.push(
+      { displaySource: 'stokesRgb', stokesParameter: 'aolp', label: 'AoLP.(R,G,B)' },
+      { displaySource: 'stokesRgb', stokesParameter: 'dolp', label: 'DoLP.(R,G,B)' },
+      { displaySource: 'stokesRgb', stokesParameter: 'dop', label: 'DoP.(R,G,B)' },
+      { displaySource: 'stokesRgb', stokesParameter: 'docp', label: 'DoCP.(R,G,B)' }
+    );
+  }
+
+  return options;
+}
+
+export function isStokesDisplaySelection(
+  selection: Pick<DisplaySelection, 'displaySource' | 'stokesParameter'>
+): selection is DisplaySelection & {
+  displaySource: Exclude<DisplaySourceKind, 'channels'>;
+  stokesParameter: StokesParameter;
+} {
+  return selection.displaySource !== 'channels' && selection.stokesParameter !== null;
+}
+
+export function isStokesDisplayAvailable(
+  channelNames: string[],
+  selection: Pick<DisplaySelection, 'displaySource' | 'stokesParameter'>
+): boolean {
+  if (!isStokesDisplaySelection(selection)) {
+    return true;
+  }
+
+  return selection.displaySource === 'stokesScalar'
+    ? Boolean(detectScalarStokesChannels(channelNames))
+    : Boolean(detectRgbStokesChannels(channelNames));
+}
+
 export function buildDisplayTexture(
   layer: DecodedLayer,
   width: number,
@@ -312,6 +436,90 @@ export function buildDisplayTexture(
     out[outIndex + 0] = sanitizeDisplayValue(readChannelValue(channelR, pixelIndex));
     out[outIndex + 1] = sanitizeDisplayValue(readChannelValue(channelG, pixelIndex));
     out[outIndex + 2] = sanitizeDisplayValue(readChannelValue(channelB, pixelIndex));
+    out[outIndex + 3] = 1;
+  }
+
+  return out;
+}
+
+export function buildSelectedDisplayTexture(
+  layer: DecodedLayer,
+  width: number,
+  height: number,
+  selection: DisplaySelection,
+  output?: Float32Array
+): Float32Array {
+  if (isStokesDisplaySelection(selection) && isStokesDisplayAvailable(layer.channelNames, selection)) {
+    return buildStokesDisplayTexture(
+      layer,
+      width,
+      height,
+      selection.displaySource,
+      selection.stokesParameter,
+      output
+    );
+  }
+
+  return buildDisplayTexture(layer, width, height, selection.displayR, selection.displayG, selection.displayB, output);
+}
+
+export function buildStokesDisplayTexture(
+  layer: DecodedLayer,
+  width: number,
+  height: number,
+  displaySource: Exclude<DisplaySourceKind, 'channels'>,
+  parameter: StokesParameter,
+  output?: Float32Array
+): Float32Array {
+  const pixelCount = width * height;
+  const requiredLength = pixelCount * 4;
+  const out = output && output.length === requiredLength ? output : new Float32Array(requiredLength);
+
+  if (displaySource === 'stokesScalar') {
+    const channels = detectScalarStokesChannels(layer.channelNames);
+    if (!channels) {
+      return fillDisplayTexture(out, 0, 0, 0);
+    }
+
+    const s0 = getChannel(layer, channels.s0);
+    const s1 = getChannel(layer, channels.s1);
+    const s2 = getChannel(layer, channels.s2);
+    const s3 = getChannel(layer, channels.s3);
+
+    for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
+      const value = computeStokesDisplayValue(
+        parameter,
+        readChannelValue(s0, pixelIndex),
+        readChannelValue(s1, pixelIndex),
+        readChannelValue(s2, pixelIndex),
+        readChannelValue(s3, pixelIndex)
+      );
+      const outIndex = pixelIndex * 4;
+      out[outIndex + 0] = value;
+      out[outIndex + 1] = value;
+      out[outIndex + 2] = value;
+      out[outIndex + 3] = 1;
+    }
+
+    return out;
+  }
+
+  const channels = detectRgbStokesChannels(layer.channelNames);
+  if (!channels) {
+    return fillDisplayTexture(out, 0, 0, 0);
+  }
+
+  const r = resolveStokesChannelArrays(layer, channels.r);
+  const g = resolveStokesChannelArrays(layer, channels.g);
+  const b = resolveStokesChannelArrays(layer, channels.b);
+
+  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
+    const mono = computeRgbStokesMonoValues(r, g, b, pixelIndex);
+    const value = computeStokesDisplayValue(parameter, mono.s0, mono.s1, mono.s2, mono.s3);
+    const outIndex = pixelIndex * 4;
+    out[outIndex + 0] = value;
+    out[outIndex + 1] = value;
+    out[outIndex + 2] = value;
     out[outIndex + 3] = 1;
   }
 
@@ -395,6 +603,69 @@ export function samplePixelValues(
     y: pixel.iy,
     values
   };
+}
+
+export function samplePixelValuesForDisplay(
+  layer: DecodedLayer,
+  width: number,
+  height: number,
+  pixel: ImagePixel,
+  selection: DisplaySelection
+): PixelSample | null {
+  const sample = samplePixelValues(layer, width, height, pixel);
+  if (!sample || !isStokesDisplaySelection(selection) || !isStokesDisplayAvailable(layer.channelNames, selection)) {
+    return sample;
+  }
+
+  const flatIndex = pixel.iy * width + pixel.ix;
+  appendStokesSampleValues(layer, flatIndex, selection, sample.values);
+  return sample;
+}
+
+export function getStokesParameterLabel(parameter: StokesParameter): string {
+  return STOKES_PARAMETER_LABELS[parameter];
+}
+
+export function computeStokesAolp(s1: number, s2: number): number {
+  if (!Number.isFinite(s1) || !Number.isFinite(s2)) {
+    return 0;
+  }
+
+  const aolp = 0.5 * Math.atan2(s2, s1);
+  return aolp < 0 ? aolp + Math.PI : aolp;
+}
+
+export function computeStokesDolp(s0: number, s1: number, s2: number): number {
+  if (!Number.isFinite(s0) || !Number.isFinite(s1) || !Number.isFinite(s2) || s0 === 0) {
+    return 0;
+  }
+
+  const dolp = Math.sqrt(s1 ** 2 + s2 ** 2) / s0;
+  return Number.isFinite(dolp) ? dolp : 0;
+}
+
+export function computeStokesDop(s0: number, s1: number, s2: number, s3: number): number {
+  if (
+    !Number.isFinite(s0) ||
+    !Number.isFinite(s1) ||
+    !Number.isFinite(s2) ||
+    !Number.isFinite(s3) ||
+    s0 === 0
+  ) {
+    return 0;
+  }
+
+  const dop = Math.sqrt(s1 ** 2 + s2 ** 2 + s3 ** 2) / s0;
+  return Number.isFinite(dop) ? dop : 0;
+}
+
+export function computeStokesDocp(s0: number, s3: number): number {
+  if (!Number.isFinite(s0) || !Number.isFinite(s3) || s0 === 0) {
+    return 0;
+  }
+
+  const docp = Math.abs(s3) / s0;
+  return Number.isFinite(docp) ? docp : 0;
 }
 
 export function formatScientific(value: number): string {
@@ -1060,8 +1331,128 @@ function getChannel(layer: DecodedLayer, channelName: string): Float32Array | nu
   return layer.channelData.get(channelName) ?? null;
 }
 
+function resolveStokesChannelArrays(
+  layer: DecodedLayer,
+  channels: ScalarStokesChannels
+): { s0: Float32Array | null; s1: Float32Array | null; s2: Float32Array | null; s3: Float32Array | null } {
+  return {
+    s0: getChannel(layer, channels.s0),
+    s1: getChannel(layer, channels.s1),
+    s2: getChannel(layer, channels.s2),
+    s3: getChannel(layer, channels.s3)
+  };
+}
+
 function readChannelValue(channel: Float32Array | null, pixelIndex: number): number {
   return channel ? channel[pixelIndex] ?? 0 : 0;
+}
+
+function computeStokesDisplayValue(
+  parameter: StokesParameter,
+  s0: number,
+  s1: number,
+  s2: number,
+  s3: number
+): number {
+  switch (parameter) {
+    case 'aolp':
+      return computeStokesAolp(s1, s2);
+    case 'dolp':
+      return computeStokesDolp(s0, s1, s2);
+    case 'dop':
+      return computeStokesDop(s0, s1, s2, s3);
+    case 'docp':
+      return computeStokesDocp(s0, s3);
+  }
+
+  return 0;
+}
+
+function computeRgbStokesMonoValues(
+  r: { s0: Float32Array | null; s1: Float32Array | null; s2: Float32Array | null; s3: Float32Array | null },
+  g: { s0: Float32Array | null; s1: Float32Array | null; s2: Float32Array | null; s3: Float32Array | null },
+  b: { s0: Float32Array | null; s1: Float32Array | null; s2: Float32Array | null; s3: Float32Array | null },
+  pixelIndex: number
+): { s0: number; s1: number; s2: number; s3: number } {
+  return {
+    s0: computeLuminance(
+      readChannelValue(r.s0, pixelIndex),
+      readChannelValue(g.s0, pixelIndex),
+      readChannelValue(b.s0, pixelIndex)
+    ),
+    s1: computeLuminance(
+      readChannelValue(r.s1, pixelIndex),
+      readChannelValue(g.s1, pixelIndex),
+      readChannelValue(b.s1, pixelIndex)
+    ),
+    s2: computeLuminance(
+      readChannelValue(r.s2, pixelIndex),
+      readChannelValue(g.s2, pixelIndex),
+      readChannelValue(b.s2, pixelIndex)
+    ),
+    s3: computeLuminance(
+      readChannelValue(r.s3, pixelIndex),
+      readChannelValue(g.s3, pixelIndex),
+      readChannelValue(b.s3, pixelIndex)
+    )
+  };
+}
+
+function computeLuminance(r: number, g: number, b: number): number {
+  return LUMINANCE_WEIGHTS.r * r + LUMINANCE_WEIGHTS.g * g + LUMINANCE_WEIGHTS.b * b;
+}
+
+function fillDisplayTexture(out: Float32Array, r: number, g: number, b: number): Float32Array {
+  for (let i = 0; i < out.length; i += 4) {
+    out[i + 0] = r;
+    out[i + 1] = g;
+    out[i + 2] = b;
+    out[i + 3] = 1;
+  }
+  return out;
+}
+
+function appendStokesSampleValues(
+  layer: DecodedLayer,
+  flatIndex: number,
+  selection: DisplaySelection & {
+    displaySource: Exclude<DisplaySourceKind, 'channels'>;
+    stokesParameter: StokesParameter;
+  },
+  values: Record<string, number>
+): void {
+  const label = getStokesParameterLabel(selection.stokesParameter);
+
+  if (selection.displaySource === 'stokesScalar') {
+    const channels = detectScalarStokesChannels(layer.channelNames);
+    if (!channels) {
+      return;
+    }
+
+    const s0 = getChannel(layer, channels.s0);
+    const s1 = getChannel(layer, channels.s1);
+    const s2 = getChannel(layer, channels.s2);
+    const s3 = getChannel(layer, channels.s3);
+    values[label] = computeStokesDisplayValue(
+      selection.stokesParameter,
+      readChannelValue(s0, flatIndex),
+      readChannelValue(s1, flatIndex),
+      readChannelValue(s2, flatIndex),
+      readChannelValue(s3, flatIndex)
+    );
+    return;
+  }
+
+  const channels = detectRgbStokesChannels(layer.channelNames);
+  if (!channels) {
+    return;
+  }
+
+  const r = resolveStokesChannelArrays(layer, channels.r);
+  const g = resolveStokesChannelArrays(layer, channels.g);
+  const b = resolveStokesChannelArrays(layer, channels.b);
+  const mono = computeRgbStokesMonoValues(r, g, b, flatIndex);
+  values[label] = computeStokesDisplayValue(selection.stokesParameter, mono.s0, mono.s1, mono.s2, mono.s3);
 }
 
 function parseRgbChannel(channelName: string): { base: string; suffix: RgbSuffix } | null {

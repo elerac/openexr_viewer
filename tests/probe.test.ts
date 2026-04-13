@@ -42,6 +42,8 @@ describe('probe helpers', () => {
         }
       },
       {
+        displaySource: 'channels',
+        stokesParameter: null,
         displayR: 'R',
         displayG: 'G',
         displayB: 'B'
@@ -67,6 +69,8 @@ describe('probe helpers', () => {
         }
       },
       {
+        displaySource: 'channels',
+        stokesParameter: null,
         displayR: 'A',
         displayG: ZERO_CHANNEL,
         displayB: ZERO_CHANNEL
@@ -84,6 +88,8 @@ describe('probe helpers', () => {
 
   it('maps probe swatch colors through the selected colormap LUT', () => {
     const selection = {
+      displaySource: 'channels' as const,
+      stokesParameter: null,
       displayR: 'Y',
       displayG: 'Y',
       displayB: 'Y'
@@ -109,6 +115,8 @@ describe('probe helpers', () => {
     const preview = buildProbeColorPreview(
       { x: 0, y: 0, values: { Y: 1 } },
       {
+        displaySource: 'channels',
+        stokesParameter: null,
         displayR: 'Y',
         displayG: 'Y',
         displayB: 'Y'
@@ -122,5 +130,67 @@ describe('probe helpers', () => {
     );
 
     expect(preview?.cssColor).toBe('rgb(0, 0, 0)');
+  });
+
+  it('uses scalar Stokes derived values for colormap probe preview', () => {
+    const preview = buildProbeColorPreview(
+      { x: 0, y: 0, values: { S0: 1, S1: 0, S2: 1, S3: 0, AoLP: Math.PI / 4 } },
+      {
+        displaySource: 'stokesScalar',
+        stokesParameter: 'aolp',
+        displayR: 'S0',
+        displayG: 'S1',
+        displayB: 'S2'
+      },
+      0,
+      {
+        mode: 'colormap',
+        colormapRange: { min: 0, max: Math.PI / 2 },
+        colormapLut: redBlackGreenLut
+      }
+    );
+
+    expect(preview).toEqual({
+      cssColor: 'rgb(0, 0, 0)',
+      rValue: '0.7854',
+      gValue: '0.7854',
+      bValue: '0.7854'
+    });
+  });
+
+  it('uses RGB Stokes derived values for probe preview', () => {
+    const preview = buildProbeColorPreview(
+      { x: 0, y: 0, values: { DoLP: 0.5 } },
+      {
+        displaySource: 'stokesRgb',
+        stokesParameter: 'dolp',
+        displayR: 'S0.R',
+        displayG: 'S0.G',
+        displayB: 'S0.B'
+      },
+      0
+    );
+
+    expect(preview?.rValue).toBe('0.5');
+    expect(preview?.gValue).toBe('0.5');
+    expect(preview?.bValue).toBe('0.5');
+  });
+
+  it('uses new Stokes degree labels for probe preview', () => {
+    const preview = buildProbeColorPreview(
+      { x: 0, y: 0, values: { DoCP: 0.25 } },
+      {
+        displaySource: 'stokesScalar',
+        stokesParameter: 'docp',
+        displayR: 'S0',
+        displayG: 'S1',
+        displayB: 'S2'
+      },
+      0
+    );
+
+    expect(preview?.rValue).toBe('0.25');
+    expect(preview?.gValue).toBe('0.25');
+    expect(preview?.bValue).toBe('0.25');
   });
 });

@@ -14,6 +14,8 @@ const state: ViewerState = {
   panX: 100,
   panY: 200,
   activeLayer: 0,
+  displaySource: 'channels',
+  stokesParameter: null,
   displayR: 'R',
   displayG: 'G',
   displayB: 'B',

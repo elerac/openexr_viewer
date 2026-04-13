@@ -54,6 +54,8 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - Not affected by exposure slider.
 - Channel controls:
   - `Channel` selector for grouped channels such as `HOGE.R/G/B`, `FUGA.R/G/B`.
+  - Stokes layers with `S0/S1/S2/S3` expose derived `Stokes AoLP`, `Stokes DoLP`, `Stokes DoP`, and `Stokes DoCP` entries. Scalar AoLP uses HSV over `[0, pi]`; degree parameters use Black-Red over `[0, 1]`.
+  - RGB Stokes layers with `S0.R/G/B` through `S3.R/G/B` expose `AoLP.(R,G,B)`, `DoLP.(R,G,B)`, `DoP.(R,G,B)`, and `DoCP.(R,G,B)`; each Stokes component is converted to mono with Rec.709 luminance weights before deriving the scalar visualization.
   - When a selected layer does not expose the previous channel mapping, the viewer falls back to bare `R/G/B`, then the first RGB group, then a single grayscale channel mapped across RGB, then the first three channels.
 - Reset button resets view and display state, including exposure.
   - Reset also restores histogram axes to the default mode (`X = EV`, `Y = Linear`).

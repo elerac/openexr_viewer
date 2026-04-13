@@ -1,5 +1,6 @@
 import {
   DEFAULT_COLORMAP_ID,
+  findColormapIdByLabel,
   getColormapAsset,
   getColormapOptions,
   loadColormapRegistry,
@@ -13,7 +14,8 @@ import { buildProbeColorPreview, resolveActiveProbePixel, resolveProbeMode } fro
 import { WebGlExrRenderer } from './renderer';
 import {
   buildLayerDisplayHistogram,
-  buildDisplayTexture,
+  buildDisplayHistogram,
+  buildSelectedDisplayTexture,
   buildViewerStateForLayer,
   buildSessionDisplayName,
   buildZeroCenteredColormapRange,
@@ -21,9 +23,10 @@ import {
   createInitialState,
   extractRgbChannelGroups,
   findSelectedRgbGroup,
+  isStokesDisplaySelection,
   persistActiveSessionState,
   pickNextSessionIndexAfterRemoval,
-  samplePixelValues,
+  samplePixelValuesForDisplay,
   samePixel,
   ViewerStore,
   type HistogramData,
@@ -34,6 +37,7 @@ import { ViewerUi } from './ui';
 import {
   DecodedExrImage,
   DecodedLayer,
+  DisplaySelection,
   DisplayLuminanceRange,
   ImagePixel,
   OpenedImageSession,
@@ -51,6 +55,11 @@ const DEFAULT_HISTOGRAM_VIEW_OPTIONS: HistogramViewOptions = {
   xAxis: 'ev',
   yAxis: 'linear'
 };
+
+type RestorableVisualizationState = Pick<
+  ViewerState,
+  'visualizationMode' | 'activeColormapId' | 'colormapRange' | 'colormapRangeMode' | 'colormapZeroCentered'
+>;
 
 void bootstrap();
 
@@ -80,6 +89,7 @@ async function bootstrap(): Promise<void> {
   let activeColormapLut: ColormapLut | null = null;
   let defaultColormapId = DEFAULT_COLORMAP_ID;
   let colormapRegistry: ColormapRegistry | null = null;
+  const stokesDisplayRestoreStates = new Map<string, RestorableVisualizationState>();
 
   const ui = new ViewerUi({
     onOpenFileClick: () => {
@@ -123,7 +133,7 @@ async function bootstrap(): Promise<void> {
       setActiveLayer(layerIndex);
     },
     onRgbGroupChange: (mapping) => {
-      void applyRgbViewChangeWithLoading(mapping);
+      void applyDisplaySelectionWithLoading(mapping);
     },
     onVisualizationModeChange: (mode) => {
       setVisualizationMode(mode);
@@ -240,6 +250,8 @@ async function bootstrap(): Promise<void> {
         const uiSelectionDirty =
           layerSelectionDirty ||
           sessionChanged ||
+          state.displaySource !== previous.displaySource ||
+          state.stokesParameter !== previous.stokesParameter ||
           state.displayR !== previous.displayR ||
           state.displayG !== previous.displayG ||
           state.displayB !== previous.displayB;
@@ -248,6 +260,8 @@ async function bootstrap(): Promise<void> {
         if (uiSelectionDirty) {
           rgbGroups = extractRgbChannelGroups(layer.channelNames);
           ui.setRgbGroupOptions(layer.channelNames, {
+            displaySource: state.displaySource,
+            stokesParameter: state.stokesParameter,
             displayR: state.displayR,
             displayG: state.displayG,
             displayB: state.displayB
@@ -257,13 +271,11 @@ async function bootstrap(): Promise<void> {
         const textureKey = buildTextureRevisionKey(state);
         const textureDirty = textureKey !== activeSession.textureRevisionKey || !activeSession.displayTexture;
         if (textureDirty) {
-          activeSession.displayTexture = buildDisplayTexture(
+          activeSession.displayTexture = buildSelectedDisplayTexture(
             layer,
             activeImage.width,
             activeImage.height,
-            state.displayR,
-            state.displayG,
-            state.displayB,
+            state,
             activeSession.displayTexture ?? undefined
           );
           activeSession.displayLuminanceRange = computeDisplayTextureLuminanceRange(
@@ -324,6 +336,8 @@ async function bootstrap(): Promise<void> {
           sessionChanged ||
           state.activeLayer !== previous.activeLayer ||
           state.exposureEv !== previous.exposureEv ||
+          state.displaySource !== previous.displaySource ||
+          state.stokesParameter !== previous.stokesParameter ||
           state.displayR !== previous.displayR ||
           state.displayG !== previous.displayG ||
           state.displayB !== previous.displayB ||
@@ -343,6 +357,8 @@ async function bootstrap(): Promise<void> {
             state.lockedPixel,
             state.hoveredPixel,
             {
+              displaySource: state.displaySource,
+              stokesParameter: state.stokesParameter,
               displayR: state.displayR,
               displayG: state.displayG,
               displayB: state.displayB
@@ -357,6 +373,8 @@ async function bootstrap(): Promise<void> {
         invalidateHistogramCache();
         ui.setLayerOptions([], 0);
         ui.setRgbGroupOptions([], {
+          displaySource: 'channels',
+          stokesParameter: null,
           displayR: ZERO_CHANNEL,
           displayG: ZERO_CHANNEL,
           displayB: ZERO_CHANNEL
@@ -382,6 +400,8 @@ async function bootstrap(): Promise<void> {
       state.hoveredPixel !== previous.hoveredPixel ||
       state.lockedPixel !== previous.lockedPixel ||
       state.activeLayer !== previous.activeLayer ||
+      state.displaySource !== previous.displaySource ||
+      state.stokesParameter !== previous.stokesParameter ||
       state.displayR !== previous.displayR ||
       state.displayG !== previous.displayG ||
       state.displayB !== previous.displayB ||
@@ -534,6 +554,8 @@ async function bootstrap(): Promise<void> {
         colormapRangeMode: 'alwaysAuto',
         colormapZeroCentered: false,
         activeLayer: 0,
+        displaySource: 'channels',
+        stokesParameter: null,
         displayR: ZERO_CHANNEL,
         displayG: ZERO_CHANNEL,
         displayB: ZERO_CHANNEL,
@@ -664,13 +686,10 @@ async function bootstrap(): Promise<void> {
     }
   }
 
-  async function applyRgbViewChangeWithLoading(patch: {
-    displayR?: string;
-    displayG?: string;
-    displayB?: string;
-  }): Promise<void> {
-    if (!getActiveSession()) {
-      store.setState({ ...patch });
+  async function applyDisplaySelectionWithLoading(selection: DisplaySelection): Promise<void> {
+    const activeSession = getActiveSession();
+    if (!activeSession) {
+      store.setState({ ...selection });
       return;
     }
 
@@ -682,6 +701,39 @@ async function bootstrap(): Promise<void> {
       await waitForNextPaint();
       if (token !== rgbViewChangeToken) {
         return;
+      }
+
+      const currentState = store.getState();
+      const patch: Partial<ViewerState> = { ...selection };
+      if (selection.displaySource === 'channels' && isStokesDisplaySelection(currentState)) {
+        Object.assign(patch, resolveStokesDisplayRestoreState(activeSession.id));
+      }
+
+      const stokesDefaults = resolveStokesDisplayDefaults(selection);
+      if (stokesDefaults) {
+        if (!isStokesDisplaySelection(currentState)) {
+          stokesDisplayRestoreStates.set(activeSession.id, captureRestorableVisualizationState(currentState));
+        }
+
+        const registry = getLoadedColormapRegistry();
+        const colormapId = findColormapIdByLabel(registry, stokesDefaults.colormapLabel);
+        if (!colormapId) {
+          ui.setError(`Required colormap not found: ${stokesDefaults.colormapLabel}`);
+          return;
+        }
+
+        const colormapToken = ++colormapChangeToken;
+        const lut = await loadColormapLut(registry, colormapId);
+        if (token !== rgbViewChangeToken || colormapToken !== colormapChangeToken) {
+          return;
+        }
+
+        uploadLoadedColormap(colormapId, lut);
+        patch.visualizationMode = 'colormap';
+        patch.activeColormapId = colormapId;
+        patch.colormapRange = stokesDefaults.range;
+        patch.colormapRangeMode = 'oneTime';
+        patch.colormapZeroCentered = false;
       }
 
       store.setState({ ...patch });
@@ -833,6 +885,8 @@ async function bootstrap(): Promise<void> {
     const nextState = buildViewerStateForLayer(currentState, activeSession.decoded, layerIndex);
     if (
       nextState.activeLayer === currentState.activeLayer &&
+      nextState.displaySource === currentState.displaySource &&
+      nextState.stokesParameter === currentState.stokesParameter &&
       nextState.displayR === currentState.displayR &&
       nextState.displayG === currentState.displayG &&
       nextState.displayB === currentState.displayB
@@ -900,14 +954,16 @@ async function bootstrap(): Promise<void> {
     }
 
     const rgbGroups = rgbGroupsOverride ?? extractRgbChannelGroups(layer.channelNames);
-    const histogramMode: HistogramMode = findSelectedRgbGroup(
-      rgbGroups,
-      state.displayR,
-      state.displayG,
-      state.displayB
-    )
-      ? 'rgb'
-      : 'luminance';
+    const histogramMode: HistogramMode =
+      state.displaySource === 'channels' &&
+      Boolean(findSelectedRgbGroup(
+        rgbGroups,
+        state.displayR,
+        state.displayG,
+        state.displayB
+      ))
+        ? 'rgb'
+        : 'luminance';
 
     const shouldRebuild =
       forceRebuild ||
@@ -918,20 +974,38 @@ async function bootstrap(): Promise<void> {
       cachedHistogramXAxis !== histogramViewOptions.xAxis;
 
     if (shouldRebuild) {
-      cachedHistogram = buildLayerDisplayHistogram(
-        layer,
-        activeSession.decoded.width,
-        activeSession.decoded.height,
-        state.displayR,
-        state.displayG,
-        state.displayB,
-        {
-          bins: HISTOGRAM_BIN_COUNT,
-          mode: histogramMode,
-          xAxis: histogramViewOptions.xAxis,
-          evReference: HISTOGRAM_EV_REFERENCE
+      const histogramOptions = {
+        bins: HISTOGRAM_BIN_COUNT,
+        mode: histogramMode,
+        xAxis: histogramViewOptions.xAxis,
+        evReference: HISTOGRAM_EV_REFERENCE
+      };
+
+      if (isStokesDisplaySelection(state)) {
+        if (!activeSession.displayTexture || activeSession.textureRevisionKey !== textureKey) {
+          activeSession.displayTexture = buildSelectedDisplayTexture(
+            layer,
+            activeSession.decoded.width,
+            activeSession.decoded.height,
+            state,
+            activeSession.displayTexture ?? undefined
+          );
+          activeSession.displayLuminanceRange = computeDisplayTextureLuminanceRange(activeSession.displayTexture);
+          activeSession.textureRevisionKey = textureKey;
         }
-      );
+
+        cachedHistogram = buildDisplayHistogram(activeSession.displayTexture, histogramOptions);
+      } else {
+        cachedHistogram = buildLayerDisplayHistogram(
+          layer,
+          activeSession.decoded.width,
+          activeSession.decoded.height,
+          state.displayR,
+          state.displayG,
+          state.displayB,
+          histogramOptions
+        );
+      }
       cachedHistogramSessionId = activeSession.id;
       cachedHistogramTextureRevisionKey = textureKey;
       cachedHistogramMode = histogramMode;
@@ -1017,6 +1091,8 @@ async function bootstrap(): Promise<void> {
         colormapRange: null,
         colormapRangeMode: 'alwaysAuto',
         colormapZeroCentered: false,
+        displaySource: 'channels',
+        stokesParameter: null,
         hoveredPixel: null,
         lockedPixel: null
       });
@@ -1035,6 +1111,8 @@ async function bootstrap(): Promise<void> {
         colormapRangeMode: 'alwaysAuto',
         colormapZeroCentered: false,
         activeLayer: 0,
+        displaySource: 'channels',
+        stokesParameter: null,
         displayR: ZERO_CHANNEL,
         displayG: ZERO_CHANNEL,
         displayB: ZERO_CHANNEL,
@@ -1075,6 +1153,7 @@ async function bootstrap(): Promise<void> {
     }
 
     if (!removingActiveSession) {
+      stokesDisplayRestoreStates.delete(sessionId);
       ui.setOpenedImageOptions(
         sessions.map((session) => ({ id: session.id, label: session.displayName })),
         activeSessionId
@@ -1095,6 +1174,7 @@ async function bootstrap(): Promise<void> {
     const nextSession = sessions[nextIndex];
     const currentState = store.getState();
     const nextState = buildSwitchedSessionState(nextSession, currentState, removedSession?.decoded ?? null);
+    stokesDisplayRestoreStates.delete(sessionId);
     activeSessionId = nextSession.id;
     releaseInactiveSessionDisplayCaches(activeSessionId);
 
@@ -1123,6 +1203,7 @@ async function bootstrap(): Promise<void> {
     uploadedSessionId = null;
     uploadedTextureRevisionKey = '';
     renderedSessionId = null;
+    stokesDisplayRestoreStates.clear();
     invalidateHistogramCache();
 
     renderer.clearImage();
@@ -1138,6 +1219,8 @@ async function bootstrap(): Promise<void> {
       panX: 0,
       panY: 0,
       activeLayer: 0,
+      displaySource: 'channels',
+      stokesParameter: null,
       displayR: ZERO_CHANNEL,
       displayG: ZERO_CHANNEL,
       displayB: ZERO_CHANNEL,
@@ -1148,6 +1231,8 @@ async function bootstrap(): Promise<void> {
     ui.setOpenedImageOptions([], null);
     ui.setLayerOptions([], 0);
     ui.setRgbGroupOptions([], {
+      displaySource: 'channels',
+      stokesParameter: null,
       displayR: ZERO_CHANNEL,
       displayG: ZERO_CHANNEL,
       displayB: ZERO_CHANNEL
@@ -1225,6 +1310,8 @@ async function bootstrap(): Promise<void> {
       state.lockedPixel,
       state.hoveredPixel,
       {
+        displaySource: state.displaySource,
+        stokesParameter: state.stokesParameter,
         displayR: state.displayR,
         displayG: state.displayG,
         displayB: state.displayB
@@ -1297,7 +1384,7 @@ async function bootstrap(): Promise<void> {
     height: number,
     lockedPixel: ImagePixel | null,
     hoveredPixel: ImagePixel | null,
-    displayMapping: { displayR: string; displayG: string; displayB: string },
+    displayMapping: DisplaySelection,
     exposureEv: number,
     visualizationMode: VisualizationMode,
     colormapRange: DisplayLuminanceRange | null,
@@ -1311,7 +1398,7 @@ async function bootstrap(): Promise<void> {
       return;
     }
 
-    const sample = samplePixelValues(layer, width, height, targetPixel);
+    const sample = samplePixelValuesForDisplay(layer, width, height, targetPixel, displayMapping);
     ui.setProbeReadout(
       mode,
       sample,
@@ -1394,6 +1481,8 @@ async function bootstrap(): Promise<void> {
         zoom: currentState.zoom,
         panX: pan.panX,
         panY: pan.panY,
+        displaySource: currentState.displaySource,
+        stokesParameter: currentState.stokesParameter,
         displayR: currentState.displayR,
         displayG: currentState.displayG,
         displayB: currentState.displayB,
@@ -1453,11 +1542,46 @@ async function bootstrap(): Promise<void> {
   }
 
   function buildTextureRevisionKey(state: ViewerState): string {
-    return `${state.activeLayer}:${state.displayR}:${state.displayG}:${state.displayB}`;
+    return [
+      state.activeLayer,
+      state.displaySource,
+      state.stokesParameter ?? '',
+      state.displayR,
+      state.displayG,
+      state.displayB
+    ].join(':');
   }
 
   function cloneDisplayLuminanceRange(range: DisplayLuminanceRange | null): DisplayLuminanceRange | null {
     return range ? { min: range.min, max: range.max } : null;
+  }
+
+  function captureRestorableVisualizationState(state: ViewerState): RestorableVisualizationState {
+    return {
+      visualizationMode: state.visualizationMode,
+      activeColormapId: state.activeColormapId,
+      colormapRange: cloneDisplayLuminanceRange(state.colormapRange),
+      colormapRangeMode: state.colormapRangeMode,
+      colormapZeroCentered: state.colormapZeroCentered
+    };
+  }
+
+  function resolveStokesDisplayRestoreState(sessionId: string): RestorableVisualizationState {
+    const restoreState = stokesDisplayRestoreStates.get(sessionId);
+    if (restoreState) {
+      return {
+        ...restoreState,
+        colormapRange: cloneDisplayLuminanceRange(restoreState.colormapRange)
+      };
+    }
+
+    return {
+      visualizationMode: 'rgb',
+      activeColormapId: defaultColormapId,
+      colormapRange: null,
+      colormapRangeMode: 'alwaysAuto',
+      colormapZeroCentered: false
+    };
   }
 
   function resolveAutoColormapRange(
@@ -1467,6 +1591,20 @@ async function bootstrap(): Promise<void> {
     return zeroCentered
       ? buildZeroCenteredColormapRange(range)
       : cloneDisplayLuminanceRange(range);
+  }
+
+  function resolveStokesDisplayDefaults(
+    selection: DisplaySelection
+  ): { colormapLabel: string; range: DisplayLuminanceRange } | null {
+    if (selection.displaySource === 'channels' || !selection.stokesParameter) {
+      return null;
+    }
+
+    if (selection.stokesParameter === 'aolp') {
+      return { colormapLabel: 'HSV', range: { min: 0, max: Math.PI } };
+    }
+
+    return { colormapLabel: 'Black-Red', range: { min: 0, max: 1 } };
   }
 
   function sameDisplayLuminanceRange(

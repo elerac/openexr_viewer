@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_COLORMAP_ID,
+  findColormapIdByLabel,
   getColormapAsset,
   getColormapOptions,
   mapValueToColormapRgbBytes,
@@ -29,6 +30,7 @@ describe('NumPy colormap LUT parsing', () => {
     expect(getColormapAsset(registry, '0')?.file).toBe('colormaps/red_black_green.npy');
     expect(getColormapAsset(registry, '1')?.label).toBe('Blue / Yellow');
     expect(getColormapAsset(registry, 'blue-yellow')).toBeNull();
+    expect(findColormapIdByLabel(registry, 'blue / yellow')).toBe('1');
   });
 
   it('rejects invalid manifest entries', () => {

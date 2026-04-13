@@ -1,9 +1,10 @@
 import { ColormapLut, mapValueToColormapRgbBytes } from './colormaps';
 import {
-  DisplayChannelMapping,
+  DisplaySelection,
   DisplayLuminanceRange,
   ImagePixel,
   PixelSample,
+  StokesParameter,
   VisualizationMode,
   ZERO_CHANNEL
 } from './types';
@@ -34,7 +35,7 @@ export function resolveProbeMode(lockedPixel: ImagePixel | null): 'Hover' | 'Loc
 
 export function buildProbeColorPreview(
   sample: PixelSample | null,
-  selection: DisplayChannelMapping,
+  selection: DisplaySelection,
   exposureEv: number,
   visualization: ProbeVisualizationOptions = { mode: 'rgb', colormapRange: null }
 ): ProbeColorPreview | null {
@@ -42,9 +43,7 @@ export function buildProbeColorPreview(
     return null;
   }
 
-  const rawR = readProbeChannel(sample, selection.displayR);
-  const rawG = readProbeChannel(sample, selection.displayG);
-  const rawB = readProbeChannel(sample, selection.displayB);
+  const [rawR, rawG, rawB] = readProbeDisplayValues(sample, selection);
   const exposureScale = 2 ** exposureEv;
   const bytes =
     visualization.mode === 'colormap'
@@ -65,6 +64,19 @@ export function buildProbeColorPreview(
     gValue: formatProbeRgbValue(rawG),
     bValue: formatProbeRgbValue(rawB)
   };
+}
+
+function readProbeDisplayValues(sample: PixelSample, selection: DisplaySelection): [number, number, number] {
+  if (selection.displaySource !== 'channels' && selection.stokesParameter) {
+    const value = readProbeChannel(sample, getStokesParameterLabel(selection.stokesParameter));
+    return [value, value, value];
+  }
+
+  return [
+    readProbeChannel(sample, selection.displayR),
+    readProbeChannel(sample, selection.displayG),
+    readProbeChannel(sample, selection.displayB)
+  ];
 }
 
 function readProbeChannel(sample: PixelSample, channelName: string): number {
@@ -96,4 +108,19 @@ function formatProbeRgbValue(value: number): string {
   }
 
   return Number(value.toPrecision(4)).toString();
+}
+
+function getStokesParameterLabel(parameter: StokesParameter): string {
+  switch (parameter) {
+    case 'aolp':
+      return 'AoLP';
+    case 'dolp':
+      return 'DoLP';
+    case 'dop':
+      return 'DoP';
+    case 'docp':
+      return 'DoCP';
+  }
+
+  return 'DoLP';
 }

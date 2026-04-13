@@ -3,19 +3,29 @@ import { DEFAULT_COLORMAP_ID } from '../src/colormaps';
 import {
   buildDisplayHistogram,
   buildLayerDisplayHistogram,
+  buildSelectedDisplayTexture,
   buildDisplayTexture,
+  buildStokesDisplayTexture,
   buildViewerStateForLayer,
   buildSessionDisplayName,
   buildZeroCenteredColormapRange,
+  computeStokesAolp,
+  computeStokesDocp,
+  computeStokesDop,
+  computeStokesDolp,
   computeDisplayTextureLuminanceRange,
   computeHistogramRenderCeiling,
   createInitialState,
+  detectRgbStokesChannels,
+  detectScalarStokesChannels,
   extractRgbChannelGroups,
   findSelectedRgbGroup,
+  getStokesDisplayOptions,
   persistActiveSessionState,
   pickDefaultDisplayChannels,
   pickNextSessionIndexAfterRemoval,
   scaleHistogramCount,
+  samplePixelValuesForDisplay,
   samplePixelValues
 } from '../src/state';
 import { DecodedExrImage, DecodedLayer, ImagePixel, ViewerState } from '../src/types';
@@ -41,6 +51,13 @@ function createImage(layers: DecodedLayer[]): DecodedExrImage {
   };
 }
 
+function createViewerState(overrides: Partial<ViewerState> = {}): ViewerState {
+  return {
+    ...createInitialState(),
+    ...overrides
+  };
+}
+
 describe('state helpers', () => {
   it('defaults to normal RGB visualization mode', () => {
     expect(createInitialState().visualizationMode).toBe('rgb');
@@ -48,6 +65,8 @@ describe('state helpers', () => {
     expect(createInitialState().colormapRange).toBeNull();
     expect(createInitialState().colormapRangeMode).toBe('alwaysAuto');
     expect(createInitialState().colormapZeroCentered).toBe(false);
+    expect(createInitialState().displaySource).toBe('channels');
+    expect(createInitialState().stokesParameter).toBeNull();
   });
 
   it('builds RGBA display texture from selected channels', () => {
@@ -89,6 +108,212 @@ describe('state helpers', () => {
 
     expect(Array.from(texture.slice(0, 12))).toEqual([0, 2, 3, 1, 0, 2, 3, 1, 0, 2, 3, 1]);
     expect(Array.from(texture.slice(12, 16))).toEqual([1, 2, 3, 1]);
+  });
+
+  it('detects scalar and RGB Stokes channel layouts', () => {
+    expect(detectScalarStokesChannels(['S0', 'S1', 'S2', 'S3'])).toEqual({
+      s0: 'S0',
+      s1: 'S1',
+      s2: 'S2',
+      s3: 'S3'
+    });
+    expect(detectScalarStokesChannels(['S0', 'S1', 'S2'])).toBeNull();
+
+    const rgbNames = [
+      'S0.R', 'S0.G', 'S0.B',
+      'S1.R', 'S1.G', 'S1.B',
+      'S2.R', 'S2.G', 'S2.B',
+      'S3.R', 'S3.G', 'S3.B'
+    ];
+    expect(detectRgbStokesChannels(rgbNames)?.r).toEqual({
+      s0: 'S0.R',
+      s1: 'S1.R',
+      s2: 'S2.R',
+      s3: 'S3.R'
+    });
+    expect(getStokesDisplayOptions(['S0', 'S1', 'S2', 'S3']).map((option) => option.label)).toEqual([
+      'Stokes AoLP',
+      'Stokes DoLP',
+      'Stokes DoP',
+      'Stokes DoCP'
+    ]);
+    expect(getStokesDisplayOptions(rgbNames).map((option) => option.label)).toEqual([
+      'AoLP.(R,G,B)',
+      'DoLP.(R,G,B)',
+      'DoP.(R,G,B)',
+      'DoCP.(R,G,B)'
+    ]);
+  });
+
+  it('computes AoLP, DoLP, DoP, and DoCP from Stokes values', () => {
+    expect(computeStokesAolp(1, 0)).toBeCloseTo(0, 6);
+    expect(computeStokesAolp(0, 1)).toBeCloseTo(Math.PI / 4, 6);
+    expect(computeStokesAolp(-1, 0)).toBeCloseTo(Math.PI / 2, 6);
+    expect(computeStokesAolp(0, -1)).toBeCloseTo((3 * Math.PI) / 4, 6);
+    expect(computeStokesAolp(Number.NaN, 1)).toBe(0);
+
+    expect(computeStokesDolp(1, 1, 0)).toBeCloseTo(1, 6);
+    expect(computeStokesDolp(2, 1, Math.sqrt(3))).toBeCloseTo(1, 6);
+    expect(computeStokesDolp(0, 1, 1)).toBe(0);
+    expect(computeStokesDolp(1, Number.NaN, 1)).toBe(0);
+
+    expect(computeStokesDop(1, 0, 0, 0)).toBe(0);
+    expect(computeStokesDop(1, 1, 0, 0)).toBeCloseTo(1, 6);
+    expect(computeStokesDop(2, 1, 1, Math.sqrt(2))).toBeCloseTo(1, 6);
+    expect(computeStokesDop(0, 1, 1, 1)).toBe(0);
+    expect(computeStokesDop(1, 1, Number.NaN, 1)).toBe(0);
+
+    expect(computeStokesDocp(1, 0)).toBe(0);
+    expect(computeStokesDocp(2, -1)).toBeCloseTo(0.5, 6);
+    expect(computeStokesDocp(0, 1)).toBe(0);
+    expect(computeStokesDocp(1, Number.NaN)).toBe(0);
+  });
+
+  it('builds scalar Stokes AoLP display textures with values duplicated across RGB', () => {
+    const layer: DecodedLayer = {
+      name: 'stokes',
+      channelNames: ['S0', 'S1', 'S2', 'S3'],
+      channelData: new Map([
+        ['S0', new Float32Array([1, 1, 1, 1])],
+        ['S1', new Float32Array([1, 0, -1, 0])],
+        ['S2', new Float32Array([0, 1, 0, -1])],
+        ['S3', new Float32Array([0, 0, 0, 0])]
+      ])
+    };
+
+    const texture = buildStokesDisplayTexture(layer, 2, 2, 'stokesScalar', 'aolp');
+
+    expect(Array.from(texture.slice(0, 4))).toEqual([0, 0, 0, 1]);
+    expect(texture[4]).toBeCloseTo(Math.PI / 4, 6);
+    expect(texture[5]).toBeCloseTo(Math.PI / 4, 6);
+    expect(texture[8]).toBeCloseTo(Math.PI / 2, 6);
+    expect(texture[12]).toBeCloseTo((3 * Math.PI) / 4, 6);
+  });
+
+  it('builds scalar Stokes DoLP display textures and stabilizes invalid samples', () => {
+    const layer: DecodedLayer = {
+      name: 'stokes',
+      channelNames: ['S0', 'S1', 'S2', 'S3'],
+      channelData: new Map([
+        ['S0', new Float32Array([1, 2, 0, 1])],
+        ['S1', new Float32Array([1, 1, 1, Number.NaN])],
+        ['S2', new Float32Array([0, Math.sqrt(3), 1, 0])],
+        ['S3', new Float32Array([0, 0, 0, 0])]
+      ])
+    };
+
+    const texture = buildSelectedDisplayTexture(layer, 2, 2, {
+      ...createViewerState(),
+      displaySource: 'stokesScalar',
+      stokesParameter: 'dolp'
+    });
+
+    expect(texture[0]).toBeCloseTo(1, 6);
+    expect(texture[4]).toBeCloseTo(1, 6);
+    expect(texture[8]).toBe(0);
+    expect(texture[12]).toBe(0);
+  });
+
+  it('builds scalar Stokes DoP and DoCP display textures', () => {
+    const layer: DecodedLayer = {
+      name: 'stokes',
+      channelNames: ['S0', 'S1', 'S2', 'S3'],
+      channelData: new Map([
+        ['S0', new Float32Array([2, 1, 0, 1])],
+        ['S1', new Float32Array([1, 0, 1, 0])],
+        ['S2', new Float32Array([1, 0, 1, 0])],
+        ['S3', new Float32Array([Math.sqrt(2), -1, 1, Number.NaN])]
+      ])
+    };
+
+    const dopTexture = buildStokesDisplayTexture(layer, 2, 2, 'stokesScalar', 'dop');
+    const docpTexture = buildStokesDisplayTexture(layer, 2, 2, 'stokesScalar', 'docp');
+
+    expect(dopTexture[0]).toBeCloseTo(1, 6);
+    expect(dopTexture[4]).toBeCloseTo(1, 6);
+    expect(dopTexture[8]).toBe(0);
+    expect(dopTexture[12]).toBe(0);
+    expect(docpTexture[0]).toBeCloseTo(Math.SQRT1_2, 6);
+    expect(docpTexture[4]).toBeCloseTo(1, 6);
+    expect(docpTexture[8]).toBe(0);
+    expect(docpTexture[12]).toBe(0);
+  });
+
+  it('builds RGB Stokes derived display textures from mono Rec.709 Stokes values', () => {
+    const layer: DecodedLayer = {
+      name: 'stokes-rgb',
+      channelNames: [
+        'S0.R', 'S0.G', 'S0.B',
+        'S1.R', 'S1.G', 'S1.B',
+        'S2.R', 'S2.G', 'S2.B',
+        'S3.R', 'S3.G', 'S3.B'
+      ],
+      channelData: new Map([
+        ['S0.R', new Float32Array([1])],
+        ['S0.G', new Float32Array([1])],
+        ['S0.B', new Float32Array([1])],
+        ['S1.R', new Float32Array([1])],
+        ['S1.G', new Float32Array([0])],
+        ['S1.B', new Float32Array([0])],
+        ['S2.R', new Float32Array([0])],
+        ['S2.G', new Float32Array([1])],
+        ['S2.B', new Float32Array([0])],
+        ['S3.R', new Float32Array([0])],
+        ['S3.G', new Float32Array([0])],
+        ['S3.B', new Float32Array([1])]
+      ])
+    };
+
+    const texture = buildStokesDisplayTexture(layer, 1, 1, 'stokesRgb', 'aolp');
+    const expected = 0.5 * Math.atan2(0.7152, 0.2126);
+
+    expect(texture[0]).toBeCloseTo(expected, 6);
+    expect(texture[1]).toBeCloseTo(expected, 6);
+    expect(texture[2]).toBeCloseTo(expected, 6);
+    expect(texture[3]).toBe(1);
+
+    const dopTexture = buildStokesDisplayTexture(layer, 1, 1, 'stokesRgb', 'dop');
+    const docpTexture = buildStokesDisplayTexture(layer, 1, 1, 'stokesRgb', 'docp');
+    expect(dopTexture[0]).toBeCloseTo(Math.sqrt(0.2126 ** 2 + 0.7152 ** 2 + 0.0722 ** 2), 6);
+    expect(dopTexture[1]).toBeCloseTo(dopTexture[0], 6);
+    expect(dopTexture[2]).toBeCloseTo(dopTexture[0], 6);
+    expect(docpTexture[0]).toBeCloseTo(0.0722, 6);
+    expect(docpTexture[1]).toBeCloseTo(0.0722, 6);
+    expect(docpTexture[2]).toBeCloseTo(0.0722, 6);
+  });
+
+  it('returns zero for RGB Stokes degree values when the mono S0 denominator is invalid', () => {
+    const layer: DecodedLayer = {
+      name: 'stokes-rgb',
+      channelNames: [
+        'S0.R', 'S0.G', 'S0.B',
+        'S1.R', 'S1.G', 'S1.B',
+        'S2.R', 'S2.G', 'S2.B',
+        'S3.R', 'S3.G', 'S3.B'
+      ],
+      channelData: new Map([
+        ['S0.R', new Float32Array([0])],
+        ['S0.G', new Float32Array([0])],
+        ['S0.B', new Float32Array([0])],
+        ['S1.R', new Float32Array([1])],
+        ['S1.G', new Float32Array([1])],
+        ['S1.B', new Float32Array([1])],
+        ['S2.R', new Float32Array([1])],
+        ['S2.G', new Float32Array([1])],
+        ['S2.B', new Float32Array([1])],
+        ['S3.R', new Float32Array([1])],
+        ['S3.G', new Float32Array([1])],
+        ['S3.B', new Float32Array([1])]
+      ])
+    };
+
+    const dolpTexture = buildStokesDisplayTexture(layer, 1, 1, 'stokesRgb', 'dolp');
+    const dopTexture = buildStokesDisplayTexture(layer, 1, 1, 'stokesRgb', 'dop');
+    const docpTexture = buildStokesDisplayTexture(layer, 1, 1, 'stokesRgb', 'docp');
+
+    expect(Array.from(dolpTexture)).toEqual([0, 0, 0, 1]);
+    expect(Array.from(dopTexture)).toEqual([0, 0, 0, 1]);
+    expect(Array.from(docpTexture)).toEqual([0, 0, 0, 1]);
   });
 
   it('computes finite luminance range from a display texture', () => {
@@ -285,23 +510,11 @@ describe('state helpers', () => {
     const image = createImage([createLayer(), altLayer]);
 
     const nextState = buildViewerStateForLayer(
-      {
-        exposureEv: 0,
-        visualizationMode: 'rgb',
-        activeColormapId: DEFAULT_COLORMAP_ID,
-        colormapRange: null,
-        colormapRangeMode: 'alwaysAuto',
-        colormapZeroCentered: false,
-        zoom: 1,
-        panX: 0,
-        panY: 0,
-        activeLayer: 0,
+      createViewerState({
         displayR: 'R',
         displayG: 'G',
-        displayB: 'B',
-        hoveredPixel: null,
-        lockedPixel: null
-      },
+        displayB: 'B'
+      }),
       image,
       1
     );
@@ -316,23 +529,11 @@ describe('state helpers', () => {
     const image = createImage([createLayer()]);
 
     const nextState = buildViewerStateForLayer(
-      {
-        exposureEv: 0,
-        visualizationMode: 'rgb',
-        activeColormapId: DEFAULT_COLORMAP_ID,
-        colormapRange: null,
-        colormapRangeMode: 'alwaysAuto',
-        colormapZeroCentered: false,
-        zoom: 1,
-        panX: 0,
-        panY: 0,
-        activeLayer: 0,
+      createViewerState({
         displayR: '__ZERO__',
         displayG: '__ZERO__',
-        displayB: '__ZERO__',
-        hoveredPixel: null,
-        lockedPixel: null
-      },
+        displayB: '__ZERO__'
+      }),
       image,
       0
     );
@@ -346,23 +547,12 @@ describe('state helpers', () => {
     const image = createImage([createLayer()]);
 
     const nextState = buildViewerStateForLayer(
-      {
-        exposureEv: 0,
-        visualizationMode: 'rgb',
-        activeColormapId: DEFAULT_COLORMAP_ID,
-        colormapRange: null,
-        colormapRangeMode: 'alwaysAuto',
-        colormapZeroCentered: false,
-        zoom: 1,
-        panX: 0,
-        panY: 0,
+      createViewerState({
         activeLayer: 3,
         displayR: 'X',
         displayG: 'Y',
-        displayB: 'Z',
-        hoveredPixel: null,
-        lockedPixel: null
-      },
+        displayB: 'Z'
+      }),
       image,
       3
     );
@@ -371,6 +561,148 @@ describe('state helpers', () => {
     expect(nextState.displayR).toBe('R');
     expect(nextState.displayG).toBe('G');
     expect(nextState.displayB).toBe('B');
+  });
+
+  it('preserves available Stokes selections and falls back when unavailable', () => {
+    const stokesLayer: DecodedLayer = {
+      name: 'stokes',
+      channelNames: ['S0', 'S1', 'S2', 'S3'],
+      channelData: new Map([
+        ['S0', new Float32Array([1, 1, 1, 1])],
+        ['S1', new Float32Array([1, 1, 1, 1])],
+        ['S2', new Float32Array([0, 0, 0, 0])],
+        ['S3', new Float32Array([0, 0, 0, 0])]
+      ])
+    };
+    const image = createImage([stokesLayer, createLayer()]);
+
+    const preserved = buildViewerStateForLayer(
+      createViewerState({
+        displaySource: 'stokesScalar',
+        stokesParameter: 'aolp',
+        displayR: 'S0',
+        displayG: 'S1',
+        displayB: 'S2'
+      }),
+      image,
+      0
+    );
+    expect(preserved.displaySource).toBe('stokesScalar');
+    expect(preserved.stokesParameter).toBe('aolp');
+
+    const fallback = buildViewerStateForLayer(preserved, image, 1);
+    expect(fallback.displaySource).toBe('channels');
+    expect(fallback.stokesParameter).toBeNull();
+    expect(fallback.displayR).toBe('R');
+    expect(fallback.displayG).toBe('G');
+    expect(fallback.displayB).toBe('B');
+  });
+
+  it('adds selected derived Stokes values to probe samples', () => {
+    const layer: DecodedLayer = {
+      name: 'stokes',
+      channelNames: ['S0', 'S1', 'S2', 'S3'],
+      channelData: new Map([
+        ['S0', new Float32Array([1])],
+        ['S1', new Float32Array([0])],
+        ['S2', new Float32Array([1])],
+        ['S3', new Float32Array([0])]
+      ])
+    };
+
+    const sample = samplePixelValuesForDisplay(
+      layer,
+      1,
+      1,
+      { ix: 0, iy: 0 },
+      {
+        ...createViewerState(),
+        displaySource: 'stokesScalar',
+        stokesParameter: 'aolp'
+      }
+    );
+
+    expect(sample?.values.S0).toBe(1);
+    expect(sample?.values.AoLP).toBeCloseTo(Math.PI / 4, 6);
+
+    const docpSample = samplePixelValuesForDisplay(
+      {
+        ...layer,
+        channelData: new Map([
+          ['S0', new Float32Array([2])],
+          ['S1', new Float32Array([0])],
+          ['S2', new Float32Array([0])],
+          ['S3', new Float32Array([-1])]
+        ])
+      },
+      1,
+      1,
+      { ix: 0, iy: 0 },
+      {
+        ...createViewerState(),
+        displaySource: 'stokesScalar',
+        stokesParameter: 'docp'
+      }
+    );
+
+    expect(docpSample?.values.DoCP).toBeCloseTo(0.5, 6);
+  });
+
+  it('adds mono-derived RGB Stokes values to probe samples', () => {
+    const layer: DecodedLayer = {
+      name: 'stokes-rgb',
+      channelNames: [
+        'S0.R', 'S0.G', 'S0.B',
+        'S1.R', 'S1.G', 'S1.B',
+        'S2.R', 'S2.G', 'S2.B',
+        'S3.R', 'S3.G', 'S3.B'
+      ],
+      channelData: new Map([
+        ['S0.R', new Float32Array([1])],
+        ['S0.G', new Float32Array([1])],
+        ['S0.B', new Float32Array([1])],
+        ['S1.R', new Float32Array([1])],
+        ['S1.G', new Float32Array([0])],
+        ['S1.B', new Float32Array([0])],
+        ['S2.R', new Float32Array([0])],
+        ['S2.G', new Float32Array([1])],
+        ['S2.B', new Float32Array([0])],
+        ['S3.R', new Float32Array([0])],
+        ['S3.G', new Float32Array([0])],
+        ['S3.B', new Float32Array([1])]
+      ])
+    };
+
+    const sample = samplePixelValuesForDisplay(
+      layer,
+      1,
+      1,
+      { ix: 0, iy: 0 },
+      {
+        ...createViewerState(),
+        displaySource: 'stokesRgb',
+        stokesParameter: 'aolp'
+      }
+    );
+
+    expect(sample?.values['S0.R']).toBe(1);
+    expect(sample?.values.AoLP).toBeCloseTo(0.5 * Math.atan2(0.7152, 0.2126), 6);
+    expect(sample?.values['AoLP.R']).toBeUndefined();
+
+    const dopSample = samplePixelValuesForDisplay(
+      layer,
+      1,
+      1,
+      { ix: 0, iy: 0 },
+      {
+        ...createViewerState(),
+        displaySource: 'stokesRgb',
+        stokesParameter: 'dop'
+      }
+    );
+
+    expect(dopSample?.values.DoP).toBeCloseTo(Math.sqrt(0.2126 ** 2 + 0.7152 ** 2 + 0.0722 ** 2), 6);
+    expect(dopSample?.values['DoP.R']).toBeUndefined();
   });
 
   it('builds layer histograms without counting non-finite samples', () => {
@@ -490,23 +822,11 @@ describe('state helpers', () => {
   });
 
   it('persists active session state without mutating others', () => {
-    const baseState: ViewerState = {
-      exposureEv: 0,
-      visualizationMode: 'rgb',
-      activeColormapId: DEFAULT_COLORMAP_ID,
-      colormapRange: null,
-      colormapRangeMode: 'alwaysAuto',
-      colormapZeroCentered: false,
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      activeLayer: 0,
+    const baseState: ViewerState = createViewerState({
       displayR: 'R',
       displayG: 'G',
-      displayB: 'B',
-      hoveredPixel: null,
-      lockedPixel: null
-    };
+      displayB: 'B'
+    });
 
     const sessions = [
       { id: 'a', state: { ...baseState, exposureEv: -1 } },

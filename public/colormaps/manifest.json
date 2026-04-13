@@ -11,6 +11,10 @@
     {
       "label": "HSV",
       "file": "hsv.npy"
+    },
+    {
+      "label": "Black-Red",
+      "file": "black-red.npy"
     }
   ]
 }

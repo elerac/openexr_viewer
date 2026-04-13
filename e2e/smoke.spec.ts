@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { Buffer } from 'node:buffer';
+import {
+  CompressionMethod,
+  ExrEncoder,
+  initSync,
+  SamplePrecision
+} from '../src/vendor/exrs_raw_wasm_bindgen.js';
 
 interface ColormapManifest {
   colormaps: Array<{
@@ -11,6 +18,7 @@ const colormapManifest = JSON.parse(
   readFileSync(new URL('../public/colormaps/manifest.json', import.meta.url), 'utf8')
 ) as ColormapManifest;
 const expectedColormapLabels = colormapManifest.colormaps.map((colormap) => colormap.label);
+let exrEncoderInitialized = false;
 
 test('boots the default demo image and keeps core controls stable', async ({ page }) => {
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
@@ -216,3 +224,221 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(layerControl).toBeHidden();
   await expect(probeCoords).toHaveText('(x: -, y: -)');
 });
+
+test('loads scalar Stokes channels and applies derived-channel defaults', async ({ page }) => {
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  const openedImages = page.locator('#opened-images-select');
+  await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
+
+  await page.setInputFiles('#file-input', {
+    name: 'stokes_scalar.exr',
+    mimeType: 'image/exr',
+    buffer: buildScalarStokesExr()
+  });
+
+  await expect(openedImages.locator('option:checked')).toContainText('stokes_scalar.exr', { timeout: 30000 });
+
+  const channelSelect = page.locator('#rgb-group-select');
+  await expect(channelSelect).toBeEnabled();
+  await expect(channelSelect.locator('option', { hasText: 'Stokes AoLP' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'Stokes DoLP' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'Stokes DoP' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'Stokes DoCP' })).toHaveCount(1);
+
+  const colormapRangeControl = page.locator('#colormap-range-control');
+  const colormapSelect = page.locator('#colormap-select');
+  const colormapVminInput = page.locator('#colormap-vmin-input');
+  const colormapVmaxInput = page.locator('#colormap-vmax-input');
+  const colormapAutoRangeButton = page.getByRole('button', { name: 'Auto Range' });
+  const colormapZeroCenterButton = page.getByRole('button', { name: 'Zero Center' });
+  const hsvId = String(expectedColormapLabels.indexOf('HSV'));
+  const blackRedId = String(expectedColormapLabels.indexOf('Black-Red'));
+
+  expect(hsvId).not.toBe('-1');
+  expect(blackRedId).not.toBe('-1');
+
+  await channelSelect.selectOption({ label: 'Stokes AoLP' });
+  await expect(colormapRangeControl).toBeVisible();
+  await expect(colormapSelect).toHaveValue(hsvId);
+  await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI, 6);
+
+  await channelSelect.selectOption({ label: 'Stokes DoLP' });
+  await expect(colormapSelect).toHaveValue(blackRedId);
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
+
+  await channelSelect.selectOption({ label: 'Stokes DoP' });
+  await expect(colormapSelect).toHaveValue(blackRedId);
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
+
+  await channelSelect.selectOption({ label: 'Stokes DoCP' });
+  await expect(colormapSelect).toHaveValue(blackRedId);
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
+});
+
+test('loads RGB Stokes channels and applies mono-derived scalar defaults', async ({ page }) => {
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  const openedImages = page.locator('#opened-images-select');
+  await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
+
+  await page.setInputFiles('#file-input', {
+    name: 'stokes_rgb.exr',
+    mimeType: 'image/exr',
+    buffer: buildRgbStokesExr()
+  });
+
+  await expect(openedImages.locator('option:checked')).toContainText('stokes_rgb.exr', { timeout: 30000 });
+
+  const channelSelect = page.locator('#rgb-group-select');
+  await expect(channelSelect).toBeEnabled();
+  await expect(channelSelect.locator('option', { hasText: 'AoLP.(R,G,B)' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'DoLP.(R,G,B)' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'DoP.(R,G,B)' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'DoCP.(R,G,B)' })).toHaveCount(1);
+
+  const colormapRangeControl = page.locator('#colormap-range-control');
+  const colormapSelect = page.locator('#colormap-select');
+  const colormapVminInput = page.locator('#colormap-vmin-input');
+  const colormapVmaxInput = page.locator('#colormap-vmax-input');
+  const noneButton = page.getByRole('button', { name: 'None', exact: true });
+  const colormapButton = page.getByRole('button', { name: 'Colormap' });
+  const exposureControl = page.locator('#exposure-control');
+  const colormapAutoRangeButton = page.getByRole('button', { name: 'Auto Range' });
+  const colormapZeroCenterButton = page.getByRole('button', { name: 'Zero Center' });
+  const hsvId = String(expectedColormapLabels.indexOf('HSV'));
+  const blackRedId = String(expectedColormapLabels.indexOf('Black-Red'));
+  const previousColormapId = String(expectedColormapLabels.indexOf('RdBu'));
+
+  expect(hsvId).not.toBe('-1');
+  expect(blackRedId).not.toBe('-1');
+  expect(previousColormapId).not.toBe('-1');
+
+  await channelSelect.selectOption({ label: 'AoLP.(R,G,B)' });
+  await expect(colormapRangeControl).toBeVisible();
+  await expect(colormapSelect).toHaveValue(hsvId);
+  await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI, 6);
+
+  await channelSelect.selectOption({ label: 'DoLP.(R,G,B)' });
+  await expect(colormapSelect).toHaveValue(blackRedId);
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
+
+  await channelSelect.selectOption({ label: 'DoP.(R,G,B)' });
+  await expect(colormapSelect).toHaveValue(blackRedId);
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
+
+  await channelSelect.selectOption({ label: 'DoCP.(R,G,B)' });
+  await expect(colormapSelect).toHaveValue(blackRedId);
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
+
+  await channelSelect.selectOption({ label: 'R,G,B' });
+  await expect(noneButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(colormapButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(exposureControl).toBeVisible();
+  await expect(colormapRangeControl).toBeHidden();
+
+  await colormapButton.click();
+  await colormapSelect.selectOption({ label: 'RdBu' });
+  await expect(colormapButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(colormapSelect).toHaveValue(previousColormapId);
+
+  await channelSelect.selectOption({ label: 'DoCP.(R,G,B)' });
+  await expect(colormapSelect).toHaveValue(blackRedId);
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
+
+  await channelSelect.selectOption({ label: 'R,G,B' });
+  await expect(noneButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(colormapButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(exposureControl).toBeHidden();
+  await expect(colormapRangeControl).toBeVisible();
+  await expect(colormapSelect).toHaveValue(previousColormapId);
+});
+
+function buildScalarStokesExr(): Buffer {
+  ensureExrEncoderInitialized();
+
+  const encoder = new ExrEncoder(2, 2);
+  try {
+    encoder.addLayer(
+      null,
+      ['S0', 'S1', 'S2', 'S3'],
+      new Float32Array([
+        1, 1, 0, 0,
+        1, 0, 1, 0,
+        1, -1, 0, 0,
+        1, 0, -1, 0
+      ]),
+      SamplePrecision.F32,
+      CompressionMethod.None
+    );
+    return Buffer.from(encoder.encode());
+  } finally {
+    encoder.free();
+  }
+}
+
+function buildRgbStokesExr(): Buffer {
+  ensureExrEncoderInitialized();
+
+  const encoder = new ExrEncoder(2, 2);
+  try {
+    encoder.addLayer(
+      null,
+      [
+        'R', 'G', 'B',
+        'S0.R', 'S0.G', 'S0.B',
+        'S1.R', 'S1.G', 'S1.B',
+        'S2.R', 'S2.G', 'S2.B',
+        'S3.R', 'S3.G', 'S3.B'
+      ],
+      new Float32Array([
+        0.8, 0.7, 0.6, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0,
+        0.6, 0.7, 0.8, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0,
+        0.4, 0.5, 0.6, 1, 1, 1, -1, 0, 0, 0, -1, 0, 0, 0, 0,
+        0.2, 0.3, 0.4, 1, 1, 1, 0, -1, 0, -1, 0, 0, 0, 0, 0
+      ]),
+      SamplePrecision.F32,
+      CompressionMethod.None
+    );
+    return Buffer.from(encoder.encode());
+  } finally {
+    encoder.free();
+  }
+}
+
+function ensureExrEncoderInitialized(): void {
+  if (exrEncoderInitialized) {
+    return;
+  }
+
+  const wasmBytes = readFileSync(new URL('../src/vendor/exrs_raw_wasm_bindgen_bg.wasm', import.meta.url));
+  initSync({ module: wasmBytes });
+  exrEncoderInitialized = true;
+}

@@ -1,5 +1,5 @@
 import { ColormapLut, sampleColormapRgbBytes } from './colormaps';
-import { DisplayChannelMapping, DisplayLuminanceRange, PixelSample, VisualizationMode, ViewerState } from './types';
+import { DisplaySelection, DisplayLuminanceRange, PixelSample, VisualizationMode, ViewerState } from './types';
 import { ProbeColorPreview } from './probe';
 import {
   buildZeroCenteredColormapRange,
@@ -7,6 +7,7 @@ import {
   extractRgbChannelGroups,
   findSelectedRgbGroup,
   formatScientific,
+  getStokesDisplayOptions,
   scaleHistogramCount,
   type HistogramData,
   type HistogramViewOptions,
@@ -40,7 +41,7 @@ export interface UiCallbacks {
   onHistogramXAxisChange: (value: HistogramXAxisMode) => void;
   onHistogramYAxisChange: (value: HistogramYAxisMode) => void;
   onLayerChange: (layerIndex: number) => void;
-  onRgbGroupChange: (mapping: DisplayChannelMapping) => void;
+  onRgbGroupChange: (mapping: DisplaySelection) => void;
   onVisualizationModeChange: (mode: VisualizationMode) => void;
   onColormapChange: (colormapId: string) => void;
   onColormapRangeChange: (range: DisplayLuminanceRange) => void;
@@ -113,7 +114,7 @@ export interface ListboxHitTestMetrics {
 
 export class ViewerUi {
   private readonly elements: Elements;
-  private readonly rgbGroupMappings = new Map<string, DisplayChannelMapping>();
+  private readonly rgbGroupMappings = new Map<string, DisplaySelection>();
   private readonly histogramResizeObserver: ResizeObserver;
   private lastHistogram: HistogramData | null = null;
   private histogramViewOptions: HistogramViewOptions = { xAxis: 'ev', yAxis: 'linear' };
@@ -405,27 +406,47 @@ export class ViewerUi {
 
   setRgbGroupOptions(
     channelNames: string[],
-    selected: DisplayChannelMapping
+    selected: DisplaySelection
   ): void {
     const hadFocus = document.activeElement === this.elements.rgbGroupSelect;
     const groups = extractRgbChannelGroups(channelNames);
+    const stokesOptions = getStokesDisplayOptions(channelNames);
     const selectedGroup = findSelectedRgbGroup(
       groups,
       selected.displayR,
       selected.displayG,
       selected.displayB
     );
+    const showCurrentChannelOption = selected.displaySource === 'channels' && !selectedGroup && stokesOptions.length > 0;
+    const optionCount = groups.length + stokesOptions.length + (showCurrentChannelOption ? 1 : 0);
 
-    this.hasRgbGroups = groups.length > 0;
+    this.hasRgbGroups = optionCount > 0;
     this.rgbGroupMappings.clear();
     this.elements.rgbGroupSelect.innerHTML = '';
-    this.applyListboxRowSizing(this.elements.rgbGroupSelect, groups.length, groups.length);
+    this.applyListboxRowSizing(this.elements.rgbGroupSelect, optionCount, optionCount);
 
-    let selectedValue = groups.length > 0 ? 'group-0' : '';
+    let selectedValue = optionCount > 0 ? 'group-0' : '';
+
+    if (showCurrentChannelOption) {
+      const value = 'channels-current';
+      this.rgbGroupMappings.set(value, {
+        ...selected,
+        displaySource: 'channels',
+        stokesParameter: null
+      });
+
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = formatCurrentChannelOptionLabel(selected);
+      this.elements.rgbGroupSelect.append(option);
+      selectedValue = value;
+    }
 
     groups.forEach((group, index) => {
       const value = `group-${index}`;
       this.rgbGroupMappings.set(value, {
+        displaySource: 'channels',
+        stokesParameter: null,
         displayR: group.r,
         displayG: group.g,
         displayB: group.b
@@ -437,6 +458,29 @@ export class ViewerUi {
       this.elements.rgbGroupSelect.append(option);
 
       if (selectedGroup && selectedGroup.key === group.key) {
+        selectedValue = value;
+      }
+    });
+
+    stokesOptions.forEach((stokesOption, index) => {
+      const value = `stokes-${index}`;
+      this.rgbGroupMappings.set(value, {
+        displaySource: stokesOption.displaySource,
+        stokesParameter: stokesOption.stokesParameter,
+        displayR: selected.displayR,
+        displayG: selected.displayG,
+        displayB: selected.displayB
+      });
+
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = stokesOption.label;
+      this.elements.rgbGroupSelect.append(option);
+
+      if (
+        selected.displaySource === stokesOption.displaySource &&
+        selected.stokesParameter === stokesOption.stokesParameter
+      ) {
         selectedValue = value;
       }
     });
@@ -1377,6 +1421,13 @@ function resolveElements(): Elements {
     glCanvas: requireElement('gl-canvas', HTMLCanvasElement),
     overlayCanvas: requireElement('overlay-canvas', HTMLCanvasElement)
   };
+}
+
+function formatCurrentChannelOptionLabel(selected: DisplaySelection): string {
+  const channels = [selected.displayR, selected.displayG, selected.displayB];
+  return channels.every((channel) => channel === channels[0])
+    ? channels[0] ?? 'Current'
+    : channels.join(',');
 }
 
 function createSvgElement<K extends keyof SVGElementTagNameMap>(tagName: K): SVGElementTagNameMap[K] {

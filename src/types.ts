@@ -2,6 +2,8 @@ export const ZERO_CHANNEL = '__ZERO__';
 
 export type VisualizationMode = 'rgb' | 'colormap';
 export type ColormapRangeMode = 'alwaysAuto' | 'oneTime';
+export type DisplaySourceKind = 'channels' | 'stokesScalar' | 'stokesRgb';
+export type StokesParameter = 'aolp' | 'dolp' | 'dop' | 'docp';
 
 export interface DisplayLuminanceRange {
   min: number;
@@ -36,6 +38,8 @@ export interface ViewerState {
   panX: number;
   panY: number;
   activeLayer: number;
+  displaySource: DisplaySourceKind;
+  stokesParameter: StokesParameter | null;
   displayR: string;
   displayG: string;
   displayB: string;
@@ -47,6 +51,11 @@ export interface DisplayChannelMapping {
   displayR: string;
   displayG: string;
   displayB: string;
+}
+
+export interface DisplaySelection extends DisplayChannelMapping {
+  displaySource: DisplaySourceKind;
+  stokesParameter: StokesParameter | null;
 }
 
 export interface PixelSample {
