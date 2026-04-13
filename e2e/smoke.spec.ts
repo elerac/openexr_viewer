@@ -1,4 +1,16 @@
 import { expect, test } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+interface ColormapManifest {
+  colormaps: Array<{
+    label: string;
+  }>;
+}
+
+const colormapManifest = JSON.parse(
+  readFileSync(new URL('../public/colormaps/manifest.json', import.meta.url), 'utf8')
+) as ColormapManifest;
+const expectedColormapLabels = colormapManifest.colormaps.map((colormap) => colormap.label);
 
 test('boots the default demo image and keeps core controls stable', async ({ page }) => {
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
@@ -98,10 +110,10 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'false');
   await expect(colormapSelect).toBeVisible();
   await expect(colormapSelect).toBeEnabled();
-  await expect(colormapSelect.locator('option')).toHaveCount(2);
-  await expect(colormapSelect.locator('option').first()).toHaveText('Red / Black / Green');
+  expect(expectedColormapLabels.length).toBeGreaterThanOrEqual(2);
+  await expect(colormapSelect.locator('option')).toHaveText(expectedColormapLabels);
   await expect(colormapSelect).toHaveValue('0');
-  await colormapSelect.selectOption({ label: 'Blue / Yellow' });
+  await colormapSelect.selectOption({ label: expectedColormapLabels[1] });
   await expect(colormapSelect).toHaveValue('1');
   await expect(colormapRangeSlider).toBeVisible();
   await expect(colormapVminInput).toBeEnabled();
