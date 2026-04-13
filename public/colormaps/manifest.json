@@ -1,12 +1,16 @@
 {
   "colormaps": [
     {
-      "label": "Red / Black / Green",
-      "file": "red_black_green.npy"
+      "label": "Viridis",
+      "file": "viridis.npy"
     },
     {
-      "label": "Blue / Yellow",
-      "file": "blue_yellow.npy"
+      "label": "RdBu",
+      "file": "RdBu.npy"
+    },
+    {
+      "label": "HSV",
+      "file": "hsv.npy"
     }
   ]
 }
