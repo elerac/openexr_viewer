@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
+import { ColormapLut } from '../src/colormaps';
 import { buildProbeColorPreview, resolveActiveProbePixel, resolveProbeMode } from '../src/probe';
 import { ZERO_CHANNEL } from '../src/types';
+
+const redBlackGreenLut: ColormapLut = {
+  id: '0',
+  label: 'Red / Black / Green',
+  entryCount: 3,
+  rgba8: new Uint8Array([
+    255, 0, 0, 255,
+    0, 0, 0, 255,
+    0, 255, 0, 255
+  ])
+};
 
 describe('probe helpers', () => {
   it('prefers the locked pixel over hover for display state', () => {
@@ -70,15 +82,16 @@ describe('probe helpers', () => {
     });
   });
 
-  it('maps probe swatch colors through the red-black-green colormap', () => {
+  it('maps probe swatch colors through the selected colormap LUT', () => {
     const selection = {
       displayR: 'Y',
       displayG: 'Y',
       displayB: 'Y'
     };
     const visualization = {
-      mode: 'redBlackGreen' as const,
-      colormapRange: { min: 0, max: 2 }
+      mode: 'colormap' as const,
+      colormapRange: { min: 0, max: 2 },
+      colormapLut: redBlackGreenLut
     };
 
     expect(
@@ -102,8 +115,9 @@ describe('probe helpers', () => {
       },
       0,
       {
-        mode: 'redBlackGreen',
-        colormapRange: { min: 1, max: 1 }
+        mode: 'colormap',
+        colormapRange: { min: 1, max: 1 },
+        colormapLut: redBlackGreenLut
       }
     );
 

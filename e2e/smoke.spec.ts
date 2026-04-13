@@ -18,6 +18,7 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   const colormapButton = page.getByRole('button', { name: 'Colormap' });
   const exposureControl = page.locator('#exposure-control');
   const colormapRangeControl = page.locator('#colormap-range-control');
+  const colormapSelect = page.locator('#colormap-select');
   const colormapAutoRangeButton = page.getByRole('button', { name: 'Auto Range' });
   const colormapZeroCenterButton = page.getByRole('button', { name: 'Zero Center' });
   const colormapRangeSlider = page.locator('#colormap-range-slider');
@@ -80,6 +81,7 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(colormapRangeControl).toBeHidden();
   await expect(colormapAutoRangeButton).toHaveCount(0);
   await expect(colormapZeroCenterButton).toHaveCount(0);
+  await expect(colormapSelect).toBeHidden();
   await expect(colormapVminInput).toBeHidden();
   await expect(colormapVmaxInput).toBeHidden();
   await expect(colormapVmaxSlider).toBeHidden();
@@ -94,6 +96,13 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'true');
   await expect(colormapZeroCenterButton).toBeEnabled();
   await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(colormapSelect).toBeVisible();
+  await expect(colormapSelect).toBeEnabled();
+  await expect(colormapSelect.locator('option')).toHaveCount(2);
+  await expect(colormapSelect.locator('option').first()).toHaveText('Red / Black / Green');
+  await expect(colormapSelect).toHaveValue('0');
+  await colormapSelect.selectOption({ label: 'Blue / Yellow' });
+  await expect(colormapSelect).toHaveValue('1');
   await expect(colormapRangeSlider).toBeVisible();
   await expect(colormapVminInput).toBeEnabled();
   await expect(colormapVmaxInput).toBeEnabled();
@@ -167,6 +176,7 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(colormapRangeControl).toBeHidden();
   await expect(colormapAutoRangeButton).toHaveCount(0);
   await expect(colormapZeroCenterButton).toHaveCount(0);
+  await expect(colormapSelect).toBeHidden();
   await expect(colormapVminInput).toBeHidden();
   await expect(colormapVmaxInput).toBeHidden();
   await expect(colormapVmaxSlider).toBeHidden();

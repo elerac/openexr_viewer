@@ -1,3 +1,4 @@
+import { ColormapLut, sampleColormapRgbBytes } from './colormaps';
 import { DisplayChannelMapping, DisplayLuminanceRange, PixelSample, VisualizationMode, ViewerState } from './types';
 import { ProbeColorPreview } from './probe';
 import {
@@ -22,6 +23,8 @@ const HISTOGRAM_EV_SPECIAL_BUCKET_MAX_WIDTH = 22;
 const OPENED_IMAGES_MAX_VISIBLE_ROWS = 10;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const COLORMAP_ZERO_CENTER_SLIDER_MIN_MAGNITUDE = 1e-16;
+const COLORMAP_GRADIENT_STOP_COUNT = 16;
+const DEFAULT_COLORMAP_GRADIENT = 'linear-gradient(90deg, #d95656 0%, #05070a 50%, #59d884 100%)';
 
 export interface UiCallbacks {
   onOpenFileClick: () => void;
@@ -39,6 +42,7 @@ export interface UiCallbacks {
   onLayerChange: (layerIndex: number) => void;
   onRgbGroupChange: (mapping: DisplayChannelMapping) => void;
   onVisualizationModeChange: (mode: VisualizationMode) => void;
+  onColormapChange: (colormapId: string) => void;
   onColormapRangeChange: (range: DisplayLuminanceRange) => void;
   onColormapAutoRange: () => void;
   onColormapZeroCenterToggle: () => void;
@@ -52,6 +56,7 @@ interface Elements {
   visualizationNoneButton: HTMLButtonElement;
   colormapToggleButton: HTMLButtonElement;
   colormapRangeControl: HTMLDivElement;
+  colormapSelect: HTMLSelectElement;
   colormapAutoRangeButton: HTMLButtonElement;
   colormapZeroCenterButton: HTMLButtonElement;
   colormapRangeSlider: HTMLDivElement;
@@ -132,6 +137,7 @@ export class ViewerUi {
   private currentAutoColormapRange: DisplayLuminanceRange | null = null;
   private currentColormapZeroCentered = false;
   private isColormapEnabled = false;
+  private hasColormapOptions = false;
 
   constructor(private readonly callbacks: UiCallbacks) {
     this.elements = resolveElements();
@@ -151,6 +157,7 @@ export class ViewerUi {
     this.elements.closeAllOpenedImagesButton.disabled = true;
     this.elements.visualizationNoneButton.disabled = true;
     this.elements.colormapToggleButton.disabled = true;
+    this.elements.colormapSelect.disabled = true;
     this.setColormapRangeControlsDisabled(true);
     this.elements.layerSelect.disabled = true;
     this.elements.rgbGroupSelect.disabled = true;
@@ -228,13 +235,54 @@ export class ViewerUi {
   }
 
   setVisualizationMode(mode: VisualizationMode): void {
-    this.isColormapEnabled = mode === 'redBlackGreen';
+    this.isColormapEnabled = mode === 'colormap';
     this.elements.visualizationNoneButton.setAttribute('aria-pressed', mode === 'rgb' ? 'true' : 'false');
     this.elements.colormapToggleButton.setAttribute('aria-pressed', this.isColormapEnabled ? 'true' : 'false');
     this.elements.colormapToggleButton.setAttribute('aria-expanded', this.isColormapEnabled ? 'true' : 'false');
     this.elements.colormapRangeControl.classList.toggle('hidden', !this.isColormapEnabled);
     this.elements.exposureControl.classList.toggle('hidden', this.isColormapEnabled);
     this.setColormapRangeControlsDisabled(this.isLoading || this.openedImageCount === 0 || !this.currentColormapRange);
+  }
+
+  setColormapOptions(items: Array<{ id: string; label: string }>, activeId: string): void {
+    this.hasColormapOptions = items.length > 0;
+    const hadFocus = document.activeElement === this.elements.colormapSelect;
+    this.elements.colormapSelect.innerHTML = '';
+
+    for (const item of items) {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = item.label;
+      this.elements.colormapSelect.append(option);
+    }
+
+    this.setActiveColormap(activeId);
+    this.setColormapRangeControlsDisabled(
+      this.isLoading || this.openedImageCount === 0 || !this.currentColormapRange
+    );
+
+    if (hadFocus && !this.elements.colormapSelect.disabled) {
+      this.elements.colormapSelect.focus();
+    }
+  }
+
+  setActiveColormap(activeId: string): void {
+    if (!this.hasColormapOptions) {
+      this.elements.colormapSelect.value = '';
+      return;
+    }
+
+    const hasOption = Array.from(this.elements.colormapSelect.options).some(
+      (option) => option.value === activeId
+    );
+    this.elements.colormapSelect.value = hasOption ? activeId : this.elements.colormapSelect.options[0]?.value ?? '';
+  }
+
+  setColormapGradient(lut: ColormapLut | null): void {
+    this.elements.colormapRangeSlider.style.setProperty(
+      '--colormap-gradient',
+      lut ? buildColormapCssGradient(lut) : DEFAULT_COLORMAP_GRADIENT
+    );
   }
 
   setColormapRange(
@@ -859,7 +907,16 @@ export class ViewerUi {
         return;
       }
 
-      this.callbacks.onVisualizationModeChange('redBlackGreen');
+      this.callbacks.onVisualizationModeChange('colormap');
+    });
+
+    this.elements.colormapSelect.addEventListener('change', (event) => {
+      if (this.elements.colormapSelect.disabled) {
+        return;
+      }
+
+      const target = event.currentTarget as HTMLSelectElement;
+      this.callbacks.onColormapChange(target.value);
     });
 
     this.elements.colormapAutoRangeButton.addEventListener('click', () => {
@@ -1175,6 +1232,7 @@ export class ViewerUi {
 
   private setColormapRangeControlsDisabled(disabled: boolean): void {
     const effectiveDisabled = disabled || !this.isColormapEnabled;
+    this.elements.colormapSelect.disabled = effectiveDisabled || !this.hasColormapOptions;
     this.elements.colormapAutoRangeButton.disabled = effectiveDisabled || !this.currentAutoColormapRange;
     this.elements.colormapZeroCenterButton.disabled = effectiveDisabled || !this.currentColormapRange;
     this.elements.colormapVminSlider.disabled = effectiveDisabled;
@@ -1280,6 +1338,7 @@ function resolveElements(): Elements {
     visualizationNoneButton: requireElement('visualization-none-button', HTMLButtonElement),
     colormapToggleButton: requireElement('colormap-toggle-button', HTMLButtonElement),
     colormapRangeControl: requireElement('colormap-range-control', HTMLDivElement),
+    colormapSelect: requireElement('colormap-select', HTMLSelectElement),
     colormapAutoRangeButton: requireElement('colormap-auto-range-button', HTMLButtonElement),
     colormapZeroCenterButton: requireElement('colormap-zero-center-button', HTMLButtonElement),
     colormapRangeSlider: requireElement('colormap-range-slider', HTMLDivElement),
@@ -1354,6 +1413,19 @@ function toFiles(files: FileList | null | undefined): File[] {
 
 function cloneRange(range: DisplayLuminanceRange | null): DisplayLuminanceRange | null {
   return range ? { min: range.min, max: range.max } : null;
+}
+
+function buildColormapCssGradient(lut: ColormapLut): string {
+  const stopCount = Math.min(COLORMAP_GRADIENT_STOP_COUNT, Math.max(2, lut.entryCount));
+  const stops: string[] = [];
+
+  for (let index = 0; index < stopCount; index += 1) {
+    const t = stopCount === 1 ? 0 : index / (stopCount - 1);
+    const [r, g, b] = sampleColormapRgbBytes(lut, t);
+    stops.push(`rgb(${r}, ${g}, ${b}) ${(t * 100).toFixed(2)}%`);
+  }
+
+  return `linear-gradient(90deg, ${stops.join(', ')})`;
 }
 
 function buildColormapSliderBounds(

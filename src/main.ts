@@ -1,3 +1,12 @@
+import {
+  DEFAULT_COLORMAP_ID,
+  getColormapAsset,
+  getColormapOptions,
+  loadColormapRegistry,
+  loadColormapLut,
+  type ColormapLut,
+  type ColormapRegistry
+} from './colormaps';
 import { loadExr } from './exr';
 import { clampZoom, ViewerInteraction } from './interaction';
 import { buildProbeColorPreview, resolveActiveProbePixel, resolveProbeMode } from './probe';
@@ -55,6 +64,7 @@ async function bootstrap(): Promise<void> {
   let activeSessionId: string | null = null;
   let sessionCounter = 0;
   let rgbViewChangeToken = 0;
+  let colormapChangeToken = 0;
   let loadQueue: Promise<void> = Promise.resolve();
   let histogramViewOptions: HistogramViewOptions = { ...DEFAULT_HISTOGRAM_VIEW_OPTIONS };
   let cachedHistogram: HistogramData | null = null;
@@ -66,6 +76,10 @@ async function bootstrap(): Promise<void> {
   let renderedSessionId: string | null = null;
   let uploadedSessionId: string | null = null;
   let uploadedTextureRevisionKey = '';
+  let uploadedColormapId: string | null = null;
+  let activeColormapLut: ColormapLut | null = null;
+  let defaultColormapId = DEFAULT_COLORMAP_ID;
+  let colormapRegistry: ColormapRegistry | null = null;
 
   const ui = new ViewerUi({
     onOpenFileClick: () => {
@@ -114,6 +128,9 @@ async function bootstrap(): Promise<void> {
     onVisualizationModeChange: (mode) => {
       setVisualizationMode(mode);
     },
+    onColormapChange: (colormapId) => {
+      void setActiveColormap(colormapId);
+    },
     onColormapRangeChange: (range) => {
       setColormapRange(range);
     },
@@ -130,7 +147,12 @@ async function bootstrap(): Promise<void> {
   ui.setHistogramViewOptions(histogramViewOptions);
 
   try {
+    colormapRegistry = await loadColormapRegistry();
+    defaultColormapId = colormapRegistry.defaultId;
+    ui.setColormapOptions(getColormapOptions(colormapRegistry), defaultColormapId);
+    store.setState({ activeColormapId: defaultColormapId });
     renderer = new WebGlExrRenderer(ui.glCanvas, ui.overlayCanvas);
+    await uploadColormapToRenderer(defaultColormapId);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to initialize WebGL2 renderer.';
     ui.setError(message);
@@ -185,6 +207,11 @@ async function bootstrap(): Promise<void> {
 
     if (sessionChanged || state.visualizationMode !== previous.visualizationMode) {
       ui.setVisualizationMode(state.visualizationMode);
+    }
+
+    if (sessionChanged || state.activeColormapId !== previous.activeColormapId) {
+      ui.setActiveColormap(state.activeColormapId);
+      syncColormapTextureForState(state.activeColormapId);
     }
 
     if (
@@ -301,6 +328,7 @@ async function bootstrap(): Promise<void> {
           state.displayG !== previous.displayG ||
           state.displayB !== previous.displayB ||
           state.visualizationMode !== previous.visualizationMode ||
+          state.activeColormapId !== previous.activeColormapId ||
           state.colormapRange !== previous.colormapRange ||
           state.colormapRangeMode !== previous.colormapRangeMode ||
           state.colormapZeroCentered !== previous.colormapZeroCentered ||
@@ -321,7 +349,8 @@ async function bootstrap(): Promise<void> {
             },
             state.exposureEv,
             state.visualizationMode,
-            state.colormapRange
+            state.colormapRange,
+            getActiveColormapLut(state.activeColormapId)
           );
         }
       } else {
@@ -357,6 +386,7 @@ async function bootstrap(): Promise<void> {
       state.displayG !== previous.displayG ||
       state.displayB !== previous.displayB ||
       state.visualizationMode !== previous.visualizationMode ||
+      state.activeColormapId !== previous.activeColormapId ||
       state.colormapRange !== previous.colormapRange ||
       state.colormapRangeMode !== previous.colormapRangeMode ||
       state.colormapZeroCentered !== previous.colormapZeroCentered;
@@ -499,6 +529,7 @@ async function bootstrap(): Promise<void> {
       {
         exposureEv: 0,
         visualizationMode: 'rgb',
+        activeColormapId: defaultColormapId,
         colormapRange: null,
         colormapRangeMode: 'alwaysAuto',
         colormapZeroCentered: false,
@@ -666,14 +697,60 @@ async function bootstrap(): Promise<void> {
     }
   }
 
+  async function setActiveColormap(colormapId: string): Promise<void> {
+    const registry = getLoadedColormapRegistry();
+    if (!getColormapAsset(registry, colormapId)) {
+      ui.setActiveColormap(store.getState().activeColormapId);
+      ui.setError(`Unknown colormap: ${colormapId}`);
+      return;
+    }
+
+    const currentState = store.getState();
+    if (currentState.activeColormapId === colormapId) {
+      return;
+    }
+
+    const token = ++colormapChangeToken;
+    const startedAt = performance.now();
+    ui.setRgbViewLoading(true);
+
+    try {
+      const lut = await loadColormapLut(registry, colormapId);
+      if (token !== colormapChangeToken) {
+        return;
+      }
+
+      uploadLoadedColormap(colormapId, lut);
+      store.setState({
+        activeColormapId: colormapId
+      });
+
+      const elapsedMs = performance.now() - startedAt;
+      if (elapsedMs < MIN_RGB_VIEW_LOADING_MS) {
+        await waitMs(MIN_RGB_VIEW_LOADING_MS - elapsedMs);
+      }
+    } catch (error) {
+      ui.setActiveColormap(currentState.activeColormapId);
+      ui.setError(error instanceof Error ? error.message : 'Failed to load colormap.');
+    } finally {
+      if (token === colormapChangeToken) {
+        ui.setRgbViewLoading(false);
+      }
+    }
+  }
+
   function setVisualizationMode(mode: VisualizationMode): void {
     if (!getActiveSession()) {
       return;
     }
 
-    const currentMode = store.getState().visualizationMode;
-    if (currentMode === mode) {
+    const currentState = store.getState();
+    if (currentState.visualizationMode === mode) {
       return;
+    }
+
+    if (mode === 'colormap') {
+      syncColormapTextureForState(currentState.activeColormapId);
     }
 
     store.setState({
@@ -936,6 +1013,7 @@ async function bootstrap(): Promise<void> {
       store.setState({
         exposureEv: 0,
         visualizationMode: 'rgb',
+        activeColormapId: defaultColormapId,
         colormapRange: null,
         colormapRangeMode: 'alwaysAuto',
         colormapZeroCentered: false,
@@ -952,6 +1030,7 @@ async function bootstrap(): Promise<void> {
       {
         exposureEv: 0,
         visualizationMode: 'rgb',
+        activeColormapId: defaultColormapId,
         colormapRange: null,
         colormapRangeMode: 'alwaysAuto',
         colormapZeroCentered: false,
@@ -1051,6 +1130,7 @@ async function bootstrap(): Promise<void> {
     store.setState({
       exposureEv: 0,
       visualizationMode: 'rgb',
+      activeColormapId: defaultColormapId,
       colormapRange: null,
       colormapRangeMode: 'alwaysAuto',
       colormapZeroCentered: false,
@@ -1074,6 +1154,86 @@ async function bootstrap(): Promise<void> {
     });
 
     renderer.render(store.getState());
+  }
+
+  async function uploadColormapToRenderer(colormapId: string): Promise<void> {
+    uploadLoadedColormap(colormapId, await loadColormapLut(getLoadedColormapRegistry(), colormapId));
+  }
+
+  function getLoadedColormapRegistry(): ColormapRegistry {
+    if (!colormapRegistry) {
+      throw new Error('Colormap manifest is not loaded.');
+    }
+
+    return colormapRegistry;
+  }
+
+  function uploadLoadedColormap(colormapId: string, lut: ColormapLut): void {
+    if (!renderer) {
+      return;
+    }
+
+    renderer.setColormapTexture(lut.entryCount, lut.rgba8);
+    uploadedColormapId = colormapId;
+    activeColormapLut = lut;
+    ui.setColormapGradient(lut);
+  }
+
+  function syncColormapTextureForState(colormapId: string): void {
+    if (uploadedColormapId === colormapId) {
+      return;
+    }
+
+    const token = ++colormapChangeToken;
+    void loadColormapLut(getLoadedColormapRegistry(), colormapId)
+      .then((lut) => {
+        if (token !== colormapChangeToken || store.getState().activeColormapId !== colormapId) {
+          return;
+        }
+
+        uploadLoadedColormap(colormapId, lut);
+        refreshActiveProbeReadout();
+        renderer?.render(store.getState());
+      })
+      .catch((error) => {
+        ui.setError(error instanceof Error ? error.message : 'Failed to load colormap.');
+      });
+  }
+
+  function getActiveColormapLut(colormapId: string): ColormapLut | null {
+    return uploadedColormapId === colormapId ? activeColormapLut : null;
+  }
+
+  function refreshActiveProbeReadout(): void {
+    const activeSession = getActiveSession();
+    if (!activeSession) {
+      ui.setProbeReadout('Hover', null, null);
+      return;
+    }
+
+    const state = store.getState();
+    const layer = getSelectedLayer(activeSession.decoded, state.activeLayer);
+    if (!layer) {
+      ui.setProbeReadout('Hover', null, null);
+      return;
+    }
+
+    updateProbeReadout(
+      layer,
+      activeSession.decoded.width,
+      activeSession.decoded.height,
+      state.lockedPixel,
+      state.hoveredPixel,
+      {
+        displayR: state.displayR,
+        displayG: state.displayG,
+        displayB: state.displayB
+      },
+      state.exposureEv,
+      state.visualizationMode,
+      state.colormapRange,
+      getActiveColormapLut(state.activeColormapId)
+    );
   }
 
   function getActiveSession(): OpenedImageSession | null {
@@ -1140,7 +1300,8 @@ async function bootstrap(): Promise<void> {
     displayMapping: { displayR: string; displayG: string; displayB: string },
     exposureEv: number,
     visualizationMode: VisualizationMode,
-    colormapRange: DisplayLuminanceRange | null
+    colormapRange: DisplayLuminanceRange | null,
+    colormapLut: ColormapLut | null
   ): void {
     const targetPixel = resolveActiveProbePixel(lockedPixel, hoveredPixel);
     const mode = resolveProbeMode(lockedPixel);
@@ -1156,7 +1317,8 @@ async function bootstrap(): Promise<void> {
       sample,
       buildProbeColorPreview(sample, displayMapping, exposureEv, {
         mode: visualizationMode,
-        colormapRange
+        colormapRange,
+        colormapLut
       })
     );
   }
@@ -1236,6 +1398,7 @@ async function bootstrap(): Promise<void> {
         displayG: currentState.displayG,
         displayB: currentState.displayB,
         visualizationMode: currentState.visualizationMode,
+        activeColormapId: currentState.activeColormapId,
         colormapRange: currentState.colormapRange,
         colormapRangeMode: currentState.colormapRangeMode,
         colormapZeroCentered: currentState.colormapZeroCentered,

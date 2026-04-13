@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_COLORMAP_ID } from '../src/colormaps';
 import {
   buildDisplayHistogram,
   buildLayerDisplayHistogram,
@@ -43,6 +44,7 @@ function createImage(layers: DecodedLayer[]): DecodedExrImage {
 describe('state helpers', () => {
   it('defaults to normal RGB visualization mode', () => {
     expect(createInitialState().visualizationMode).toBe('rgb');
+    expect(createInitialState().activeColormapId).toBe(DEFAULT_COLORMAP_ID);
     expect(createInitialState().colormapRange).toBeNull();
     expect(createInitialState().colormapRangeMode).toBe('alwaysAuto');
     expect(createInitialState().colormapZeroCentered).toBe(false);
@@ -286,6 +288,7 @@ describe('state helpers', () => {
       {
         exposureEv: 0,
         visualizationMode: 'rgb',
+        activeColormapId: DEFAULT_COLORMAP_ID,
         colormapRange: null,
         colormapRangeMode: 'alwaysAuto',
         colormapZeroCentered: false,
@@ -316,6 +319,7 @@ describe('state helpers', () => {
       {
         exposureEv: 0,
         visualizationMode: 'rgb',
+        activeColormapId: DEFAULT_COLORMAP_ID,
         colormapRange: null,
         colormapRangeMode: 'alwaysAuto',
         colormapZeroCentered: false,
@@ -345,6 +349,7 @@ describe('state helpers', () => {
       {
         exposureEv: 0,
         visualizationMode: 'rgb',
+        activeColormapId: DEFAULT_COLORMAP_ID,
         colormapRange: null,
         colormapRangeMode: 'alwaysAuto',
         colormapZeroCentered: false,
@@ -488,6 +493,7 @@ describe('state helpers', () => {
     const baseState: ViewerState = {
       exposureEv: 0,
       visualizationMode: 'rgb',
+      activeColormapId: DEFAULT_COLORMAP_ID,
       colormapRange: null,
       colormapRangeMode: 'alwaysAuto',
       colormapZeroCentered: false,

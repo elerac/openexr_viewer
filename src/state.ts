@@ -1,3 +1,4 @@
+import { DEFAULT_COLORMAP_ID } from './colormaps';
 import {
   DecodedExrImage,
   DecodedLayer,
@@ -63,6 +64,7 @@ export function createInitialState(): ViewerState {
   return {
     exposureEv: 0,
     visualizationMode: 'rgb',
+    activeColormapId: DEFAULT_COLORMAP_ID,
     colormapRange: null,
     colormapRangeMode: 'alwaysAuto',
     colormapZeroCentered: false,

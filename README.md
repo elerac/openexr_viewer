@@ -23,8 +23,11 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
 - Exposure control: slider + numeric input (`-10` to `+10` EV, step `0.1`).
 - Visualization mode buttons:
   - `None` is the default RGB display path.
-  - `Colormap` maps current display luminance over the full active image from red at `vmin`, through black at the midpoint, to green at `vmax`.
+  - `Colormap` maps current display luminance over the full active image through the selected NumPy LUT palette.
+  - Built-in palettes are listed in `public/colormaps/manifest.json` and stored as static `.npy` files in the same directory.
+  - The app accepts LUT arrays with shape `(N, 3)` or `(N, 4)` and dtype `float32`, `float64`, or `uint8`.
   - Exposure controls are hidden in `Colormap` mode because exposure does not affect that display path.
+  - `Palette` selects the active LUT without rebuilding the EXR display texture.
   - `vmin`/`vmax` can be adjusted with one dual-handle slider or numeric inputs.
   - `Auto Range` has two modes: highlighted always-auto mode follows each image/layer/channel, while one-time/manual mode preserves the current min/max across targets.
   - `Zero Center` keeps the range symmetric around zero (`min=-v`, `max=v`), and in auto mode uses `v=max(abs(min), abs(max))`.
@@ -135,7 +138,33 @@ npm run test:e2e
 
 ## Implementation Notes
 
-- Display path: normal RGB uses `linear * 2^EV`, then sRGB encode for screen; colormap mode maps raw display luminance directly to red/black/green.
+- Display path: normal RGB uses `linear * 2^EV`, then sRGB encode for screen; colormap mode maps raw display luminance through the selected `.npy` LUT.
+- Colormap authoring in Python:
+  ```python
+  import numpy as np
+
+  lut = np.array([
+      [1.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+  ], dtype=np.float32)
+
+  np.save("public/colormaps/red_black_green.npy", lut)
+  loaded = np.load("public/colormaps/red_black_green.npy")
+  ```
+  Register the file in `public/colormaps/manifest.json`:
+  ```json
+  {
+    "version": 1,
+    "defaultIndex": 0,
+    "colormaps": [
+      {
+        "label": "Red / Black / Green",
+        "file": "red_black_green.npy"
+      }
+    ]
+  }
+  ```
 - Texture sampling uses `NEAREST` for both `MIN_FILTER` and `MAG_FILTER`.
 - EXR WASM is initialized through a local adapter module backed by a vendored wasm loader, avoiding app-level deep imports into `exrs` internals.
 - Performance path for large images/channel sets:

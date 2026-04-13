@@ -1,3 +1,4 @@
+import { ColormapLut, mapValueToColormapRgbBytes } from './colormaps';
 import {
   DisplayChannelMapping,
   DisplayLuminanceRange,
@@ -17,6 +18,7 @@ export interface ProbeColorPreview {
 export interface ProbeVisualizationOptions {
   mode: VisualizationMode;
   colormapRange: DisplayLuminanceRange | null;
+  colormapLut?: ColormapLut | null;
 }
 
 export function resolveActiveProbePixel(
@@ -45,10 +47,11 @@ export function buildProbeColorPreview(
   const rawB = readProbeChannel(sample, selection.displayB);
   const exposureScale = 2 ** exposureEv;
   const bytes =
-    visualization.mode === 'redBlackGreen'
-      ? mapRedBlackGreenToRgbBytes(
+    visualization.mode === 'colormap'
+      ? mapValueToColormapRgbBytes(
           0.2126 * rawR + 0.7152 * rawG + 0.0722 * rawB,
-          visualization.colormapRange
+          visualization.colormapRange,
+          visualization.colormapLut ?? null
         )
       : [
           toSrgbByte(rawR * exposureScale),
@@ -62,24 +65,6 @@ export function buildProbeColorPreview(
     gValue: formatProbeRgbValue(rawG),
     bValue: formatProbeRgbValue(rawB)
   };
-}
-
-export function mapRedBlackGreenToRgbBytes(
-  value: number,
-  range: DisplayLuminanceRange | null
-): [number, number, number] {
-  if (!range || !Number.isFinite(value) || range.max <= range.min) {
-    return [0, 0, 0];
-  }
-
-  const midpoint = (range.min + range.max) * 0.5;
-  if (value <= midpoint) {
-    const t = clampUnit((value - range.min) / (midpoint - range.min));
-    return [Math.round(255 * (1 - t)), 0, 0];
-  }
-
-  const t = clampUnit((value - midpoint) / (range.max - midpoint));
-  return [0, Math.round(255 * t), 0];
 }
 
 function readProbeChannel(sample: PixelSample, channelName: string): number {
@@ -99,10 +84,6 @@ function toSrgbByte(value: number): number {
       : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055;
 
   return Math.max(0, Math.min(255, Math.round(srgb * 255)));
-}
-
-function clampUnit(value: number): number {
-  return Math.max(0, Math.min(1, value));
 }
 
 function formatProbeRgbValue(value: number): string {

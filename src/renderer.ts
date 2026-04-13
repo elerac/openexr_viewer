@@ -23,6 +23,7 @@ const FRAGMENT_SOURCE = `#version 300 es
 precision highp float;
 
 uniform sampler2D uTexture;
+uniform sampler2D uColormapTexture;
 uniform vec2 uViewport;
 uniform vec2 uImageSize;
 uniform vec2 uPan;
@@ -31,6 +32,8 @@ uniform float uExposure;
 uniform bool uUseColormap;
 uniform float uColormapMin;
 uniform float uColormapMax;
+uniform ivec2 uColormapTextureSize;
+uniform int uColormapEntryCount;
 out vec4 outColor;
 
 vec3 linearToSrgb(vec3 linear) {
@@ -49,19 +52,24 @@ vec3 checker(vec2 screen) {
   return mix(vec3(0.09), vec3(0.12), tile);
 }
 
-vec3 redBlackGreenColormap(float value, float vmin, float vmax) {
-  if (vmax <= vmin) {
+ivec2 colormapCoord(int index) {
+  int width = max(uColormapTextureSize.x, 1);
+  return ivec2(index - (index / width) * width, index / width);
+}
+
+vec3 sampleColormap(float value, float vmin, float vmax) {
+  if (vmax <= vmin || uColormapEntryCount < 2 || uColormapTextureSize.x <= 0 || uColormapTextureSize.y <= 0) {
     return vec3(0.0);
   }
 
-  float midpoint = (vmin + vmax) * 0.5;
-  if (value <= midpoint) {
-    float t = clamp((value - vmin) / (midpoint - vmin), 0.0, 1.0);
-    return mix(vec3(1.0, 0.0, 0.0), vec3(0.0), t);
-  }
-
-  float t = clamp((value - midpoint) / (vmax - midpoint), 0.0, 1.0);
-  return mix(vec3(0.0), vec3(0.0, 1.0, 0.0), t);
+  float t = clamp((value - vmin) / (vmax - vmin), 0.0, 1.0);
+  float lutIndex = t * float(uColormapEntryCount - 1);
+  int index0 = int(floor(lutIndex));
+  int index1 = min(index0 + 1, uColormapEntryCount - 1);
+  float f = lutIndex - float(index0);
+  vec3 color0 = texelFetch(uColormapTexture, colormapCoord(index0), 0).rgb;
+  vec3 color1 = texelFetch(uColormapTexture, colormapCoord(index1), 0).rgb;
+  return mix(color0, color1, f);
 }
 
 void main() {
@@ -77,7 +85,7 @@ void main() {
   vec3 linear = texelFetch(uTexture, pixel, 0).rgb;
   if (uUseColormap) {
     float luminance = dot(linear, vec3(0.2126, 0.7152, 0.0722));
-    outColor = vec4(redBlackGreenColormap(luminance, uColormapMin, uColormapMax), 1.0);
+    outColor = vec4(sampleColormap(luminance, uColormapMin, uColormapMax), 1.0);
     return;
   }
 
@@ -97,6 +105,8 @@ interface Uniforms {
   useColormap: WebGLUniformLocation;
   colormapMin: WebGLUniformLocation;
   colormapMax: WebGLUniformLocation;
+  colormapTextureSize: WebGLUniformLocation;
+  colormapEntryCount: WebGLUniformLocation;
 }
 
 export class WebGlExrRenderer {
@@ -107,10 +117,13 @@ export class WebGlExrRenderer {
   private readonly program: WebGLProgram;
   private readonly vao: WebGLVertexArrayObject;
   private readonly texture: WebGLTexture;
+  private readonly colormapTexture: WebGLTexture;
   private readonly uniforms: Uniforms;
   private viewport: ViewportInfo = { width: 1, height: 1 };
   private imageSize: { width: number; height: number } | null = null;
   private displayTextureData: Float32Array | null = null;
+  private colormapTextureSize = { width: 1, height: 1 };
+  private colormapEntryCount = 0;
 
   constructor(glCanvas: HTMLCanvasElement, overlayCanvas: HTMLCanvasElement) {
     const gl = glCanvas.getContext('webgl2', { antialias: false });
@@ -142,6 +155,12 @@ export class WebGlExrRenderer {
     }
     this.texture = texture;
 
+    const colormapTexture = gl.createTexture();
+    if (!colormapTexture) {
+      throw new Error('Failed to create colormap texture.');
+    }
+    this.colormapTexture = colormapTexture;
+
     const viewport = gl.getUniformLocation(this.program, 'uViewport');
     const imageSize = gl.getUniformLocation(this.program, 'uImageSize');
     const pan = gl.getUniformLocation(this.program, 'uPan');
@@ -150,6 +169,8 @@ export class WebGlExrRenderer {
     const useColormap = gl.getUniformLocation(this.program, 'uUseColormap');
     const colormapMin = gl.getUniformLocation(this.program, 'uColormapMin');
     const colormapMax = gl.getUniformLocation(this.program, 'uColormapMax');
+    const colormapTextureSize = gl.getUniformLocation(this.program, 'uColormapTextureSize');
+    const colormapEntryCount = gl.getUniformLocation(this.program, 'uColormapEntryCount');
 
     if (
       !viewport ||
@@ -159,12 +180,25 @@ export class WebGlExrRenderer {
       !exposure ||
       !useColormap ||
       !colormapMin ||
-      !colormapMax
+      !colormapMax ||
+      !colormapTextureSize ||
+      !colormapEntryCount
     ) {
       throw new Error('Failed to resolve shader uniforms.');
     }
 
-    this.uniforms = { viewport, imageSize, pan, zoom, exposure, useColormap, colormapMin, colormapMax };
+    this.uniforms = {
+      viewport,
+      imageSize,
+      pan,
+      zoom,
+      exposure,
+      useColormap,
+      colormapMin,
+      colormapMax,
+      colormapTextureSize,
+      colormapEntryCount
+    };
 
     gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);
@@ -176,6 +210,25 @@ export class WebGlExrRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.uniform1i(gl.getUniformLocation(this.program, 'uTexture'), 0);
+
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.colormapTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA8,
+      1,
+      1,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      new Uint8Array([0, 0, 0, 255])
+    );
+    gl.uniform1i(gl.getUniformLocation(this.program, 'uColormapTexture'), 1);
   }
 
   getViewport(): ViewportInfo {
@@ -204,6 +257,7 @@ export class WebGlExrRenderer {
     const sameSize = this.imageSize?.width === width && this.imageSize?.height === height;
     this.imageSize = { width, height };
     this.displayTextureData = rgbaTexture;
+    this.gl.activeTexture(this.gl.TEXTURE0);
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture);
     if (sameSize) {
       this.gl.texSubImage2D(
@@ -232,6 +286,54 @@ export class WebGlExrRenderer {
     }
   }
 
+  setColormapTexture(entryCount: number, rgba8: Uint8Array): void {
+    if (!Number.isInteger(entryCount) || entryCount < 2) {
+      throw new Error('Colormap texture requires at least 2 entries.');
+    }
+
+    const maxTextureSize = this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE) as number;
+    const width = Math.min(entryCount, maxTextureSize);
+    const height = Math.ceil(entryCount / width);
+    if (height > maxTextureSize) {
+      throw new Error(`Colormap has too many entries for this GPU (${entryCount}).`);
+    }
+
+    const texelCount = width * height;
+    const expectedLength = entryCount * 4;
+    if (rgba8.length !== expectedLength) {
+      throw new Error(`Invalid colormap data length: expected ${expectedLength}, got ${rgba8.length}.`);
+    }
+
+    const uploadData = texelCount === entryCount ? rgba8 : new Uint8Array(texelCount * 4);
+    if (uploadData !== rgba8) {
+      uploadData.set(rgba8);
+      const lastColorOffset = (entryCount - 1) * 4;
+      for (let index = entryCount; index < texelCount; index += 1) {
+        const offset = index * 4;
+        uploadData[offset + 0] = rgba8[lastColorOffset + 0];
+        uploadData[offset + 1] = rgba8[lastColorOffset + 1];
+        uploadData[offset + 2] = rgba8[lastColorOffset + 2];
+        uploadData[offset + 3] = rgba8[lastColorOffset + 3];
+      }
+    }
+
+    this.colormapTextureSize = { width, height };
+    this.colormapEntryCount = entryCount;
+    this.gl.activeTexture(this.gl.TEXTURE1);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.colormapTexture);
+    this.gl.texImage2D(
+      this.gl.TEXTURE_2D,
+      0,
+      this.gl.RGBA8,
+      width,
+      height,
+      0,
+      this.gl.RGBA,
+      this.gl.UNSIGNED_BYTE,
+      uploadData
+    );
+  }
+
   clearImage(): void {
     this.imageSize = null;
     this.displayTextureData = null;
@@ -247,7 +349,10 @@ export class WebGlExrRenderer {
 
     gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);
+    gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.colormapTexture);
 
     gl.uniform2f(this.uniforms.viewport, this.viewport.width, this.viewport.height);
 
@@ -257,9 +362,15 @@ export class WebGlExrRenderer {
     gl.uniform2f(this.uniforms.pan, state.panX, state.panY);
     gl.uniform1f(this.uniforms.zoom, state.zoom);
     gl.uniform1f(this.uniforms.exposure, state.exposureEv);
-    gl.uniform1i(this.uniforms.useColormap, state.visualizationMode === 'redBlackGreen' ? 1 : 0);
+    gl.uniform1i(this.uniforms.useColormap, state.visualizationMode === 'colormap' ? 1 : 0);
     gl.uniform1f(this.uniforms.colormapMin, state.colormapRange?.min ?? 0);
     gl.uniform1f(this.uniforms.colormapMax, state.colormapRange?.max ?? 0);
+    gl.uniform2i(
+      this.uniforms.colormapTextureSize,
+      this.colormapTextureSize.width,
+      this.colormapTextureSize.height
+    );
+    gl.uniform1i(this.uniforms.colormapEntryCount, this.colormapEntryCount);
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }

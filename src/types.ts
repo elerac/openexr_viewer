@@ -1,6 +1,6 @@
 export const ZERO_CHANNEL = '__ZERO__';
 
-export type VisualizationMode = 'rgb' | 'redBlackGreen';
+export type VisualizationMode = 'rgb' | 'colormap';
 export type ColormapRangeMode = 'alwaysAuto' | 'oneTime';
 
 export interface DisplayLuminanceRange {
@@ -28,6 +28,7 @@ export interface DecodedExrImage {
 export interface ViewerState {
   exposureEv: number;
   visualizationMode: VisualizationMode;
+  activeColormapId: string;
   colormapRange: DisplayLuminanceRange | null;
   colormapRangeMode: ColormapRangeMode;
   colormapZeroCentered: boolean;
