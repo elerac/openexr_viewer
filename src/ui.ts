@@ -1,4 +1,4 @@
-import { DisplayChannelMapping, DisplayLuminanceRange, PixelSample, ViewerState } from './types';
+import { DisplayChannelMapping, DisplayLuminanceRange, PixelSample, VisualizationMode, ViewerState } from './types';
 import { ProbeColorPreview } from './probe';
 import {
   buildZeroCenteredColormapRange,
@@ -38,7 +38,7 @@ export interface UiCallbacks {
   onHistogramYAxisChange: (value: HistogramYAxisMode) => void;
   onLayerChange: (layerIndex: number) => void;
   onRgbGroupChange: (mapping: DisplayChannelMapping) => void;
-  onColormapToggle: () => void;
+  onVisualizationModeChange: (mode: VisualizationMode) => void;
   onColormapRangeChange: (range: DisplayLuminanceRange) => void;
   onColormapAutoRange: () => void;
   onColormapZeroCenterToggle: () => void;
@@ -49,6 +49,7 @@ interface Elements {
   openFileButton: HTMLButtonElement;
   fileInput: HTMLInputElement;
   resetViewButton: HTMLButtonElement;
+  visualizationNoneButton: HTMLButtonElement;
   colormapToggleButton: HTMLButtonElement;
   colormapRangeControl: HTMLDivElement;
   colormapAutoRangeButton: HTMLButtonElement;
@@ -58,6 +59,7 @@ interface Elements {
   colormapVmaxSlider: HTMLInputElement;
   colormapVminInput: HTMLInputElement;
   colormapVmaxInput: HTMLInputElement;
+  exposureControl: HTMLDivElement;
   exposureSlider: HTMLInputElement;
   exposureValue: HTMLInputElement;
   histogramXAxisSelect: HTMLSelectElement;
@@ -147,6 +149,7 @@ export class ViewerUi {
     this.elements.reloadOpenedImageButton.disabled = true;
     this.elements.closeOpenedImageButton.disabled = true;
     this.elements.closeAllOpenedImagesButton.disabled = true;
+    this.elements.visualizationNoneButton.disabled = true;
     this.elements.colormapToggleButton.disabled = true;
     this.setColormapRangeControlsDisabled(true);
     this.elements.layerSelect.disabled = true;
@@ -185,7 +188,7 @@ export class ViewerUi {
     this.isLoading = loading;
     this.elements.openFileButton.disabled = loading;
     this.elements.resetViewButton.disabled = loading;
-    this.elements.colormapToggleButton.disabled = loading || this.openedImageCount === 0;
+    this.setVisualizationModeButtonsDisabled(loading || this.openedImageCount === 0);
     this.setColormapRangeControlsDisabled(loading || this.openedImageCount === 0);
     this.elements.exposureValue.disabled = loading;
     this.elements.openedImagesSelect.disabled = loading || this.openedImageCount === 0;
@@ -224,11 +227,13 @@ export class ViewerUi {
     this.elements.exposureValue.value = exposureEv.toFixed(1);
   }
 
-  setColormapEnabled(enabled: boolean): void {
-    this.isColormapEnabled = enabled;
-    this.elements.colormapToggleButton.setAttribute('aria-pressed', enabled ? 'true' : 'false');
-    this.elements.colormapToggleButton.setAttribute('aria-expanded', enabled ? 'true' : 'false');
-    this.elements.colormapRangeControl.classList.toggle('hidden', !enabled);
+  setVisualizationMode(mode: VisualizationMode): void {
+    this.isColormapEnabled = mode === 'redBlackGreen';
+    this.elements.visualizationNoneButton.setAttribute('aria-pressed', mode === 'rgb' ? 'true' : 'false');
+    this.elements.colormapToggleButton.setAttribute('aria-pressed', this.isColormapEnabled ? 'true' : 'false');
+    this.elements.colormapToggleButton.setAttribute('aria-expanded', this.isColormapEnabled ? 'true' : 'false');
+    this.elements.colormapRangeControl.classList.toggle('hidden', !this.isColormapEnabled);
+    this.elements.exposureControl.classList.toggle('hidden', this.isColormapEnabled);
     this.setColormapRangeControlsDisabled(this.isLoading || this.openedImageCount === 0 || !this.currentColormapRange);
   }
 
@@ -320,7 +325,7 @@ export class ViewerUi {
     this.elements.reloadOpenedImageButton.disabled = this.isLoading || this.openedImageCount === 0;
     this.elements.closeOpenedImageButton.disabled = this.isLoading || this.openedImageCount === 0;
     this.elements.closeAllOpenedImagesButton.disabled = this.isLoading || this.openedImageCount === 0;
-    this.elements.colormapToggleButton.disabled = this.isLoading || this.openedImageCount === 0;
+    this.setVisualizationModeButtonsDisabled(this.isLoading || this.openedImageCount === 0);
     this.setColormapRangeControlsDisabled(this.isLoading || this.openedImageCount === 0 || !this.currentColormapRange);
   }
 
@@ -841,12 +846,20 @@ export class ViewerUi {
       this.callbacks.onResetView();
     });
 
+    this.elements.visualizationNoneButton.addEventListener('click', () => {
+      if (this.elements.visualizationNoneButton.disabled) {
+        return;
+      }
+
+      this.callbacks.onVisualizationModeChange('rgb');
+    });
+
     this.elements.colormapToggleButton.addEventListener('click', () => {
       if (this.elements.colormapToggleButton.disabled) {
         return;
       }
 
-      this.callbacks.onColormapToggle();
+      this.callbacks.onVisualizationModeChange('redBlackGreen');
     });
 
     this.elements.colormapAutoRangeButton.addEventListener('click', () => {
@@ -1170,6 +1183,11 @@ export class ViewerUi {
     this.elements.colormapVmaxInput.disabled = effectiveDisabled;
   }
 
+  private setVisualizationModeButtonsDisabled(disabled: boolean): void {
+    this.elements.visualizationNoneButton.disabled = disabled;
+    this.elements.colormapToggleButton.disabled = disabled;
+  }
+
   private setColormapRangeValues(range: DisplayLuminanceRange, autoRange: DisplayLuminanceRange): void {
     const bounds = buildColormapSliderBounds(range, autoRange, this.currentColormapZeroCentered);
     const zeroCenteredFloor = this.currentColormapZeroCentered
@@ -1259,6 +1277,7 @@ function resolveElements(): Elements {
     openFileButton: requireElement('open-file-button', HTMLButtonElement),
     fileInput: requireElement('file-input', HTMLInputElement),
     resetViewButton: requireElement('reset-view-button', HTMLButtonElement),
+    visualizationNoneButton: requireElement('visualization-none-button', HTMLButtonElement),
     colormapToggleButton: requireElement('colormap-toggle-button', HTMLButtonElement),
     colormapRangeControl: requireElement('colormap-range-control', HTMLDivElement),
     colormapAutoRangeButton: requireElement('colormap-auto-range-button', HTMLButtonElement),
@@ -1268,6 +1287,7 @@ function resolveElements(): Elements {
     colormapVmaxSlider: requireElement('colormap-vmax-slider', HTMLInputElement),
     colormapVminInput: requireElement('colormap-vmin-input', HTMLInputElement),
     colormapVmaxInput: requireElement('colormap-vmax-input', HTMLInputElement),
+    exposureControl: requireElement('exposure-control', HTMLDivElement),
     exposureSlider: requireElement('exposure-slider', HTMLInputElement),
     exposureValue: requireElement('exposure-value', HTMLInputElement),
     histogramXAxisSelect: requireElement('histogram-x-axis-select', HTMLSelectElement),

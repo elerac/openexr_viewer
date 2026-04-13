@@ -111,8 +111,8 @@ async function bootstrap(): Promise<void> {
     onRgbGroupChange: (mapping) => {
       void applyRgbViewChangeWithLoading(mapping);
     },
-    onColormapToggle: () => {
-      toggleColormapMode();
+    onVisualizationModeChange: (mode) => {
+      setVisualizationMode(mode);
     },
     onColormapRangeChange: (range) => {
       setColormapRange(range);
@@ -184,7 +184,7 @@ async function bootstrap(): Promise<void> {
     }
 
     if (sessionChanged || state.visualizationMode !== previous.visualizationMode) {
-      ui.setColormapEnabled(state.visualizationMode === 'redBlackGreen');
+      ui.setVisualizationMode(state.visualizationMode);
     }
 
     if (
@@ -338,7 +338,7 @@ async function bootstrap(): Promise<void> {
       }
     } else {
       invalidateHistogramCache();
-      ui.setColormapEnabled(false);
+      ui.setVisualizationMode('rgb');
       ui.setColormapRange(null, null);
       ui.setProbeReadout('Hover', null, null);
       ui.clearHistogram();
@@ -666,14 +666,18 @@ async function bootstrap(): Promise<void> {
     }
   }
 
-  function toggleColormapMode(): void {
+  function setVisualizationMode(mode: VisualizationMode): void {
     if (!getActiveSession()) {
       return;
     }
 
     const currentMode = store.getState().visualizationMode;
+    if (currentMode === mode) {
+      return;
+    }
+
     store.setState({
-      visualizationMode: currentMode === 'redBlackGreen' ? 'rgb' : 'redBlackGreen'
+      visualizationMode: mode
     });
   }
 

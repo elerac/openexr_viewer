@@ -13,7 +13,10 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   const probeCoords = page.locator('#probe-coords');
   const probeValues = page.locator('#probe-values');
   const viewer = page.locator('#viewer-container');
+  const resetButton = page.getByRole('button', { name: 'Reset', exact: true });
+  const noneButton = page.getByRole('button', { name: 'None', exact: true });
   const colormapButton = page.getByRole('button', { name: 'Colormap' });
+  const exposureControl = page.locator('#exposure-control');
   const colormapRangeControl = page.locator('#colormap-range-control');
   const colormapAutoRangeButton = page.getByRole('button', { name: 'Auto Range' });
   const colormapZeroCenterButton = page.getByRole('button', { name: 'Zero Center' });
@@ -56,10 +59,24 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   expect(await page.locator('#gl-canvas').evaluate((canvas) => {
     return canvas instanceof HTMLCanvasElement && canvas.width > 0 && canvas.height > 0;
   })).toBe(true);
+  await expect(resetButton).toBeVisible();
+  await expect(noneButton).toBeVisible();
+  await expect(noneButton).toBeEnabled();
+  await expect(noneButton).toHaveAttribute('aria-pressed', 'true');
   await expect(colormapButton).toBeVisible();
   await expect(colormapButton).toBeEnabled();
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'false');
   await expect(colormapButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(exposureControl).toBeVisible();
+  const resetBox = await resetButton.boundingBox();
+  const noneBox = await noneButton.boundingBox();
+  const colormapBox = await colormapButton.boundingBox();
+  expect(resetBox).not.toBeNull();
+  expect(noneBox).not.toBeNull();
+  expect(colormapBox).not.toBeNull();
+  expect(resetBox!.y).toBeLessThan(noneBox!.y);
+  expect(Math.abs(noneBox!.y - colormapBox!.y)).toBeLessThanOrEqual(1);
+  expect(noneBox!.x).toBeLessThan(colormapBox!.x);
   await expect(colormapRangeControl).toBeHidden();
   await expect(colormapAutoRangeButton).toHaveCount(0);
   await expect(colormapZeroCenterButton).toHaveCount(0);
@@ -68,8 +85,10 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(colormapVmaxSlider).toBeHidden();
 
   await colormapButton.click();
+  await expect(noneButton).toHaveAttribute('aria-pressed', 'false');
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'true');
   await expect(colormapButton).toHaveAttribute('aria-expanded', 'true');
+  await expect(exposureControl).toBeHidden();
   await expect(colormapRangeControl).toBeVisible();
   await expect(colormapAutoRangeButton).toBeEnabled();
   await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'true');
@@ -140,9 +159,11 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(autoMin, 5);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(autoMax, 5);
 
-  await colormapButton.click();
+  await noneButton.click();
+  await expect(noneButton).toHaveAttribute('aria-pressed', 'true');
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'false');
   await expect(colormapButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(exposureControl).toBeVisible();
   await expect(colormapRangeControl).toBeHidden();
   await expect(colormapAutoRangeButton).toHaveCount(0);
   await expect(colormapZeroCenterButton).toHaveCount(0);

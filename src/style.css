@@ -321,6 +321,12 @@ input[type='range'] {
   gap: 0.4rem;
 }
 
+#visualization-none-button[aria-pressed='true'] {
+  border-color: #75a7ff;
+  background: rgba(75, 192, 255, 0.16);
+  color: #f3f8ff;
+}
+
 #colormap-toggle-button[aria-pressed='true'] {
   border-color: #59d884;
   background: linear-gradient(90deg, rgba(255, 80, 80, 0.24), rgba(0, 0, 0, 0.18), rgba(89, 216, 132, 0.24));

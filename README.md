@@ -21,8 +21,10 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - Duplicate filenames are disambiguated as `name.exr (2)`, `name.exr (3)`, etc.
 - Visible loading indicator while large EXR files are decoding/loading.
 - Exposure control: slider + numeric input (`-10` to `+10` EV, step `0.1`).
-- Colormap toggle:
-  - Maps current display luminance over the full active image from red at `vmin`, through black at the midpoint, to green at `vmax`.
+- Visualization mode buttons:
+  - `None` is the default RGB display path.
+  - `Colormap` maps current display luminance over the full active image from red at `vmin`, through black at the midpoint, to green at `vmax`.
+  - Exposure controls are hidden in `Colormap` mode because exposure does not affect that display path.
   - `vmin`/`vmax` can be adjusted with one dual-handle slider or numeric inputs.
   - `Auto Range` has two modes: highlighted always-auto mode follows each image/layer/channel, while one-time/manual mode preserves the current min/max across targets.
   - `Zero Center` keeps the range symmetric around zero (`min=-v`, `max=v`), and in auto mode uses `v=max(abs(min), abs(max))`.
