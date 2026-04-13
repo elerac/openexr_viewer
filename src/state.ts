@@ -65,6 +65,7 @@ export function createInitialState(): ViewerState {
     visualizationMode: 'rgb',
     colormapRange: null,
     colormapRangeMode: 'alwaysAuto',
+    colormapZeroCentered: false,
     zoom: 1,
     panX: 0,
     panY: 0,
@@ -346,6 +347,20 @@ export function computeDisplayTextureLuminanceRange(
   }
 
   return { min, max };
+}
+
+export function buildZeroCenteredColormapRange(
+  range: DisplayLuminanceRange | null,
+  fallbackMagnitude = 1
+): DisplayLuminanceRange | null {
+  if (!range) {
+    return null;
+  }
+
+  const magnitude = Math.max(Math.abs(range.min), Math.abs(range.max));
+  const fallback = Number.isFinite(fallbackMagnitude) && fallbackMagnitude > 0 ? fallbackMagnitude : 1;
+  const v = Number.isFinite(magnitude) && magnitude > 0 ? magnitude : fallback;
+  return { min: -v, max: v };
 }
 
 export function sanitizeDisplayValue(value: number): number {

@@ -30,6 +30,7 @@ export interface ViewerState {
   visualizationMode: VisualizationMode;
   colormapRange: DisplayLuminanceRange | null;
   colormapRangeMode: ColormapRangeMode;
+  colormapZeroCentered: boolean;
   zoom: number;
   panX: number;
   panY: number;

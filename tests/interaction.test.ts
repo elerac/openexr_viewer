@@ -7,6 +7,7 @@ const state: ViewerState = {
   visualizationMode: 'rgb',
   colormapRange: null,
   colormapRangeMode: 'alwaysAuto',
+  colormapZeroCentered: false,
   zoom: 16,
   panX: 100,
   panY: 200,

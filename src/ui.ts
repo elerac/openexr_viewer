@@ -1,6 +1,7 @@
 import { DisplayChannelMapping, DisplayLuminanceRange, PixelSample, ViewerState } from './types';
 import { ProbeColorPreview } from './probe';
 import {
+  buildZeroCenteredColormapRange,
   computeHistogramRenderCeiling,
   extractRgbChannelGroups,
   findSelectedRgbGroup,
@@ -20,6 +21,7 @@ const HISTOGRAM_EV_SPECIAL_BUCKET_MIN_WIDTH = 12;
 const HISTOGRAM_EV_SPECIAL_BUCKET_MAX_WIDTH = 22;
 const OPENED_IMAGES_MAX_VISIBLE_ROWS = 10;
 const SVG_NS = 'http://www.w3.org/2000/svg';
+const COLORMAP_ZERO_CENTER_SLIDER_MIN_MAGNITUDE = 1e-16;
 
 export interface UiCallbacks {
   onOpenFileClick: () => void;
@@ -39,6 +41,7 @@ export interface UiCallbacks {
   onColormapToggle: () => void;
   onColormapRangeChange: (range: DisplayLuminanceRange) => void;
   onColormapAutoRange: () => void;
+  onColormapZeroCenterToggle: () => void;
   onResetView: () => void;
 }
 
@@ -49,6 +52,7 @@ interface Elements {
   colormapToggleButton: HTMLButtonElement;
   colormapRangeControl: HTMLDivElement;
   colormapAutoRangeButton: HTMLButtonElement;
+  colormapZeroCenterButton: HTMLButtonElement;
   colormapRangeSlider: HTMLDivElement;
   colormapVminSlider: HTMLInputElement;
   colormapVmaxSlider: HTMLInputElement;
@@ -124,6 +128,7 @@ export class ViewerUi {
   private hasRgbGroups = false;
   private currentColormapRange: DisplayLuminanceRange | null = null;
   private currentAutoColormapRange: DisplayLuminanceRange | null = null;
+  private currentColormapZeroCentered = false;
   private isColormapEnabled = false;
 
   constructor(private readonly callbacks: UiCallbacks) {
@@ -230,11 +235,14 @@ export class ViewerUi {
   setColormapRange(
     range: DisplayLuminanceRange | null,
     autoRange: DisplayLuminanceRange | null,
-    alwaysAuto = false
+    alwaysAuto = false,
+    zeroCentered = false
   ): void {
     this.currentColormapRange = cloneRange(range);
     this.currentAutoColormapRange = cloneRange(autoRange);
+    this.currentColormapZeroCentered = zeroCentered;
     this.elements.colormapAutoRangeButton.setAttribute('aria-pressed', alwaysAuto ? 'true' : 'false');
+    this.elements.colormapZeroCenterButton.setAttribute('aria-pressed', zeroCentered ? 'true' : 'false');
 
     const controlsDisabled = this.isLoading || this.openedImageCount === 0 || !range;
     this.setColormapRangeControlsDisabled(controlsDisabled);
@@ -849,6 +857,14 @@ export class ViewerUi {
       this.callbacks.onColormapAutoRange();
     });
 
+    this.elements.colormapZeroCenterButton.addEventListener('click', () => {
+      if (this.elements.colormapZeroCenterButton.disabled) {
+        return;
+      }
+
+      this.callbacks.onColormapZeroCenterToggle();
+    });
+
     this.elements.colormapVminSlider.addEventListener('input', () => {
       this.commitColormapMin(Number(this.elements.colormapVminSlider.value));
     });
@@ -1147,6 +1163,7 @@ export class ViewerUi {
   private setColormapRangeControlsDisabled(disabled: boolean): void {
     const effectiveDisabled = disabled || !this.isColormapEnabled;
     this.elements.colormapAutoRangeButton.disabled = effectiveDisabled || !this.currentAutoColormapRange;
+    this.elements.colormapZeroCenterButton.disabled = effectiveDisabled || !this.currentColormapRange;
     this.elements.colormapVminSlider.disabled = effectiveDisabled;
     this.elements.colormapVmaxSlider.disabled = effectiveDisabled;
     this.elements.colormapVminInput.disabled = effectiveDisabled;
@@ -1154,20 +1171,28 @@ export class ViewerUi {
   }
 
   private setColormapRangeValues(range: DisplayLuminanceRange, autoRange: DisplayLuminanceRange): void {
-    const bounds = buildColormapSliderBounds(range, autoRange);
-    const step = formatColormapRangeStep(bounds.min, bounds.max);
-    const vmin = clamp(range.min, bounds.min, bounds.max);
-    const vmax = clamp(range.max, bounds.min, bounds.max);
+    const bounds = buildColormapSliderBounds(range, autoRange, this.currentColormapZeroCentered);
+    const zeroCenteredFloor = this.currentColormapZeroCentered
+      ? Math.min(COLORMAP_ZERO_CENTER_SLIDER_MIN_MAGNITUDE, bounds.max)
+      : 0;
+    const step = this.currentColormapZeroCentered
+      ? 'any'
+      : formatColormapRangeStep(bounds.min, bounds.max);
+    const vminSliderMax = this.currentColormapZeroCentered ? -zeroCenteredFloor : bounds.max;
+    const vmaxSliderMin = this.currentColormapZeroCentered ? zeroCenteredFloor : bounds.min;
+    const vmin = clamp(range.min, bounds.min, vminSliderMax);
+    const vmax = clamp(range.max, vmaxSliderMin, bounds.max);
     const span = Math.max(Number.EPSILON, bounds.max - bounds.min);
     const minPct = ((vmin - bounds.min) / span) * 100;
     const maxPct = ((vmax - bounds.min) / span) * 100;
 
+    this.elements.colormapRangeSlider.classList.toggle('zero-centered', this.currentColormapZeroCentered);
     this.elements.colormapVminSlider.min = formatColormapInputValue(bounds.min);
-    this.elements.colormapVminSlider.max = formatColormapInputValue(bounds.max);
+    this.elements.colormapVminSlider.max = formatColormapInputValue(vminSliderMax);
     this.elements.colormapVminSlider.step = step;
     this.elements.colormapVminSlider.value = formatColormapInputValue(vmin);
 
-    this.elements.colormapVmaxSlider.min = formatColormapInputValue(bounds.min);
+    this.elements.colormapVmaxSlider.min = formatColormapInputValue(vmaxSliderMin);
     this.elements.colormapVmaxSlider.max = formatColormapInputValue(bounds.max);
     this.elements.colormapVmaxSlider.step = step;
     this.elements.colormapVmaxSlider.value = formatColormapInputValue(vmax);
@@ -1189,6 +1214,16 @@ export class ViewerUi {
       return;
     }
 
+    if (this.currentColormapZeroCentered) {
+      this.callbacks.onColormapRangeChange(
+        buildZeroCenteredColormapRange(
+          { min: value, max: value },
+          COLORMAP_ZERO_CENTER_SLIDER_MIN_MAGNITUDE
+        ) ?? current
+      );
+      return;
+    }
+
     this.callbacks.onColormapRangeChange({
       min: value,
       max: Math.max(value, current.max)
@@ -1199,6 +1234,16 @@ export class ViewerUi {
     const current = this.currentColormapRange;
     if (!current || !Number.isFinite(value)) {
       this.setColormapRangeValues(current ?? { min: 0, max: 1 }, this.currentAutoColormapRange ?? current ?? { min: 0, max: 1 });
+      return;
+    }
+
+    if (this.currentColormapZeroCentered) {
+      this.callbacks.onColormapRangeChange(
+        buildZeroCenteredColormapRange(
+          { min: value, max: value },
+          COLORMAP_ZERO_CENTER_SLIDER_MIN_MAGNITUDE
+        ) ?? current
+      );
       return;
     }
 
@@ -1217,6 +1262,7 @@ function resolveElements(): Elements {
     colormapToggleButton: requireElement('colormap-toggle-button', HTMLButtonElement),
     colormapRangeControl: requireElement('colormap-range-control', HTMLDivElement),
     colormapAutoRangeButton: requireElement('colormap-auto-range-button', HTMLButtonElement),
+    colormapZeroCenterButton: requireElement('colormap-zero-center-button', HTMLButtonElement),
     colormapRangeSlider: requireElement('colormap-range-slider', HTMLDivElement),
     colormapVminSlider: requireElement('colormap-vmin-slider', HTMLInputElement),
     colormapVmaxSlider: requireElement('colormap-vmax-slider', HTMLInputElement),
@@ -1292,8 +1338,16 @@ function cloneRange(range: DisplayLuminanceRange | null): DisplayLuminanceRange 
 
 function buildColormapSliderBounds(
   range: DisplayLuminanceRange,
-  autoRange: DisplayLuminanceRange
+  autoRange: DisplayLuminanceRange,
+  zeroCentered = false
 ): DisplayLuminanceRange {
+  if (zeroCentered) {
+    return buildZeroCenteredColormapRange({
+      min: Math.min(range.min, range.max, autoRange.min, autoRange.max),
+      max: Math.max(range.min, range.max, autoRange.min, autoRange.max)
+    }) ?? { min: -1, max: 1 };
+  }
+
   let min = Math.min(range.min, range.max, autoRange.min, autoRange.max);
   let max = Math.max(range.min, range.max, autoRange.min, autoRange.max);
 

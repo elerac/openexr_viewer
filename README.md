@@ -25,6 +25,7 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - Maps current display luminance over the full active image from red at `vmin`, through black at the midpoint, to green at `vmax`.
   - `vmin`/`vmax` can be adjusted with one dual-handle slider or numeric inputs.
   - `Auto Range` has two modes: highlighted always-auto mode follows each image/layer/channel, while one-time/manual mode preserves the current min/max across targets.
+  - `Zero Center` keeps the range symmetric around zero (`min=-v`, `max=v`), and in auto mode uses `v=max(abs(min), abs(max))`.
   - Leaves histogram and raw numeric probe values unchanged.
 - Nearest-neighbor rendering at all zoom levels (no interpolation).
 - Zoom range: `0.125x` to `512x`, wheel zoom anchored to cursor.

@@ -16,9 +16,11 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   const colormapButton = page.getByRole('button', { name: 'Colormap' });
   const colormapRangeControl = page.locator('#colormap-range-control');
   const colormapAutoRangeButton = page.getByRole('button', { name: 'Auto Range' });
+  const colormapZeroCenterButton = page.getByRole('button', { name: 'Zero Center' });
   const colormapRangeSlider = page.locator('#colormap-range-slider');
   const colormapVminInput = page.locator('#colormap-vmin-input');
   const colormapVmaxInput = page.locator('#colormap-vmax-input');
+  const colormapVminSlider = page.locator('#colormap-vmin-slider');
   const colormapVmaxSlider = page.locator('#colormap-vmax-slider');
   const getViewerPoint = async (xRatio: number, yRatio: number) => {
     const box = await viewer.boundingBox();
@@ -60,6 +62,7 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(colormapButton).toHaveAttribute('aria-expanded', 'false');
   await expect(colormapRangeControl).toBeHidden();
   await expect(colormapAutoRangeButton).toHaveCount(0);
+  await expect(colormapZeroCenterButton).toHaveCount(0);
   await expect(colormapVminInput).toBeHidden();
   await expect(colormapVmaxInput).toBeHidden();
   await expect(colormapVmaxSlider).toBeHidden();
@@ -70,6 +73,8 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(colormapRangeControl).toBeVisible();
   await expect(colormapAutoRangeButton).toBeEnabled();
   await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(colormapZeroCenterButton).toBeEnabled();
+  await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'false');
   await expect(colormapRangeSlider).toBeVisible();
   await expect(colormapVminInput).toBeEnabled();
   await expect(colormapVmaxInput).toBeEnabled();
@@ -92,19 +97,41 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
       });
     })
     .toBeCloseTo(0, 1);
-  const manualMax = (autoMin + autoMax) * 0.5;
+
+  const zeroCenteredAutoMax = Math.max(Math.abs(autoMin), Math.abs(autoMax));
+  await colormapZeroCenterButton.click();
+  await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(colormapRangeSlider).toHaveClass(/zero-centered/);
+  expect(Number(await colormapVminSlider.getAttribute('max'))).toBeLessThan(0);
+  expect(Number(await colormapVmaxSlider.getAttribute('min'))).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-zeroCenteredAutoMax, 5);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(zeroCenteredAutoMax, 5);
+
+  const manualMax = 1e-16;
   await colormapVmaxInput.fill(String(manualMax));
   await colormapVmaxInput.dispatchEvent('change');
   await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'false');
-  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(manualMax, 5);
+  await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-manualMax, 12);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(manualMax, 12);
 
   await page.getByRole('button', { name: 'Reload', exact: true }).click();
   await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr');
   await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'false');
-  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(manualMax, 5);
+  await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-manualMax, 12);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(manualMax, 12);
 
   await colormapAutoRangeButton.click();
   await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-zeroCenteredAutoMax, 5);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(zeroCenteredAutoMax, 5);
+
+  await colormapZeroCenterButton.click();
+  await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(colormapRangeSlider).not.toHaveClass(/zero-centered/);
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(autoMin, 5);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(autoMax, 5);
 
@@ -118,6 +145,7 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(colormapButton).toHaveAttribute('aria-expanded', 'false');
   await expect(colormapRangeControl).toBeHidden();
   await expect(colormapAutoRangeButton).toHaveCount(0);
+  await expect(colormapZeroCenterButton).toHaveCount(0);
   await expect(colormapVminInput).toBeHidden();
   await expect(colormapVmaxInput).toBeHidden();
   await expect(colormapVmaxSlider).toBeHidden();

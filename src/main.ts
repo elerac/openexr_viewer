@@ -7,6 +7,7 @@ import {
   buildDisplayTexture,
   buildViewerStateForLayer,
   buildSessionDisplayName,
+  buildZeroCenteredColormapRange,
   computeDisplayTextureLuminanceRange,
   createInitialState,
   extractRgbChannelGroups,
@@ -35,6 +36,7 @@ import {
 
 const HISTOGRAM_BIN_COUNT = 2048;
 const HISTOGRAM_EV_REFERENCE = 1;
+const COLORMAP_ZERO_CENTER_MANUAL_MIN_MAGNITUDE = 1e-16;
 const MIN_RGB_VIEW_LOADING_MS = 120;
 const DEFAULT_HISTOGRAM_VIEW_OPTIONS: HistogramViewOptions = {
   xAxis: 'ev',
@@ -117,6 +119,9 @@ async function bootstrap(): Promise<void> {
     },
     onColormapAutoRange: () => {
       applyAutoColormapRange();
+    },
+    onColormapZeroCenterToggle: () => {
+      toggleColormapZeroCenter();
     },
     onResetView: () => {
       resetAllState();
@@ -240,13 +245,18 @@ async function bootstrap(): Promise<void> {
           activeSession.textureRevisionKey = textureKey;
         }
 
+        const activeAutoColormapRange = resolveAutoColormapRange(
+          activeSession.displayLuminanceRange,
+          state.colormapZeroCentered
+        );
+
         if (
           textureDirty &&
           state.colormapRangeMode === 'alwaysAuto' &&
-          !sameDisplayLuminanceRange(state.colormapRange, activeSession.displayLuminanceRange)
+          !sameDisplayLuminanceRange(state.colormapRange, activeAutoColormapRange)
         ) {
           store.setState({
-            colormapRange: cloneDisplayLuminanceRange(activeSession.displayLuminanceRange)
+            colormapRange: activeAutoColormapRange
           });
           return;
         }
@@ -255,12 +265,14 @@ async function bootstrap(): Promise<void> {
           sessionChanged ||
           state.colormapRange !== previous.colormapRange ||
           state.colormapRangeMode !== previous.colormapRangeMode ||
+          state.colormapZeroCentered !== previous.colormapZeroCentered ||
           textureDirty
         ) {
           ui.setColormapRange(
             state.colormapRange,
             activeSession.displayLuminanceRange,
-            state.colormapRangeMode === 'alwaysAuto'
+            state.colormapRangeMode === 'alwaysAuto',
+            state.colormapZeroCentered
           );
         }
 
@@ -291,6 +303,7 @@ async function bootstrap(): Promise<void> {
           state.visualizationMode !== previous.visualizationMode ||
           state.colormapRange !== previous.colormapRange ||
           state.colormapRangeMode !== previous.colormapRangeMode ||
+          state.colormapZeroCentered !== previous.colormapZeroCentered ||
           state.lockedPixel !== previous.lockedPixel ||
           state.hoveredPixel !== previous.hoveredPixel;
 
@@ -345,7 +358,8 @@ async function bootstrap(): Promise<void> {
       state.displayB !== previous.displayB ||
       state.visualizationMode !== previous.visualizationMode ||
       state.colormapRange !== previous.colormapRange ||
-      state.colormapRangeMode !== previous.colormapRangeMode;
+      state.colormapRangeMode !== previous.colormapRangeMode ||
+      state.colormapZeroCentered !== previous.colormapZeroCentered;
 
     if (shouldRender) {
       renderer.render(state);
@@ -487,6 +501,7 @@ async function bootstrap(): Promise<void> {
         visualizationMode: 'rgb',
         colormapRange: null,
         colormapRangeMode: 'alwaysAuto',
+        colormapZeroCentered: false,
         activeLayer: 0,
         displayR: ZERO_CHANNEL,
         displayG: ZERO_CHANNEL,
@@ -667,11 +682,14 @@ async function bootstrap(): Promise<void> {
       return;
     }
 
-    const nextRange = range.min <= range.max
+    const currentState = store.getState();
+    const orderedRange = range.min <= range.max
       ? { min: range.min, max: range.max }
       : { min: range.max, max: range.min };
+    const nextRange = currentState.colormapZeroCentered
+      ? buildZeroCenteredColormapRange(orderedRange, COLORMAP_ZERO_CENTER_MANUAL_MIN_MAGNITUDE)
+      : orderedRange;
 
-    const currentState = store.getState();
     if (
       currentState.colormapRangeMode === 'oneTime' &&
       sameDisplayLuminanceRange(currentState.colormapRange, nextRange)
@@ -685,14 +703,38 @@ async function bootstrap(): Promise<void> {
     });
   }
 
+  function toggleColormapZeroCenter(): void {
+    const activeSession = getActiveSession();
+    if (!activeSession) {
+      return;
+    }
+
+    const currentState = store.getState();
+    const nextZeroCentered = !currentState.colormapZeroCentered;
+    const nextRange = nextZeroCentered
+      ? buildZeroCenteredColormapRange(currentState.colormapRange ?? activeSession.displayLuminanceRange)
+      : currentState.colormapRangeMode === 'alwaysAuto'
+        ? cloneDisplayLuminanceRange(activeSession.displayLuminanceRange)
+        : cloneDisplayLuminanceRange(currentState.colormapRange);
+
+    store.setState({
+      colormapRange: nextRange,
+      colormapZeroCentered: nextZeroCentered
+    });
+  }
+
   function applyAutoColormapRange(): void {
     const activeSession = getActiveSession();
     if (!activeSession) {
       return;
     }
 
-    const nextRange = cloneDisplayLuminanceRange(activeSession.displayLuminanceRange);
-    const currentMode = store.getState().colormapRangeMode;
+    const currentState = store.getState();
+    const nextRange = resolveAutoColormapRange(
+      activeSession.displayLuminanceRange,
+      currentState.colormapZeroCentered
+    );
+    const currentMode = currentState.colormapRangeMode;
 
     store.setState({
       colormapRange: nextRange,
@@ -892,6 +934,7 @@ async function bootstrap(): Promise<void> {
         visualizationMode: 'rgb',
         colormapRange: null,
         colormapRangeMode: 'alwaysAuto',
+        colormapZeroCentered: false,
         hoveredPixel: null,
         lockedPixel: null
       });
@@ -907,6 +950,7 @@ async function bootstrap(): Promise<void> {
         visualizationMode: 'rgb',
         colormapRange: null,
         colormapRangeMode: 'alwaysAuto',
+        colormapZeroCentered: false,
         activeLayer: 0,
         displayR: ZERO_CHANNEL,
         displayG: ZERO_CHANNEL,
@@ -1005,6 +1049,7 @@ async function bootstrap(): Promise<void> {
       visualizationMode: 'rgb',
       colormapRange: null,
       colormapRangeMode: 'alwaysAuto',
+      colormapZeroCentered: false,
       zoom: 1,
       panX: 0,
       panY: 0,
@@ -1189,6 +1234,7 @@ async function bootstrap(): Promise<void> {
         visualizationMode: currentState.visualizationMode,
         colormapRange: currentState.colormapRange,
         colormapRangeMode: currentState.colormapRangeMode,
+        colormapZeroCentered: currentState.colormapZeroCentered,
         hoveredPixel,
         lockedPixel
       },
@@ -1245,6 +1291,15 @@ async function bootstrap(): Promise<void> {
 
   function cloneDisplayLuminanceRange(range: DisplayLuminanceRange | null): DisplayLuminanceRange | null {
     return range ? { min: range.min, max: range.max } : null;
+  }
+
+  function resolveAutoColormapRange(
+    range: DisplayLuminanceRange | null,
+    zeroCentered: boolean
+  ): DisplayLuminanceRange | null {
+    return zeroCentered
+      ? buildZeroCenteredColormapRange(range)
+      : cloneDisplayLuminanceRange(range);
   }
 
   function sameDisplayLuminanceRange(

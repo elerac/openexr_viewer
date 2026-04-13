@@ -343,6 +343,13 @@ input[type='range'] {
   font-size: 0.82rem;
 }
 
+.colormap-range-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
 .colormap-range-heading button {
   padding: 0.22rem 0.45rem;
   font-size: 0.82rem;
@@ -395,6 +402,18 @@ input[type='range'] {
   -webkit-appearance: none;
   background: transparent;
   pointer-events: none;
+}
+
+.colormap-range-slider.zero-centered input[type='range'].colormap-range-thumb-min {
+  left: 0;
+  right: auto;
+  width: 50%;
+}
+
+.colormap-range-slider.zero-centered input[type='range'].colormap-range-thumb-max {
+  left: auto;
+  right: 0;
+  width: 50%;
 }
 
 .colormap-range-thumb::-webkit-slider-runnable-track {

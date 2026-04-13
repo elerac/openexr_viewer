@@ -5,6 +5,7 @@ import {
   buildDisplayTexture,
   buildViewerStateForLayer,
   buildSessionDisplayName,
+  buildZeroCenteredColormapRange,
   computeDisplayTextureLuminanceRange,
   computeHistogramRenderCeiling,
   createInitialState,
@@ -44,6 +45,7 @@ describe('state helpers', () => {
     expect(createInitialState().visualizationMode).toBe('rgb');
     expect(createInitialState().colormapRange).toBeNull();
     expect(createInitialState().colormapRangeMode).toBe('alwaysAuto');
+    expect(createInitialState().colormapZeroCentered).toBe(false);
   });
 
   it('builds RGBA display texture from selected channels', () => {
@@ -111,6 +113,12 @@ describe('state helpers', () => {
       max: 0.25
     });
     expect(computeDisplayTextureLuminanceRange(new Float32Array())).toBeNull();
+  });
+
+  it('builds zero-centered colormap ranges from the largest absolute bound', () => {
+    expect(buildZeroCenteredColormapRange({ min: -2, max: 1 })).toEqual({ min: -2, max: 2 });
+    expect(buildZeroCenteredColormapRange({ min: 0.2, max: 3 })).toEqual({ min: -3, max: 3 });
+    expect(buildZeroCenteredColormapRange({ min: 0, max: 0 })).toEqual({ min: -1, max: 1 });
   });
 
   it('returns exact raw channel values for a probed pixel', () => {
@@ -280,6 +288,7 @@ describe('state helpers', () => {
         visualizationMode: 'rgb',
         colormapRange: null,
         colormapRangeMode: 'alwaysAuto',
+        colormapZeroCentered: false,
         zoom: 1,
         panX: 0,
         panY: 0,
@@ -309,6 +318,7 @@ describe('state helpers', () => {
         visualizationMode: 'rgb',
         colormapRange: null,
         colormapRangeMode: 'alwaysAuto',
+        colormapZeroCentered: false,
         zoom: 1,
         panX: 0,
         panY: 0,
@@ -337,6 +347,7 @@ describe('state helpers', () => {
         visualizationMode: 'rgb',
         colormapRange: null,
         colormapRangeMode: 'alwaysAuto',
+        colormapZeroCentered: false,
         zoom: 1,
         panX: 0,
         panY: 0,
@@ -479,6 +490,7 @@ describe('state helpers', () => {
       visualizationMode: 'rgb',
       colormapRange: null,
       colormapRangeMode: 'alwaysAuto',
+      colormapZeroCentered: false,
       zoom: 1,
       panX: 0,
       panY: 0,
