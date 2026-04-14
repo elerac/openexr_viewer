@@ -23,6 +23,10 @@
     {
       "label": "Yellow-Cyan-Yellow",
       "file": "yellow-cyan-yellow.npy"
+    },
+    {
+      "label": "coolwarm",
+      "file": "coolwarm.npy"
     }
   ]
 }
