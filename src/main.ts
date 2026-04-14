@@ -1681,6 +1681,14 @@ async function bootstrap(): Promise<void> {
       };
     }
 
+    if (
+      selection.stokesParameter === 's1_over_s0' ||
+      selection.stokesParameter === 's2_over_s0' ||
+      selection.stokesParameter === 's3_over_s0'
+    ) {
+      return { colormapLabel: 'RdBu', range: { min: -1, max: 1 }, zeroCentered: true };
+    }
+
     return { colormapLabel: 'Black-Red', range: { min: 0, max: 1 }, zeroCentered: false };
   }
 

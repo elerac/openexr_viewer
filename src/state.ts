@@ -110,9 +110,22 @@ const STOKES_PARAMETER_LABELS: Record<StokesParameter, string> = {
   dop: 'DoP',
   docp: 'DoCP',
   cop: 'CoP',
-  top: 'ToP'
+  top: 'ToP',
+  s1_over_s0: 'S1/S0',
+  s2_over_s0: 'S2/S0',
+  s3_over_s0: 'S3/S0'
 };
-const STOKES_PARAMETER_ORDER: StokesParameter[] = ['aolp', 'dolp', 'dop', 'docp', 'cop', 'top'];
+const STOKES_PARAMETER_ORDER: StokesParameter[] = [
+  'aolp',
+  'dolp',
+  'dop',
+  'docp',
+  'cop',
+  'top',
+  's1_over_s0',
+  's2_over_s0',
+  's3_over_s0'
+];
 const STOKES_DEGREE_MODULATION_LABELS: Record<StokesDegreeModulationParameter, string> = {
   aolp: 'DoLP',
   cop: 'DoCP',
@@ -1090,6 +1103,15 @@ export function computeStokesEang(s1: number, s2: number, s3: number): number {
   return 0.5 * Math.atan2(s3, Math.sqrt(s1 ** 2 + s2 ** 2));
 }
 
+export function computeStokesNormalizedComponent(s0: number, component: number): number {
+  if (!Number.isFinite(s0) || !Number.isFinite(component) || s0 === 0) {
+    return 0;
+  }
+
+  const normalized = component / s0;
+  return Number.isFinite(normalized) ? normalized : 0;
+}
+
 export function formatScientific(value: number): string {
   if (!Number.isFinite(value)) {
     return String(value);
@@ -1788,6 +1810,12 @@ function computeStokesDisplayValue(
     case 'cop':
     case 'top':
       return computeStokesEang(s1, s2, s3);
+    case 's1_over_s0':
+      return computeStokesNormalizedComponent(s0, s1);
+    case 's2_over_s0':
+      return computeStokesNormalizedComponent(s0, s2);
+    case 's3_over_s0':
+      return computeStokesNormalizedComponent(s0, s3);
   }
 
   return 0;
@@ -1810,6 +1838,9 @@ function computeStokesDegreeModulationValue(
     case 'dolp':
     case 'dop':
     case 'docp':
+    case 's1_over_s0':
+    case 's2_over_s0':
+    case 's3_over_s0':
       return null;
   }
 

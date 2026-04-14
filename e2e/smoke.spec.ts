@@ -281,6 +281,9 @@ test('loads scalar Stokes channels and applies derived-channel defaults', async 
   await expect(channelSelect.locator('option', { hasText: 'Stokes DoCP' })).toHaveCount(1);
   await expect(channelSelect.locator('option', { hasText: 'Stokes CoP' })).toHaveCount(1);
   await expect(channelSelect.locator('option', { hasText: 'Stokes ToP' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'Stokes S1/S0' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'Stokes S2/S0' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'Stokes S3/S0' })).toHaveCount(1);
 
   const colormapRangeControl = page.locator('#colormap-range-control');
   const colormapSelect = page.locator('#colormap-select');
@@ -290,11 +293,13 @@ test('loads scalar Stokes channels and applies derived-channel defaults', async 
   const colormapZeroCenterButton = page.getByRole('button', { name: 'Zero Center' });
   const stokesDegreeModulationButton = page.locator('#stokes-degree-modulation-button');
   const hsvId = String(expectedColormapLabels.indexOf('HSV'));
+  const rdBuId = String(expectedColormapLabels.indexOf('RdBu'));
   const blackRedId = String(expectedColormapLabels.indexOf('Black-Red'));
   const yellowBlackBlueId = String(expectedColormapLabels.indexOf('Yellow-Black-Blue'));
   const yellowCyanYellowId = String(expectedColormapLabels.indexOf('Yellow-Cyan-Yellow'));
 
   expect(hsvId).not.toBe('-1');
+  expect(rdBuId).not.toBe('-1');
   expect(blackRedId).not.toBe('-1');
   expect(yellowBlackBlueId).not.toBe('-1');
   expect(yellowCyanYellowId).not.toBe('-1');
@@ -348,6 +353,13 @@ test('loads scalar Stokes channels and applies derived-channel defaults', async 
   await expect(stokesDegreeModulationButton).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-Math.PI / 4, 6);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI / 4, 6);
+
+  await channelSelect.selectOption({ label: 'Stokes S1/S0' });
+  await expect(stokesDegreeModulationButton).toBeHidden();
+  await expect(colormapSelect).toHaveValue(rdBuId);
+  await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-1, 8);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
 });
 
 test('loads RGB Stokes channels and applies grouped and split derived defaults', async ({ page }) => {
@@ -382,6 +394,9 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   await expect(channelSelect.locator('option', { hasText: 'DoCP.(R,G,B)' })).toHaveCount(1);
   await expect(channelSelect.locator('option', { hasText: 'CoP.(R,G,B)' })).toHaveCount(1);
   await expect(channelSelect.locator('option', { hasText: 'ToP.(R,G,B)' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'S1/S0.(R,G,B)' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'S2/S0.(R,G,B)' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'S3/S0.(R,G,B)' })).toHaveCount(1);
   await expect(channelSelect.locator('option').filter({ hasText: /^AoLP\.R$/ })).toHaveCount(0);
   await expect(channelSelect.locator('option').filter({ hasText: /^S0\.R$/ })).toHaveCount(0);
 
@@ -418,6 +433,18 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI, 6);
 
+  await channelSelect.selectOption({ label: 'S2/S0.(R,G,B)' });
+  await expect(stokesDegreeModulationButton).toBeHidden();
+  await expect(colormapSelect).toHaveValue(previousColormapId);
+  await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-1, 8);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
+
+  await channelSelect.selectOption({ label: 'AoLP.(R,G,B)' });
+  await expect(colormapSelect).toHaveValue(hsvId);
+  await expect(stokesDegreeModulationButton).toBeVisible();
+  await expect(stokesDegreeModulationButton).toHaveText('DoLP Modulation');
+
   await rgbSplitToggleButton.click();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
   await expect(channelSelect.locator('option:checked')).toHaveText('AoLP.R');
@@ -425,6 +452,15 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   await expect(channelSelect.locator('option').filter({ hasText: /^AoLP\.R$/ })).toHaveCount(1);
   await expect(channelSelect.locator('option').filter({ hasText: /^AoLP\.G$/ })).toHaveCount(1);
   await expect(channelSelect.locator('option').filter({ hasText: /^AoLP\.B$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^S1\/S0\.R$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^S1\/S0\.G$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^S1\/S0\.B$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^S2\/S0\.R$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^S2\/S0\.G$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^S2\/S0\.B$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^S3\/S0\.R$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^S3\/S0\.G$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^S3\/S0\.B$/ })).toHaveCount(1);
   await expect(channelSelect.locator('option').filter({ hasText: /^S0\.\(R,G,B\)$/ })).toHaveCount(0);
   await expect(channelSelect.locator('option').filter({ hasText: /^S0\.R$/ })).toHaveCount(1);
   await expect(colormapSelect).toHaveValue(hsvId);
@@ -465,6 +501,15 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   await expect(stokesDegreeModulationButton).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-Math.PI / 4, 6);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI / 4, 6);
+
+  await channelSelect.selectOption({ label: 'S3/S0.B' });
+  await expect(stokesDegreeModulationButton).toBeHidden();
+  await expect(colormapSelect).toHaveValue(previousColormapId);
+  await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-1, 8);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
+
+  await channelSelect.selectOption({ label: 'ToP.B' });
 
   await rgbSplitToggleButton.click();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');

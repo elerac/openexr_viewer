@@ -301,5 +301,21 @@ describe('probe helpers', () => {
     expect(topPreview?.rValue).toBe('0.7854');
     expect(topPreview?.gValue).toBe('0.7854');
     expect(topPreview?.bValue).toBe('0.7854');
+
+    const normalizedPreview = buildProbeColorPreview(
+      { x: 0, y: 0, values: { 'S3/S0.B': -0.5 } },
+      {
+        displaySource: 'stokesRgb',
+        stokesParameter: 's3_over_s0',
+        displayR: 'S0.B',
+        displayG: 'S0.B',
+        displayB: 'S0.B'
+      },
+      0
+    );
+
+    expect(normalizedPreview?.rValue).toBe('-0.5');
+    expect(normalizedPreview?.gValue).toBe('-0.5');
+    expect(normalizedPreview?.bValue).toBe('-0.5');
   });
 });

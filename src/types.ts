@@ -3,7 +3,16 @@ export const ZERO_CHANNEL = '__ZERO__';
 export type VisualizationMode = 'rgb' | 'colormap';
 export type ColormapRangeMode = 'alwaysAuto' | 'oneTime';
 export type DisplaySourceKind = 'channels' | 'stokesScalar' | 'stokesRgb';
-export type StokesParameter = 'aolp' | 'dolp' | 'dop' | 'docp' | 'cop' | 'top';
+export type StokesParameter =
+  | 'aolp'
+  | 'dolp'
+  | 'dop'
+  | 'docp'
+  | 'cop'
+  | 'top'
+  | 's1_over_s0'
+  | 's2_over_s0'
+  | 's3_over_s0';
 export type StokesDegreeModulationParameter = 'aolp' | 'cop' | 'top';
 export type StokesDegreeModulationState = Record<StokesDegreeModulationParameter, boolean>;
 
