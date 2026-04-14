@@ -10,6 +10,7 @@ const state: ViewerState = {
   colormapRange: null,
   colormapRangeMode: 'alwaysAuto',
   colormapZeroCentered: false,
+  stokesDegreeModulation: { aolp: false, cop: true, top: true },
   zoom: 16,
   panX: 100,
   panY: 200,

@@ -1,5 +1,6 @@
 import { imageToScreen } from './interaction';
 import { resolveActiveProbePixel } from './probe';
+import { isStokesDegreeModulationEnabled } from './state';
 import { ImagePixel, ViewerState, ViewportInfo } from './types';
 
 const VALUE_LABEL_ZOOM_THRESHOLD = 28;
@@ -34,6 +35,7 @@ uniform float uColormapMin;
 uniform float uColormapMax;
 uniform ivec2 uColormapTextureSize;
 uniform int uColormapEntryCount;
+uniform bool uUseStokesDegreeModulation;
 out vec4 outColor;
 
 vec3 linearToSrgb(vec3 linear) {
@@ -72,6 +74,56 @@ vec3 sampleColormap(float value, float vmin, float vmax) {
   return mix(color0, color1, f);
 }
 
+vec3 rgbToHsv(vec3 c) {
+  float maxValue = max(max(c.r, c.g), c.b);
+  float minValue = min(min(c.r, c.g), c.b);
+  float delta = maxValue - minValue;
+  float hue = 0.0;
+  if (delta > 0.0) {
+    if (maxValue == c.r) {
+      hue = mod((c.g - c.b) / delta, 6.0);
+    } else if (maxValue == c.g) {
+      hue = (c.b - c.r) / delta + 2.0;
+    } else {
+      hue = (c.r - c.g) / delta + 4.0;
+    }
+    hue /= 6.0;
+    if (hue < 0.0) {
+      hue += 1.0;
+    }
+  }
+
+  float saturation = maxValue == 0.0 ? 0.0 : delta / maxValue;
+  return vec3(hue, saturation, maxValue);
+}
+
+vec3 hsvToRgb(vec3 hsv) {
+  float hue = fract(hsv.x);
+  float saturation = clamp(hsv.y, 0.0, 1.0);
+  float value = clamp(hsv.z, 0.0, 1.0);
+  float c = value * saturation;
+  float hp = hue * 6.0;
+  float x = c * (1.0 - abs(mod(hp, 2.0) - 1.0));
+  float m = value - c;
+  vec3 rgb = vec3(0.0);
+
+  if (hp < 1.0) {
+    rgb = vec3(c, x, 0.0);
+  } else if (hp < 2.0) {
+    rgb = vec3(x, c, 0.0);
+  } else if (hp < 3.0) {
+    rgb = vec3(0.0, c, x);
+  } else if (hp < 4.0) {
+    rgb = vec3(0.0, x, c);
+  } else if (hp < 5.0) {
+    rgb = vec3(x, 0.0, c);
+  } else {
+    rgb = vec3(c, 0.0, x);
+  }
+
+  return rgb + vec3(m);
+}
+
 void main() {
   vec2 screen = vec2(gl_FragCoord.x - 0.5, uViewport.y - gl_FragCoord.y - 0.5);
   vec2 imagePos = uPan + (screen - uViewport * 0.5) / uZoom;
@@ -82,10 +134,17 @@ void main() {
   }
 
   ivec2 pixel = ivec2(floor(imagePos));
-  vec3 linear = texelFetch(uTexture, pixel, 0).rgb;
+  vec4 texel = texelFetch(uTexture, pixel, 0);
+  vec3 linear = texel.rgb;
   if (uUseColormap) {
     float luminance = dot(linear, vec3(0.2126, 0.7152, 0.0722));
-    outColor = vec4(sampleColormap(luminance, uColormapMin, uColormapMax), 1.0);
+    vec3 color = sampleColormap(luminance, uColormapMin, uColormapMax);
+    if (uUseStokesDegreeModulation) {
+      vec3 hsv = rgbToHsv(color);
+      hsv.z *= clamp(texel.a, 0.0, 1.0);
+      color = hsvToRgb(hsv);
+    }
+    outColor = vec4(color, 1.0);
     return;
   }
 
@@ -107,6 +166,7 @@ interface Uniforms {
   colormapMax: WebGLUniformLocation;
   colormapTextureSize: WebGLUniformLocation;
   colormapEntryCount: WebGLUniformLocation;
+  useStokesDegreeModulation: WebGLUniformLocation;
 }
 
 export class WebGlExrRenderer {
@@ -171,6 +231,7 @@ export class WebGlExrRenderer {
     const colormapMax = gl.getUniformLocation(this.program, 'uColormapMax');
     const colormapTextureSize = gl.getUniformLocation(this.program, 'uColormapTextureSize');
     const colormapEntryCount = gl.getUniformLocation(this.program, 'uColormapEntryCount');
+    const useStokesDegreeModulation = gl.getUniformLocation(this.program, 'uUseStokesDegreeModulation');
 
     if (
       !viewport ||
@@ -182,7 +243,8 @@ export class WebGlExrRenderer {
       !colormapMin ||
       !colormapMax ||
       !colormapTextureSize ||
-      !colormapEntryCount
+      !colormapEntryCount ||
+      !useStokesDegreeModulation
     ) {
       throw new Error('Failed to resolve shader uniforms.');
     }
@@ -197,7 +259,8 @@ export class WebGlExrRenderer {
       colormapMin,
       colormapMax,
       colormapTextureSize,
-      colormapEntryCount
+      colormapEntryCount,
+      useStokesDegreeModulation
     };
 
     gl.useProgram(this.program);
@@ -371,6 +434,10 @@ export class WebGlExrRenderer {
       this.colormapTextureSize.height
     );
     gl.uniform1i(this.uniforms.colormapEntryCount, this.colormapEntryCount);
+    gl.uniform1i(
+      this.uniforms.useStokesDegreeModulation,
+      isStokesDegreeModulationEnabled(state, state.stokesDegreeModulation) ? 1 : 0
+    );
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }

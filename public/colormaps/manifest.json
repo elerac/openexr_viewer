@@ -15,6 +15,14 @@
     {
       "label": "Black-Red",
       "file": "black-red.npy"
+    },
+    {
+      "label": "Yellow-Black-Blue",
+      "file": "yellow-black-blue.npy"
+    },
+    {
+      "label": "Yellow-Cyan-Yellow",
+      "file": "yellow-cyan-yellow.npy"
     }
   ]
 }

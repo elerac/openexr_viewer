@@ -31,6 +31,7 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - `vmin`/`vmax` can be adjusted with one dual-handle slider or numeric inputs.
   - `Auto Range` has two modes: highlighted always-auto mode follows each image/layer/channel, while one-time/manual mode preserves the current min/max across targets.
   - `Zero Center` keeps the range symmetric around zero (`min=-v`, `max=v`), and in auto mode uses `v=max(abs(min), abs(max))`.
+  - Angle Stokes colormaps expose a paired degree modulation toggle: AoLP can be modulated by DoLP, CoP by DoCP, and ToP by DoP. CoP and ToP modulation default to on; AoLP defaults to off.
   - Leaves histogram and raw numeric probe values unchanged.
 - Nearest-neighbor rendering at all zoom levels (no interpolation).
 - Zoom range: `0.125x` to `512x`, wheel zoom anchored to cursor.
@@ -54,8 +55,8 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - Not affected by exposure slider.
 - Channel controls:
   - `Channel` selector for grouped channels such as `HOGE.R/G/B`, `FUGA.R/G/B`.
-  - Stokes layers with `S0/S1/S2/S3` expose derived `Stokes AoLP`, `Stokes DoLP`, `Stokes DoP`, and `Stokes DoCP` entries. Scalar AoLP uses HSV over `[0, pi]`; degree parameters use Black-Red over `[0, 1]`.
-  - RGB Stokes layers with `S0.R/G/B` through `S3.R/G/B` expose `AoLP.(R,G,B)`, `DoLP.(R,G,B)`, `DoP.(R,G,B)`, and `DoCP.(R,G,B)`; each Stokes component is converted to mono with Rec.709 luminance weights before deriving the scalar visualization.
+  - Stokes layers with `S0/S1/S2/S3` expose derived `Stokes AoLP`, `Stokes DoLP`, `Stokes DoP`, `Stokes DoCP`, `Stokes CoP`, and `Stokes ToP` entries. Scalar AoLP uses HSV over `[0, pi]`; degree parameters use Black-Red over `[0, 1]`; CoP and ToP use signed ellipticity angle over `[-pi/4, pi/4]`. CoP enables `Zero Center` by default.
+  - RGB Stokes layers with `S0.R/G/B` through `S3.R/G/B` expose `AoLP.(R,G,B)`, `DoLP.(R,G,B)`, `DoP.(R,G,B)`, `DoCP.(R,G,B)`, `CoP.(R,G,B)`, and `ToP.(R,G,B)`; each Stokes component is converted to mono with Rec.709 luminance weights before deriving the scalar visualization.
   - When a selected layer does not expose the previous channel mapping, the viewer falls back to bare `R/G/B`, then the first RGB group, then a single grayscale channel mapped across RGB, then the first three channels.
 - Reset button resets view and display state, including exposure.
   - Reset also restores histogram axes to the default mode (`X = EV`, `Y = Linear`).
@@ -140,7 +141,7 @@ npm run test:e2e
 
 ## Implementation Notes
 
-- Display path: normal RGB uses `linear * 2^EV`, then sRGB encode for screen; colormap mode maps raw display luminance through the selected `.npy` LUT.
+- Display path: normal RGB uses `linear * 2^EV`, then sRGB encode for screen; colormap mode maps raw display luminance through the selected `.npy` LUT. For angle Stokes modulation, the LUT color is converted to HSV, its value component is multiplied by the clamped paired degree value, and the result is converted back to RGB.
 - Colormap authoring in Python:
   ```python
   import numpy as np

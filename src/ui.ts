@@ -47,6 +47,7 @@ export interface UiCallbacks {
   onColormapRangeChange: (range: DisplayLuminanceRange) => void;
   onColormapAutoRange: () => void;
   onColormapZeroCenterToggle: () => void;
+  onStokesDegreeModulationToggle: () => void;
   onResetView: () => void;
 }
 
@@ -58,6 +59,8 @@ interface Elements {
   colormapToggleButton: HTMLButtonElement;
   colormapRangeControl: HTMLDivElement;
   colormapSelect: HTMLSelectElement;
+  stokesDegreeModulationControl: HTMLDivElement;
+  stokesDegreeModulationButton: HTMLButtonElement;
   colormapAutoRangeButton: HTMLButtonElement;
   colormapZeroCenterButton: HTMLButtonElement;
   colormapRangeSlider: HTMLDivElement;
@@ -159,6 +162,7 @@ export class ViewerUi {
     this.elements.visualizationNoneButton.disabled = true;
     this.elements.colormapToggleButton.disabled = true;
     this.elements.colormapSelect.disabled = true;
+    this.elements.stokesDegreeModulationButton.disabled = true;
     this.setColormapRangeControlsDisabled(true);
     this.elements.layerSelect.disabled = true;
     this.elements.rgbGroupSelect.disabled = true;
@@ -206,6 +210,7 @@ export class ViewerUi {
     this.elements.closeAllOpenedImagesButton.disabled = loading || this.openedImageCount === 0;
     this.elements.layerSelect.disabled = loading || !this.hasMultipleLayers;
     this.elements.rgbGroupSelect.disabled = loading || !this.hasRgbGroups;
+    this.updateStokesDegreeModulationDisabled();
 
     if (!loading && this.restoreRgbGroupFocusAfterLoading && !this.elements.rgbGroupSelect.disabled) {
       this.elements.rgbGroupSelect.focus();
@@ -243,6 +248,7 @@ export class ViewerUi {
     this.elements.colormapRangeControl.classList.toggle('hidden', !this.isColormapEnabled);
     this.elements.exposureControl.classList.toggle('hidden', this.isColormapEnabled);
     this.setColormapRangeControlsDisabled(this.isLoading || this.openedImageCount === 0 || !this.currentColormapRange);
+    this.updateStokesDegreeModulationDisabled();
   }
 
   setColormapOptions(items: Array<{ id: string; label: string }>, activeId: string): void {
@@ -307,6 +313,16 @@ export class ViewerUi {
     }
 
     this.setColormapRangeValues(range, autoRange ?? range);
+  }
+
+  setStokesDegreeModulationControl(label: string | null, enabled = false): void {
+    const visible = Boolean(label);
+    this.elements.stokesDegreeModulationControl.classList.toggle('hidden', !visible);
+    if (label) {
+      this.elements.stokesDegreeModulationButton.textContent = `${label} Modulation`;
+    }
+    this.elements.stokesDegreeModulationButton.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    this.updateStokesDegreeModulationDisabled();
   }
 
   setHistogramViewOptions(options: HistogramViewOptions): void {
@@ -376,6 +392,7 @@ export class ViewerUi {
     this.elements.closeAllOpenedImagesButton.disabled = this.isLoading || this.openedImageCount === 0;
     this.setVisualizationModeButtonsDisabled(this.isLoading || this.openedImageCount === 0);
     this.setColormapRangeControlsDisabled(this.isLoading || this.openedImageCount === 0 || !this.currentColormapRange);
+    this.updateStokesDegreeModulationDisabled();
   }
 
   setLayerOptions(items: Array<{ index: number; label: string }>, activeIndex: number): void {
@@ -979,6 +996,14 @@ export class ViewerUi {
       this.callbacks.onColormapZeroCenterToggle();
     });
 
+    this.elements.stokesDegreeModulationButton.addEventListener('click', () => {
+      if (this.elements.stokesDegreeModulationButton.disabled) {
+        return;
+      }
+
+      this.callbacks.onStokesDegreeModulationToggle();
+    });
+
     this.elements.colormapVminSlider.addEventListener('input', () => {
       this.commitColormapMin(Number(this.elements.colormapVminSlider.value));
     });
@@ -1290,6 +1315,12 @@ export class ViewerUi {
     this.elements.colormapToggleButton.disabled = disabled;
   }
 
+  private updateStokesDegreeModulationDisabled(): void {
+    const visible = !this.elements.stokesDegreeModulationControl.classList.contains('hidden');
+    this.elements.stokesDegreeModulationButton.disabled =
+      !visible || this.isLoading || this.openedImageCount === 0 || !this.isColormapEnabled;
+  }
+
   private setColormapRangeValues(range: DisplayLuminanceRange, autoRange: DisplayLuminanceRange): void {
     const bounds = buildColormapSliderBounds(range, autoRange, this.currentColormapZeroCentered);
     const zeroCenteredFloor = this.currentColormapZeroCentered
@@ -1383,6 +1414,8 @@ function resolveElements(): Elements {
     colormapToggleButton: requireElement('colormap-toggle-button', HTMLButtonElement),
     colormapRangeControl: requireElement('colormap-range-control', HTMLDivElement),
     colormapSelect: requireElement('colormap-select', HTMLSelectElement),
+    stokesDegreeModulationControl: requireElement('stokes-degree-modulation-control', HTMLDivElement),
+    stokesDegreeModulationButton: requireElement('stokes-degree-modulation-button', HTMLButtonElement),
     colormapAutoRangeButton: requireElement('colormap-auto-range-button', HTMLButtonElement),
     colormapZeroCenterButton: requireElement('colormap-zero-center-button', HTMLButtonElement),
     colormapRangeSlider: requireElement('colormap-range-slider', HTMLDivElement),

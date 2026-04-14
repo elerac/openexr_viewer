@@ -252,6 +252,8 @@ test('loads scalar Stokes channels and applies derived-channel defaults', async 
   await expect(channelSelect.locator('option', { hasText: 'Stokes DoLP' })).toHaveCount(1);
   await expect(channelSelect.locator('option', { hasText: 'Stokes DoP' })).toHaveCount(1);
   await expect(channelSelect.locator('option', { hasText: 'Stokes DoCP' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'Stokes CoP' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'Stokes ToP' })).toHaveCount(1);
 
   const colormapRangeControl = page.locator('#colormap-range-control');
   const colormapSelect = page.locator('#colormap-select');
@@ -259,34 +261,66 @@ test('loads scalar Stokes channels and applies derived-channel defaults', async 
   const colormapVmaxInput = page.locator('#colormap-vmax-input');
   const colormapAutoRangeButton = page.getByRole('button', { name: 'Auto Range' });
   const colormapZeroCenterButton = page.getByRole('button', { name: 'Zero Center' });
+  const stokesDegreeModulationButton = page.locator('#stokes-degree-modulation-button');
   const hsvId = String(expectedColormapLabels.indexOf('HSV'));
   const blackRedId = String(expectedColormapLabels.indexOf('Black-Red'));
+  const yellowBlackBlueId = String(expectedColormapLabels.indexOf('Yellow-Black-Blue'));
+  const yellowCyanYellowId = String(expectedColormapLabels.indexOf('Yellow-Cyan-Yellow'));
 
   expect(hsvId).not.toBe('-1');
   expect(blackRedId).not.toBe('-1');
+  expect(yellowBlackBlueId).not.toBe('-1');
+  expect(yellowCyanYellowId).not.toBe('-1');
 
   await channelSelect.selectOption({ label: 'Stokes AoLP' });
   await expect(colormapRangeControl).toBeVisible();
   await expect(colormapSelect).toHaveValue(hsvId);
   await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'false');
   await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(stokesDegreeModulationButton).toBeVisible();
+  await expect(stokesDegreeModulationButton).toHaveText('DoLP Modulation');
+  await expect(stokesDegreeModulationButton).toHaveAttribute('aria-pressed', 'false');
+  await stokesDegreeModulationButton.click();
+  await expect(stokesDegreeModulationButton).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI, 6);
 
   await channelSelect.selectOption({ label: 'Stokes DoLP' });
+  await expect(stokesDegreeModulationButton).toBeHidden();
   await expect(colormapSelect).toHaveValue(blackRedId);
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
 
   await channelSelect.selectOption({ label: 'Stokes DoP' });
+  await expect(stokesDegreeModulationButton).toBeHidden();
   await expect(colormapSelect).toHaveValue(blackRedId);
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
 
   await channelSelect.selectOption({ label: 'Stokes DoCP' });
+  await expect(stokesDegreeModulationButton).toBeHidden();
   await expect(colormapSelect).toHaveValue(blackRedId);
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
+
+  await channelSelect.selectOption({ label: 'Stokes CoP' });
+  await expect(colormapSelect).toHaveValue(yellowBlackBlueId);
+  await expect(stokesDegreeModulationButton).toBeVisible();
+  await expect(stokesDegreeModulationButton).toHaveText('DoCP Modulation');
+  await expect(stokesDegreeModulationButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'true');
+  await stokesDegreeModulationButton.click();
+  await expect(stokesDegreeModulationButton).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-Math.PI / 4, 6);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI / 4, 6);
+
+  await channelSelect.selectOption({ label: 'Stokes ToP' });
+  await expect(colormapSelect).toHaveValue(yellowCyanYellowId);
+  await expect(stokesDegreeModulationButton).toBeVisible();
+  await expect(stokesDegreeModulationButton).toHaveText('DoP Modulation');
+  await expect(stokesDegreeModulationButton).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-Math.PI / 4, 6);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI / 4, 6);
 });
 
 test('loads RGB Stokes channels and applies mono-derived scalar defaults', async ({ page }) => {
@@ -316,6 +350,8 @@ test('loads RGB Stokes channels and applies mono-derived scalar defaults', async
   await expect(channelSelect.locator('option', { hasText: 'DoLP.(R,G,B)' })).toHaveCount(1);
   await expect(channelSelect.locator('option', { hasText: 'DoP.(R,G,B)' })).toHaveCount(1);
   await expect(channelSelect.locator('option', { hasText: 'DoCP.(R,G,B)' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'CoP.(R,G,B)' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'ToP.(R,G,B)' })).toHaveCount(1);
 
   const colormapRangeControl = page.locator('#colormap-range-control');
   const colormapSelect = page.locator('#colormap-select');
@@ -326,12 +362,17 @@ test('loads RGB Stokes channels and applies mono-derived scalar defaults', async
   const exposureControl = page.locator('#exposure-control');
   const colormapAutoRangeButton = page.getByRole('button', { name: 'Auto Range' });
   const colormapZeroCenterButton = page.getByRole('button', { name: 'Zero Center' });
+  const stokesDegreeModulationButton = page.locator('#stokes-degree-modulation-button');
   const hsvId = String(expectedColormapLabels.indexOf('HSV'));
   const blackRedId = String(expectedColormapLabels.indexOf('Black-Red'));
+  const yellowBlackBlueId = String(expectedColormapLabels.indexOf('Yellow-Black-Blue'));
+  const yellowCyanYellowId = String(expectedColormapLabels.indexOf('Yellow-Cyan-Yellow'));
   const previousColormapId = String(expectedColormapLabels.indexOf('RdBu'));
 
   expect(hsvId).not.toBe('-1');
   expect(blackRedId).not.toBe('-1');
+  expect(yellowBlackBlueId).not.toBe('-1');
+  expect(yellowCyanYellowId).not.toBe('-1');
   expect(previousColormapId).not.toBe('-1');
 
   await channelSelect.selectOption({ label: 'AoLP.(R,G,B)' });
@@ -339,25 +380,49 @@ test('loads RGB Stokes channels and applies mono-derived scalar defaults', async
   await expect(colormapSelect).toHaveValue(hsvId);
   await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'false');
   await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(stokesDegreeModulationButton).toBeVisible();
+  await expect(stokesDegreeModulationButton).toHaveText('DoLP Modulation');
+  await expect(stokesDegreeModulationButton).toHaveAttribute('aria-pressed', 'false');
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI, 6);
 
   await channelSelect.selectOption({ label: 'DoLP.(R,G,B)' });
+  await expect(stokesDegreeModulationButton).toBeHidden();
   await expect(colormapSelect).toHaveValue(blackRedId);
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
 
   await channelSelect.selectOption({ label: 'DoP.(R,G,B)' });
+  await expect(stokesDegreeModulationButton).toBeHidden();
   await expect(colormapSelect).toHaveValue(blackRedId);
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
 
   await channelSelect.selectOption({ label: 'DoCP.(R,G,B)' });
+  await expect(stokesDegreeModulationButton).toBeHidden();
   await expect(colormapSelect).toHaveValue(blackRedId);
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
 
+  await channelSelect.selectOption({ label: 'CoP.(R,G,B)' });
+  await expect(colormapSelect).toHaveValue(yellowBlackBlueId);
+  await expect(stokesDegreeModulationButton).toBeVisible();
+  await expect(stokesDegreeModulationButton).toHaveText('DoCP Modulation');
+  await expect(stokesDegreeModulationButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-Math.PI / 4, 6);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI / 4, 6);
+
+  await channelSelect.selectOption({ label: 'ToP.(R,G,B)' });
+  await expect(colormapSelect).toHaveValue(yellowCyanYellowId);
+  await expect(stokesDegreeModulationButton).toBeVisible();
+  await expect(stokesDegreeModulationButton).toHaveText('DoP Modulation');
+  await expect(stokesDegreeModulationButton).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-Math.PI / 4, 6);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI / 4, 6);
+
   await channelSelect.selectOption({ label: 'R,G,B' });
+  await expect(stokesDegreeModulationButton).toBeHidden();
   await expect(noneButton).toHaveAttribute('aria-pressed', 'true');
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'false');
   await expect(exposureControl).toBeVisible();
@@ -368,10 +433,10 @@ test('loads RGB Stokes channels and applies mono-derived scalar defaults', async
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'true');
   await expect(colormapSelect).toHaveValue(previousColormapId);
 
-  await channelSelect.selectOption({ label: 'DoCP.(R,G,B)' });
-  await expect(colormapSelect).toHaveValue(blackRedId);
-  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
-  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
+  await channelSelect.selectOption({ label: 'ToP.(R,G,B)' });
+  await expect(colormapSelect).toHaveValue(yellowCyanYellowId);
+  await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-Math.PI / 4, 6);
+  await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI / 4, 6);
 
   await channelSelect.selectOption({ label: 'R,G,B' });
   await expect(noneButton).toHaveAttribute('aria-pressed', 'false');

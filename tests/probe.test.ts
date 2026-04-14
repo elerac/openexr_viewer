@@ -158,6 +158,43 @@ describe('probe helpers', () => {
     });
   });
 
+  it('modulates Stokes angle colormap preview values through paired degree values', () => {
+    const selection = {
+      displaySource: 'stokesScalar' as const,
+      stokesParameter: 'aolp' as const,
+      displayR: 'S0',
+      displayG: 'S1',
+      displayB: 'S2'
+    };
+    const visualization = {
+      mode: 'colormap' as const,
+      colormapRange: { min: 0, max: 2 },
+      colormapLut: redBlackGreenLut
+    };
+
+    const modulated = buildProbeColorPreview(
+      { x: 0, y: 0, values: { AoLP: 0, DoLP: 0.5 } },
+      selection,
+      0,
+      {
+        ...visualization,
+        stokesDegreeModulation: { aolp: true, cop: true, top: true }
+      }
+    );
+    const unmodulated = buildProbeColorPreview(
+      { x: 0, y: 0, values: { AoLP: 0, DoLP: 0.5 } },
+      selection,
+      0,
+      {
+        ...visualization,
+        stokesDegreeModulation: { aolp: false, cop: true, top: true }
+      }
+    );
+
+    expect(modulated?.cssColor).toBe('rgb(128, 0, 0)');
+    expect(unmodulated?.cssColor).toBe('rgb(255, 0, 0)');
+  });
+
   it('uses RGB Stokes derived values for probe preview', () => {
     const preview = buildProbeColorPreview(
       { x: 0, y: 0, values: { DoLP: 0.5 } },
@@ -176,7 +213,7 @@ describe('probe helpers', () => {
     expect(preview?.bValue).toBe('0.5');
   });
 
-  it('uses new Stokes degree labels for probe preview', () => {
+  it('uses additional Stokes labels for probe preview', () => {
     const preview = buildProbeColorPreview(
       { x: 0, y: 0, values: { DoCP: 0.25 } },
       {
@@ -192,5 +229,37 @@ describe('probe helpers', () => {
     expect(preview?.rValue).toBe('0.25');
     expect(preview?.gValue).toBe('0.25');
     expect(preview?.bValue).toBe('0.25');
+
+    const copPreview = buildProbeColorPreview(
+      { x: 0, y: 0, values: { CoP: -Math.PI / 4 } },
+      {
+        displaySource: 'stokesScalar',
+        stokesParameter: 'cop',
+        displayR: 'S0',
+        displayG: 'S1',
+        displayB: 'S2'
+      },
+      0
+    );
+
+    expect(copPreview?.rValue).toBe('-0.7854');
+    expect(copPreview?.gValue).toBe('-0.7854');
+    expect(copPreview?.bValue).toBe('-0.7854');
+
+    const topPreview = buildProbeColorPreview(
+      { x: 0, y: 0, values: { ToP: Math.PI / 4 } },
+      {
+        displaySource: 'stokesRgb',
+        stokesParameter: 'top',
+        displayR: 'S0.R',
+        displayG: 'S0.G',
+        displayB: 'S0.B'
+      },
+      0
+    );
+
+    expect(topPreview?.rValue).toBe('0.7854');
+    expect(topPreview?.gValue).toBe('0.7854');
+    expect(topPreview?.bValue).toBe('0.7854');
   });
 });

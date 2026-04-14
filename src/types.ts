@@ -3,7 +3,9 @@ export const ZERO_CHANNEL = '__ZERO__';
 export type VisualizationMode = 'rgb' | 'colormap';
 export type ColormapRangeMode = 'alwaysAuto' | 'oneTime';
 export type DisplaySourceKind = 'channels' | 'stokesScalar' | 'stokesRgb';
-export type StokesParameter = 'aolp' | 'dolp' | 'dop' | 'docp';
+export type StokesParameter = 'aolp' | 'dolp' | 'dop' | 'docp' | 'cop' | 'top';
+export type StokesDegreeModulationParameter = 'aolp' | 'cop' | 'top';
+export type StokesDegreeModulationState = Record<StokesDegreeModulationParameter, boolean>;
 
 export interface DisplayLuminanceRange {
   min: number;
@@ -34,6 +36,7 @@ export interface ViewerState {
   colormapRange: DisplayLuminanceRange | null;
   colormapRangeMode: ColormapRangeMode;
   colormapZeroCentered: boolean;
+  stokesDegreeModulation: StokesDegreeModulationState;
   zoom: number;
   panX: number;
   panY: number;

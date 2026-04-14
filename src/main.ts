@@ -20,10 +20,13 @@ import {
   buildSessionDisplayName,
   buildZeroCenteredColormapRange,
   computeDisplayTextureLuminanceRange,
+  createDefaultStokesDegreeModulation,
   createInitialState,
   extractRgbChannelGroups,
   findSelectedRgbGroup,
+  getStokesDegreeModulationLabel,
   isStokesDisplaySelection,
+  isStokesDegreeModulationParameter,
   persistActiveSessionState,
   pickNextSessionIndexAfterRemoval,
   samplePixelValuesForDisplay,
@@ -150,6 +153,9 @@ async function bootstrap(): Promise<void> {
     onColormapZeroCenterToggle: () => {
       toggleColormapZeroCenter();
     },
+    onStokesDegreeModulationToggle: () => {
+      toggleStokesDegreeModulation();
+    },
     onResetView: () => {
       resetAllState();
     }
@@ -217,6 +223,16 @@ async function bootstrap(): Promise<void> {
 
     if (sessionChanged || state.visualizationMode !== previous.visualizationMode) {
       ui.setVisualizationMode(state.visualizationMode);
+    }
+
+    if (
+      sessionChanged ||
+      state.visualizationMode !== previous.visualizationMode ||
+      state.displaySource !== previous.displaySource ||
+      state.stokesParameter !== previous.stokesParameter ||
+      state.stokesDegreeModulation !== previous.stokesDegreeModulation
+    ) {
+      updateStokesDegreeModulationControl(state);
     }
 
     if (sessionChanged || state.activeColormapId !== previous.activeColormapId) {
@@ -346,6 +362,7 @@ async function bootstrap(): Promise<void> {
           state.colormapRange !== previous.colormapRange ||
           state.colormapRangeMode !== previous.colormapRangeMode ||
           state.colormapZeroCentered !== previous.colormapZeroCentered ||
+          state.stokesDegreeModulation !== previous.stokesDegreeModulation ||
           state.lockedPixel !== previous.lockedPixel ||
           state.hoveredPixel !== previous.hoveredPixel;
 
@@ -366,7 +383,8 @@ async function bootstrap(): Promise<void> {
             state.exposureEv,
             state.visualizationMode,
             state.colormapRange,
-            getActiveColormapLut(state.activeColormapId)
+            getActiveColormapLut(state.activeColormapId),
+            state.stokesDegreeModulation
           );
         }
       } else {
@@ -409,7 +427,8 @@ async function bootstrap(): Promise<void> {
       state.activeColormapId !== previous.activeColormapId ||
       state.colormapRange !== previous.colormapRange ||
       state.colormapRangeMode !== previous.colormapRangeMode ||
-      state.colormapZeroCentered !== previous.colormapZeroCentered;
+      state.colormapZeroCentered !== previous.colormapZeroCentered ||
+      state.stokesDegreeModulation !== previous.stokesDegreeModulation;
 
     if (shouldRender) {
       renderer.render(state);
@@ -553,6 +572,7 @@ async function bootstrap(): Promise<void> {
         colormapRange: null,
         colormapRangeMode: 'alwaysAuto',
         colormapZeroCentered: false,
+        stokesDegreeModulation: createDefaultStokesDegreeModulation(),
         activeLayer: 0,
         displaySource: 'channels',
         stokesParameter: null,
@@ -733,7 +753,7 @@ async function bootstrap(): Promise<void> {
         patch.activeColormapId = colormapId;
         patch.colormapRange = stokesDefaults.range;
         patch.colormapRangeMode = 'oneTime';
-        patch.colormapZeroCentered = false;
+        patch.colormapZeroCentered = stokesDefaults.zeroCentered;
       }
 
       store.setState({ ...patch });
@@ -853,6 +873,28 @@ async function bootstrap(): Promise<void> {
     store.setState({
       colormapRange: nextRange,
       colormapZeroCentered: nextZeroCentered
+    });
+  }
+
+  function toggleStokesDegreeModulation(): void {
+    if (!getActiveSession()) {
+      return;
+    }
+
+    const currentState = store.getState();
+    if (
+      currentState.displaySource === 'channels' ||
+      !isStokesDegreeModulationParameter(currentState.stokesParameter)
+    ) {
+      return;
+    }
+
+    const parameter = currentState.stokesParameter;
+    store.setState({
+      stokesDegreeModulation: {
+        ...currentState.stokesDegreeModulation,
+        [parameter]: !currentState.stokesDegreeModulation[parameter]
+      }
     });
   }
 
@@ -1091,6 +1133,7 @@ async function bootstrap(): Promise<void> {
         colormapRange: null,
         colormapRangeMode: 'alwaysAuto',
         colormapZeroCentered: false,
+        stokesDegreeModulation: createDefaultStokesDegreeModulation(),
         displaySource: 'channels',
         stokesParameter: null,
         hoveredPixel: null,
@@ -1110,6 +1153,7 @@ async function bootstrap(): Promise<void> {
         colormapRange: null,
         colormapRangeMode: 'alwaysAuto',
         colormapZeroCentered: false,
+        stokesDegreeModulation: createDefaultStokesDegreeModulation(),
         activeLayer: 0,
         displaySource: 'channels',
         stokesParameter: null,
@@ -1215,6 +1259,7 @@ async function bootstrap(): Promise<void> {
       colormapRange: null,
       colormapRangeMode: 'alwaysAuto',
       colormapZeroCentered: false,
+      stokesDegreeModulation: createDefaultStokesDegreeModulation(),
       zoom: 1,
       panX: 0,
       panY: 0,
@@ -1289,6 +1334,18 @@ async function bootstrap(): Promise<void> {
     return uploadedColormapId === colormapId ? activeColormapLut : null;
   }
 
+  function updateStokesDegreeModulationControl(state: ViewerState): void {
+    if (state.displaySource === 'channels' || !isStokesDegreeModulationParameter(state.stokesParameter)) {
+      ui.setStokesDegreeModulationControl(null);
+      return;
+    }
+
+    ui.setStokesDegreeModulationControl(
+      getStokesDegreeModulationLabel(state.stokesParameter),
+      state.stokesDegreeModulation[state.stokesParameter]
+    );
+  }
+
   function refreshActiveProbeReadout(): void {
     const activeSession = getActiveSession();
     if (!activeSession) {
@@ -1319,7 +1376,8 @@ async function bootstrap(): Promise<void> {
       state.exposureEv,
       state.visualizationMode,
       state.colormapRange,
-      getActiveColormapLut(state.activeColormapId)
+      getActiveColormapLut(state.activeColormapId),
+      state.stokesDegreeModulation
     );
   }
 
@@ -1388,7 +1446,8 @@ async function bootstrap(): Promise<void> {
     exposureEv: number,
     visualizationMode: VisualizationMode,
     colormapRange: DisplayLuminanceRange | null,
-    colormapLut: ColormapLut | null
+    colormapLut: ColormapLut | null,
+    stokesDegreeModulation: ViewerState['stokesDegreeModulation']
   ): void {
     const targetPixel = resolveActiveProbePixel(lockedPixel, hoveredPixel);
     const mode = resolveProbeMode(lockedPixel);
@@ -1405,7 +1464,8 @@ async function bootstrap(): Promise<void> {
       buildProbeColorPreview(sample, displayMapping, exposureEv, {
         mode: visualizationMode,
         colormapRange,
-        colormapLut
+        colormapLut,
+        stokesDegreeModulation
       })
     );
   }
@@ -1491,6 +1551,7 @@ async function bootstrap(): Promise<void> {
         colormapRange: currentState.colormapRange,
         colormapRangeMode: currentState.colormapRangeMode,
         colormapZeroCentered: currentState.colormapZeroCentered,
+        stokesDegreeModulation: { ...currentState.stokesDegreeModulation },
         hoveredPixel,
         lockedPixel
       },
@@ -1595,16 +1656,32 @@ async function bootstrap(): Promise<void> {
 
   function resolveStokesDisplayDefaults(
     selection: DisplaySelection
-  ): { colormapLabel: string; range: DisplayLuminanceRange } | null {
+  ): { colormapLabel: string; range: DisplayLuminanceRange; zeroCentered: boolean } | null {
     if (selection.displaySource === 'channels' || !selection.stokesParameter) {
       return null;
     }
 
     if (selection.stokesParameter === 'aolp') {
-      return { colormapLabel: 'HSV', range: { min: 0, max: Math.PI } };
+      return { colormapLabel: 'HSV', range: { min: 0, max: Math.PI }, zeroCentered: false };
     }
 
-    return { colormapLabel: 'Black-Red', range: { min: 0, max: 1 } };
+    if (selection.stokesParameter === 'cop') {
+      return {
+        colormapLabel: 'Yellow-Black-Blue',
+        range: { min: -Math.PI / 4, max: Math.PI / 4 },
+        zeroCentered: true
+      };
+    }
+
+    if (selection.stokesParameter === 'top') {
+      return {
+        colormapLabel: 'Yellow-Cyan-Yellow',
+        range: { min: -Math.PI / 4, max: Math.PI / 4 },
+        zeroCentered: false
+      };
+    }
+
+    return { colormapLabel: 'Black-Red', range: { min: 0, max: 1 }, zeroCentered: false };
   }
 
   function sameDisplayLuminanceRange(

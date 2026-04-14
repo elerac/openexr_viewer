@@ -8,6 +8,8 @@ import {
   DisplayLuminanceRange,
   ImagePixel,
   PixelSample,
+  StokesDegreeModulationParameter,
+  StokesDegreeModulationState,
   StokesParameter,
   ViewerState,
   ZERO_CHANNEL
@@ -86,8 +88,25 @@ const STOKES_PARAMETER_LABELS: Record<StokesParameter, string> = {
   aolp: 'AoLP',
   dolp: 'DoLP',
   dop: 'DoP',
-  docp: 'DoCP'
+  docp: 'DoCP',
+  cop: 'CoP',
+  top: 'ToP'
 };
+const STOKES_DEGREE_MODULATION_LABELS: Record<StokesDegreeModulationParameter, string> = {
+  aolp: 'DoLP',
+  cop: 'DoCP',
+  top: 'DoP'
+};
+
+export const DEFAULT_STOKES_DEGREE_MODULATION: StokesDegreeModulationState = {
+  aolp: false,
+  cop: true,
+  top: true
+};
+
+export function createDefaultStokesDegreeModulation(): StokesDegreeModulationState {
+  return { ...DEFAULT_STOKES_DEGREE_MODULATION };
+}
 
 export function createInitialState(): ViewerState {
   return {
@@ -97,6 +116,7 @@ export function createInitialState(): ViewerState {
     colormapRange: null,
     colormapRangeMode: 'alwaysAuto',
     colormapZeroCentered: false,
+    stokesDegreeModulation: createDefaultStokesDegreeModulation(),
     zoom: 1,
     panX: 0,
     panY: 0,
@@ -376,7 +396,9 @@ export function getStokesDisplayOptions(channelNames: string[]): StokesDisplayOp
       { displaySource: 'stokesScalar', stokesParameter: 'aolp', label: 'Stokes AoLP' },
       { displaySource: 'stokesScalar', stokesParameter: 'dolp', label: 'Stokes DoLP' },
       { displaySource: 'stokesScalar', stokesParameter: 'dop', label: 'Stokes DoP' },
-      { displaySource: 'stokesScalar', stokesParameter: 'docp', label: 'Stokes DoCP' }
+      { displaySource: 'stokesScalar', stokesParameter: 'docp', label: 'Stokes DoCP' },
+      { displaySource: 'stokesScalar', stokesParameter: 'cop', label: 'Stokes CoP' },
+      { displaySource: 'stokesScalar', stokesParameter: 'top', label: 'Stokes ToP' }
     );
   }
 
@@ -385,7 +407,9 @@ export function getStokesDisplayOptions(channelNames: string[]): StokesDisplayOp
       { displaySource: 'stokesRgb', stokesParameter: 'aolp', label: 'AoLP.(R,G,B)' },
       { displaySource: 'stokesRgb', stokesParameter: 'dolp', label: 'DoLP.(R,G,B)' },
       { displaySource: 'stokesRgb', stokesParameter: 'dop', label: 'DoP.(R,G,B)' },
-      { displaySource: 'stokesRgb', stokesParameter: 'docp', label: 'DoCP.(R,G,B)' }
+      { displaySource: 'stokesRgb', stokesParameter: 'docp', label: 'DoCP.(R,G,B)' },
+      { displaySource: 'stokesRgb', stokesParameter: 'cop', label: 'CoP.(R,G,B)' },
+      { displaySource: 'stokesRgb', stokesParameter: 'top', label: 'ToP.(R,G,B)' }
     );
   }
 
@@ -487,18 +511,29 @@ export function buildStokesDisplayTexture(
     const s3 = getChannel(layer, channels.s3);
 
     for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
+      const s0Value = readChannelValue(s0, pixelIndex);
+      const s1Value = readChannelValue(s1, pixelIndex);
+      const s2Value = readChannelValue(s2, pixelIndex);
+      const s3Value = readChannelValue(s3, pixelIndex);
       const value = computeStokesDisplayValue(
         parameter,
-        readChannelValue(s0, pixelIndex),
-        readChannelValue(s1, pixelIndex),
-        readChannelValue(s2, pixelIndex),
-        readChannelValue(s3, pixelIndex)
+        s0Value,
+        s1Value,
+        s2Value,
+        s3Value
+      );
+      const modulation = computeStokesDegreeModulationDisplayValue(
+        parameter,
+        s0Value,
+        s1Value,
+        s2Value,
+        s3Value
       );
       const outIndex = pixelIndex * 4;
       out[outIndex + 0] = value;
       out[outIndex + 1] = value;
       out[outIndex + 2] = value;
-      out[outIndex + 3] = 1;
+      out[outIndex + 3] = modulation ?? 1;
     }
 
     return out;
@@ -516,11 +551,18 @@ export function buildStokesDisplayTexture(
   for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
     const mono = computeRgbStokesMonoValues(r, g, b, pixelIndex);
     const value = computeStokesDisplayValue(parameter, mono.s0, mono.s1, mono.s2, mono.s3);
+    const modulation = computeStokesDegreeModulationDisplayValue(
+      parameter,
+      mono.s0,
+      mono.s1,
+      mono.s2,
+      mono.s3
+    );
     const outIndex = pixelIndex * 4;
     out[outIndex + 0] = value;
     out[outIndex + 1] = value;
     out[outIndex + 2] = value;
-    out[outIndex + 3] = 1;
+    out[outIndex + 3] = modulation ?? 1;
   }
 
   return out;
@@ -626,6 +668,39 @@ export function getStokesParameterLabel(parameter: StokesParameter): string {
   return STOKES_PARAMETER_LABELS[parameter];
 }
 
+export function isStokesDegreeModulationParameter(
+  parameter: StokesParameter | null
+): parameter is StokesDegreeModulationParameter {
+  return parameter === 'aolp' || parameter === 'cop' || parameter === 'top';
+}
+
+export function getStokesDegreeModulationLabel(
+  parameter: StokesParameter | null
+): string | null {
+  return isStokesDegreeModulationParameter(parameter)
+    ? STOKES_DEGREE_MODULATION_LABELS[parameter]
+    : null;
+}
+
+export function isStokesDegreeModulationEnabled(
+  selection: Pick<DisplaySelection, 'displaySource' | 'stokesParameter'>,
+  modulation: StokesDegreeModulationState
+): boolean {
+  return (
+    selection.displaySource !== 'channels' &&
+    isStokesDegreeModulationParameter(selection.stokesParameter) &&
+    modulation[selection.stokesParameter]
+  );
+}
+
+export function clampStokesDegreeModulationValue(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.min(1, Math.max(0, value));
+}
+
 export function computeStokesAolp(s1: number, s2: number): number {
   if (!Number.isFinite(s1) || !Number.isFinite(s2)) {
     return 0;
@@ -666,6 +741,14 @@ export function computeStokesDocp(s0: number, s3: number): number {
 
   const docp = Math.abs(s3) / s0;
   return Number.isFinite(docp) ? docp : 0;
+}
+
+export function computeStokesEang(s1: number, s2: number, s3: number): number {
+  if (!Number.isFinite(s1) || !Number.isFinite(s2) || !Number.isFinite(s3)) {
+    return 0;
+  }
+
+  return 0.5 * Math.atan2(s3, Math.sqrt(s1 ** 2 + s2 ** 2));
 }
 
 export function formatScientific(value: number): string {
@@ -1363,9 +1446,46 @@ function computeStokesDisplayValue(
       return computeStokesDop(s0, s1, s2, s3);
     case 'docp':
       return computeStokesDocp(s0, s3);
+    case 'cop':
+    case 'top':
+      return computeStokesEang(s1, s2, s3);
   }
 
   return 0;
+}
+
+function computeStokesDegreeModulationValue(
+  parameter: StokesParameter,
+  s0: number,
+  s1: number,
+  s2: number,
+  s3: number
+): number | null {
+  switch (parameter) {
+    case 'aolp':
+      return computeStokesDolp(s0, s1, s2);
+    case 'cop':
+      return computeStokesDocp(s0, s3);
+    case 'top':
+      return computeStokesDop(s0, s1, s2, s3);
+    case 'dolp':
+    case 'dop':
+    case 'docp':
+      return null;
+  }
+
+  return null;
+}
+
+function computeStokesDegreeModulationDisplayValue(
+  parameter: StokesParameter,
+  s0: number,
+  s1: number,
+  s2: number,
+  s3: number
+): number | null {
+  const value = computeStokesDegreeModulationValue(parameter, s0, s1, s2, s3);
+  return value === null ? null : clampStokesDegreeModulationValue(value);
 }
 
 function computeRgbStokesMonoValues(
@@ -1433,12 +1553,24 @@ function appendStokesSampleValues(
     const s1 = getChannel(layer, channels.s1);
     const s2 = getChannel(layer, channels.s2);
     const s3 = getChannel(layer, channels.s3);
+    const s0Value = readChannelValue(s0, flatIndex);
+    const s1Value = readChannelValue(s1, flatIndex);
+    const s2Value = readChannelValue(s2, flatIndex);
+    const s3Value = readChannelValue(s3, flatIndex);
     values[label] = computeStokesDisplayValue(
       selection.stokesParameter,
-      readChannelValue(s0, flatIndex),
-      readChannelValue(s1, flatIndex),
-      readChannelValue(s2, flatIndex),
-      readChannelValue(s3, flatIndex)
+      s0Value,
+      s1Value,
+      s2Value,
+      s3Value
+    );
+    appendStokesDegreeModulationSampleValue(
+      selection.stokesParameter,
+      s0Value,
+      s1Value,
+      s2Value,
+      s3Value,
+      values
     );
     return;
   }
@@ -1453,6 +1585,33 @@ function appendStokesSampleValues(
   const b = resolveStokesChannelArrays(layer, channels.b);
   const mono = computeRgbStokesMonoValues(r, g, b, flatIndex);
   values[label] = computeStokesDisplayValue(selection.stokesParameter, mono.s0, mono.s1, mono.s2, mono.s3);
+  appendStokesDegreeModulationSampleValue(
+    selection.stokesParameter,
+    mono.s0,
+    mono.s1,
+    mono.s2,
+    mono.s3,
+    values
+  );
+}
+
+function appendStokesDegreeModulationSampleValue(
+  parameter: StokesParameter,
+  s0: number,
+  s1: number,
+  s2: number,
+  s3: number,
+  values: Record<string, number>
+): void {
+  const label = getStokesDegreeModulationLabel(parameter);
+  if (!label) {
+    return;
+  }
+
+  const value = computeStokesDegreeModulationValue(parameter, s0, s1, s2, s3);
+  if (value !== null) {
+    values[label] = value;
+  }
 }
 
 function parseRgbChannel(channelName: string): { base: string; suffix: RgbSuffix } | null {

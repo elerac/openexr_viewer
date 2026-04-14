@@ -225,6 +225,14 @@ export function mapValueToColormapRgbBytes(
   return sampleColormapRgbBytes(lut, (value - range.min) / (range.max - range.min));
 }
 
+export function modulateRgbBytesValue(
+  rgb: [number, number, number],
+  valueScale: number
+): [number, number, number] {
+  const [h, s, v] = rgbBytesToHsv(rgb);
+  return hsvToRgbBytes(h, s, v * clampFiniteUnit(valueScale));
+}
+
 function resolvePublicAssetUrl(file: string): string {
   const base = import.meta.env.BASE_URL ?? '/';
   return `${base.endsWith('/') ? base : `${base}/`}${file}`;
@@ -416,6 +424,86 @@ function readColormapComponent(
 
 function clampUnit(value: number): number {
   return Math.max(0, Math.min(1, value));
+}
+
+function clampFiniteUnit(value: number): number {
+  return Number.isFinite(value) ? clampUnit(value) : 0;
+}
+
+function rgbBytesToHsv(rgb: [number, number, number]): [number, number, number] {
+  const r = clampByte(rgb[0]) / 255;
+  const g = clampByte(rgb[1]) / 255;
+  const b = clampByte(rgb[2]) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+
+  if (delta === 0) {
+    return [0, 0, max];
+  }
+
+  let h = 0;
+  if (max === r) {
+    h = ((g - b) / delta) % 6;
+  } else if (max === g) {
+    h = (b - r) / delta + 2;
+  } else {
+    h = (r - g) / delta + 4;
+  }
+
+  h /= 6;
+  if (h < 0) {
+    h += 1;
+  }
+
+  return [h, max === 0 ? 0 : delta / max, max];
+}
+
+function hsvToRgbBytes(h: number, s: number, v: number): [number, number, number] {
+  const hue = ((h % 1) + 1) % 1;
+  const saturation = clampFiniteUnit(s);
+  const value = clampFiniteUnit(v);
+  const c = value * saturation;
+  const hp = hue * 6;
+  const x = c * (1 - Math.abs((hp % 2) - 1));
+  const m = value - c;
+
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (hp < 1) {
+    r = c;
+    g = x;
+  } else if (hp < 2) {
+    r = x;
+    g = c;
+  } else if (hp < 3) {
+    g = c;
+    b = x;
+  } else if (hp < 4) {
+    g = x;
+    b = c;
+  } else if (hp < 5) {
+    r = x;
+    b = c;
+  } else {
+    r = c;
+    b = x;
+  }
+
+  return [
+    Math.round((r + m) * 255),
+    Math.round((g + m) * 255),
+    Math.round((b + m) * 255)
+  ];
+}
+
+function clampByte(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(255, Math.round(value)));
 }
 
 function lerp(a: number, b: number, t: number): number {

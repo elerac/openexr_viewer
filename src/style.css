@@ -322,7 +322,8 @@ input[type='range'] {
 }
 
 #visualization-none-button[aria-pressed='true'],
-#colormap-toggle-button[aria-pressed='true'] {
+#colormap-toggle-button[aria-pressed='true'],
+#stokes-degree-modulation-button[aria-pressed='true'] {
   border-color: #75a7ff;
   background: rgba(75, 192, 255, 0.16);
   color: #f3f8ff;
@@ -338,6 +339,14 @@ input[type='range'] {
 }
 
 .colormap-palette-control select {
+  width: 100%;
+}
+
+.stokes-degree-modulation-control {
+  display: grid;
+}
+
+.stokes-degree-modulation-control button {
   width: 100%;
 }
 

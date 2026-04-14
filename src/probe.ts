@@ -1,10 +1,17 @@
-import { ColormapLut, mapValueToColormapRgbBytes } from './colormaps';
+import { ColormapLut, mapValueToColormapRgbBytes, modulateRgbBytesValue } from './colormaps';
+import {
+  clampStokesDegreeModulationValue,
+  createDefaultStokesDegreeModulation,
+  getStokesDegreeModulationLabel,
+  getStokesParameterLabel,
+  isStokesDegreeModulationEnabled
+} from './state';
 import {
   DisplaySelection,
   DisplayLuminanceRange,
   ImagePixel,
   PixelSample,
-  StokesParameter,
+  StokesDegreeModulationState,
   VisualizationMode,
   ZERO_CHANNEL
 } from './types';
@@ -20,6 +27,7 @@ export interface ProbeVisualizationOptions {
   mode: VisualizationMode;
   colormapRange: DisplayLuminanceRange | null;
   colormapLut?: ColormapLut | null;
+  stokesDegreeModulation?: StokesDegreeModulationState;
 }
 
 export function resolveActiveProbePixel(
@@ -45,18 +53,26 @@ export function buildProbeColorPreview(
 
   const [rawR, rawG, rawB] = readProbeDisplayValues(sample, selection);
   const exposureScale = 2 ** exposureEv;
-  const bytes =
-    visualization.mode === 'colormap'
-      ? mapValueToColormapRgbBytes(
-          0.2126 * rawR + 0.7152 * rawG + 0.0722 * rawB,
-          visualization.colormapRange,
-          visualization.colormapLut ?? null
-        )
-      : [
-          toSrgbByte(rawR * exposureScale),
-          toSrgbByte(rawG * exposureScale),
-          toSrgbByte(rawB * exposureScale)
-        ];
+  let bytes: [number, number, number];
+  if (visualization.mode === 'colormap') {
+    bytes = mapValueToColormapRgbBytes(
+      0.2126 * rawR + 0.7152 * rawG + 0.0722 * rawB,
+      visualization.colormapRange,
+      visualization.colormapLut ?? null
+    );
+
+    const stokesDegreeModulation =
+      visualization.stokesDegreeModulation ?? createDefaultStokesDegreeModulation();
+    if (isStokesDegreeModulationEnabled(selection, stokesDegreeModulation)) {
+      bytes = modulateRgbBytesValue(bytes, readProbeStokesDegreeModulationValue(sample, selection));
+    }
+  } else {
+    bytes = [
+      toSrgbByte(rawR * exposureScale),
+      toSrgbByte(rawG * exposureScale),
+      toSrgbByte(rawB * exposureScale)
+    ];
+  }
 
   return {
     cssColor: `rgb(${bytes[0]}, ${bytes[1]}, ${bytes[2]})`,
@@ -88,6 +104,15 @@ function readProbeChannel(sample: PixelSample, channelName: string): number {
   return Number.isFinite(value) ? value : 0;
 }
 
+function readProbeStokesDegreeModulationValue(sample: PixelSample, selection: DisplaySelection): number {
+  const label = getStokesDegreeModulationLabel(selection.stokesParameter);
+  if (!label) {
+    return 1;
+  }
+
+  return clampStokesDegreeModulationValue(readProbeChannel(sample, label));
+}
+
 function toSrgbByte(value: number): number {
   const linear = Math.max(0, value);
   const srgb =
@@ -108,19 +133,4 @@ function formatProbeRgbValue(value: number): string {
   }
 
   return Number(value.toPrecision(4)).toString();
-}
-
-function getStokesParameterLabel(parameter: StokesParameter): string {
-  switch (parameter) {
-    case 'aolp':
-      return 'AoLP';
-    case 'dolp':
-      return 'DoLP';
-    case 'dop':
-      return 'DoP';
-    case 'docp':
-      return 'DoCP';
-  }
-
-  return 'DoLP';
 }

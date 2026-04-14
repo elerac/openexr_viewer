@@ -13,6 +13,7 @@ import {
   computeStokesDocp,
   computeStokesDop,
   computeStokesDolp,
+  computeStokesEang,
   computeDisplayTextureLuminanceRange,
   computeHistogramRenderCeiling,
   createInitialState,
@@ -67,6 +68,11 @@ describe('state helpers', () => {
     expect(createInitialState().colormapZeroCentered).toBe(false);
     expect(createInitialState().displaySource).toBe('channels');
     expect(createInitialState().stokesParameter).toBeNull();
+    expect(createInitialState().stokesDegreeModulation).toEqual({
+      aolp: false,
+      cop: true,
+      top: true
+    });
   });
 
   it('builds RGBA display texture from selected channels', () => {
@@ -135,17 +141,21 @@ describe('state helpers', () => {
       'Stokes AoLP',
       'Stokes DoLP',
       'Stokes DoP',
-      'Stokes DoCP'
+      'Stokes DoCP',
+      'Stokes CoP',
+      'Stokes ToP'
     ]);
     expect(getStokesDisplayOptions(rgbNames).map((option) => option.label)).toEqual([
       'AoLP.(R,G,B)',
       'DoLP.(R,G,B)',
       'DoP.(R,G,B)',
-      'DoCP.(R,G,B)'
+      'DoCP.(R,G,B)',
+      'CoP.(R,G,B)',
+      'ToP.(R,G,B)'
     ]);
   });
 
-  it('computes AoLP, DoLP, DoP, and DoCP from Stokes values', () => {
+  it('computes derived Stokes values', () => {
     expect(computeStokesAolp(1, 0)).toBeCloseTo(0, 6);
     expect(computeStokesAolp(0, 1)).toBeCloseTo(Math.PI / 4, 6);
     expect(computeStokesAolp(-1, 0)).toBeCloseTo(Math.PI / 2, 6);
@@ -167,6 +177,11 @@ describe('state helpers', () => {
     expect(computeStokesDocp(2, -1)).toBeCloseTo(0.5, 6);
     expect(computeStokesDocp(0, 1)).toBe(0);
     expect(computeStokesDocp(1, Number.NaN)).toBe(0);
+
+    expect(computeStokesEang(0, 0, 1)).toBeCloseTo(Math.PI / 4, 6);
+    expect(computeStokesEang(0, 0, -1)).toBeCloseTo(-Math.PI / 4, 6);
+    expect(computeStokesEang(1, 0, 0)).toBe(0);
+    expect(computeStokesEang(Number.NaN, 0, 1)).toBe(0);
   });
 
   it('builds scalar Stokes AoLP display textures with values duplicated across RGB', () => {
@@ -239,6 +254,69 @@ describe('state helpers', () => {
     expect(docpTexture[12]).toBe(0);
   });
 
+  it('builds scalar Stokes CoP and ToP display textures from signed ellipticity angle', () => {
+    const layer: DecodedLayer = {
+      name: 'stokes',
+      channelNames: ['S0', 'S1', 'S2', 'S3'],
+      channelData: new Map([
+        ['S0', new Float32Array([1, 1, 1, 1])],
+        ['S1', new Float32Array([0, 0, 1, Number.NaN])],
+        ['S2', new Float32Array([0, 0, 0, 0])],
+        ['S3', new Float32Array([1, -1, 0, 1])]
+      ])
+    };
+
+    const copTexture = buildStokesDisplayTexture(layer, 2, 2, 'stokesScalar', 'cop');
+    const topTexture = buildStokesDisplayTexture(layer, 2, 2, 'stokesScalar', 'top');
+
+    expect(copTexture[0]).toBeCloseTo(Math.PI / 4, 6);
+    expect(copTexture[4]).toBeCloseTo(-Math.PI / 4, 6);
+    expect(copTexture[8]).toBe(0);
+    expect(copTexture[12]).toBe(0);
+    expect(copTexture[3]).toBe(1);
+    expect(copTexture[7]).toBe(1);
+    expect(copTexture[11]).toBe(0);
+    expect(copTexture[15]).toBe(1);
+    expect(topTexture[0]).toBeCloseTo(Math.PI / 4, 6);
+    expect(topTexture[4]).toBeCloseTo(-Math.PI / 4, 6);
+    expect(topTexture[8]).toBe(0);
+    expect(topTexture[12]).toBe(0);
+    expect(topTexture[3]).toBe(1);
+    expect(topTexture[7]).toBe(1);
+    expect(topTexture[11]).toBe(1);
+    expect(topTexture[15]).toBe(0);
+  });
+
+  it('stores clamped paired degree modulation values in angle Stokes texture alpha', () => {
+    const layer: DecodedLayer = {
+      name: 'stokes',
+      channelNames: ['S0', 'S1', 'S2', 'S3'],
+      channelData: new Map([
+        ['S0', new Float32Array([2, 1, 2, 0])],
+        ['S1', new Float32Array([1, 0, 2, 1])],
+        ['S2', new Float32Array([1, 0, 0, 1])],
+        ['S3', new Float32Array([0, 2, 2, 1])]
+      ])
+    };
+
+    const aolpTexture = buildStokesDisplayTexture(layer, 2, 2, 'stokesScalar', 'aolp');
+    const copTexture = buildStokesDisplayTexture(layer, 2, 2, 'stokesScalar', 'cop');
+    const topTexture = buildStokesDisplayTexture(layer, 2, 2, 'stokesScalar', 'top');
+
+    expect(aolpTexture[3]).toBeCloseTo(Math.SQRT1_2, 6);
+    expect(aolpTexture[7]).toBe(0);
+    expect(aolpTexture[11]).toBe(1);
+    expect(aolpTexture[15]).toBe(0);
+    expect(copTexture[3]).toBe(0);
+    expect(copTexture[7]).toBe(1);
+    expect(copTexture[11]).toBe(1);
+    expect(copTexture[15]).toBe(0);
+    expect(topTexture[3]).toBeCloseTo(Math.SQRT1_2, 6);
+    expect(topTexture[7]).toBe(1);
+    expect(topTexture[11]).toBe(1);
+    expect(topTexture[15]).toBe(0);
+  });
+
   it('builds RGB Stokes derived display textures from mono Rec.709 Stokes values', () => {
     const layer: DecodedLayer = {
       name: 'stokes-rgb',
@@ -270,16 +348,27 @@ describe('state helpers', () => {
     expect(texture[0]).toBeCloseTo(expected, 6);
     expect(texture[1]).toBeCloseTo(expected, 6);
     expect(texture[2]).toBeCloseTo(expected, 6);
-    expect(texture[3]).toBe(1);
+    expect(texture[3]).toBeCloseTo(Math.sqrt(0.2126 ** 2 + 0.7152 ** 2), 6);
 
     const dopTexture = buildStokesDisplayTexture(layer, 1, 1, 'stokesRgb', 'dop');
     const docpTexture = buildStokesDisplayTexture(layer, 1, 1, 'stokesRgb', 'docp');
+    const copTexture = buildStokesDisplayTexture(layer, 1, 1, 'stokesRgb', 'cop');
+    const topTexture = buildStokesDisplayTexture(layer, 1, 1, 'stokesRgb', 'top');
+    const expectedEang = 0.5 * Math.atan2(0.0722, Math.sqrt(0.2126 ** 2 + 0.7152 ** 2));
     expect(dopTexture[0]).toBeCloseTo(Math.sqrt(0.2126 ** 2 + 0.7152 ** 2 + 0.0722 ** 2), 6);
     expect(dopTexture[1]).toBeCloseTo(dopTexture[0], 6);
     expect(dopTexture[2]).toBeCloseTo(dopTexture[0], 6);
     expect(docpTexture[0]).toBeCloseTo(0.0722, 6);
     expect(docpTexture[1]).toBeCloseTo(0.0722, 6);
     expect(docpTexture[2]).toBeCloseTo(0.0722, 6);
+    expect(copTexture[0]).toBeCloseTo(expectedEang, 6);
+    expect(copTexture[1]).toBeCloseTo(expectedEang, 6);
+    expect(copTexture[2]).toBeCloseTo(expectedEang, 6);
+    expect(copTexture[3]).toBeCloseTo(0.0722, 6);
+    expect(topTexture[0]).toBeCloseTo(expectedEang, 6);
+    expect(topTexture[1]).toBeCloseTo(expectedEang, 6);
+    expect(topTexture[2]).toBeCloseTo(expectedEang, 6);
+    expect(topTexture[3]).toBeCloseTo(Math.sqrt(0.2126 ** 2 + 0.7152 ** 2 + 0.0722 ** 2), 6);
   });
 
   it('returns zero for RGB Stokes degree values when the mono S0 denominator is invalid', () => {
@@ -624,6 +713,7 @@ describe('state helpers', () => {
 
     expect(sample?.values.S0).toBe(1);
     expect(sample?.values.AoLP).toBeCloseTo(Math.PI / 4, 6);
+    expect(sample?.values.DoLP).toBeCloseTo(1, 6);
 
     const docpSample = samplePixelValuesForDisplay(
       {
@@ -646,6 +736,29 @@ describe('state helpers', () => {
     );
 
     expect(docpSample?.values.DoCP).toBeCloseTo(0.5, 6);
+
+    const copSample = samplePixelValuesForDisplay(
+      {
+        ...layer,
+        channelData: new Map([
+          ['S0', new Float32Array([1])],
+          ['S1', new Float32Array([0])],
+          ['S2', new Float32Array([0])],
+          ['S3', new Float32Array([-1])]
+        ])
+      },
+      1,
+      1,
+      { ix: 0, iy: 0 },
+      {
+        ...createViewerState(),
+        displaySource: 'stokesScalar',
+        stokesParameter: 'cop'
+      }
+    );
+
+    expect(copSample?.values.CoP).toBeCloseTo(-Math.PI / 4, 6);
+    expect(copSample?.values.DoCP).toBeCloseTo(1, 6);
   });
 
   it('adds mono-derived RGB Stokes values to probe samples', () => {
@@ -687,6 +800,7 @@ describe('state helpers', () => {
 
     expect(sample?.values['S0.R']).toBe(1);
     expect(sample?.values.AoLP).toBeCloseTo(0.5 * Math.atan2(0.7152, 0.2126), 6);
+    expect(sample?.values.DoLP).toBeCloseTo(Math.sqrt(0.2126 ** 2 + 0.7152 ** 2), 6);
     expect(sample?.values['AoLP.R']).toBeUndefined();
 
     const dopSample = samplePixelValuesForDisplay(
@@ -703,6 +817,25 @@ describe('state helpers', () => {
 
     expect(dopSample?.values.DoP).toBeCloseTo(Math.sqrt(0.2126 ** 2 + 0.7152 ** 2 + 0.0722 ** 2), 6);
     expect(dopSample?.values['DoP.R']).toBeUndefined();
+
+    const topSample = samplePixelValuesForDisplay(
+      layer,
+      1,
+      1,
+      { ix: 0, iy: 0 },
+      {
+        ...createViewerState(),
+        displaySource: 'stokesRgb',
+        stokesParameter: 'top'
+      }
+    );
+
+    expect(topSample?.values.ToP).toBeCloseTo(
+      0.5 * Math.atan2(0.0722, Math.sqrt(0.2126 ** 2 + 0.7152 ** 2)),
+      6
+    );
+    expect(topSample?.values.DoP).toBeCloseTo(Math.sqrt(0.2126 ** 2 + 0.7152 ** 2 + 0.0722 ** 2), 6);
+    expect(topSample?.values['ToP.R']).toBeUndefined();
   });
 
   it('builds layer histograms without counting non-finite samples', () => {
