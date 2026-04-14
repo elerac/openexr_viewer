@@ -117,15 +117,15 @@ const STOKES_PARAMETER_LABELS: Record<StokesParameter, string> = {
   s3_over_s0: 'S3/S0'
 };
 const STOKES_PARAMETER_ORDER: StokesParameter[] = [
-  'aolp',
-  'dolp',
-  'dop',
-  'docp',
-  'cop',
-  'top',
   's1_over_s0',
   's2_over_s0',
-  's3_over_s0'
+  's3_over_s0',
+  'aolp',
+  'dop',
+  'dolp',
+  'docp',
+  'cop',
+  'top'
 ];
 const STOKES_DEGREE_MODULATION_LABELS: Record<StokesDegreeModulationParameter, string> = {
   aolp: 'DoLP',

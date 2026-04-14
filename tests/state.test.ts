@@ -164,49 +164,31 @@ describe('state helpers', () => {
       s3: 'S3.R'
     });
     expect(getStokesDisplayOptions(['S0', 'S1', 'S2', 'S3']).map((option) => option.label)).toEqual([
-      'Stokes AoLP',
-      'Stokes DoLP',
-      'Stokes DoP',
-      'Stokes DoCP',
-      'Stokes CoP',
-      'Stokes ToP',
       'Stokes S1/S0',
       'Stokes S2/S0',
-      'Stokes S3/S0'
+      'Stokes S3/S0',
+      'Stokes AoLP',
+      'Stokes DoP',
+      'Stokes DoLP',
+      'Stokes DoCP',
+      'Stokes CoP',
+      'Stokes ToP'
     ]);
     expect(getStokesDisplayOptions(rgbNames).map((option) => option.label)).toEqual([
-      'AoLP.(R,G,B)',
-      'DoLP.(R,G,B)',
-      'DoP.(R,G,B)',
-      'DoCP.(R,G,B)',
-      'CoP.(R,G,B)',
-      'ToP.(R,G,B)',
       'S1/S0.(R,G,B)',
       'S2/S0.(R,G,B)',
-      'S3/S0.(R,G,B)'
+      'S3/S0.(R,G,B)',
+      'AoLP.(R,G,B)',
+      'DoP.(R,G,B)',
+      'DoLP.(R,G,B)',
+      'DoCP.(R,G,B)',
+      'CoP.(R,G,B)',
+      'ToP.(R,G,B)'
     ]);
     expect(getStokesDisplayOptions(rgbNames, {
       includeRgbGroups: false,
       includeSplitChannels: true
     }).map((option) => option.label)).toEqual([
-      'AoLP.R',
-      'AoLP.G',
-      'AoLP.B',
-      'DoLP.R',
-      'DoLP.G',
-      'DoLP.B',
-      'DoP.R',
-      'DoP.G',
-      'DoP.B',
-      'DoCP.R',
-      'DoCP.G',
-      'DoCP.B',
-      'CoP.R',
-      'CoP.G',
-      'CoP.B',
-      'ToP.R',
-      'ToP.G',
-      'ToP.B',
       'S1/S0.R',
       'S1/S0.G',
       'S1/S0.B',
@@ -215,7 +197,25 @@ describe('state helpers', () => {
       'S2/S0.B',
       'S3/S0.R',
       'S3/S0.G',
-      'S3/S0.B'
+      'S3/S0.B',
+      'AoLP.R',
+      'AoLP.G',
+      'AoLP.B',
+      'DoP.R',
+      'DoP.G',
+      'DoP.B',
+      'DoLP.R',
+      'DoLP.G',
+      'DoLP.B',
+      'DoCP.R',
+      'DoCP.G',
+      'DoCP.B',
+      'CoP.R',
+      'CoP.G',
+      'CoP.B',
+      'ToP.R',
+      'ToP.G',
+      'ToP.B'
     ]);
     expect(getStokesDisplayOptions(rgbNames, {
       includeRgbGroups: false,
