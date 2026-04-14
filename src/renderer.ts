@@ -5,6 +5,12 @@ import { ImagePixel, ViewerState, ViewportInfo } from './types';
 
 const VALUE_LABEL_ZOOM_THRESHOLD = 28;
 const MAX_VALUE_LABELS = 1800;
+const OVERLAY_MONO_LABEL_COLOR = 'rgba(255, 255, 255, 0.95)';
+const OVERLAY_RGB_LABEL_COLORS = [
+  'rgba(255, 120, 120, 0.96)',
+  'rgba(120, 255, 140, 0.96)',
+  'rgba(120, 170, 255, 0.96)'
+] as const;
 
 const VERTEX_SOURCE = `#version 300 es
 precision highp float;
@@ -486,8 +492,7 @@ export class WebGlExrRenderer {
     const ctx = this.overlayContext;
     const maxTextWidth = Math.max(1, state.zoom - 5);
     const maxTextHeight = Math.max(1, state.zoom - 5);
-    const singleChannelDisplay = isSingleChannelDisplay(state);
-    const lineCount = singleChannelDisplay ? 1 : 3;
+    const lineCount = getOverlayValueLineCount(state);
     let fontSize = Math.min(20, state.zoom * 0.33);
     ctx.font = `${fontSize}px "IBM Plex Mono", monospace`;
 
@@ -513,7 +518,6 @@ export class WebGlExrRenderer {
     ctx.lineJoin = 'round';
     ctx.lineWidth = 3;
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
-    const labelColors = ['rgba(255, 120, 120, 0.96)', 'rgba(120, 255, 140, 0.96)', 'rgba(120, 170, 255, 0.96)'];
 
     const halfViewWidth = this.viewport.width * 0.5;
     const halfViewHeight = this.viewport.height * 0.5;
@@ -522,18 +526,12 @@ export class WebGlExrRenderer {
       for (let x = startX; x <= endX; x += 1) {
         const pixelIndex = y * imageWidth + x;
         const dataIndex = pixelIndex * 4;
-        const valueLines = singleChannelDisplay
-          ? [
-              {
-                color: overlayLabelColorForChannel(state.displayR),
-                value: formatOverlayValue(data[dataIndex + 0])
-              }
-            ]
-          : [
-              { color: labelColors[0], value: formatOverlayValue(data[dataIndex + 0]) },
-              { color: labelColors[1], value: formatOverlayValue(data[dataIndex + 1]) },
-              { color: labelColors[2], value: formatOverlayValue(data[dataIndex + 2]) }
-            ];
+        const valueLines = buildOverlayValueLines(
+          state,
+          data[dataIndex + 0],
+          data[dataIndex + 1],
+          data[dataIndex + 2]
+        );
 
         const centerX = (x + 0.5 - state.panX) * state.zoom + halfViewWidth;
         const centerY = (y + 0.5 - state.panY) * state.zoom + halfViewHeight;
@@ -593,8 +591,54 @@ function formatOverlayValue(value: number): string {
   return value.toPrecision(3);
 }
 
-function isSingleChannelDisplay(state: ViewerState): boolean {
+export interface OverlayValueLine {
+  color: string;
+  value: string;
+}
+
+export function buildOverlayValueLines(
+  state: Pick<ViewerState, 'visualizationMode' | 'displayR' | 'displayG' | 'displayB'>,
+  r: number,
+  g: number,
+  b: number
+): OverlayValueLine[] {
+  if (state.visualizationMode === 'colormap') {
+    return [
+      {
+        color: OVERLAY_MONO_LABEL_COLOR,
+        value: formatOverlayValue(computeOverlayLuminanceValue(r, g, b))
+      }
+    ];
+  }
+
+  if (isSingleChannelDisplay(state)) {
+    return [
+      {
+        color: overlayLabelColorForChannel(state.displayR),
+        value: formatOverlayValue(r)
+      }
+    ];
+  }
+
+  return [
+    { color: OVERLAY_RGB_LABEL_COLORS[0], value: formatOverlayValue(r) },
+    { color: OVERLAY_RGB_LABEL_COLORS[1], value: formatOverlayValue(g) },
+    { color: OVERLAY_RGB_LABEL_COLORS[2], value: formatOverlayValue(b) }
+  ];
+}
+
+function getOverlayValueLineCount(
+  state: Pick<ViewerState, 'visualizationMode' | 'displayR' | 'displayG' | 'displayB'>
+): number {
+  return state.visualizationMode === 'colormap' || isSingleChannelDisplay(state) ? 1 : 3;
+}
+
+function isSingleChannelDisplay(state: Pick<ViewerState, 'displayR' | 'displayG' | 'displayB'>): boolean {
   return state.displayR === state.displayG && state.displayG === state.displayB;
+}
+
+function computeOverlayLuminanceValue(r: number, g: number, b: number): number {
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 function overlayLabelColorForChannel(channelName: string): string {
@@ -607,7 +651,7 @@ function overlayLabelColorForChannel(channelName: string): string {
   if (channelName === 'B' || channelName.endsWith('.B')) {
     return 'rgba(120, 170, 255, 0.96)';
   }
-  return 'rgba(255, 255, 255, 0.95)';
+  return OVERLAY_MONO_LABEL_COLOR;
 }
 
 function createProgram(gl: WebGL2RenderingContext, vertexSource: string, fragmentSource: string): WebGLProgram {

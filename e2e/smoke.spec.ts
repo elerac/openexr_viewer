@@ -32,6 +32,7 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   const rgbGroupSelect = page.locator('#rgb-group-select');
   const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
   const probeCoords = page.locator('#probe-coords');
+  const probeColorValues = page.locator('#probe-color-values');
   const probeValues = page.locator('#probe-values');
   const viewer = page.locator('#viewer-container');
   const resetButton = page.getByRole('button', { name: 'Reset', exact: true });
@@ -74,9 +75,13 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
 
   await viewer.hover();
   await expect(probeCoords).not.toHaveText('(x: -, y: -)');
+  await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['R:', 'G:', 'B:']);
   await expect(probeValues).toContainText('R');
   await expect(probeValues).toContainText('G');
   await expect(probeValues).toContainText('B');
+  const lockedProbePoint = await getViewerPoint(0.5, 0.5);
+  await page.mouse.click(lockedProbePoint.x, lockedProbePoint.y);
+  await expect(page.locator('#probe-mode')).toHaveText('Locked');
   await expect(rgbGroupSelect).toBeEnabled();
   await expect(rgbSplitToggleButton).toBeVisible();
   await expect(rgbSplitToggleButton).toBeEnabled();
@@ -137,6 +142,7 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(colormapButton).toHaveAttribute('aria-expanded', 'true');
   await expect(exposureControl).toBeHidden();
   await expect(colormapRangeControl).toBeVisible();
+  await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['Mono:']);
   await expect(colormapAutoRangeButton).toBeEnabled();
   await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'true');
   await expect(colormapZeroCenterButton).toBeEnabled();

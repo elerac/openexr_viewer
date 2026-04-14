@@ -1,6 +1,6 @@
 import { ColormapLut, sampleColormapRgbBytes } from './colormaps';
 import { DisplaySelection, DisplayLuminanceRange, PixelSample, VisualizationMode, ViewerState } from './types';
-import { ProbeColorPreview } from './probe';
+import { ProbeColorPreview, ProbeDisplayValue } from './probe';
 import {
   buildChannelDisplayOptions,
   buildZeroCenteredColormapRange,
@@ -98,9 +98,7 @@ interface Elements {
   probeCoords: HTMLElement;
   probeColorPreview: HTMLDivElement;
   probeColorSwatch: HTMLElement;
-  probeColorRValue: HTMLElement;
-  probeColorGValue: HTMLElement;
-  probeColorBValue: HTMLElement;
+  probeColorValues: HTMLElement;
   probeValues: HTMLElement;
   glCanvas: HTMLCanvasElement;
   overlayCanvas: HTMLCanvasElement;
@@ -555,9 +553,7 @@ export class ViewerUi {
       this.elements.probeCoords.textContent = '(x: -, y: -)';
       this.elements.probeColorPreview.classList.add('is-empty');
       this.elements.probeColorSwatch.style.backgroundColor = 'transparent';
-      this.elements.probeColorRValue.textContent = '-';
-      this.elements.probeColorGValue.textContent = '-';
-      this.elements.probeColorBValue.textContent = '-';
+      this.renderProbeDisplayValues(createEmptyProbeDisplayValues());
       this.elements.probeValues.innerHTML = '';
       return;
     }
@@ -566,15 +562,11 @@ export class ViewerUi {
     if (colorPreview) {
       this.elements.probeColorPreview.classList.remove('is-empty');
       this.elements.probeColorSwatch.style.backgroundColor = colorPreview.cssColor;
-      this.elements.probeColorRValue.textContent = colorPreview.rValue;
-      this.elements.probeColorGValue.textContent = colorPreview.gValue;
-      this.elements.probeColorBValue.textContent = colorPreview.bValue;
+      this.renderProbeDisplayValues(colorPreview.displayValues);
     } else {
       this.elements.probeColorPreview.classList.add('is-empty');
       this.elements.probeColorSwatch.style.backgroundColor = 'transparent';
-      this.elements.probeColorRValue.textContent = '-';
-      this.elements.probeColorGValue.textContent = '-';
-      this.elements.probeColorBValue.textContent = '-';
+      this.renderProbeDisplayValues(createEmptyProbeDisplayValues());
     }
 
     const channelEntries = Object.entries(sample.values).sort(([a], [b]) => a.localeCompare(b));
@@ -594,6 +586,26 @@ export class ViewerUi {
 
       row.append(key, value);
       this.elements.probeValues.append(row);
+    }
+  }
+
+  private renderProbeDisplayValues(displayValues: ProbeDisplayValue[]): void {
+    this.elements.probeColorValues.innerHTML = '';
+
+    for (const item of displayValues) {
+      const row = document.createElement('div');
+      row.className = 'probe-color-row';
+
+      const channel = document.createElement('span');
+      channel.className = 'probe-color-channel';
+      channel.textContent = `${item.label}:`;
+
+      const value = document.createElement('span');
+      value.className = 'probe-color-number';
+      value.textContent = item.value;
+
+      row.append(channel, value);
+      this.elements.probeColorValues.append(row);
     }
   }
 
@@ -1518,13 +1530,19 @@ function resolveElements(): Elements {
     probeCoords: requireElement('probe-coords', HTMLElement),
     probeColorPreview: requireElement('probe-color-preview', HTMLDivElement),
     probeColorSwatch: requireElement('probe-color-swatch', HTMLElement),
-    probeColorRValue: requireElement('probe-color-r-value', HTMLElement),
-    probeColorGValue: requireElement('probe-color-g-value', HTMLElement),
-    probeColorBValue: requireElement('probe-color-b-value', HTMLElement),
+    probeColorValues: requireElement('probe-color-values', HTMLElement),
     probeValues: requireElement('probe-values', HTMLElement),
     glCanvas: requireElement('gl-canvas', HTMLCanvasElement),
     overlayCanvas: requireElement('overlay-canvas', HTMLCanvasElement)
   };
+}
+
+function createEmptyProbeDisplayValues(): ProbeDisplayValue[] {
+  return [
+    { label: 'R', value: '-' },
+    { label: 'G', value: '-' },
+    { label: 'B', value: '-' }
+  ];
 }
 
 function formatCurrentChannelOptionLabel(selected: DisplaySelection): string {

@@ -20,9 +20,12 @@ import {
 
 export interface ProbeColorPreview {
   cssColor: string;
-  rValue: string;
-  gValue: string;
-  bValue: string;
+  displayValues: ProbeDisplayValue[];
+}
+
+export interface ProbeDisplayValue {
+  label: string;
+  value: string;
 }
 
 export interface ProbeVisualizationOptions {
@@ -56,12 +59,15 @@ export function buildProbeColorPreview(
   const [rawR, rawG, rawB] = readProbeDisplayValues(sample, selection);
   const exposureScale = 2 ** exposureEv;
   let bytes: [number, number, number];
+  const monoValue = computeProbeLuminanceValue(rawR, rawG, rawB);
+  let displayValues: ProbeDisplayValue[];
   if (visualization.mode === 'colormap') {
     bytes = mapValueToColormapRgbBytes(
-      0.2126 * rawR + 0.7152 * rawG + 0.0722 * rawB,
+      monoValue,
       visualization.colormapRange,
       visualization.colormapLut ?? null
     );
+    displayValues = [{ label: 'Mono', value: formatProbeRgbValue(monoValue) }];
 
     const stokesDegreeModulation =
       visualization.stokesDegreeModulation ?? createDefaultStokesDegreeModulation();
@@ -74,14 +80,21 @@ export function buildProbeColorPreview(
       toSrgbByte(rawG * exposureScale),
       toSrgbByte(rawB * exposureScale)
     ];
+    displayValues = [
+      { label: 'R', value: formatProbeRgbValue(rawR) },
+      { label: 'G', value: formatProbeRgbValue(rawG) },
+      { label: 'B', value: formatProbeRgbValue(rawB) }
+    ];
   }
 
   return {
     cssColor: `rgb(${bytes[0]}, ${bytes[1]}, ${bytes[2]})`,
-    rValue: formatProbeRgbValue(rawR),
-    gValue: formatProbeRgbValue(rawG),
-    bValue: formatProbeRgbValue(rawB)
+    displayValues
   };
+}
+
+function computeProbeLuminanceValue(r: number, g: number, b: number): number {
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 function readProbeDisplayValues(sample: PixelSample, selection: DisplaySelection): [number, number, number] {
