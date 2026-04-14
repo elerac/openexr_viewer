@@ -151,7 +151,10 @@
           </div>
 
           <div class="control-block">
-            <label for="rgb-group-select">Channel</label>
+            <div class="channel-control-heading">
+              <label for="rgb-group-select">Channel</label>
+              <button id="rgb-split-toggle-button" class="channel-split-toggle hidden" type="button" aria-pressed="false" aria-controls="rgb-group-select">Split RGB</button>
+            </div>
             <select id="rgb-group-select" multiple></select>
           </div>
         </aside>

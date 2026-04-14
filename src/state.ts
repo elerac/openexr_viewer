@@ -19,6 +19,7 @@ export type HistogramMode = 'luminance' | 'rgb';
 export type HistogramXAxisMode = 'ev' | 'linear';
 export type HistogramYAxisMode = 'sqrt' | 'log' | 'linear';
 type RgbSuffix = 'R' | 'G' | 'B' | 'A';
+type RgbStokesComponent = 'R' | 'G' | 'B';
 
 export interface HistogramBuildOptions {
   bins?: number;
@@ -61,6 +62,22 @@ export interface RgbChannelGroup {
   a?: string;
 }
 
+export interface ChannelDisplayOption {
+  key: string;
+  label: string;
+  mapping: DisplayChannelMapping;
+}
+
+export interface ChannelDisplayOptionsConfig {
+  includeRgbGroups?: boolean;
+  includeSplitChannels?: boolean;
+}
+
+export interface StokesDisplayOptionsConfig {
+  includeRgbGroups?: boolean;
+  includeSplitChannels?: boolean;
+}
+
 export interface ScalarStokesChannels {
   s0: string;
   s1: string;
@@ -75,9 +92,12 @@ export interface RgbStokesChannels {
 }
 
 export interface StokesDisplayOption {
+  key: string;
   displaySource: Exclude<DisplaySourceKind, 'channels'>;
   stokesParameter: StokesParameter;
   label: string;
+  mapping: DisplayChannelMapping;
+  component: RgbStokesComponent | null;
 }
 
 const HISTOGRAM_DEFAULT_EV_REFERENCE = 1;
@@ -92,6 +112,7 @@ const STOKES_PARAMETER_LABELS: Record<StokesParameter, string> = {
   cop: 'CoP',
   top: 'ToP'
 };
+const STOKES_PARAMETER_ORDER: StokesParameter[] = ['aolp', 'dolp', 'dop', 'docp', 'cop', 'top'];
 const STOKES_DEGREE_MODULATION_LABELS: Record<StokesDegreeModulationParameter, string> = {
   aolp: 'DoLP',
   cop: 'DoCP',
@@ -364,6 +385,133 @@ export function findSelectedRgbGroup(
   return groups.find((group) => group.r === displayR && group.g === displayG && group.b === displayB) ?? null;
 }
 
+export function buildChannelDisplayOptions(
+  channelNames: string[],
+  config: ChannelDisplayOptionsConfig = {}
+): ChannelDisplayOption[] {
+  const options: ChannelDisplayOption[] = [];
+  const includeRgbGroups = config.includeRgbGroups ?? true;
+  const includeSplitChannels = config.includeSplitChannels ?? false;
+
+  for (const group of extractRgbChannelGroups(channelNames)) {
+    if (includeRgbGroups) {
+      options.push({
+        key: `group:${group.key}`,
+        label: group.label,
+        mapping: {
+          displayR: group.r,
+          displayG: group.g,
+          displayB: group.b
+        }
+      });
+    }
+
+    if (includeSplitChannels) {
+      options.push(
+        buildSingleChannelDisplayOption(group.r),
+        buildSingleChannelDisplayOption(group.g),
+        buildSingleChannelDisplayOption(group.b)
+      );
+    }
+  }
+
+  return options;
+}
+
+export function findSelectedChannelDisplayOption(
+  options: ChannelDisplayOption[],
+  displayR: string,
+  displayG: string,
+  displayB: string
+): ChannelDisplayOption | null {
+  return options.find((option) => {
+    return (
+      option.mapping.displayR === displayR &&
+      option.mapping.displayG === displayG &&
+      option.mapping.displayB === displayB
+    );
+  }) ?? null;
+}
+
+function areDisplayMappingsEqual(
+  a: DisplayChannelMapping,
+  b: DisplayChannelMapping
+): boolean {
+  return a.displayR === b.displayR && a.displayG === b.displayG && a.displayB === b.displayB;
+}
+
+function buildRgbStokesGroupMapping(channels: RgbStokesChannels): DisplayChannelMapping {
+  return {
+    displayR: channels.r.s0,
+    displayG: channels.g.s0,
+    displayB: channels.b.s0
+  };
+}
+
+function buildRgbStokesSplitMapping(channels: ScalarStokesChannels): DisplayChannelMapping {
+  return {
+    displayR: channels.s0,
+    displayG: channels.s0,
+    displayB: channels.s0
+  };
+}
+
+function findMergedSelectionForSplitChannel(
+  channelNames: string[],
+  selected: DisplaySelection
+): DisplaySelection | null {
+  if (
+    selected.displaySource !== 'channels' ||
+    selected.stokesParameter !== null ||
+    selected.displayR !== selected.displayG ||
+    selected.displayR !== selected.displayB
+  ) {
+    return null;
+  }
+
+  const selectedChannel = selected.displayR;
+  for (const group of extractRgbChannelGroups(channelNames)) {
+    if (selectedChannel !== group.r && selectedChannel !== group.g && selectedChannel !== group.b) {
+      continue;
+    }
+
+    return {
+      displaySource: 'channels',
+      stokesParameter: null,
+      displayR: group.r,
+      displayG: group.g,
+      displayB: group.b
+    };
+  }
+
+  return null;
+}
+
+function findSplitSelectionForMergedGroup(
+  channelNames: string[],
+  selected: DisplaySelection
+): DisplaySelection | null {
+  if (selected.displaySource !== 'channels' || selected.stokesParameter !== null) {
+    return null;
+  }
+
+  for (const group of extractRgbChannelGroups(channelNames)) {
+    if (selected.displayR !== group.r || selected.displayG !== group.g || selected.displayB !== group.b) {
+      continue;
+    }
+
+    return {
+      displaySource: 'channels',
+      stokesParameter: null,
+      displayR: group.r,
+      displayG: group.r,
+      displayB: group.r
+    };
+  }
+
+  return null;
+}
+
 export function detectScalarStokesChannels(channelNames: string[]): ScalarStokesChannels | null {
   const channels = new Set(channelNames);
   return channels.has('S0') && channels.has('S1') && channels.has('S2') && channels.has('S3')
@@ -389,31 +537,162 @@ export function detectRgbStokesChannels(channelNames: string[]): RgbStokesChanne
   return r && g && b ? { r, g, b } : null;
 }
 
-export function getStokesDisplayOptions(channelNames: string[]): StokesDisplayOption[] {
+export function getStokesDisplayOptions(
+  channelNames: string[],
+  config: StokesDisplayOptionsConfig = {}
+): StokesDisplayOption[] {
   const options: StokesDisplayOption[] = [];
-  if (detectScalarStokesChannels(channelNames)) {
-    options.push(
-      { displaySource: 'stokesScalar', stokesParameter: 'aolp', label: 'Stokes AoLP' },
-      { displaySource: 'stokesScalar', stokesParameter: 'dolp', label: 'Stokes DoLP' },
-      { displaySource: 'stokesScalar', stokesParameter: 'dop', label: 'Stokes DoP' },
-      { displaySource: 'stokesScalar', stokesParameter: 'docp', label: 'Stokes DoCP' },
-      { displaySource: 'stokesScalar', stokesParameter: 'cop', label: 'Stokes CoP' },
-      { displaySource: 'stokesScalar', stokesParameter: 'top', label: 'Stokes ToP' }
-    );
+  const includeRgbGroups = config.includeRgbGroups ?? true;
+  const includeSplitChannels = config.includeSplitChannels ?? false;
+  const scalarChannels = detectScalarStokesChannels(channelNames);
+  if (scalarChannels) {
+    for (const parameter of STOKES_PARAMETER_ORDER) {
+      options.push(buildScalarStokesDisplayOption(parameter, scalarChannels));
+    }
   }
 
-  if (detectRgbStokesChannels(channelNames)) {
-    options.push(
-      { displaySource: 'stokesRgb', stokesParameter: 'aolp', label: 'AoLP.(R,G,B)' },
-      { displaySource: 'stokesRgb', stokesParameter: 'dolp', label: 'DoLP.(R,G,B)' },
-      { displaySource: 'stokesRgb', stokesParameter: 'dop', label: 'DoP.(R,G,B)' },
-      { displaySource: 'stokesRgb', stokesParameter: 'docp', label: 'DoCP.(R,G,B)' },
-      { displaySource: 'stokesRgb', stokesParameter: 'cop', label: 'CoP.(R,G,B)' },
-      { displaySource: 'stokesRgb', stokesParameter: 'top', label: 'ToP.(R,G,B)' }
-    );
+  const rgbChannels = detectRgbStokesChannels(channelNames);
+  if (rgbChannels) {
+    for (const parameter of STOKES_PARAMETER_ORDER) {
+      if (includeRgbGroups) {
+        options.push(buildRgbStokesGroupDisplayOption(parameter, rgbChannels));
+      }
+
+      if (includeSplitChannels) {
+        options.push(
+          buildRgbStokesSplitDisplayOption(parameter, 'R', rgbChannels.r),
+          buildRgbStokesSplitDisplayOption(parameter, 'G', rgbChannels.g),
+          buildRgbStokesSplitDisplayOption(parameter, 'B', rgbChannels.b)
+        );
+      }
+    }
   }
 
   return options;
+}
+
+export function findSelectedStokesDisplayOption(
+  options: StokesDisplayOption[],
+  selected: DisplaySelection
+): StokesDisplayOption | null {
+  const matchingOptions = options.filter((option) => {
+    return (
+      selected.displaySource === option.displaySource &&
+      selected.stokesParameter === option.stokesParameter
+    );
+  });
+
+  if (matchingOptions.length === 0) {
+    return null;
+  }
+
+  const exactMatch = matchingOptions.find((option) => {
+    return areDisplayMappingsEqual(option.mapping, selected);
+  });
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  return matchingOptions.find((option) => option.component === null) ?? matchingOptions[0] ?? null;
+}
+
+export function findMergedSelectionForSplitDisplay(
+  channelNames: string[],
+  selected: DisplaySelection
+): DisplaySelection | null {
+  const channelSelection = findMergedSelectionForSplitChannel(channelNames, selected);
+  if (channelSelection) {
+    return channelSelection;
+  }
+
+  if (selected.displaySource !== 'stokesRgb' || selected.stokesParameter === null) {
+    return null;
+  }
+
+  const channels = detectRgbStokesChannels(channelNames);
+  if (!channels || !resolveRgbStokesSplitComponent(channels, selected)) {
+    return null;
+  }
+
+  return {
+    displaySource: 'stokesRgb',
+    stokesParameter: selected.stokesParameter,
+    ...buildRgbStokesGroupMapping(channels)
+  };
+}
+
+export function findSplitSelectionForMergedDisplay(
+  channelNames: string[],
+  selected: DisplaySelection
+): DisplaySelection | null {
+  const channelSelection = findSplitSelectionForMergedGroup(channelNames, selected);
+  if (channelSelection) {
+    return channelSelection;
+  }
+
+  if (selected.displaySource !== 'stokesRgb' || selected.stokesParameter === null) {
+    return null;
+  }
+
+  const channels = detectRgbStokesChannels(channelNames);
+  if (!channels || resolveRgbStokesSplitComponent(channels, selected)) {
+    return null;
+  }
+
+  return {
+    displaySource: 'stokesRgb',
+    stokesParameter: selected.stokesParameter,
+    ...buildRgbStokesSplitMapping(channels.r)
+  };
+}
+
+function buildScalarStokesDisplayOption(
+  parameter: StokesParameter,
+  channels: ScalarStokesChannels
+): StokesDisplayOption {
+  return {
+    key: `stokesScalar:${parameter}`,
+    displaySource: 'stokesScalar',
+    stokesParameter: parameter,
+    label: `Stokes ${getStokesParameterLabel(parameter)}`,
+    mapping: {
+      displayR: channels.s0,
+      displayG: channels.s1,
+      displayB: channels.s2
+    },
+    component: null
+  };
+}
+
+function buildRgbStokesGroupDisplayOption(
+  parameter: StokesParameter,
+  channels: RgbStokesChannels
+): StokesDisplayOption {
+  const label = getStokesParameterLabel(parameter);
+  return {
+    key: `stokesRgb:${parameter}:group`,
+    displaySource: 'stokesRgb',
+    stokesParameter: parameter,
+    label: `${label}.(R,G,B)`,
+    mapping: buildRgbStokesGroupMapping(channels),
+    component: null
+  };
+}
+
+function buildRgbStokesSplitDisplayOption(
+  parameter: StokesParameter,
+  component: RgbStokesComponent,
+  channels: ScalarStokesChannels
+): StokesDisplayOption {
+  const label = getStokesParameterLabel(parameter);
+  return {
+    key: `stokesRgb:${parameter}:${component}`,
+    displaySource: 'stokesRgb',
+    stokesParameter: parameter,
+    label: `${label}.${component}`,
+    mapping: buildRgbStokesSplitMapping(channels),
+    component
+  };
 }
 
 export function isStokesDisplaySelection(
@@ -480,6 +759,7 @@ export function buildSelectedDisplayTexture(
       height,
       selection.displaySource,
       selection.stokesParameter,
+      selection,
       output
     );
   }
@@ -493,11 +773,16 @@ export function buildStokesDisplayTexture(
   height: number,
   displaySource: Exclude<DisplaySourceKind, 'channels'>,
   parameter: StokesParameter,
+  selectionOrOutput?: DisplayChannelMapping | Float32Array,
   output?: Float32Array
 ): Float32Array {
   const pixelCount = width * height;
   const requiredLength = pixelCount * 4;
-  const out = output && output.length === requiredLength ? output : new Float32Array(requiredLength);
+  const selection = selectionOrOutput instanceof Float32Array ? null : selectionOrOutput ?? null;
+  const outputBuffer = selectionOrOutput instanceof Float32Array ? selectionOrOutput : output;
+  const out = outputBuffer && outputBuffer.length === requiredLength
+    ? outputBuffer
+    : new Float32Array(requiredLength);
 
   if (displaySource === 'stokesScalar') {
     const channels = detectScalarStokesChannels(layer.channelNames);
@@ -542,6 +827,32 @@ export function buildStokesDisplayTexture(
   const channels = detectRgbStokesChannels(layer.channelNames);
   if (!channels) {
     return fillDisplayTexture(out, 0, 0, 0);
+  }
+
+  const splitComponent = selection ? resolveRgbStokesSplitComponent(channels, selection) : null;
+  if (splitComponent) {
+    const component = resolveStokesChannelArrays(layer, splitComponent.channels);
+    for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
+      const s0Value = readChannelValue(component.s0, pixelIndex);
+      const s1Value = readChannelValue(component.s1, pixelIndex);
+      const s2Value = readChannelValue(component.s2, pixelIndex);
+      const s3Value = readChannelValue(component.s3, pixelIndex);
+      const value = computeStokesDisplayValue(parameter, s0Value, s1Value, s2Value, s3Value);
+      const modulation = computeStokesDegreeModulationDisplayValue(
+        parameter,
+        s0Value,
+        s1Value,
+        s2Value,
+        s3Value
+      );
+      const outIndex = pixelIndex * 4;
+      out[outIndex + 0] = value;
+      out[outIndex + 1] = value;
+      out[outIndex + 2] = value;
+      out[outIndex + 3] = modulation ?? 1;
+    }
+
+    return out;
   }
 
   const r = resolveStokesChannelArrays(layer, channels.r);
@@ -668,6 +979,18 @@ export function getStokesParameterLabel(parameter: StokesParameter): string {
   return STOKES_PARAMETER_LABELS[parameter];
 }
 
+export function getStokesDisplayValueLabel(selection: DisplaySelection): string | null {
+  if (selection.displaySource === 'channels' || !selection.stokesParameter) {
+    return null;
+  }
+
+  const label = getStokesParameterLabel(selection.stokesParameter);
+  const component = selection.displaySource === 'stokesRgb'
+    ? inferRepeatedRgbComponentFromMapping(selection)
+    : null;
+  return component ? `${label}.${component}` : label;
+}
+
 export function isStokesDegreeModulationParameter(
   parameter: StokesParameter | null
 ): parameter is StokesDegreeModulationParameter {
@@ -680,6 +1003,22 @@ export function getStokesDegreeModulationLabel(
   return isStokesDegreeModulationParameter(parameter)
     ? STOKES_DEGREE_MODULATION_LABELS[parameter]
     : null;
+}
+
+export function getStokesDegreeModulationDisplayValueLabel(selection: DisplaySelection): string | null {
+  if (selection.displaySource === 'channels') {
+    return null;
+  }
+
+  const label = getStokesDegreeModulationLabel(selection.stokesParameter);
+  if (!label) {
+    return null;
+  }
+
+  const component = selection.displaySource === 'stokesRgb'
+    ? inferRepeatedRgbComponentFromMapping(selection)
+    : null;
+  return component ? `${label}.${component}` : label;
 }
 
 export function isStokesDegreeModulationEnabled(
@@ -1522,6 +1861,50 @@ function computeLuminance(r: number, g: number, b: number): number {
   return LUMINANCE_WEIGHTS.r * r + LUMINANCE_WEIGHTS.g * g + LUMINANCE_WEIGHTS.b * b;
 }
 
+function resolveRgbStokesSplitComponent(
+  channels: RgbStokesChannels,
+  selection: DisplayChannelMapping
+): { component: RgbStokesComponent; channels: ScalarStokesChannels } | null {
+  if (selection.displayR !== selection.displayG || selection.displayR !== selection.displayB) {
+    return null;
+  }
+
+  const selectedChannel = selection.displayR;
+  if (isScalarStokesChannelName(channels.r, selectedChannel)) {
+    return { component: 'R', channels: channels.r };
+  }
+  if (isScalarStokesChannelName(channels.g, selectedChannel)) {
+    return { component: 'G', channels: channels.g };
+  }
+  if (isScalarStokesChannelName(channels.b, selectedChannel)) {
+    return { component: 'B', channels: channels.b };
+  }
+
+  return null;
+}
+
+function isScalarStokesChannelName(channels: ScalarStokesChannels, channelName: string): boolean {
+  return (
+    channelName === channels.s0 ||
+    channelName === channels.s1 ||
+    channelName === channels.s2 ||
+    channelName === channels.s3
+  );
+}
+
+function inferRepeatedRgbComponentFromMapping(selection: DisplayChannelMapping): RgbStokesComponent | null {
+  if (selection.displayR !== selection.displayG || selection.displayR !== selection.displayB) {
+    return null;
+  }
+
+  const parsed = parseRgbChannel(selection.displayR);
+  if (!parsed || parsed.suffix === 'A') {
+    return null;
+  }
+
+  return parsed.suffix;
+}
+
 function fillDisplayTexture(out: Float32Array, r: number, g: number, b: number): Float32Array {
   for (let i = 0; i < out.length; i += 4) {
     out[i + 0] = r;
@@ -1580,6 +1963,32 @@ function appendStokesSampleValues(
     return;
   }
 
+  const splitComponent = resolveRgbStokesSplitComponent(channels, selection);
+  if (splitComponent) {
+    const componentChannels = resolveStokesChannelArrays(layer, splitComponent.channels);
+    const s0Value = readChannelValue(componentChannels.s0, flatIndex);
+    const s1Value = readChannelValue(componentChannels.s1, flatIndex);
+    const s2Value = readChannelValue(componentChannels.s2, flatIndex);
+    const s3Value = readChannelValue(componentChannels.s3, flatIndex);
+    values[`${label}.${splitComponent.component}`] = computeStokesDisplayValue(
+      selection.stokesParameter,
+      s0Value,
+      s1Value,
+      s2Value,
+      s3Value
+    );
+    appendStokesDegreeModulationSampleValue(
+      selection.stokesParameter,
+      s0Value,
+      s1Value,
+      s2Value,
+      s3Value,
+      values,
+      splitComponent.component
+    );
+    return;
+  }
+
   const r = resolveStokesChannelArrays(layer, channels.r);
   const g = resolveStokesChannelArrays(layer, channels.g);
   const b = resolveStokesChannelArrays(layer, channels.b);
@@ -1601,7 +2010,8 @@ function appendStokesDegreeModulationSampleValue(
   s1: number,
   s2: number,
   s3: number,
-  values: Record<string, number>
+  values: Record<string, number>,
+  component: RgbStokesComponent | null = null
 ): void {
   const label = getStokesDegreeModulationLabel(parameter);
   if (!label) {
@@ -1610,7 +2020,7 @@ function appendStokesDegreeModulationSampleValue(
 
   const value = computeStokesDegreeModulationValue(parameter, s0, s1, s2, s3);
   if (value !== null) {
-    values[label] = value;
+    values[component ? `${label}.${component}` : label] = value;
   }
 }
 
@@ -1641,6 +2051,18 @@ function parseRgbChannel(channelName: string): { base: string; suffix: RgbSuffix
 function buildRgbGroupLabel(base: string, hasAlpha: boolean): string {
   const channelsLabel = hasAlpha ? 'R,G,B,A' : 'R,G,B';
   return base.length > 0 ? `${base}.(${channelsLabel})` : channelsLabel;
+}
+
+function buildSingleChannelDisplayOption(channelName: string): ChannelDisplayOption {
+  return {
+    key: `channel:${channelName}`,
+    label: channelName,
+    mapping: {
+      displayR: channelName,
+      displayG: channelName,
+      displayB: channelName
+    }
+  };
 }
 
 function pickGrayscaleDisplayChannel(channelNames: string[]): string | null {

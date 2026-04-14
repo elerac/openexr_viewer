@@ -30,6 +30,7 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   const openedImages = page.locator('#opened-images-select');
   const layerControl = page.locator('#layer-control');
   const rgbGroupSelect = page.locator('#rgb-group-select');
+  const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
   const probeCoords = page.locator('#probe-coords');
   const probeValues = page.locator('#probe-values');
   const viewer = page.locator('#viewer-container');
@@ -77,6 +78,30 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(probeValues).toContainText('G');
   await expect(probeValues).toContainText('B');
   await expect(rgbGroupSelect).toBeEnabled();
+  await expect(rgbSplitToggleButton).toBeVisible();
+  await expect(rgbSplitToggleButton).toBeEnabled();
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-controls', 'rgb-group-select');
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(rgbGroupSelect.locator('option:checked')).toHaveText(/R,G,B/);
+  await expect(rgbGroupSelect.locator('option').filter({ hasText: /^R$/ })).toHaveCount(0);
+  await expect(rgbGroupSelect.locator('option').filter({ hasText: /^G$/ })).toHaveCount(0);
+  await expect(rgbGroupSelect.locator('option').filter({ hasText: /^B$/ })).toHaveCount(0);
+  await rgbSplitToggleButton.click();
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(rgbGroupSelect.locator('option').filter({ hasText: /^R,G,B$/ })).toHaveCount(0);
+  await expect(rgbGroupSelect.locator('option:checked')).toHaveText('R');
+  await expect(rgbGroupSelect.locator('option').filter({ hasText: /^R$/ })).toHaveCount(1);
+  await expect(rgbGroupSelect.locator('option').filter({ hasText: /^G$/ })).toHaveCount(1);
+  await expect(rgbGroupSelect.locator('option').filter({ hasText: /^B$/ })).toHaveCount(1);
+  await rgbGroupSelect.selectOption({ label: 'R' });
+  await expect(rgbGroupSelect.locator('option:checked')).toHaveText('R');
+  await expect(page.locator('#loading-overlay')).toBeHidden();
+  await rgbSplitToggleButton.click();
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(rgbGroupSelect.locator('option:checked')).toHaveText(/R,G,B/);
+  await expect(rgbGroupSelect.locator('option').filter({ hasText: /^R$/ })).toHaveCount(0);
+  await expect(rgbGroupSelect.locator('option').filter({ hasText: /^G$/ })).toHaveCount(0);
+  await expect(rgbGroupSelect.locator('option').filter({ hasText: /^B$/ })).toHaveCount(0);
   expect(await page.locator('#gl-canvas').evaluate((canvas) => {
     return canvas instanceof HTMLCanvasElement && canvas.width > 0 && canvas.height > 0;
   })).toBe(true);
@@ -247,7 +272,9 @@ test('loads scalar Stokes channels and applies derived-channel defaults', async 
   await expect(openedImages.locator('option:checked')).toContainText('stokes_scalar.exr', { timeout: 30000 });
 
   const channelSelect = page.locator('#rgb-group-select');
+  const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
   await expect(channelSelect).toBeEnabled();
+  await expect(rgbSplitToggleButton).toBeHidden();
   await expect(channelSelect.locator('option', { hasText: 'Stokes AoLP' })).toHaveCount(1);
   await expect(channelSelect.locator('option', { hasText: 'Stokes DoLP' })).toHaveCount(1);
   await expect(channelSelect.locator('option', { hasText: 'Stokes DoP' })).toHaveCount(1);
@@ -323,7 +350,7 @@ test('loads scalar Stokes channels and applies derived-channel defaults', async 
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI / 4, 6);
 });
 
-test('loads RGB Stokes channels and applies mono-derived scalar defaults', async ({ page }) => {
+test('loads RGB Stokes channels and applies grouped and split derived defaults', async ({ page }) => {
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
   await page.waitForTimeout(1500);
 
@@ -345,13 +372,18 @@ test('loads RGB Stokes channels and applies mono-derived scalar defaults', async
   await expect(openedImages.locator('option:checked')).toContainText('stokes_rgb.exr', { timeout: 30000 });
 
   const channelSelect = page.locator('#rgb-group-select');
+  const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
   await expect(channelSelect).toBeEnabled();
+  await expect(rgbSplitToggleButton).toBeVisible();
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');
   await expect(channelSelect.locator('option', { hasText: 'AoLP.(R,G,B)' })).toHaveCount(1);
   await expect(channelSelect.locator('option', { hasText: 'DoLP.(R,G,B)' })).toHaveCount(1);
   await expect(channelSelect.locator('option', { hasText: 'DoP.(R,G,B)' })).toHaveCount(1);
   await expect(channelSelect.locator('option', { hasText: 'DoCP.(R,G,B)' })).toHaveCount(1);
   await expect(channelSelect.locator('option', { hasText: 'CoP.(R,G,B)' })).toHaveCount(1);
   await expect(channelSelect.locator('option', { hasText: 'ToP.(R,G,B)' })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^AoLP\.R$/ })).toHaveCount(0);
+  await expect(channelSelect.locator('option').filter({ hasText: /^S0\.R$/ })).toHaveCount(0);
 
   const colormapRangeControl = page.locator('#colormap-range-control');
   const colormapSelect = page.locator('#colormap-select');
@@ -386,25 +418,38 @@ test('loads RGB Stokes channels and applies mono-derived scalar defaults', async
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI, 6);
 
-  await channelSelect.selectOption({ label: 'DoLP.(R,G,B)' });
+  await rgbSplitToggleButton.click();
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(channelSelect.locator('option:checked')).toHaveText('AoLP.R');
+  await expect(channelSelect.locator('option').filter({ hasText: /^AoLP\.\(R,G,B\)$/ })).toHaveCount(0);
+  await expect(channelSelect.locator('option').filter({ hasText: /^AoLP\.R$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^AoLP\.G$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^AoLP\.B$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^S0\.\(R,G,B\)$/ })).toHaveCount(0);
+  await expect(channelSelect.locator('option').filter({ hasText: /^S0\.R$/ })).toHaveCount(1);
+  await expect(colormapSelect).toHaveValue(hsvId);
+  await expect(stokesDegreeModulationButton).toBeVisible();
+  await expect(stokesDegreeModulationButton).toHaveText('DoLP Modulation');
+
+  await channelSelect.selectOption({ label: 'DoLP.G' });
   await expect(stokesDegreeModulationButton).toBeHidden();
   await expect(colormapSelect).toHaveValue(blackRedId);
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
 
-  await channelSelect.selectOption({ label: 'DoP.(R,G,B)' });
+  await channelSelect.selectOption({ label: 'DoP.B' });
   await expect(stokesDegreeModulationButton).toBeHidden();
   await expect(colormapSelect).toHaveValue(blackRedId);
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
 
-  await channelSelect.selectOption({ label: 'DoCP.(R,G,B)' });
+  await channelSelect.selectOption({ label: 'DoCP.R' });
   await expect(stokesDegreeModulationButton).toBeHidden();
   await expect(colormapSelect).toHaveValue(blackRedId);
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
 
-  await channelSelect.selectOption({ label: 'CoP.(R,G,B)' });
+  await channelSelect.selectOption({ label: 'CoP.B' });
   await expect(colormapSelect).toHaveValue(yellowBlackBlueId);
   await expect(stokesDegreeModulationButton).toBeVisible();
   await expect(stokesDegreeModulationButton).toHaveText('DoCP Modulation');
@@ -413,7 +458,7 @@ test('loads RGB Stokes channels and applies mono-derived scalar defaults', async
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-Math.PI / 4, 6);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI / 4, 6);
 
-  await channelSelect.selectOption({ label: 'ToP.(R,G,B)' });
+  await channelSelect.selectOption({ label: 'ToP.B' });
   await expect(colormapSelect).toHaveValue(yellowCyanYellowId);
   await expect(stokesDegreeModulationButton).toBeVisible();
   await expect(stokesDegreeModulationButton).toHaveText('DoP Modulation');
@@ -421,6 +466,12 @@ test('loads RGB Stokes channels and applies mono-derived scalar defaults', async
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-Math.PI / 4, 6);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI / 4, 6);
 
+  await rgbSplitToggleButton.click();
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(channelSelect.locator('option:checked')).toHaveText('ToP.(R,G,B)');
+  await expect(channelSelect.locator('option').filter({ hasText: /^R,G,B$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^ToP\.B$/ })).toHaveCount(0);
+  await expect(channelSelect.locator('option').filter({ hasText: /^S0\.R$/ })).toHaveCount(0);
   await channelSelect.selectOption({ label: 'R,G,B' });
   await expect(stokesDegreeModulationButton).toBeHidden();
   await expect(noneButton).toHaveAttribute('aria-pressed', 'true');

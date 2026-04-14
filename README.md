@@ -54,9 +54,11 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - Shows X-axis tick marks and tick labels inside the histogram; in `EV` mode the bins use EV/log2 spacing while tick labels show the corresponding linear values.
   - Not affected by exposure slider.
 - Channel controls:
-  - `Channel` selector for grouped channels such as `HOGE.R/G/B`, `FUGA.R/G/B`.
+  - `Channel` selector for grouped channels such as `HOGE.R/G/B`, `FUGA.R/G/B`; grouped RGB remains the default display when available.
+  - `Split RGB` switches RGB groups to separate `R`, `G`, and `B` entries. Split entries are hidden by default, merged RGB rows are hidden while split mode is active, and turning the toggle off while a split channel is selected switches back to that channel's merged RGB group.
+  - A separate channel is displayed as grayscale by mapping that source channel into all three display channels, which makes `Colormap` operate on that channel directly.
   - Stokes layers with `S0/S1/S2/S3` expose derived `Stokes AoLP`, `Stokes DoLP`, `Stokes DoP`, `Stokes DoCP`, `Stokes CoP`, and `Stokes ToP` entries. Scalar AoLP uses HSV over `[0, pi]`; degree parameters use Black-Red over `[0, 1]`; CoP and ToP use signed ellipticity angle over `[-pi/4, pi/4]`. CoP enables `Zero Center` by default.
-  - RGB Stokes layers with `S0.R/G/B` through `S3.R/G/B` expose `AoLP.(R,G,B)`, `DoLP.(R,G,B)`, `DoP.(R,G,B)`, `DoCP.(R,G,B)`, `CoP.(R,G,B)`, and `ToP.(R,G,B)`; each Stokes component is converted to mono with Rec.709 luminance weights before deriving the scalar visualization.
+  - RGB Stokes layers with `S0.R/G/B` through `S3.R/G/B` expose grouped `AoLP.(R,G,B)`, `DoLP.(R,G,B)`, `DoP.(R,G,B)`, `DoCP.(R,G,B)`, `CoP.(R,G,B)`, and `ToP.(R,G,B)` entries; grouped entries keep the Rec.709 mono-derived visualization, while `Split RGB` exposes per-component entries such as `AoLP.R`, `AoLP.G`, and `AoLP.B`.
   - When a selected layer does not expose the previous channel mapping, the viewer falls back to bare `R/G/B`, then the first RGB group, then a single grayscale channel mapped across RGB, then the first three channels.
 - Reset button resets view and display state, including exposure.
   - Reset also restores histogram axes to the default mode (`X = EV`, `Y = Linear`).
@@ -141,7 +143,7 @@ npm run test:e2e
 
 ## Implementation Notes
 
-- Display path: normal RGB uses `linear * 2^EV`, then sRGB encode for screen; colormap mode maps raw display luminance through the selected `.npy` LUT. For angle Stokes modulation, the LUT color is converted to HSV, its value component is multiplied by the clamped paired degree value, and the result is converted back to RGB.
+- Display path: normal RGB uses `linear * 2^EV`, then sRGB encode for screen; colormap mode maps raw display luminance through the selected `.npy` LUT. When `Split RGB` is enabled, separate `R`, `G`, and `B` channel choices duplicate the selected source into RGB, so display luminance equals that channel value. Split RGB Stokes entries derive the selected parameter from only the chosen component's Stokes channels before duplicating the scalar into RGB. For angle Stokes modulation, the LUT color is converted to HSV, its value component is multiplied by the clamped paired degree value, and the result is converted back to RGB.
 - Colormap authoring in Python:
   ```python
   import numpy as np

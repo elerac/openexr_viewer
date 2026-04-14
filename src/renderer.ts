@@ -486,7 +486,8 @@ export class WebGlExrRenderer {
     const ctx = this.overlayContext;
     const maxTextWidth = Math.max(1, state.zoom - 5);
     const maxTextHeight = Math.max(1, state.zoom - 5);
-    const lineCount = 3;
+    const singleChannelDisplay = isSingleChannelDisplay(state);
+    const lineCount = singleChannelDisplay ? 1 : 3;
     let fontSize = Math.min(20, state.zoom * 0.33);
     ctx.font = `${fontSize}px "IBM Plex Mono", monospace`;
 
@@ -521,11 +522,18 @@ export class WebGlExrRenderer {
       for (let x = startX; x <= endX; x += 1) {
         const pixelIndex = y * imageWidth + x;
         const dataIndex = pixelIndex * 4;
-        const valueLines = [
-          formatOverlayValue(data[dataIndex + 0]),
-          formatOverlayValue(data[dataIndex + 1]),
-          formatOverlayValue(data[dataIndex + 2])
-        ];
+        const valueLines = singleChannelDisplay
+          ? [
+              {
+                color: overlayLabelColorForChannel(state.displayR),
+                value: formatOverlayValue(data[dataIndex + 0])
+              }
+            ]
+          : [
+              { color: labelColors[0], value: formatOverlayValue(data[dataIndex + 0]) },
+              { color: labelColors[1], value: formatOverlayValue(data[dataIndex + 1]) },
+              { color: labelColors[2], value: formatOverlayValue(data[dataIndex + 2]) }
+            ];
 
         const centerX = (x + 0.5 - state.panX) * state.zoom + halfViewWidth;
         const centerY = (y + 0.5 - state.panY) * state.zoom + halfViewHeight;
@@ -535,9 +543,9 @@ export class WebGlExrRenderer {
 
         for (let lineIndex = 0; lineIndex < valueLines.length; lineIndex += 1) {
           const line = valueLines[lineIndex];
-          ctx.fillStyle = labelColors[lineIndex] ?? 'rgba(255, 255, 255, 0.95)';
-          ctx.strokeText(line, centerX, textY);
-          ctx.fillText(line, centerX, textY);
+          ctx.fillStyle = line?.color ?? 'rgba(255, 255, 255, 0.95)';
+          ctx.strokeText(line?.value ?? '', centerX, textY);
+          ctx.fillText(line?.value ?? '', centerX, textY);
           textY += lineHeight;
         }
       }
@@ -583,6 +591,23 @@ function formatOverlayValue(value: number): string {
   }
 
   return value.toPrecision(3);
+}
+
+function isSingleChannelDisplay(state: ViewerState): boolean {
+  return state.displayR === state.displayG && state.displayG === state.displayB;
+}
+
+function overlayLabelColorForChannel(channelName: string): string {
+  if (channelName === 'R' || channelName.endsWith('.R')) {
+    return 'rgba(255, 120, 120, 0.96)';
+  }
+  if (channelName === 'G' || channelName.endsWith('.G')) {
+    return 'rgba(120, 255, 140, 0.96)';
+  }
+  if (channelName === 'B' || channelName.endsWith('.B')) {
+    return 'rgba(120, 170, 255, 0.96)';
+  }
+  return 'rgba(255, 255, 255, 0.95)';
 }
 
 function createProgram(gl: WebGL2RenderingContext, vertexSource: string, fragmentSource: string): WebGLProgram {

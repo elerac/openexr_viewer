@@ -2,10 +2,14 @@ import { ColormapLut, sampleColormapRgbBytes } from './colormaps';
 import { DisplaySelection, DisplayLuminanceRange, PixelSample, VisualizationMode, ViewerState } from './types';
 import { ProbeColorPreview } from './probe';
 import {
+  buildChannelDisplayOptions,
   buildZeroCenteredColormapRange,
   computeHistogramRenderCeiling,
   extractRgbChannelGroups,
-  findSelectedRgbGroup,
+  findMergedSelectionForSplitDisplay,
+  findSelectedChannelDisplayOption,
+  findSelectedStokesDisplayOption,
+  findSplitSelectionForMergedDisplay,
   formatScientific,
   getStokesDisplayOptions,
   scaleHistogramCount,
@@ -22,6 +26,7 @@ const HISTOGRAM_EV_SPECIAL_BUCKET_GAP = 4;
 const HISTOGRAM_EV_SPECIAL_BUCKET_MIN_WIDTH = 12;
 const HISTOGRAM_EV_SPECIAL_BUCKET_MAX_WIDTH = 22;
 const OPENED_IMAGES_MAX_VISIBLE_ROWS = 10;
+const CHANNEL_OPTIONS_MAX_VISIBLE_ROWS = 10;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const COLORMAP_ZERO_CENTER_SLIDER_MIN_MAGNITUDE = 1e-16;
 const COLORMAP_GRADIENT_STOP_COUNT = 16;
@@ -85,6 +90,7 @@ interface Elements {
   closeAllOpenedImagesButton: HTMLButtonElement;
   layerControl: HTMLDivElement;
   layerSelect: HTMLSelectElement;
+  rgbSplitToggleButton: HTMLButtonElement;
   rgbGroupSelect: HTMLSelectElement;
   zoomReadout: HTMLElement;
   panReadout: HTMLElement;
@@ -137,6 +143,10 @@ export class ViewerUi {
       }
     | null = null;
   private hasRgbGroups = false;
+  private hasRgbSplitOptions = false;
+  private includeSplitRgbChannels = false;
+  private currentRgbChannelNames: string[] = [];
+  private currentRgbSelection: DisplaySelection | null = null;
   private currentColormapRange: DisplayLuminanceRange | null = null;
   private currentAutoColormapRange: DisplayLuminanceRange | null = null;
   private currentColormapZeroCentered = false;
@@ -165,6 +175,7 @@ export class ViewerUi {
     this.elements.stokesDegreeModulationButton.disabled = true;
     this.setColormapRangeControlsDisabled(true);
     this.elements.layerSelect.disabled = true;
+    this.elements.rgbSplitToggleButton.disabled = true;
     this.elements.rgbGroupSelect.disabled = true;
   }
 
@@ -210,6 +221,7 @@ export class ViewerUi {
     this.elements.closeAllOpenedImagesButton.disabled = loading || this.openedImageCount === 0;
     this.elements.layerSelect.disabled = loading || !this.hasMultipleLayers;
     this.elements.rgbGroupSelect.disabled = loading || !this.hasRgbGroups;
+    this.updateRgbSplitToggleState();
     this.updateStokesDegreeModulationDisabled();
 
     if (!loading && this.restoreRgbGroupFocusAfterLoading && !this.elements.rgbGroupSelect.disabled) {
@@ -224,6 +236,7 @@ export class ViewerUi {
 
   setRgbViewLoading(loading: boolean): void {
     this.isRgbViewLoading = loading;
+    this.updateRgbSplitToggleState();
     this.updateLoadingOverlayVisibility();
   }
 
@@ -426,28 +439,49 @@ export class ViewerUi {
     selected: DisplaySelection
   ): void {
     const hadFocus = document.activeElement === this.elements.rgbGroupSelect;
-    const groups = extractRgbChannelGroups(channelNames);
-    const stokesOptions = getStokesDisplayOptions(channelNames);
-    const selectedGroup = findSelectedRgbGroup(
-      groups,
-      selected.displayR,
-      selected.displayG,
-      selected.displayB
+    const nextChannelNames = [...channelNames];
+    const expandedSelection = this.includeSplitRgbChannels
+      ? findSplitSelectionForMergedDisplay(nextChannelNames, selected)
+      : null;
+    const collapsedSelection = !this.includeSplitRgbChannels
+      ? findMergedSelectionForSplitDisplay(nextChannelNames, selected)
+      : null;
+    const effectiveSelected = expandedSelection ?? collapsedSelection ?? selected;
+    const rgbGroups = extractRgbChannelGroups(nextChannelNames);
+    const channelOptions = buildChannelDisplayOptions(nextChannelNames, {
+      includeRgbGroups: !this.includeSplitRgbChannels,
+      includeSplitChannels: this.includeSplitRgbChannels
+    });
+    const stokesOptions = getStokesDisplayOptions(nextChannelNames, {
+      includeRgbGroups: !this.includeSplitRgbChannels,
+      includeSplitChannels: this.includeSplitRgbChannels
+    });
+    const selectedChannelOption = findSelectedChannelDisplayOption(
+      channelOptions,
+      effectiveSelected.displayR,
+      effectiveSelected.displayG,
+      effectiveSelected.displayB
     );
-    const showCurrentChannelOption = selected.displaySource === 'channels' && !selectedGroup && stokesOptions.length > 0;
-    const optionCount = groups.length + stokesOptions.length + (showCurrentChannelOption ? 1 : 0);
+    const selectedStokesOption = findSelectedStokesDisplayOption(stokesOptions, effectiveSelected);
+    const showCurrentChannelOption =
+      effectiveSelected.displaySource === 'channels' && !selectedChannelOption && stokesOptions.length > 0;
+    const optionCount = channelOptions.length + stokesOptions.length + (showCurrentChannelOption ? 1 : 0);
 
+    this.currentRgbChannelNames = nextChannelNames;
+    this.currentRgbSelection = { ...effectiveSelected };
     this.hasRgbGroups = optionCount > 0;
+    this.hasRgbSplitOptions = rgbGroups.length > 0;
+    this.updateRgbSplitToggleState();
     this.rgbGroupMappings.clear();
     this.elements.rgbGroupSelect.innerHTML = '';
-    this.applyListboxRowSizing(this.elements.rgbGroupSelect, optionCount, optionCount);
+    this.applyListboxRowSizing(this.elements.rgbGroupSelect, optionCount, CHANNEL_OPTIONS_MAX_VISIBLE_ROWS);
 
-    let selectedValue = optionCount > 0 ? 'group-0' : '';
+    let selectedValue = optionCount > 0 ? 'channels-0' : '';
 
     if (showCurrentChannelOption) {
       const value = 'channels-current';
       this.rgbGroupMappings.set(value, {
-        ...selected,
+        ...effectiveSelected,
         displaySource: 'channels',
         stokesParameter: null
       });
@@ -459,22 +493,20 @@ export class ViewerUi {
       selectedValue = value;
     }
 
-    groups.forEach((group, index) => {
-      const value = `group-${index}`;
+    channelOptions.forEach((channelOption, index) => {
+      const value = `channels-${index}`;
       this.rgbGroupMappings.set(value, {
         displaySource: 'channels',
         stokesParameter: null,
-        displayR: group.r,
-        displayG: group.g,
-        displayB: group.b
+        ...channelOption.mapping
       });
 
       const option = document.createElement('option');
       option.value = value;
-      option.textContent = group.label;
+      option.textContent = channelOption.label;
       this.elements.rgbGroupSelect.append(option);
 
-      if (selectedGroup && selectedGroup.key === group.key) {
+      if (selectedChannelOption && selectedChannelOption.key === channelOption.key) {
         selectedValue = value;
       }
     });
@@ -484,9 +516,7 @@ export class ViewerUi {
       this.rgbGroupMappings.set(value, {
         displaySource: stokesOption.displaySource,
         stokesParameter: stokesOption.stokesParameter,
-        displayR: selected.displayR,
-        displayG: selected.displayG,
-        displayB: selected.displayB
+        ...stokesOption.mapping
       });
 
       const option = document.createElement('option');
@@ -495,8 +525,7 @@ export class ViewerUi {
       this.elements.rgbGroupSelect.append(option);
 
       if (
-        selected.displaySource === stokesOption.displaySource &&
-        selected.stokesParameter === stokesOption.stokesParameter
+        selectedStokesOption && selectedStokesOption.key === stokesOption.key
       ) {
         selectedValue = value;
       }
@@ -506,6 +535,11 @@ export class ViewerUi {
     this.elements.rgbGroupSelect.disabled = this.isLoading || !this.hasRgbGroups;
     if (hadFocus && !this.elements.rgbGroupSelect.disabled) {
       this.elements.rgbGroupSelect.focus();
+    }
+
+    const remappedSelection = expandedSelection ?? collapsedSelection;
+    if (remappedSelection) {
+      this.callbacks.onRgbGroupChange(remappedSelection);
     }
   }
 
@@ -569,6 +603,15 @@ export class ViewerUi {
       return;
     }
     this.elements.dropOverlay.classList.add('hidden');
+  }
+
+  private updateRgbSplitToggleState(): void {
+    this.elements.rgbSplitToggleButton.classList.toggle('hidden', !this.hasRgbSplitOptions);
+    this.elements.rgbSplitToggleButton.disabled = this.isLoading || this.isRgbViewLoading || !this.hasRgbSplitOptions;
+    this.elements.rgbSplitToggleButton.setAttribute(
+      'aria-pressed',
+      this.includeSplitRgbChannels ? 'true' : 'false'
+    );
   }
 
   private drawHistogram(histogram: HistogramData): void {
@@ -1109,6 +1152,31 @@ export class ViewerUi {
       this.finishOpenedImagesDrag();
     });
 
+    this.elements.rgbSplitToggleButton.addEventListener('click', () => {
+      if (this.elements.rgbSplitToggleButton.disabled) {
+        return;
+      }
+
+      this.includeSplitRgbChannels = !this.includeSplitRgbChannels;
+      this.updateRgbSplitToggleState();
+
+      const selection = this.currentRgbSelection;
+      if (!selection) {
+        return;
+      }
+
+      if (!this.includeSplitRgbChannels) {
+        const collapsedSelection = findMergedSelectionForSplitDisplay(this.currentRgbChannelNames, selection);
+        if (collapsedSelection) {
+          this.currentRgbSelection = { ...collapsedSelection };
+          this.callbacks.onRgbGroupChange(collapsedSelection);
+          return;
+        }
+      }
+
+      this.setRgbGroupOptions(this.currentRgbChannelNames, selection);
+    });
+
     const onRgbGroupSelect = (event: Event): void => {
       const target = event.currentTarget as HTMLSelectElement;
       const mapping = this.rgbGroupMappings.get(target.value);
@@ -1116,6 +1184,7 @@ export class ViewerUi {
         return;
       }
 
+      this.currentRgbSelection = { ...mapping };
       this.callbacks.onRgbGroupChange(mapping);
     };
     this.elements.rgbGroupSelect.addEventListener('change', onRgbGroupSelect);
@@ -1158,6 +1227,7 @@ export class ViewerUi {
       if (!mapping) {
         return;
       }
+      this.currentRgbSelection = { ...mapping };
       this.callbacks.onRgbGroupChange(mapping);
     });
 
@@ -1440,6 +1510,7 @@ function resolveElements(): Elements {
     closeAllOpenedImagesButton: requireElement('close-all-opened-images-button', HTMLButtonElement),
     layerControl: requireElement('layer-control', HTMLDivElement),
     layerSelect: requireElement('layer-select', HTMLSelectElement),
+    rgbSplitToggleButton: requireElement('rgb-split-toggle-button', HTMLButtonElement),
     rgbGroupSelect: requireElement('rgb-group-select', HTMLSelectElement),
     zoomReadout: requireElement('zoom-readout', HTMLElement),
     panReadout: requireElement('pan-readout', HTMLElement),

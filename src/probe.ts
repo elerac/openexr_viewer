@@ -2,7 +2,9 @@ import { ColormapLut, mapValueToColormapRgbBytes, modulateRgbBytesValue } from '
 import {
   clampStokesDegreeModulationValue,
   createDefaultStokesDegreeModulation,
+  getStokesDegreeModulationDisplayValueLabel,
   getStokesDegreeModulationLabel,
+  getStokesDisplayValueLabel,
   getStokesParameterLabel,
   isStokesDegreeModulationEnabled
 } from './state';
@@ -84,7 +86,10 @@ export function buildProbeColorPreview(
 
 function readProbeDisplayValues(sample: PixelSample, selection: DisplaySelection): [number, number, number] {
   if (selection.displaySource !== 'channels' && selection.stokesParameter) {
-    const value = readProbeChannel(sample, getStokesParameterLabel(selection.stokesParameter));
+    const value = readFirstProbeChannel(sample, [
+      getStokesDisplayValueLabel(selection),
+      getStokesParameterLabel(selection.stokesParameter)
+    ]);
     return [value, value, value];
   }
 
@@ -93,6 +98,17 @@ function readProbeDisplayValues(sample: PixelSample, selection: DisplaySelection
     readProbeChannel(sample, selection.displayG),
     readProbeChannel(sample, selection.displayB)
   ];
+}
+
+function readFirstProbeChannel(sample: PixelSample, channelNames: Array<string | null>): number {
+  for (const channelName of channelNames) {
+    if (!channelName || !(channelName in sample.values)) {
+      continue;
+    }
+    return readProbeChannel(sample, channelName);
+  }
+
+  return 0;
 }
 
 function readProbeChannel(sample: PixelSample, channelName: string): number {
@@ -105,12 +121,12 @@ function readProbeChannel(sample: PixelSample, channelName: string): number {
 }
 
 function readProbeStokesDegreeModulationValue(sample: PixelSample, selection: DisplaySelection): number {
-  const label = getStokesDegreeModulationLabel(selection.stokesParameter);
-  if (!label) {
-    return 1;
-  }
-
-  return clampStokesDegreeModulationValue(readProbeChannel(sample, label));
+  return clampStokesDegreeModulationValue(
+    readFirstProbeChannel(sample, [
+      getStokesDegreeModulationDisplayValueLabel(selection),
+      getStokesDegreeModulationLabel(selection.stokesParameter)
+    ])
+  );
 }
 
 function toSrgbByte(value: number): number {

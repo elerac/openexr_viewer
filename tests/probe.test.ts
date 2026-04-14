@@ -213,6 +213,46 @@ describe('probe helpers', () => {
     expect(preview?.bValue).toBe('0.5');
   });
 
+  it('uses split RGB Stokes component labels for probe preview', () => {
+    const preview = buildProbeColorPreview(
+      { x: 0, y: 0, values: { 'DoLP.G': 0.75 } },
+      {
+        displaySource: 'stokesRgb',
+        stokesParameter: 'dolp',
+        displayR: 'S0.G',
+        displayG: 'S0.G',
+        displayB: 'S0.G'
+      },
+      0
+    );
+
+    expect(preview?.rValue).toBe('0.75');
+    expect(preview?.gValue).toBe('0.75');
+    expect(preview?.bValue).toBe('0.75');
+  });
+
+  it('modulates split RGB Stokes angle previews with split degree labels', () => {
+    const preview = buildProbeColorPreview(
+      { x: 0, y: 0, values: { 'AoLP.B': 0, 'DoLP.B': 0.25 } },
+      {
+        displaySource: 'stokesRgb',
+        stokesParameter: 'aolp',
+        displayR: 'S0.B',
+        displayG: 'S0.B',
+        displayB: 'S0.B'
+      },
+      0,
+      {
+        mode: 'colormap',
+        colormapRange: { min: 0, max: 2 },
+        colormapLut: redBlackGreenLut,
+        stokesDegreeModulation: { aolp: true, cop: true, top: true }
+      }
+    );
+
+    expect(preview?.cssColor).toBe('rgb(64, 0, 0)');
+  });
+
   it('uses additional Stokes labels for probe preview', () => {
     const preview = buildProbeColorPreview(
       { x: 0, y: 0, values: { DoCP: 0.25 } },

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_COLORMAP_ID } from '../src/colormaps';
 import {
+  buildChannelDisplayOptions,
   buildDisplayHistogram,
   buildLayerDisplayHistogram,
   buildSelectedDisplayTexture,
@@ -20,7 +21,9 @@ import {
   detectRgbStokesChannels,
   detectScalarStokesChannels,
   extractRgbChannelGroups,
+  findMergedSelectionForSplitDisplay,
   findSelectedRgbGroup,
+  findSplitSelectionForMergedDisplay,
   getStokesDisplayOptions,
   persistActiveSessionState,
   pickDefaultDisplayChannels,
@@ -153,6 +156,37 @@ describe('state helpers', () => {
       'CoP.(R,G,B)',
       'ToP.(R,G,B)'
     ]);
+    expect(getStokesDisplayOptions(rgbNames, {
+      includeRgbGroups: false,
+      includeSplitChannels: true
+    }).map((option) => option.label)).toEqual([
+      'AoLP.R',
+      'AoLP.G',
+      'AoLP.B',
+      'DoLP.R',
+      'DoLP.G',
+      'DoLP.B',
+      'DoP.R',
+      'DoP.G',
+      'DoP.B',
+      'DoCP.R',
+      'DoCP.G',
+      'DoCP.B',
+      'CoP.R',
+      'CoP.G',
+      'CoP.B',
+      'ToP.R',
+      'ToP.G',
+      'ToP.B'
+    ]);
+    expect(getStokesDisplayOptions(rgbNames, {
+      includeRgbGroups: false,
+      includeSplitChannels: true
+    })[0]?.mapping).toEqual({
+      displayR: 'S0.R',
+      displayG: 'S0.R',
+      displayB: 'S0.R'
+    });
   });
 
   it('computes derived Stokes values', () => {
@@ -369,6 +403,57 @@ describe('state helpers', () => {
     expect(topTexture[1]).toBeCloseTo(expectedEang, 6);
     expect(topTexture[2]).toBeCloseTo(expectedEang, 6);
     expect(topTexture[3]).toBeCloseTo(Math.sqrt(0.2126 ** 2 + 0.7152 ** 2 + 0.0722 ** 2), 6);
+  });
+
+  it('builds split RGB Stokes display textures from the selected component', () => {
+    const layer: DecodedLayer = {
+      name: 'stokes-rgb',
+      channelNames: [
+        'S0.R', 'S0.G', 'S0.B',
+        'S1.R', 'S1.G', 'S1.B',
+        'S2.R', 'S2.G', 'S2.B',
+        'S3.R', 'S3.G', 'S3.B'
+      ],
+      channelData: new Map([
+        ['S0.R', new Float32Array([1])],
+        ['S0.G', new Float32Array([1])],
+        ['S0.B', new Float32Array([2])],
+        ['S1.R', new Float32Array([1])],
+        ['S1.G', new Float32Array([0])],
+        ['S1.B', new Float32Array([0])],
+        ['S2.R', new Float32Array([0])],
+        ['S2.G', new Float32Array([1])],
+        ['S2.B', new Float32Array([0])],
+        ['S3.R', new Float32Array([0])],
+        ['S3.G', new Float32Array([0])],
+        ['S3.B', new Float32Array([1])]
+      ])
+    };
+
+    const aolpGTexture = buildSelectedDisplayTexture(layer, 1, 1, {
+      ...createViewerState(),
+      displaySource: 'stokesRgb',
+      stokesParameter: 'aolp',
+      displayR: 'S0.G',
+      displayG: 'S0.G',
+      displayB: 'S0.G'
+    });
+    const docpBTexture = buildSelectedDisplayTexture(layer, 1, 1, {
+      ...createViewerState(),
+      displaySource: 'stokesRgb',
+      stokesParameter: 'docp',
+      displayR: 'S0.B',
+      displayG: 'S0.B',
+      displayB: 'S0.B'
+    });
+
+    expect(aolpGTexture[0]).toBeCloseTo(Math.PI / 4, 6);
+    expect(aolpGTexture[1]).toBeCloseTo(Math.PI / 4, 6);
+    expect(aolpGTexture[2]).toBeCloseTo(Math.PI / 4, 6);
+    expect(aolpGTexture[3]).toBeCloseTo(1, 6);
+    expect(docpBTexture[0]).toBeCloseTo(0.5, 6);
+    expect(docpBTexture[1]).toBeCloseTo(0.5, 6);
+    expect(docpBTexture[2]).toBeCloseTo(0.5, 6);
   });
 
   it('returns zero for RGB Stokes degree values when the mono S0 denominator is invalid', () => {
@@ -838,6 +923,52 @@ describe('state helpers', () => {
     expect(topSample?.values['ToP.R']).toBeUndefined();
   });
 
+  it('adds split RGB Stokes values to probe samples with component labels', () => {
+    const layer: DecodedLayer = {
+      name: 'stokes-rgb',
+      channelNames: [
+        'S0.R', 'S0.G', 'S0.B',
+        'S1.R', 'S1.G', 'S1.B',
+        'S2.R', 'S2.G', 'S2.B',
+        'S3.R', 'S3.G', 'S3.B'
+      ],
+      channelData: new Map([
+        ['S0.R', new Float32Array([1])],
+        ['S0.G', new Float32Array([1])],
+        ['S0.B', new Float32Array([1])],
+        ['S1.R', new Float32Array([1])],
+        ['S1.G', new Float32Array([0])],
+        ['S1.B', new Float32Array([0])],
+        ['S2.R', new Float32Array([0])],
+        ['S2.G', new Float32Array([1])],
+        ['S2.B', new Float32Array([0])],
+        ['S3.R', new Float32Array([0])],
+        ['S3.G', new Float32Array([0])],
+        ['S3.B', new Float32Array([1])]
+      ])
+    };
+
+    const sample = samplePixelValuesForDisplay(
+      layer,
+      1,
+      1,
+      { ix: 0, iy: 0 },
+      {
+        ...createViewerState(),
+        displaySource: 'stokesRgb',
+        stokesParameter: 'aolp',
+        displayR: 'S0.G',
+        displayG: 'S0.G',
+        displayB: 'S0.G'
+      }
+    );
+
+    expect(sample?.values.AoLP).toBeUndefined();
+    expect(sample?.values.DoLP).toBeUndefined();
+    expect(sample?.values['AoLP.G']).toBeCloseTo(Math.PI / 4, 6);
+    expect(sample?.values['DoLP.G']).toBeCloseTo(1, 6);
+  });
+
   it('builds layer histograms without counting non-finite samples', () => {
     const channel = new Float32Array([1, Number.NaN, 0.5, 2]);
     const layer: DecodedLayer = {
@@ -897,6 +1028,118 @@ describe('state helpers', () => {
     expect(groups[0]?.label).toBe('R,G,B');
   });
 
+  it('builds grouped channel display options for bare RGB by default', () => {
+    const options = buildChannelDisplayOptions(['R', 'G', 'B']);
+
+    expect(options.map((option) => option.label)).toEqual(['R,G,B']);
+    expect(options[0]?.mapping).toEqual({
+      displayR: 'R',
+      displayG: 'G',
+      displayB: 'B'
+    });
+  });
+
+  it('builds grouped and split channel display options for bare RGB when requested', () => {
+    const options = buildChannelDisplayOptions(['R', 'G', 'B'], { includeSplitChannels: true });
+
+    expect(options.map((option) => option.label)).toEqual(['R,G,B', 'R', 'G', 'B']);
+    expect(options[0]?.mapping).toEqual({
+      displayR: 'R',
+      displayG: 'G',
+      displayB: 'B'
+    });
+    expect(options[1]?.mapping).toEqual({
+      displayR: 'R',
+      displayG: 'R',
+      displayB: 'R'
+    });
+    expect(options[2]?.mapping).toEqual({
+      displayR: 'G',
+      displayG: 'G',
+      displayB: 'G'
+    });
+    expect(options[3]?.mapping).toEqual({
+      displayR: 'B',
+      displayG: 'B',
+      displayB: 'B'
+    });
+  });
+
+  it('builds split-only channel display options for bare RGB when groups are hidden', () => {
+    const options = buildChannelDisplayOptions(['R', 'G', 'B'], {
+      includeRgbGroups: false,
+      includeSplitChannels: true
+    });
+
+    expect(options.map((option) => option.label)).toEqual(['R', 'G', 'B']);
+    expect(options[0]?.mapping).toEqual({
+      displayR: 'R',
+      displayG: 'R',
+      displayB: 'R'
+    });
+  });
+
+  it('builds grouped and split channel display options for namespaced RGB when requested', () => {
+    const defaultOptions = buildChannelDisplayOptions(['HOGE.R', 'HOGE.G', 'HOGE.B', 'HOGE.A']);
+    const splitOptions = buildChannelDisplayOptions(['HOGE.R', 'HOGE.G', 'HOGE.B', 'HOGE.A'], {
+      includeSplitChannels: true
+    });
+    const splitOnlyOptions = buildChannelDisplayOptions(['HOGE.R', 'HOGE.G', 'HOGE.B', 'HOGE.A'], {
+      includeRgbGroups: false,
+      includeSplitChannels: true
+    });
+
+    expect(defaultOptions.map((option) => option.label)).toEqual(['HOGE.(R,G,B,A)']);
+    expect(splitOptions.map((option) => option.label)).toEqual([
+      'HOGE.(R,G,B,A)',
+      'HOGE.R',
+      'HOGE.G',
+      'HOGE.B'
+    ]);
+    expect(splitOptions[1]?.mapping).toEqual({
+      displayR: 'HOGE.R',
+      displayG: 'HOGE.R',
+      displayB: 'HOGE.R'
+    });
+    expect(splitOnlyOptions.map((option) => option.label)).toEqual(['HOGE.R', 'HOGE.G', 'HOGE.B']);
+  });
+
+  it('remaps grouped and split RGB Stokes selections when toggling split mode', () => {
+    const rgbStokesNames = [
+      'S0.R', 'S0.G', 'S0.B',
+      'S1.R', 'S1.G', 'S1.B',
+      'S2.R', 'S2.G', 'S2.B',
+      'S3.R', 'S3.G', 'S3.B'
+    ];
+    const grouped = {
+      ...createViewerState(),
+      displaySource: 'stokesRgb' as const,
+      stokesParameter: 'aolp' as const,
+      displayR: 'S0.R',
+      displayG: 'S0.G',
+      displayB: 'S0.B'
+    };
+    const split = findSplitSelectionForMergedDisplay(rgbStokesNames, grouped);
+
+    expect(split).toEqual({
+      displaySource: 'stokesRgb',
+      stokesParameter: 'aolp',
+      displayR: 'S0.R',
+      displayG: 'S0.R',
+      displayB: 'S0.R'
+    });
+    if (!split) {
+      throw new Error('Expected split Stokes selection.');
+    }
+    expect(findMergedSelectionForSplitDisplay(rgbStokesNames, split)).toEqual({
+      displaySource: 'stokesRgb',
+      stokesParameter: 'aolp',
+      displayR: 'S0.R',
+      displayG: 'S0.G',
+      displayB: 'S0.B'
+    });
+  });
+
   it('labels RGB groups with alpha as R,G,B,A', () => {
     const bare = extractRgbChannelGroups(['R', 'G', 'B', 'A']);
     expect(bare).toHaveLength(1);
@@ -915,6 +1158,24 @@ describe('state helpers', () => {
       displayG: 'HOGE.G',
       displayB: 'HOGE.B'
     });
+  });
+
+  it('computes colormap luminance range from a repeated single-channel mapping', () => {
+    const layer: DecodedLayer = {
+      name: 'single-channel',
+      channelNames: ['R', 'G', 'B'],
+      channelData: new Map([
+        ['R', new Float32Array([10, 20])],
+        ['G', new Float32Array([0.25, 0.75])],
+        ['B', new Float32Array([100, 200])]
+      ])
+    };
+
+    const texture = buildDisplayTexture(layer, 2, 1, 'G', 'G', 'G');
+    const range = computeDisplayTextureLuminanceRange(texture);
+
+    expect(range?.min).toBeCloseTo(0.25, 6);
+    expect(range?.max).toBeCloseTo(0.75, 6);
   });
 
   it('uses single-channel layers as grayscale default display mapping', () => {
