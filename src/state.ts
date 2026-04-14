@@ -22,6 +22,12 @@ export type StokesColormapDefaultGroup = 'aolp' | 'degree' | 'cop' | 'top' | 'no
 type RgbSuffix = 'R' | 'G' | 'B' | 'A';
 type RgbStokesComponent = 'R' | 'G' | 'B';
 
+export interface StokesColormapDefault {
+  colormapLabel: string;
+  range: DisplayLuminanceRange;
+  zeroCentered: boolean;
+}
+
 export interface HistogramBuildOptions {
   bins?: number;
   mode?: HistogramMode;
@@ -736,6 +742,59 @@ export function getStokesColormapDefaultGroup(
   return parameter;
 }
 
+export function getStokesColormapDefault(parameter: StokesParameter | null): StokesColormapDefault | null {
+  if (!parameter) {
+    return null;
+  }
+
+  if (parameter === 'aolp') {
+    return { colormapLabel: 'HSV', range: { min: 0, max: Math.PI }, zeroCentered: false };
+  }
+
+  if (parameter === 'cop') {
+    return {
+      colormapLabel: 'Yellow-Black-Blue',
+      range: { min: -Math.PI / 4, max: Math.PI / 4 },
+      zeroCentered: true
+    };
+  }
+
+  if (parameter === 'top') {
+    return {
+      colormapLabel: 'Yellow-Cyan-Yellow',
+      range: { min: -Math.PI / 4, max: Math.PI / 4 },
+      zeroCentered: false
+    };
+  }
+
+  if (parameter === 's1_over_s0' || parameter === 's2_over_s0' || parameter === 's3_over_s0') {
+    return { colormapLabel: 'RdBu', range: { min: -1, max: 1 }, zeroCentered: true };
+  }
+
+  return { colormapLabel: 'Black-Red', range: { min: 0, max: 1 }, zeroCentered: false };
+}
+
+export function getStokesDisplayColormapDefault(
+  selection: Pick<DisplaySelection, 'displaySource' | 'stokesParameter'>
+): StokesColormapDefault | null {
+  return isStokesDisplaySelection(selection)
+    ? getStokesColormapDefault(selection.stokesParameter)
+    : null;
+}
+
+export function resolveColormapAutoRange(
+  selection: Pick<DisplaySelection, 'displaySource' | 'stokesParameter'>,
+  imageRange: DisplayLuminanceRange | null,
+  zeroCentered: boolean
+): DisplayLuminanceRange | null {
+  const stokesDefault = getStokesDisplayColormapDefault(selection);
+  const sourceRange = stokesDefault?.range ?? imageRange;
+
+  return zeroCentered
+    ? buildZeroCenteredColormapRange(sourceRange)
+    : cloneDisplayLuminanceRange(sourceRange);
+}
+
 export function shouldPreserveStokesColormapState(
   previous: Pick<DisplaySelection, 'displaySource' | 'stokesParameter'>,
   next: Pick<DisplaySelection, 'displaySource' | 'stokesParameter'>
@@ -968,6 +1027,10 @@ export function buildZeroCenteredColormapRange(
   const fallback = Number.isFinite(fallbackMagnitude) && fallbackMagnitude > 0 ? fallbackMagnitude : 1;
   const v = Number.isFinite(magnitude) && magnitude > 0 ? magnitude : fallback;
   return { min: -v, max: v };
+}
+
+function cloneDisplayLuminanceRange(range: DisplayLuminanceRange | null): DisplayLuminanceRange | null {
+  return range ? { min: range.min, max: range.max } : null;
 }
 
 export function sanitizeDisplayValue(value: number): number {

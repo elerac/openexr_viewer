@@ -25,10 +25,12 @@ import {
   extractRgbChannelGroups,
   findSelectedRgbGroup,
   getStokesDegreeModulationLabel,
+  getStokesDisplayColormapDefault,
   isStokesDisplaySelection,
   isStokesDegreeModulationParameter,
   persistActiveSessionState,
   pickNextSessionIndexAfterRemoval,
+  resolveColormapAutoRange,
   samplePixelValuesForDisplay,
   samePixel,
   shouldPreserveStokesColormapState,
@@ -301,7 +303,8 @@ async function bootstrap(): Promise<void> {
           activeSession.textureRevisionKey = textureKey;
         }
 
-        const activeAutoColormapRange = resolveAutoColormapRange(
+        const activeAutoColormapRange = resolveColormapAutoRange(
+          state,
           activeSession.displayLuminanceRange,
           state.colormapZeroCentered
         );
@@ -730,7 +733,7 @@ async function bootstrap(): Promise<void> {
         Object.assign(patch, resolveStokesDisplayRestoreState(activeSession.id));
       }
 
-      const stokesDefaults = resolveStokesDisplayDefaults(selection);
+      const stokesDefaults = getStokesDisplayColormapDefault(selection);
       if (stokesDefaults) {
         if (!isStokesDisplaySelection(currentState)) {
           stokesDisplayRestoreStates.set(activeSession.id, captureRestorableVisualizationState(currentState));
@@ -876,10 +879,10 @@ async function bootstrap(): Promise<void> {
 
     const currentState = store.getState();
     const nextZeroCentered = !currentState.colormapZeroCentered;
-    const nextRange = nextZeroCentered
-      ? buildZeroCenteredColormapRange(currentState.colormapRange ?? activeSession.displayLuminanceRange)
-      : currentState.colormapRangeMode === 'alwaysAuto'
-        ? cloneDisplayLuminanceRange(activeSession.displayLuminanceRange)
+    const nextRange = currentState.colormapRangeMode === 'alwaysAuto'
+      ? resolveColormapAutoRange(currentState, activeSession.displayLuminanceRange, nextZeroCentered)
+      : nextZeroCentered
+        ? buildZeroCenteredColormapRange(currentState.colormapRange ?? activeSession.displayLuminanceRange)
         : cloneDisplayLuminanceRange(currentState.colormapRange);
 
     store.setState({
@@ -917,7 +920,8 @@ async function bootstrap(): Promise<void> {
     }
 
     const currentState = store.getState();
-    const nextRange = resolveAutoColormapRange(
+    const nextRange = resolveColormapAutoRange(
+      currentState,
       activeSession.displayLuminanceRange,
       currentState.colormapZeroCentered
     );
@@ -1655,53 +1659,6 @@ async function bootstrap(): Promise<void> {
       colormapRangeMode: 'alwaysAuto',
       colormapZeroCentered: false
     };
-  }
-
-  function resolveAutoColormapRange(
-    range: DisplayLuminanceRange | null,
-    zeroCentered: boolean
-  ): DisplayLuminanceRange | null {
-    return zeroCentered
-      ? buildZeroCenteredColormapRange(range)
-      : cloneDisplayLuminanceRange(range);
-  }
-
-  function resolveStokesDisplayDefaults(
-    selection: DisplaySelection
-  ): { colormapLabel: string; range: DisplayLuminanceRange; zeroCentered: boolean } | null {
-    if (selection.displaySource === 'channels' || !selection.stokesParameter) {
-      return null;
-    }
-
-    if (selection.stokesParameter === 'aolp') {
-      return { colormapLabel: 'HSV', range: { min: 0, max: Math.PI }, zeroCentered: false };
-    }
-
-    if (selection.stokesParameter === 'cop') {
-      return {
-        colormapLabel: 'Yellow-Black-Blue',
-        range: { min: -Math.PI / 4, max: Math.PI / 4 },
-        zeroCentered: true
-      };
-    }
-
-    if (selection.stokesParameter === 'top') {
-      return {
-        colormapLabel: 'Yellow-Cyan-Yellow',
-        range: { min: -Math.PI / 4, max: Math.PI / 4 },
-        zeroCentered: false
-      };
-    }
-
-    if (
-      selection.stokesParameter === 's1_over_s0' ||
-      selection.stokesParameter === 's2_over_s0' ||
-      selection.stokesParameter === 's3_over_s0'
-    ) {
-      return { colormapLabel: 'RdBu', range: { min: -1, max: 1 }, zeroCentered: true };
-    }
-
-    return { colormapLabel: 'Black-Red', range: { min: 0, max: 1 }, zeroCentered: false };
   }
 
   function sameDisplayLuminanceRange(

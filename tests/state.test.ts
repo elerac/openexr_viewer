@@ -25,11 +25,13 @@ import {
   findMergedSelectionForSplitDisplay,
   findSelectedRgbGroup,
   findSplitSelectionForMergedDisplay,
+  getStokesColormapDefault,
   getStokesColormapDefaultGroup,
   getStokesDisplayOptions,
   persistActiveSessionState,
   pickDefaultDisplayChannels,
   pickNextSessionIndexAfterRemoval,
+  resolveColormapAutoRange,
   scaleHistogramCount,
   samplePixelValuesForDisplay,
   samplePixelValues,
@@ -238,6 +240,56 @@ describe('state helpers', () => {
     expect(getStokesColormapDefaultGroup('s2_over_s0')).toBe('normalized');
     expect(getStokesColormapDefaultGroup('s3_over_s0')).toBe('normalized');
     expect(getStokesColormapDefaultGroup(null)).toBeNull();
+  });
+
+  it('defines default colormap ranges for specialized Stokes parameters', () => {
+    expect(getStokesColormapDefault('aolp')).toEqual({
+      colormapLabel: 'HSV',
+      range: { min: 0, max: Math.PI },
+      zeroCentered: false
+    });
+    expect(getStokesColormapDefault('dolp')).toEqual({
+      colormapLabel: 'Black-Red',
+      range: { min: 0, max: 1 },
+      zeroCentered: false
+    });
+    expect(getStokesColormapDefault('cop')).toEqual({
+      colormapLabel: 'Yellow-Black-Blue',
+      range: { min: -Math.PI / 4, max: Math.PI / 4 },
+      zeroCentered: true
+    });
+    expect(getStokesColormapDefault('s2_over_s0')).toEqual({
+      colormapLabel: 'RdBu',
+      range: { min: -1, max: 1 },
+      zeroCentered: true
+    });
+    expect(getStokesColormapDefault(null)).toBeNull();
+  });
+
+  it('uses predefined Stokes ranges for auto colormap ranges', () => {
+    const imageRange = { min: 0.2, max: 0.4 };
+    const channelSelection: DisplaySelection = {
+      displaySource: 'channels',
+      stokesParameter: null,
+      displayR: 'R',
+      displayG: 'G',
+      displayB: 'B'
+    };
+
+    expect(resolveColormapAutoRange(channelSelection, imageRange, false)).toEqual(imageRange);
+    expect(resolveColormapAutoRange(channelSelection, imageRange, true)).toEqual({ min: -0.4, max: 0.4 });
+    expect(resolveColormapAutoRange(createStokesSelection('aolp'), imageRange, false)).toEqual({
+      min: 0,
+      max: Math.PI
+    });
+    expect(resolveColormapAutoRange(createStokesSelection('s1_over_s0'), imageRange, false)).toEqual({
+      min: -1,
+      max: 1
+    });
+    expect(resolveColormapAutoRange(createStokesSelection('dolp'), imageRange, true)).toEqual({
+      min: -1,
+      max: 1
+    });
   });
 
   it('preserves Stokes colormap state only within the same default group', () => {
