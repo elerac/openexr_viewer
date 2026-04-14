@@ -18,6 +18,7 @@ import {
 export type HistogramMode = 'luminance' | 'rgb';
 export type HistogramXAxisMode = 'ev' | 'linear';
 export type HistogramYAxisMode = 'sqrt' | 'log' | 'linear';
+export type StokesColormapDefaultGroup = 'aolp' | 'degree' | 'cop' | 'top' | 'normalized';
 type RgbSuffix = 'R' | 'G' | 'B' | 'A';
 type RgbStokesComponent = 'R' | 'G' | 'B';
 
@@ -715,6 +716,36 @@ export function isStokesDisplaySelection(
   stokesParameter: StokesParameter;
 } {
   return selection.displaySource !== 'channels' && selection.stokesParameter !== null;
+}
+
+export function getStokesColormapDefaultGroup(
+  parameter: StokesParameter | null
+): StokesColormapDefaultGroup | null {
+  if (!parameter) {
+    return null;
+  }
+
+  if (parameter === 'dolp' || parameter === 'dop' || parameter === 'docp') {
+    return 'degree';
+  }
+
+  if (parameter === 's1_over_s0' || parameter === 's2_over_s0' || parameter === 's3_over_s0') {
+    return 'normalized';
+  }
+
+  return parameter;
+}
+
+export function shouldPreserveStokesColormapState(
+  previous: Pick<DisplaySelection, 'displaySource' | 'stokesParameter'>,
+  next: Pick<DisplaySelection, 'displaySource' | 'stokesParameter'>
+): boolean {
+  if (!isStokesDisplaySelection(previous) || !isStokesDisplaySelection(next)) {
+    return false;
+  }
+
+  return getStokesColormapDefaultGroup(previous.stokesParameter) ===
+    getStokesColormapDefaultGroup(next.stokesParameter);
 }
 
 export function isStokesDisplayAvailable(

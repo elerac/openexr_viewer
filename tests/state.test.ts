@@ -25,15 +25,24 @@ import {
   findMergedSelectionForSplitDisplay,
   findSelectedRgbGroup,
   findSplitSelectionForMergedDisplay,
+  getStokesColormapDefaultGroup,
   getStokesDisplayOptions,
   persistActiveSessionState,
   pickDefaultDisplayChannels,
   pickNextSessionIndexAfterRemoval,
   scaleHistogramCount,
   samplePixelValuesForDisplay,
-  samplePixelValues
+  samplePixelValues,
+  shouldPreserveStokesColormapState
 } from '../src/state';
-import { DecodedExrImage, DecodedLayer, ImagePixel, ViewerState } from '../src/types';
+import {
+  DecodedExrImage,
+  DecodedLayer,
+  DisplaySelection,
+  ImagePixel,
+  StokesParameter,
+  ViewerState
+} from '../src/types';
 
 function createLayer(): DecodedLayer {
   const channelData = new Map<string, Float32Array>();
@@ -60,6 +69,19 @@ function createViewerState(overrides: Partial<ViewerState> = {}): ViewerState {
   return {
     ...createInitialState(),
     ...overrides
+  };
+}
+
+function createStokesSelection(
+  stokesParameter: StokesParameter,
+  displaySource: Exclude<DisplaySelection['displaySource'], 'channels'> = 'stokesScalar'
+): DisplaySelection {
+  return {
+    displaySource,
+    stokesParameter,
+    displayR: 'S0',
+    displayG: 'S1',
+    displayB: 'S2'
   };
 }
 
@@ -203,6 +225,75 @@ describe('state helpers', () => {
       displayG: 'S0.R',
       displayB: 'S0.R'
     });
+  });
+
+  it('groups Stokes parameters by default colormap behavior', () => {
+    expect(getStokesColormapDefaultGroup('aolp')).toBe('aolp');
+    expect(getStokesColormapDefaultGroup('dolp')).toBe('degree');
+    expect(getStokesColormapDefaultGroup('dop')).toBe('degree');
+    expect(getStokesColormapDefaultGroup('docp')).toBe('degree');
+    expect(getStokesColormapDefaultGroup('cop')).toBe('cop');
+    expect(getStokesColormapDefaultGroup('top')).toBe('top');
+    expect(getStokesColormapDefaultGroup('s1_over_s0')).toBe('normalized');
+    expect(getStokesColormapDefaultGroup('s2_over_s0')).toBe('normalized');
+    expect(getStokesColormapDefaultGroup('s3_over_s0')).toBe('normalized');
+    expect(getStokesColormapDefaultGroup(null)).toBeNull();
+  });
+
+  it('preserves Stokes colormap state only within the same default group', () => {
+    expect(shouldPreserveStokesColormapState(
+      createStokesSelection('dolp'),
+      createStokesSelection('dop')
+    )).toBe(true);
+    expect(shouldPreserveStokesColormapState(
+      createStokesSelection('dop'),
+      createStokesSelection('docp')
+    )).toBe(true);
+    expect(shouldPreserveStokesColormapState(
+      createStokesSelection('dolp'),
+      createStokesSelection('docp')
+    )).toBe(true);
+    expect(shouldPreserveStokesColormapState(
+      createStokesSelection('s1_over_s0'),
+      createStokesSelection('s2_over_s0')
+    )).toBe(true);
+    expect(shouldPreserveStokesColormapState(
+      createStokesSelection('s2_over_s0'),
+      createStokesSelection('s3_over_s0')
+    )).toBe(true);
+    expect(shouldPreserveStokesColormapState(
+      createStokesSelection('dolp', 'stokesScalar'),
+      createStokesSelection('docp', 'stokesRgb')
+    )).toBe(true);
+    expect(shouldPreserveStokesColormapState(
+      createStokesSelection('s1_over_s0', 'stokesRgb'),
+      createStokesSelection('s3_over_s0', 'stokesScalar')
+    )).toBe(true);
+  });
+
+  it('does not preserve Stokes colormap state across different groups or channel selections', () => {
+    const channelSelection: DisplaySelection = {
+      displaySource: 'channels',
+      stokesParameter: null,
+      displayR: 'R',
+      displayG: 'G',
+      displayB: 'B'
+    };
+
+    expect(shouldPreserveStokesColormapState(
+      createStokesSelection('dolp'),
+      createStokesSelection('s1_over_s0')
+    )).toBe(false);
+    expect(shouldPreserveStokesColormapState(
+      createStokesSelection('aolp'),
+      createStokesSelection('dolp')
+    )).toBe(false);
+    expect(shouldPreserveStokesColormapState(
+      createStokesSelection('cop'),
+      createStokesSelection('top')
+    )).toBe(false);
+    expect(shouldPreserveStokesColormapState(channelSelection, createStokesSelection('dolp'))).toBe(false);
+    expect(shouldPreserveStokesColormapState(createStokesSelection('dolp'), channelSelection)).toBe(false);
   });
 
   it('computes derived Stokes values', () => {

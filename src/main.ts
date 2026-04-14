@@ -31,6 +31,7 @@ import {
   pickNextSessionIndexAfterRemoval,
   samplePixelValuesForDisplay,
   samePixel,
+  shouldPreserveStokesColormapState,
   ViewerStore,
   type HistogramData,
   type HistogramMode,
@@ -733,6 +734,17 @@ async function bootstrap(): Promise<void> {
       if (stokesDefaults) {
         if (!isStokesDisplaySelection(currentState)) {
           stokesDisplayRestoreStates.set(activeSession.id, captureRestorableVisualizationState(currentState));
+        }
+
+        if (shouldPreserveStokesColormapState(currentState, selection)) {
+          patch.visualizationMode = 'colormap';
+          store.setState({ ...patch });
+
+          const elapsedMs = performance.now() - startedAt;
+          if (elapsedMs < MIN_RGB_VIEW_LOADING_MS) {
+            await waitMs(MIN_RGB_VIEW_LOADING_MS - elapsedMs);
+          }
+          return;
         }
 
         const registry = getLoadedColormapRegistry();
