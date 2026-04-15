@@ -80,11 +80,13 @@ export function buildProbeColorPreview(
       toSrgbByte(rawG * exposureScale),
       toSrgbByte(rawB * exposureScale)
     ];
-    displayValues = [
-      { label: 'R', value: formatProbeRgbValue(rawR) },
-      { label: 'G', value: formatProbeRgbValue(rawG) },
-      { label: 'B', value: formatProbeRgbValue(rawB) }
-    ];
+    displayValues = isSingleChannelDisplay(selection)
+      ? [{ label: 'Mono', value: formatProbeRgbValue(rawR) }]
+      : [
+          { label: 'R', value: formatProbeRgbValue(rawR) },
+          { label: 'G', value: formatProbeRgbValue(rawG) },
+          { label: 'B', value: formatProbeRgbValue(rawB) }
+        ];
   }
 
   return {
@@ -95,6 +97,10 @@ export function buildProbeColorPreview(
 
 function computeProbeLuminanceValue(r: number, g: number, b: number): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function isSingleChannelDisplay(selection: DisplaySelection): boolean {
+  return selection.displayR === selection.displayG && selection.displayG === selection.displayB;
 }
 
 function readProbeDisplayValues(sample: PixelSample, selection: DisplaySelection): [number, number, number] {

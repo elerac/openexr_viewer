@@ -101,6 +101,7 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await rgbGroupSelect.selectOption({ label: 'R' });
   await expect(rgbGroupSelect.locator('option:checked')).toHaveText('R');
   await expect(page.locator('#loading-overlay')).toBeHidden();
+  await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['Mono:']);
   await rgbSplitToggleButton.click();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');
   await expect(rgbGroupSelect.locator('option:checked')).toHaveText(/R,G,B/);

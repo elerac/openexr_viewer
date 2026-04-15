@@ -90,6 +90,44 @@ describe('probe helpers', () => {
     });
   });
 
+  it('shows one mono display value for single-channel RGB previews', () => {
+    const preview = buildProbeColorPreview(
+      { x: 0, y: 0, values: { Y: 0.25 } },
+      {
+        displaySource: 'channels',
+        stokesParameter: null,
+        displayR: 'Y',
+        displayG: 'Y',
+        displayB: 'Y'
+      },
+      0
+    );
+
+    expect(preview).toEqual({
+      cssColor: 'rgb(137, 137, 137)',
+      displayValues: [{ label: 'Mono', value: '0.25' }]
+    });
+  });
+
+  it('shows one mono display value for split RGB channel previews', () => {
+    const preview = buildProbeColorPreview(
+      { x: 0, y: 0, values: { R: 0.25 } },
+      {
+        displaySource: 'channels',
+        stokesParameter: null,
+        displayR: 'R',
+        displayG: 'R',
+        displayB: 'R'
+      },
+      0
+    );
+
+    expect(preview).toEqual({
+      cssColor: 'rgb(137, 137, 137)',
+      displayValues: [{ label: 'Mono', value: '0.25' }]
+    });
+  });
+
   it('maps probe swatch colors through the selected colormap LUT', () => {
     const selection = {
       displaySource: 'channels' as const,
@@ -241,7 +279,7 @@ describe('probe helpers', () => {
     ]);
   });
 
-  it('uses split RGB Stokes component labels for probe preview', () => {
+  it('uses one mono display value for split RGB Stokes probe preview', () => {
     const preview = buildProbeColorPreview(
       { x: 0, y: 0, values: { 'DoLP.G': 0.75 } },
       {
@@ -254,11 +292,7 @@ describe('probe helpers', () => {
       0
     );
 
-    expect(preview?.displayValues).toEqual([
-      { label: 'R', value: '0.75' },
-      { label: 'G', value: '0.75' },
-      { label: 'B', value: '0.75' }
-    ]);
+    expect(preview?.displayValues).toEqual([{ label: 'Mono', value: '0.75' }]);
   });
 
   it('modulates split RGB Stokes angle previews with split degree labels', () => {
@@ -351,10 +385,6 @@ describe('probe helpers', () => {
       0
     );
 
-    expect(normalizedPreview?.displayValues).toEqual([
-      { label: 'R', value: '-0.5' },
-      { label: 'G', value: '-0.5' },
-      { label: 'B', value: '-0.5' }
-    ]);
+    expect(normalizedPreview?.displayValues).toEqual([{ label: 'Mono', value: '-0.5' }]);
   });
 });
