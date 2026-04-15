@@ -14,8 +14,8 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - `Opened Images` list allows switching active image by filename.
   - Multi-layer EXRs expose a `Layer` selector, and session state follows the implementation: selected layer is preserved per opened session, while zoom/pan, display channel mapping, and the active probe position carry across session switches when valid for the target image.
   - Reorder opened images directly by click-hold-moving a filename row in the `Opened Images` list.
-  - `Reload All` button re-decodes all opened sessions from their original sources.
   - `Reload` button re-decodes the selected session from its original source.
+  - `Reload All` button re-decodes all opened sessions from their original sources.
   - `Close` button closes the selected filename entry.
   - `Close All` button closes all opened sessions at once.
   - Duplicate filenames are disambiguated as `name.exr (2)`, `name.exr (3)`, etc.
@@ -132,8 +132,8 @@ npm run test:e2e
 - `Layer` selector: switch the active layer for the selected multi-layer EXR.
 - `Opened Images` list: click-hold-move a filename row to reorder.
 - `Open` button: open one EXR file and append it as a new session.
-- `Reload All` button: reload and re-decode all opened image entries.
 - `Reload` button: reload and re-decode the selected entry in `Opened Images`.
+- `Reload All` button: reload and re-decode all opened image entries.
 - `Close` button: close the currently selected entry in `Opened Images`.
 - `Close All` button: close all opened image entries.
 - Mouse wheel: zoom around cursor.
