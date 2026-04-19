@@ -4,6 +4,7 @@ import { ProbeColorPreview, ProbeDisplayValue } from './probe';
 import {
   buildChannelDisplayOptions,
   buildZeroCenteredColormapRange,
+  areDisplayChannelsAvailable,
   computeHistogramRenderCeiling,
   extractRgbChannelGroups,
   findMergedSelectionForSplitDisplay,
@@ -462,7 +463,10 @@ export class ViewerUi {
     );
     const selectedStokesOption = findSelectedStokesDisplayOption(stokesOptions, effectiveSelected);
     const showCurrentChannelOption =
-      effectiveSelected.displaySource === 'channels' && !selectedChannelOption && stokesOptions.length > 0;
+      effectiveSelected.displaySource === 'channels' &&
+      !selectedChannelOption &&
+      nextChannelNames.length > 0 &&
+      areDisplayChannelsAvailable(nextChannelNames, effectiveSelected);
     const optionCount = channelOptions.length + stokesOptions.length + (showCurrentChannelOption ? 1 : 0);
 
     this.currentRgbChannelNames = nextChannelNames;

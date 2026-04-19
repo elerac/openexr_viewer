@@ -549,6 +549,162 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   await expect(colormapSelect).toHaveValue(previousColormapId);
 });
 
+test('loads arbitrary scalar channels as grayscale display options', async ({ page }) => {
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  const openedImages = page.locator('#opened-images-select');
+  const channelSelect = page.locator('#rgb-group-select');
+  const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
+  const probeColorValues = page.locator('#probe-color-values');
+  const viewer = page.locator('#viewer-container');
+
+  await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
+
+  await page.setInputFiles('#file-input', {
+    name: 'scalar_z.exr',
+    mimeType: 'image/exr',
+    buffer: buildScalarChannelExr()
+  });
+
+  await expect(openedImages.locator('option:checked')).toContainText('scalar_z.exr', { timeout: 30000 });
+  await expect(channelSelect).toBeEnabled();
+  await expect(rgbSplitToggleButton).toBeHidden();
+  await expect(channelSelect.locator('option:checked')).toHaveText('Z');
+  await expect(channelSelect.locator('option').filter({ hasText: /^Z$/ })).toHaveCount(1);
+
+  await viewer.hover();
+  await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['Mono:']);
+
+  await page.setInputFiles('#file-input', {
+    name: 'spectral.exr',
+    mimeType: 'image/exr',
+    buffer: buildSpectralExr()
+  });
+
+  await expect(openedImages.locator('option:checked')).toContainText('spectral.exr', { timeout: 30000 });
+  await expect(channelSelect).toBeEnabled();
+  await expect(rgbSplitToggleButton).toBeHidden();
+  await expect(channelSelect.locator('option:checked')).toHaveText('400nm');
+  await expect(channelSelect.locator('option').filter({ hasText: /^400nm,500nm,600nm$/ })).toHaveCount(0);
+  await expect(channelSelect.locator('option').filter({ hasText: /^400nm$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^500nm$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^600nm$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^700nm$/ })).toHaveCount(1);
+
+  await channelSelect.selectOption({ label: '500nm' });
+  await expect(channelSelect.locator('option:checked')).toHaveText('500nm');
+  await viewer.hover();
+  await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['Mono:']);
+
+  await page.setInputFiles('#file-input', {
+    name: 'rgb_aux.exr',
+    mimeType: 'image/exr',
+    buffer: buildRgbAuxExr()
+  });
+
+  await expect(openedImages.locator('option:checked')).toContainText('rgb_aux.exr', { timeout: 30000 });
+  await expect(channelSelect).toBeEnabled();
+  await expect(rgbSplitToggleButton).toBeVisible();
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(channelSelect.locator('option:checked')).toHaveText('R,G,B,A');
+  await expect(channelSelect.locator('option').filter({ hasText: /^R$/ })).toHaveCount(0);
+  await expect(channelSelect.locator('option').filter({ hasText: /^G$/ })).toHaveCount(0);
+  await expect(channelSelect.locator('option').filter({ hasText: /^B$/ })).toHaveCount(0);
+  await expect(channelSelect.locator('option').filter({ hasText: /^A$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^mask$/ })).toHaveCount(1);
+
+  await channelSelect.selectOption({ label: 'mask' });
+  await expect(channelSelect.locator('option:checked')).toHaveText('mask');
+  await viewer.hover();
+  await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['Mono:']);
+
+  await rgbSplitToggleButton.click();
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(channelSelect.locator('option:checked')).toHaveText('mask');
+  await expect(channelSelect.locator('option').filter({ hasText: /^R,G,B,A$/ })).toHaveCount(0);
+  await expect(channelSelect.locator('option').filter({ hasText: /^R$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^G$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^B$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^A$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^mask$/ })).toHaveCount(1);
+});
+
+function buildScalarChannelExr(): Buffer {
+  ensureExrEncoderInitialized();
+
+  const encoder = new ExrEncoder(2, 2);
+  try {
+    encoder.addLayer(
+      null,
+      ['Z'],
+      new Float32Array([
+        0.25,
+        0.5,
+        0.75,
+        1
+      ]),
+      SamplePrecision.F32,
+      CompressionMethod.None
+    );
+    return Buffer.from(encoder.encode());
+  } finally {
+    encoder.free();
+  }
+}
+
+function buildSpectralExr(): Buffer {
+  ensureExrEncoderInitialized();
+
+  const encoder = new ExrEncoder(2, 2);
+  try {
+    encoder.addLayer(
+      null,
+      ['400nm', '500nm', '600nm', '700nm'],
+      new Float32Array([
+        0.1, 0.2, 0.3, 0.4,
+        0.2, 0.3, 0.4, 0.5,
+        0.3, 0.4, 0.5, 0.6,
+        0.4, 0.5, 0.6, 0.7
+      ]),
+      SamplePrecision.F32,
+      CompressionMethod.None
+    );
+    return Buffer.from(encoder.encode());
+  } finally {
+    encoder.free();
+  }
+}
+
+function buildRgbAuxExr(): Buffer {
+  ensureExrEncoderInitialized();
+
+  const encoder = new ExrEncoder(2, 2);
+  try {
+    encoder.addLayer(
+      null,
+      ['R', 'G', 'B', 'A', 'mask'],
+      new Float32Array([
+        1, 0, 0, 0.25, 10,
+        0, 1, 0, 0.5, 20,
+        0, 0, 1, 0.75, 30,
+        1, 1, 1, 1, 40
+      ]),
+      SamplePrecision.F32,
+      CompressionMethod.None
+    );
+    return Buffer.from(encoder.encode());
+  } finally {
+    encoder.free();
+  }
+}
+
 function buildScalarStokesExr(): Buffer {
   ensureExrEncoderInitialized();
 

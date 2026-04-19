@@ -303,10 +303,12 @@ export function pickDefaultDisplayChannels(channelNames: string[]): DisplayChann
     };
   }
 
+  const firstNonAlphaChannel = names.find((channelName) => !isAlphaChannel(channelName));
+  const fallbackChannel = firstNonAlphaChannel ?? names[0] ?? ZERO_CHANNEL;
   return {
-    displayR: names[0] ?? ZERO_CHANNEL,
-    displayG: names[1] ?? ZERO_CHANNEL,
-    displayB: names[2] ?? ZERO_CHANNEL
+    displayR: fallbackChannel,
+    displayG: fallbackChannel,
+    displayB: fallbackChannel
   };
 }
 
@@ -319,7 +321,11 @@ export function resolveDisplayChannelsForLayer(
     currentSelection.displayG !== ZERO_CHANNEL ||
     currentSelection.displayB !== ZERO_CHANNEL;
 
-  if (hasNonZeroSelection && areDisplayChannelsAvailable(channelNames, currentSelection)) {
+  if (
+    hasNonZeroSelection &&
+    areDisplayChannelsAvailable(channelNames, currentSelection) &&
+    isDisplayChannelSelectionPreservable(channelNames, currentSelection)
+  ) {
     return {
       displayR: currentSelection.displayR,
       displayG: currentSelection.displayG,
@@ -412,8 +418,23 @@ export function buildChannelDisplayOptions(
   const options: ChannelDisplayOption[] = [];
   const includeRgbGroups = config.includeRgbGroups ?? true;
   const includeSplitChannels = config.includeSplitChannels ?? false;
+  const rgbComponentChannels = new Set<string>();
+  const singleChannelOptions = new Set<string>();
+
+  const pushSingleChannelOption = (channelName: string): void => {
+    if (singleChannelOptions.has(channelName)) {
+      return;
+    }
+
+    singleChannelOptions.add(channelName);
+    options.push(buildSingleChannelDisplayOption(channelName));
+  };
 
   for (const group of extractRgbChannelGroups(channelNames)) {
+    rgbComponentChannels.add(group.r);
+    rgbComponentChannels.add(group.g);
+    rgbComponentChannels.add(group.b);
+
     if (includeRgbGroups) {
       options.push({
         key: `group:${group.key}`,
@@ -427,12 +448,18 @@ export function buildChannelDisplayOptions(
     }
 
     if (includeSplitChannels) {
-      options.push(
-        buildSingleChannelDisplayOption(group.r),
-        buildSingleChannelDisplayOption(group.g),
-        buildSingleChannelDisplayOption(group.b)
-      );
+      pushSingleChannelOption(group.r);
+      pushSingleChannelOption(group.g);
+      pushSingleChannelOption(group.b);
     }
+  }
+
+  for (const channelName of channelNames) {
+    if (rgbComponentChannels.has(channelName)) {
+      continue;
+    }
+
+    pushSingleChannelOption(channelName);
   }
 
   return options;
@@ -451,6 +478,25 @@ export function findSelectedChannelDisplayOption(
       option.mapping.displayB === displayB
     );
   }) ?? null;
+}
+
+function isDisplayChannelSelectionPreservable(
+  channelNames: string[],
+  selection: DisplayChannelMapping
+): boolean {
+  if (
+    selection.displayR === selection.displayG &&
+    selection.displayR === selection.displayB
+  ) {
+    return true;
+  }
+
+  return Boolean(findSelectedRgbGroup(
+    extractRgbChannelGroups(channelNames),
+    selection.displayR,
+    selection.displayG,
+    selection.displayB
+  ));
 }
 
 function areDisplayMappingsEqual(

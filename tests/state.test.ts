@@ -23,6 +23,7 @@ import {
   detectScalarStokesChannels,
   extractRgbChannelGroups,
   findMergedSelectionForSplitDisplay,
+  findSelectedChannelDisplayOption,
   findSelectedRgbGroup,
   findSplitSelectionForMergedDisplay,
   getStokesColormapDefault,
@@ -921,8 +922,36 @@ describe('state helpers', () => {
 
     expect(nextState.activeLayer).toBe(1);
     expect(nextState.displayR).toBe('X');
-    expect(nextState.displayG).toBe('Y');
-    expect(nextState.displayB).toBe('Z');
+    expect(nextState.displayG).toBe('X');
+    expect(nextState.displayB).toBe('X');
+  });
+
+  it('does not preserve arbitrary mixed channel mappings as display defaults', () => {
+    const spectralLayer: DecodedLayer = {
+      name: 'spectral',
+      channelNames: ['400nm', '500nm', '600nm', '700nm'],
+      channelData: new Map([
+        ['400nm', new Float32Array([4, 4, 4, 4])],
+        ['500nm', new Float32Array([5, 5, 5, 5])],
+        ['600nm', new Float32Array([6, 6, 6, 6])],
+        ['700nm', new Float32Array([7, 7, 7, 7])]
+      ])
+    };
+    const image = createImage([spectralLayer]);
+
+    const nextState = buildViewerStateForLayer(
+      createViewerState({
+        displayR: '400nm',
+        displayG: '500nm',
+        displayB: '600nm'
+      }),
+      image,
+      0
+    );
+
+    expect(nextState.displayR).toBe('400nm');
+    expect(nextState.displayG).toBe('400nm');
+    expect(nextState.displayB).toBe('400nm');
   });
 
   it('resolves a real default mapping when the current selection is all zero channels', () => {
@@ -1280,7 +1309,7 @@ describe('state helpers', () => {
       'FUGA.R',
       'FUGA.G',
       'FUGA.B',
-      'depth.Z'
+      'mask'
     ]);
 
     expect(groups.map((group) => group.key)).toEqual(['FUGA', 'HOGE']);
@@ -1320,6 +1349,22 @@ describe('state helpers', () => {
     });
   });
 
+  it('adds auxiliary and alpha channel display options while keeping RGB grouped by default', () => {
+    const options = buildChannelDisplayOptions(['R', 'G', 'B', 'A', 'mask']);
+
+    expect(options.map((option) => option.label)).toEqual(['R,G,B,A', 'A', 'mask']);
+    expect(options[1]?.mapping).toEqual({
+      displayR: 'A',
+      displayG: 'A',
+      displayB: 'A'
+    });
+    expect(options[2]?.mapping).toEqual({
+      displayR: 'mask',
+      displayG: 'mask',
+      displayB: 'mask'
+    });
+  });
+
   it('builds grouped and split channel display options for bare RGB when requested', () => {
     const options = buildChannelDisplayOptions(['R', 'G', 'B'], { includeSplitChannels: true });
 
@@ -1346,6 +1391,26 @@ describe('state helpers', () => {
     });
   });
 
+  it('keeps auxiliary and alpha channel options visible when RGB split mode is requested', () => {
+    const splitOptions = buildChannelDisplayOptions(['R', 'G', 'B', 'A', 'mask'], {
+      includeSplitChannels: true
+    });
+    const splitOnlyOptions = buildChannelDisplayOptions(['R', 'G', 'B', 'A', 'mask'], {
+      includeRgbGroups: false,
+      includeSplitChannels: true
+    });
+
+    expect(splitOptions.map((option) => option.label)).toEqual([
+      'R,G,B,A',
+      'R',
+      'G',
+      'B',
+      'A',
+      'mask'
+    ]);
+    expect(splitOnlyOptions.map((option) => option.label)).toEqual(['R', 'G', 'B', 'A', 'mask']);
+  });
+
   it('builds split-only channel display options for bare RGB when groups are hidden', () => {
     const options = buildChannelDisplayOptions(['R', 'G', 'B'], {
       includeRgbGroups: false,
@@ -1370,19 +1435,34 @@ describe('state helpers', () => {
       includeSplitChannels: true
     });
 
-    expect(defaultOptions.map((option) => option.label)).toEqual(['HOGE.(R,G,B,A)']);
+    expect(defaultOptions.map((option) => option.label)).toEqual(['HOGE.(R,G,B,A)', 'HOGE.A']);
     expect(splitOptions.map((option) => option.label)).toEqual([
       'HOGE.(R,G,B,A)',
       'HOGE.R',
       'HOGE.G',
-      'HOGE.B'
+      'HOGE.B',
+      'HOGE.A'
     ]);
     expect(splitOptions[1]?.mapping).toEqual({
       displayR: 'HOGE.R',
       displayG: 'HOGE.R',
       displayB: 'HOGE.R'
     });
-    expect(splitOnlyOptions.map((option) => option.label)).toEqual(['HOGE.R', 'HOGE.G', 'HOGE.B']);
+    expect(splitOnlyOptions.map((option) => option.label)).toEqual(['HOGE.R', 'HOGE.G', 'HOGE.B', 'HOGE.A']);
+  });
+
+  it('builds grayscale options for scalar-only and non-RGB channel lists', () => {
+    const scalarOptions = buildChannelDisplayOptions(['Z']);
+    const nonRgbOptions = buildChannelDisplayOptions(['X', 'Y', 'Z']);
+
+    expect(scalarOptions.map((option) => option.label)).toEqual(['Z']);
+    expect(scalarOptions[0]?.mapping).toEqual({
+      displayR: 'Z',
+      displayG: 'Z',
+      displayB: 'Z'
+    });
+    expect(nonRgbOptions.map((option) => option.label)).toEqual(['X', 'Y', 'Z']);
+    expect(findSelectedChannelDisplayOption(nonRgbOptions, 'X', 'Y', 'Z')).toBeNull();
   });
 
   it('remaps grouped and split RGB Stokes selections when toggling split mode', () => {
@@ -1476,6 +1556,16 @@ describe('state helpers', () => {
       displayR: 'Y',
       displayG: 'Y',
       displayB: 'Y'
+    });
+  });
+
+  it('uses the first non-alpha arbitrary channel as grayscale default display mapping', () => {
+    const defaults = pickDefaultDisplayChannels(['400nm', '500nm', '600nm', '700nm']);
+
+    expect(defaults).toEqual({
+      displayR: '400nm',
+      displayG: '400nm',
+      displayB: '400nm'
     });
   });
 
