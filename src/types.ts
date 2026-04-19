@@ -30,12 +30,19 @@ export interface DecodedLayer {
   name: string | null;
   channelNames: string[];
   channelData: Map<string, Float32Array>;
+  metadata?: ExrMetadataEntry[];
 }
 
 export interface DecodedExrImage {
   width: number;
   height: number;
   layers: DecodedLayer[];
+}
+
+export interface ExrMetadataEntry {
+  key: string;
+  label: string;
+  value: string;
 }
 
 export interface ViewerState {

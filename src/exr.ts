@@ -1,7 +1,9 @@
 import { decodeRawExr } from './exr-runtime';
+import { parseExrMetadata } from './exr-metadata';
 import { DecodedExrImage, DecodedLayer } from './types';
 
 export async function loadExr(bytes: Uint8Array): Promise<DecodedExrImage> {
+  const metadataByLayer = parseExrMetadata(bytes);
   const decoded = await decodeRawExr(bytes);
 
   const width = decoded.width;
@@ -21,7 +23,8 @@ export async function loadExr(bytes: Uint8Array): Promise<DecodedExrImage> {
       layers.push({
         name: decoded.getLayerName(layerIndex) ?? null,
         channelNames,
-        channelData
+        channelData,
+        metadata: metadataByLayer[layerIndex] ?? []
       });
     }
   } finally {

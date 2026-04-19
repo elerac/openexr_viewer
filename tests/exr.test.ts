@@ -36,6 +36,8 @@ describe('exr decode', () => {
     expect(first.channelNames).toContain('G');
     expect(first.channelNames).toContain('B');
     expect(first.channelData.get('R')?.length).toBe(image.width * image.height);
+    expect(first.metadata?.some((entry) => entry.key === 'compression' && entry.value === 'PIZ')).toBe(true);
+    expect(first.metadata?.some((entry) => entry.key === 'channels' && entry.value === '3 (R, G, B)')).toBe(true);
   }, 60000);
 
 });

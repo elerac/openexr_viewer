@@ -255,6 +255,7 @@ async function bootstrap(): Promise<void> {
 
         if (layerSelectionDirty) {
           ui.setLayerOptions(buildLayerOptions(activeImage), state.activeLayer);
+          ui.setProbeMetadata(layer.metadata ?? null);
         }
 
         const uiSelectionDirty =
@@ -385,6 +386,7 @@ async function bootstrap(): Promise<void> {
       } else {
         invalidateHistogramCache();
         ui.setLayerOptions([], 0);
+        ui.setProbeMetadata(null);
         ui.setRgbGroupOptions([], {
           displaySource: 'channels',
           stokesParameter: null,
@@ -403,6 +405,7 @@ async function bootstrap(): Promise<void> {
       invalidateHistogramCache();
       ui.setVisualizationMode('rgb');
       ui.setColormapRange(null, null);
+      ui.setProbeMetadata(null);
       ui.setProbeReadout('Hover', null, null);
       ui.clearHistogram();
     }
@@ -1273,6 +1276,7 @@ async function bootstrap(): Promise<void> {
 
     ui.setOpenedImageOptions([], null);
     ui.setLayerOptions([], 0);
+    ui.setProbeMetadata(null);
     ui.setRgbGroupOptions([], {
       displaySource: 'channels',
       stokesParameter: null,
@@ -1347,6 +1351,7 @@ async function bootstrap(): Promise<void> {
   function refreshActiveProbeReadout(): void {
     const activeSession = getActiveSession();
     if (!activeSession) {
+      ui.setProbeMetadata(null);
       ui.setProbeReadout('Hover', null, null);
       return;
     }
@@ -1354,6 +1359,7 @@ async function bootstrap(): Promise<void> {
     const state = store.getState();
     const layer = getSelectedLayer(activeSession.decoded, state.activeLayer);
     if (!layer) {
+      ui.setProbeMetadata(null);
       ui.setProbeReadout('Hover', null, null, {
         width: activeSession.decoded.width,
         height: activeSession.decoded.height
@@ -1361,6 +1367,7 @@ async function bootstrap(): Promise<void> {
       return;
     }
 
+    ui.setProbeMetadata(layer.metadata ?? null);
     updateProbeReadout(
       layer,
       activeSession.decoded.width,

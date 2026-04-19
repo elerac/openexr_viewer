@@ -40,6 +40,7 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - Hover pixel readout in the Inspector.
   - Click to lock/unlock probe pixel.
   - Values are raw linear EXR channel values (pre-exposure, pre-display transform).
+  - EXR header metadata is shown below the probe values for the active image/layer, including common attributes such as compression, data/display windows, line order, channels, type, capture date, renderer/integrator, and compatible custom attributes.
 - On-image pixel labels at high zoom:
   - RGB values shown inside image pixels.
   - 3-channel values stacked vertically.
@@ -170,6 +171,7 @@ npm run test:e2e
   ```
 - Texture sampling uses `NEAREST` for both `MIN_FILTER` and `MAG_FILTER`.
 - EXR WASM is initialized through a local adapter module backed by a vendored wasm loader, avoiding app-level deep imports into `exrs` internals.
+- EXR metadata is parsed directly from header bytes before pixel decode because the current WASM decoder only exposes dimensions, layers, channels, and pixel data. Metadata parse failures do not block image loading.
 - Performance path for large images/channel sets:
   - channel selector DOM updates are throttled to selection/image changes only,
   - only the active session keeps a cached display texture buffer in memory,

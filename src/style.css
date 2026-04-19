@@ -1151,6 +1151,45 @@ body.is-resizing-panel-rows * {
   text-overflow: ellipsis;
 }
 
+.probe-metadata {
+  margin-top: 0.65rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.25rem;
+  overflow: hidden;
+  background: rgba(9, 13, 20, 0.54);
+  font-size: 0.84rem;
+}
+
+.probe-metadata-row {
+  display: grid;
+  grid-template-columns: minmax(7.2rem, 0.9fr) minmax(0, 1.5fr);
+  border-bottom: 1px solid color-mix(in srgb, var(--panel-border) 82%, transparent);
+  min-height: 2.1rem;
+}
+
+.probe-metadata-row:last-child {
+  border-bottom: 0;
+}
+
+.probe-metadata-key,
+.probe-metadata-value {
+  padding: 0.42rem 0.55rem;
+  line-height: 1.35;
+}
+
+.probe-metadata-key {
+  color: color-mix(in srgb, var(--text-dim) 68%, transparent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.probe-metadata-value {
+  color: var(--text);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 @media (max-width: 1280px) {
   .app-shell {
     padding-inline: 0.4rem;

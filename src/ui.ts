@@ -3,6 +3,7 @@ import {
   DisplayChannelMapping,
   DisplaySelection,
   DisplayLuminanceRange,
+  ExrMetadataEntry,
   PixelSample,
   VisualizationMode
 } from './types';
@@ -137,6 +138,7 @@ interface Elements {
   probeColorSwatch: HTMLElement;
   probeColorValues: HTMLElement;
   probeValues: HTMLElement;
+  probeMetadata: HTMLElement;
   glCanvas: HTMLCanvasElement;
   overlayCanvas: HTMLCanvasElement;
 }
@@ -791,6 +793,32 @@ export class ViewerUi {
 
       row.append(key, value);
       this.elements.probeValues.append(row);
+    }
+  }
+
+  setProbeMetadata(metadata: ExrMetadataEntry[] | null): void {
+    this.elements.probeMetadata.innerHTML = '';
+
+    if (!metadata || metadata.length === 0) {
+      this.elements.probeMetadata.classList.add('hidden');
+      return;
+    }
+
+    this.elements.probeMetadata.classList.remove('hidden');
+    for (const item of metadata) {
+      const row = document.createElement('div');
+      row.className = 'probe-metadata-row';
+
+      const key = document.createElement('span');
+      key.className = 'probe-metadata-key';
+      key.textContent = item.label;
+
+      const value = document.createElement('span');
+      value.className = 'probe-metadata-value';
+      value.textContent = item.value;
+
+      row.append(key, value);
+      this.elements.probeMetadata.append(row);
     }
   }
 
@@ -2256,6 +2284,7 @@ function resolveElements(): Elements {
     probeColorSwatch: requireElement('probe-color-swatch', HTMLElement),
     probeColorValues: requireElement('probe-color-values', HTMLElement),
     probeValues: requireElement('probe-values', HTMLElement),
+    probeMetadata: requireElement('probe-metadata', HTMLElement),
     glCanvas: requireElement('gl-canvas', HTMLCanvasElement),
     overlayCanvas: requireElement('overlay-canvas', HTMLCanvasElement)
   };
