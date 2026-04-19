@@ -8,6 +8,23 @@
   </head>
   <body>
     <div id="app" class="app-shell">
+      <header class="app-menu-bar" aria-label="Application menu">
+        <div class="app-menu-title">OpenEXR Viewer</div>
+        <nav class="app-menu-nav" aria-label="Main menu">
+          <div class="app-menu">
+            <button id="file-menu-button" class="app-menu-tab" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu">
+              File
+            </button>
+            <div id="file-menu" class="app-menu-dropdown hidden" role="menu" aria-labelledby="file-menu-button">
+              <button id="open-file-button" class="app-menu-item" type="button" role="menuitem">Open...</button>
+              <button id="reload-all-opened-images-button" class="app-menu-item" type="button" role="menuitem">Reload All</button>
+              <button id="close-all-opened-images-button" class="app-menu-item" type="button" role="menuitem">Close All</button>
+            </div>
+          </div>
+        </nav>
+        <input id="file-input" type="file" accept=".exr,image/exr" hidden />
+      </header>
+
       <div id="error-banner" class="error-banner hidden"></div>
 
       <main id="main-layout" class="main-layout">
@@ -83,20 +100,10 @@
               </div>
             </div>
 
-            <section class="readout-block">
-              <h2>View</h2>
-              <dl>
-                <dt>Zoom</dt>
-                <dd id="zoom-readout">-</dd>
-                <dt>Pan</dt>
-                <dd id="pan-readout">-</dd>
-              </dl>
-            </section>
-
             <section id="probe-panel" class="readout-block">
               <h2>Probe</h2>
               <p id="probe-mode">Hover</p>
-              <p id="probe-coords">(x: -, y: -)</p>
+              <p id="probe-coords">x -   y -</p>
               <div id="probe-color-preview" class="probe-color-preview is-empty">
                 <span id="probe-color-swatch" class="probe-color-swatch" aria-hidden="true"></span>
                 <div id="probe-color-values" class="probe-color-values" aria-label="Probe display values">
@@ -134,16 +141,6 @@
         <div id="image-panel-resizer" class="layout-resizer layout-resizer--vertical" role="separator" tabindex="0" aria-label="Resize image and viewer panels" aria-orientation="vertical"></div>
 
         <aside id="image-panel" class="image-panel">
-          <div class="image-panel-titlebar">
-            <h2>Image</h2>
-            <div class="image-panel-actions" aria-label="Image actions">
-              <button id="open-file-button" type="button">Open</button>
-              <button id="reload-all-opened-images-button" type="button">Reload All</button>
-              <button id="close-all-opened-images-button" type="button">Close All</button>
-            </div>
-            <input id="file-input" type="file" accept=".exr,image/exr" hidden />
-          </div>
-
           <section class="image-browser-section" aria-labelledby="opened-files-heading">
             <div class="image-browser-heading">
               <button id="opened-files-toggle" class="image-browser-toggle" type="button" aria-label="Toggle Open Files" aria-controls="opened-files-list" aria-expanded="true">

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildPartLayerItemsFromChannelNames,
   clampPanelSplitSizes,
+  formatProbeCoordinates,
   getListboxOptionIndexAtClientY,
   getPanelSplitKeyboardAction,
   parsePanelSplitStorageValue,
@@ -43,6 +44,16 @@ describe('listbox hit testing', () => {
     });
 
     expect(index).toBe(-1);
+  });
+});
+
+describe('probe coordinate formatting', () => {
+  it('pads x and y to the maximum digit width for the image size', () => {
+    expect(formatProbeCoordinates({ x: 7, y: 42 }, { width: 1024, height: 100 })).toBe('x    7   y 42');
+  });
+
+  it('uses the same widths for empty probe coordinates', () => {
+    expect(formatProbeCoordinates(null, { width: 1024, height: 100 })).toBe('x    -   y  -');
   });
 });
 

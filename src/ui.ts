@@ -4,8 +4,7 @@ import {
   DisplaySelection,
   DisplayLuminanceRange,
   PixelSample,
-  VisualizationMode,
-  ViewerState
+  VisualizationMode
 } from './types';
 import { ProbeColorPreview, ProbeDisplayValue } from './probe';
 import {
@@ -88,6 +87,8 @@ interface Elements {
   imagePanelResizer: HTMLElement;
   rightPanelResizer: HTMLElement;
   histogramPanelResizer: HTMLElement;
+  fileMenuButton: HTMLButtonElement;
+  fileMenu: HTMLElement;
   openFileButton: HTMLButtonElement;
   fileInput: HTMLInputElement;
   resetViewButton: HTMLButtonElement;
@@ -130,8 +131,6 @@ interface Elements {
   channelViewToggle: HTMLButtonElement;
   channelViewList: HTMLElement;
   channelViewCount: HTMLElement;
-  zoomReadout: HTMLElement;
-  panReadout: HTMLElement;
   probeMode: HTMLElement;
   probeCoords: HTMLElement;
   probeColorPreview: HTMLDivElement;
@@ -207,6 +206,11 @@ interface PanelResizeDragState {
   startY: number;
   startSizes: PanelSplitSizes;
   resizer: HTMLElement;
+}
+
+interface ProbeCoordinateImageSize {
+  width: number;
+  height: number;
 }
 
 export class ViewerUi {
@@ -358,6 +362,65 @@ export class ViewerUi {
       return;
     }
     this.elements.loadingOverlay.classList.add('hidden');
+  }
+
+  private isFileMenuOpen(): boolean {
+    return !this.elements.fileMenu.classList.contains('hidden');
+  }
+
+  private openFileMenu(focusTarget: 'first' | 'last' | null = null): void {
+    this.elements.fileMenu.classList.remove('hidden');
+    this.elements.fileMenuButton.setAttribute('aria-expanded', 'true');
+
+    if (focusTarget) {
+      this.focusFileMenuItem(focusTarget);
+    }
+  }
+
+  private closeFileMenu(restoreFocus = false): void {
+    this.elements.fileMenu.classList.add('hidden');
+    this.elements.fileMenuButton.setAttribute('aria-expanded', 'false');
+
+    if (restoreFocus) {
+      this.elements.fileMenuButton.focus();
+    }
+  }
+
+  private toggleFileMenu(): void {
+    if (this.isFileMenuOpen()) {
+      this.closeFileMenu();
+      return;
+    }
+
+    this.openFileMenu();
+  }
+
+  private getEnabledFileMenuItems(): HTMLButtonElement[] {
+    return Array.from(this.elements.fileMenu.querySelectorAll<HTMLButtonElement>('.app-menu-item')).filter(
+      (button) => !button.disabled
+    );
+  }
+
+  private focusFileMenuItem(target: 'first' | 'last'): void {
+    const items = this.getEnabledFileMenuItems();
+    const item = target === 'first' ? items.at(0) : items.at(-1);
+    item?.focus();
+  }
+
+  private focusNextFileMenuItem(delta: -1 | 1): void {
+    const items = this.getEnabledFileMenuItems();
+    if (items.length === 0) {
+      return;
+    }
+
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+    const nextIndex =
+      currentIndex === -1
+        ? delta > 0
+          ? 0
+          : items.length - 1
+        : (currentIndex + delta + items.length) % items.length;
+    items[nextIndex].focus();
   }
 
   setExposure(exposureEv: number): void {
@@ -683,16 +746,16 @@ export class ViewerUi {
     }
   }
 
-  setViewReadout(state: ViewerState): void {
-    this.elements.zoomReadout.textContent = `${state.zoom.toFixed(3)}x`;
-    this.elements.panReadout.textContent = `(${state.panX.toFixed(2)}, ${state.panY.toFixed(2)})`;
-  }
-
-  setProbeReadout(mode: 'Hover' | 'Locked', sample: PixelSample | null, colorPreview: ProbeColorPreview | null): void {
+  setProbeReadout(
+    mode: 'Hover' | 'Locked',
+    sample: PixelSample | null,
+    colorPreview: ProbeColorPreview | null,
+    imageSize: ProbeCoordinateImageSize | null = null
+  ): void {
     this.elements.probeMode.textContent = mode;
 
     if (!sample) {
-      this.elements.probeCoords.textContent = '(x: -, y: -)';
+      this.elements.probeCoords.textContent = formatProbeCoordinates(null, imageSize);
       this.elements.probeColorPreview.classList.add('is-empty');
       this.elements.probeColorSwatch.style.backgroundColor = 'transparent';
       this.renderProbeDisplayValues(createEmptyProbeDisplayValues());
@@ -700,7 +763,7 @@ export class ViewerUi {
       return;
     }
 
-    this.elements.probeCoords.textContent = `(x: ${sample.x}, y: ${sample.y})`;
+    this.elements.probeCoords.textContent = formatProbeCoordinates(sample, imageSize);
     if (colorPreview) {
       this.elements.probeColorPreview.classList.remove('is-empty');
       this.elements.probeColorSwatch.style.backgroundColor = colorPreview.cssColor;
@@ -1455,6 +1518,73 @@ export class ViewerUi {
     this.bindImageBrowserToggle(this.elements.partsLayersToggle, this.elements.partsLayersList);
     this.bindImageBrowserToggle(this.elements.channelViewToggle, this.elements.channelViewList);
 
+    this.elements.fileMenuButton.addEventListener('click', () => {
+      this.toggleFileMenu();
+    });
+
+    this.elements.fileMenuButton.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        this.toggleFileMenu();
+        return;
+      }
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        this.openFileMenu('first');
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        this.openFileMenu('last');
+        return;
+      }
+
+      if (event.key === 'Escape' && this.isFileMenuOpen()) {
+        event.preventDefault();
+        this.closeFileMenu(true);
+        return;
+      }
+
+      if (event.key === 'Tab' && this.isFileMenuOpen()) {
+        this.closeFileMenu();
+      }
+    });
+
+    this.elements.fileMenu.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        this.closeFileMenu(true);
+        return;
+      }
+
+      if (event.key === 'Tab') {
+        this.closeFileMenu();
+        return;
+      }
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        this.focusNextFileMenuItem(1);
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        this.focusNextFileMenuItem(-1);
+      }
+    });
+
+    document.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!(target instanceof Node) || this.elements.fileMenuButton.parentElement?.contains(target)) {
+        return;
+      }
+
+      this.closeFileMenu();
+    });
+
     window.addEventListener('dragover', (event) => {
       if (!hasDroppedFiles(event)) {
         return;
@@ -1482,6 +1612,7 @@ export class ViewerUi {
     });
 
     this.elements.openFileButton.addEventListener('click', () => {
+      this.closeFileMenu();
       this.callbacks.onOpenFileClick();
     });
 
@@ -1490,6 +1621,7 @@ export class ViewerUi {
         return;
       }
 
+      this.closeFileMenu();
       this.callbacks.onReloadAllOpenedImages();
     });
 
@@ -1498,6 +1630,7 @@ export class ViewerUi {
         return;
       }
 
+      this.closeFileMenu();
       this.callbacks.onCloseAllOpenedImages();
     });
 
@@ -2073,6 +2206,8 @@ function resolveElements(): Elements {
     imagePanelResizer: requireElement('image-panel-resizer', HTMLElement),
     rightPanelResizer: requireElement('right-panel-resizer', HTMLElement),
     histogramPanelResizer: requireElement('histogram-panel-resizer', HTMLElement),
+    fileMenuButton: requireElement('file-menu-button', HTMLButtonElement),
+    fileMenu: requireElement('file-menu', HTMLElement),
     openFileButton: requireElement('open-file-button', HTMLButtonElement),
     fileInput: requireElement('file-input', HTMLInputElement),
     resetViewButton: requireElement('reset-view-button', HTMLButtonElement),
@@ -2115,8 +2250,6 @@ function resolveElements(): Elements {
     channelViewToggle: requireElement('channel-view-toggle', HTMLButtonElement),
     channelViewList: requireElement('channel-view-list', HTMLElement),
     channelViewCount: requireElement('channel-view-count', HTMLElement),
-    zoomReadout: requireElement('zoom-readout', HTMLElement),
-    panReadout: requireElement('pan-readout', HTMLElement),
     probeMode: requireElement('probe-mode', HTMLElement),
     probeCoords: requireElement('probe-coords', HTMLElement),
     probeColorPreview: requireElement('probe-color-preview', HTMLDivElement),
@@ -2218,6 +2351,34 @@ export function buildPartLayerItemsFromChannelNames(channelNames: string[]): Lay
       channelCount: group.channelNames.size,
       selectable: false
     }));
+}
+
+export function formatProbeCoordinates(
+  sample: Pick<PixelSample, 'x' | 'y'> | null,
+  imageSize: ProbeCoordinateImageSize | null = null
+): string {
+  const xWidth = getProbeCoordinateWidth(imageSize?.width);
+  const yWidth = getProbeCoordinateWidth(imageSize?.height);
+  return `x ${formatProbeCoordinateValue(sample?.x ?? null, xWidth)}   y ${formatProbeCoordinateValue(
+    sample?.y ?? null,
+    yWidth
+  )}`;
+}
+
+function getProbeCoordinateWidth(size: number | undefined): number {
+  if (!Number.isFinite(size) || size === undefined || size <= 0) {
+    return 1;
+  }
+
+  return String(Math.max(0, Math.floor(size) - 1)).length;
+}
+
+function formatProbeCoordinateValue(value: number | null, width: number): string {
+  if (value === null) {
+    return '-'.padStart(width, ' ');
+  }
+
+  return String(Math.trunc(value)).padStart(width, ' ');
 }
 
 function parseRgbChannelName(channelName: string): { base: string; suffix: string } | null {

@@ -243,15 +243,6 @@ async function bootstrap(): Promise<void> {
       syncColormapTextureForState(state.activeColormapId);
     }
 
-    if (
-      sessionChanged ||
-      state.zoom !== previous.zoom ||
-      state.panX !== previous.panX ||
-      state.panY !== previous.panY
-    ) {
-      ui.setViewReadout(state);
-    }
-
     if (activeSession) {
       const activeImage = activeSession.decoded;
       const layer = getSelectedLayer(activeImage, state.activeLayer);
@@ -402,7 +393,10 @@ async function bootstrap(): Promise<void> {
           displayB: ZERO_CHANNEL
         });
         ui.setColormapRange(null, null);
-        ui.setProbeReadout('Hover', null, null);
+        ui.setProbeReadout('Hover', null, null, {
+          width: activeImage.width,
+          height: activeImage.height
+        });
         ui.clearHistogram();
       }
     } else {
@@ -1360,7 +1354,10 @@ async function bootstrap(): Promise<void> {
     const state = store.getState();
     const layer = getSelectedLayer(activeSession.decoded, state.activeLayer);
     if (!layer) {
-      ui.setProbeReadout('Hover', null, null);
+      ui.setProbeReadout('Hover', null, null, {
+        width: activeSession.decoded.width,
+        height: activeSession.decoded.height
+      });
       return;
     }
 
@@ -1524,7 +1521,7 @@ async function bootstrap(): Promise<void> {
     const mode = resolveProbeMode(lockedPixel);
 
     if (!targetPixel) {
-      ui.setProbeReadout(mode, null, null);
+      ui.setProbeReadout(mode, null, null, { width, height });
       return;
     }
 
@@ -1537,7 +1534,8 @@ async function bootstrap(): Promise<void> {
         colormapRange,
         colormapLut,
         stokesDegreeModulation
-      })
+      }),
+      { width, height }
     );
   }
 

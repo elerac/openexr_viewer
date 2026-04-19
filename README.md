@@ -8,16 +8,16 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
 
 - OpenEXR decode via a browser-safe `exrs` WASM adapter with full layer/channel extraction.
 - Auto-loads `public/cbox_rgb.exr` at startup.
-- Local EXR load via file picker or drag/drop (drag-and-drop supports multiple files in one action).
+- Local EXR load via `File > Open...` or drag/drop (drag-and-drop supports multiple files in one action).
 - Multi-image sessions:
   - New image opens as active while previously opened images are kept in memory.
   - `Opened Images` list allows switching active image by filename.
   - Multi-layer EXRs expose a `Layer` selector, and session state follows the implementation: selected layer is preserved per opened session, while zoom/pan, display channel mapping, and the active probe position carry across session switches when valid for the target image.
   - Reorder opened images directly by click-hold-moving a filename row in the `Opened Images` list.
-  - `Reload` button re-decodes the selected session from its original source.
-  - `Reload All` button re-decodes all opened sessions from their original sources.
-  - `Close` button closes the selected filename entry.
-  - `Close All` button closes all opened sessions at once.
+  - Per-file row `Reload` action re-decodes the selected session from its original source.
+  - `File > Reload All` re-decodes all opened sessions from their original sources.
+  - Per-file row `Close` action closes the selected filename entry.
+  - `File > Close All` closes all opened sessions at once.
   - Duplicate filenames are disambiguated as `name.exr (2)`, `name.exr (3)`, etc.
 - Visible loading indicator while large EXR files are decoding/loading.
 - Exposure control: slider + numeric input (`-10` to `+10` EV, step `0.1`).
@@ -65,7 +65,7 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
 
 ## UI Layout
 
-- Left panel: `Image` session controls.
+- Left panel: open files, channel view, and parts/layers controls.
 - Center: image viewer canvas.
 - Right side: `Histogram` panel above `Inspector`.
 
@@ -131,11 +131,11 @@ npm run test:e2e
 - `Opened Images` selector: switch active image session by filename.
 - `Layer` selector: switch the active layer for the selected multi-layer EXR.
 - `Opened Images` list: click-hold-move a filename row to reorder.
-- `Open` button: open one EXR file and append it as a new session.
-- `Reload` button: reload and re-decode the selected entry in `Opened Images`.
-- `Reload All` button: reload and re-decode all opened image entries.
-- `Close` button: close the currently selected entry in `Opened Images`.
-- `Close All` button: close all opened image entries.
+- `File > Open...`: open one EXR file and append it as a new session.
+- Per-file row `Reload` action: reload and re-decode that entry in `Opened Images`.
+- `File > Reload All`: reload and re-decode all opened image entries.
+- Per-file row `Close` action: close that entry in `Opened Images`.
+- `File > Close All`: close all opened image entries.
 - Mouse wheel: zoom around cursor.
 - Left drag: pan.
 - Hover: live probe sample.

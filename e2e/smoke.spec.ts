@@ -51,6 +51,12 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   const openedFileRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'cbox_rgb.exr' });
   const reloadOpenedFileButton = page.getByRole('button', { name: 'Reload cbox_rgb.exr', exact: true });
   const closeOpenedFileButton = page.getByRole('button', { name: 'Close cbox_rgb.exr', exact: true });
+  const appMenuTitle = page.locator('.app-menu-title');
+  const fileMenuButton = page.getByRole('button', { name: 'File', exact: true });
+  const fileMenu = page.locator('#file-menu');
+  const openMenuItem = page.locator('#open-file-button');
+  const reloadAllMenuItem = page.locator('#reload-all-opened-images-button');
+  const closeAllMenuItem = page.locator('#close-all-opened-images-button');
   const getViewerPoint = async (xRatio: number, yRatio: number) => {
     const box = await viewer.boundingBox();
     if (!box) {
@@ -71,6 +77,17 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   }
 
   await expect(errorBanner).toBeHidden();
+  await expect(appMenuTitle).toHaveText('OpenEXR Viewer');
+  await expect(fileMenuButton).toBeVisible();
+  await expect(fileMenuButton).toHaveAttribute('aria-haspopup', 'menu');
+  await expect(fileMenuButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(fileMenu).toBeHidden();
+  await expect(page.locator('.image-panel-actions')).toHaveCount(0);
+  await expect(page.locator('.image-panel-titlebar')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Image', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'View', exact: true })).toHaveCount(0);
+  await expect(page.locator('#zoom-readout')).toHaveCount(0);
+  await expect(page.locator('#pan-readout')).toHaveCount(0);
   await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
   await expect(openedImages.locator('option').first()).toContainText('cbox_rgb.exr');
   await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr');
@@ -83,8 +100,23 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(openedFileRow.locator('.opened-file-label')).toHaveAttribute('title', /Path: .*cbox_rgb\.exr\nSize: .* MB/);
   await expect(layerControl).toBeHidden();
 
+  await fileMenuButton.click();
+  await expect(fileMenu).toBeVisible();
+  await expect(fileMenuButton).toHaveAttribute('aria-expanded', 'true');
+  await expect(openMenuItem).toBeVisible();
+  await expect(openMenuItem).toHaveText('Open...');
+  await expect(reloadAllMenuItem).toBeVisible();
+  await expect(closeAllMenuItem).toBeVisible();
+  await expect(openMenuItem).toBeEnabled();
+  await expect(reloadAllMenuItem).toBeEnabled();
+  await expect(closeAllMenuItem).toBeEnabled();
+  await page.keyboard.press('Escape');
+  await expect(fileMenu).toBeHidden();
+  await expect(fileMenuButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(fileMenuButton).toBeFocused();
+
   await viewer.hover();
-  await expect(probeCoords).not.toHaveText('(x: -, y: -)');
+  await expect.poll(async () => await probeCoords.evaluate((element) => element.textContent ?? '')).toMatch(/^x +\d+ {3}y +\d+$/);
   await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['R:', 'G:', 'B:']);
   await expect(probeValues).toContainText('R');
   await expect(probeValues).toContainText('G');
@@ -243,28 +275,18 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(colormapVmaxInput).toBeHidden();
   await expect(colormapVmaxSlider).toBeHidden();
 
-  const zoomBeforeWheel = (await page.locator('#zoom-readout').innerText()).trim();
-  const wheelPoint = await getViewerPoint(0.5, 0.5);
-  await page.mouse.move(wheelPoint.x, wheelPoint.y);
-  await page.mouse.wheel(0, -500);
-  await expect(page.locator('#zoom-readout')).not.toHaveText(zoomBeforeWheel);
-
-  const panBeforeDrag = (await page.locator('#pan-readout').innerText()).trim();
-  const dragStart = await getViewerPoint(0.45, 0.45);
-  const dragEnd = await getViewerPoint(0.55, 0.5);
-  await page.mouse.move(dragStart.x, dragStart.y);
-  await page.mouse.down();
-  await page.mouse.move(dragEnd.x, dragEnd.y);
-  await page.mouse.up();
-  await expect(page.locator('#pan-readout')).not.toHaveText(panBeforeDrag);
-
   await expect(layerControl).toBeHidden();
   await expect(rgbGroupSelect).toBeEnabled();
 
   await closeOpenedFileButton.click();
   await expect(openedImages.locator('option')).toHaveCount(0, { timeout: 30000 });
   await expect(layerControl).toBeHidden();
-  await expect(probeCoords).toHaveText('(x: -, y: -)');
+  await expect.poll(async () => await probeCoords.evaluate((element) => element.textContent ?? '')).toBe('x -   y -');
+  await fileMenuButton.click();
+  await expect(fileMenu).toBeVisible();
+  await expect(openMenuItem).toBeEnabled();
+  await expect(reloadAllMenuItem).toBeDisabled();
+  await expect(closeAllMenuItem).toBeDisabled();
 });
 
 test('moves open files and channel view selections with arrow keys', async ({ page }) => {

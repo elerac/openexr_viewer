@@ -36,12 +36,101 @@ output {
 
 .app-shell {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-height: 100vh;
   height: 100vh;
   height: 100dvh;
   gap: 0.35rem;
   padding: 0.5rem 0.5rem 0.1rem;
+}
+
+.app-menu-bar {
+  position: relative;
+  z-index: 20;
+  min-height: 2.1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0 0.45rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--panel) 92%, #000);
+}
+
+.app-menu-title {
+  flex: 0 0 auto;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.92rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.app-menu-nav {
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+}
+
+.app-menu {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.app-menu-tab {
+  min-width: 3.25rem;
+  border: 0;
+  border-radius: 0.35rem;
+  padding: 0 0.7rem;
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.app-menu-tab:hover,
+.app-menu-tab:focus-visible,
+.app-menu-tab[aria-expanded='true'] {
+  outline: none;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+}
+
+.app-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  min-width: 9.25rem;
+  display: grid;
+  gap: 0.12rem;
+  padding: 0.28rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--panel) 96%, #000);
+  box-shadow: 0 0.75rem 2rem rgba(0, 0, 0, 0.3);
+}
+
+.app-menu-item {
+  width: 100%;
+  border: 0;
+  border-radius: 0.3rem;
+  padding: 0.42rem 0.55rem;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.app-menu-item:hover:not(:disabled),
+.app-menu-item:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: #f3f8ff;
+}
+
+.app-menu-item:disabled {
+  color: color-mix(in srgb, var(--text-dim) 62%, transparent);
+  cursor: not-allowed;
 }
 
 button,
@@ -313,11 +402,6 @@ body.is-resizing-panel-rows * {
   overflow: auto;
 }
 
-.image-panel h2 {
-  margin: 0;
-  font-size: 0.95rem;
-}
-
 .image-panel p {
   margin: 0;
 }
@@ -328,30 +412,6 @@ body.is-resizing-panel-rows * {
 
 .image-panel .control-block + p {
   margin-top: 0.5rem;
-}
-
-.image-panel-titlebar {
-  display: grid;
-  gap: 0.55rem;
-  padding: 0.75rem;
-  border-bottom: 1px solid var(--panel-border);
-}
-
-.image-panel-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.35rem;
-}
-
-.image-panel-actions button {
-  min-width: 0;
-  padding: 0.28rem 0.42rem;
-  font-size: 0.76rem;
-  white-space: nowrap;
-}
-
-.image-panel-actions button:first-child {
-  grid-column: 1 / -1;
 }
 
 .image-browser-section {
@@ -989,6 +1049,11 @@ body.is-resizing-panel-rows * {
 #probe-mode {
   color: var(--accent);
   margin-bottom: 0.2rem;
+}
+
+#probe-coords {
+  font-family: "IBM Plex Mono", "Cascadia Mono", monospace;
+  white-space: pre;
 }
 
 .probe-color-preview {
