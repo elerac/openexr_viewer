@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { Buffer } from 'node:buffer';
 import {
@@ -48,6 +48,9 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   const colormapVmaxInput = page.locator('#colormap-vmax-input');
   const colormapVminSlider = page.locator('#colormap-vmin-slider');
   const colormapVmaxSlider = page.locator('#colormap-vmax-slider');
+  const openedFileRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'cbox_rgb.exr' });
+  const reloadOpenedFileButton = page.getByRole('button', { name: 'Reload cbox_rgb.exr', exact: true });
+  const closeOpenedFileButton = page.getByRole('button', { name: 'Close cbox_rgb.exr', exact: true });
   const getViewerPoint = async (xRatio: number, yRatio: number) => {
     const box = await viewer.boundingBox();
     if (!box) {
@@ -71,6 +74,13 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
   await expect(openedImages.locator('option').first()).toContainText('cbox_rgb.exr');
   await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr');
+  await expect(page.locator('#reload-opened-image-button')).toHaveCount(0);
+  await expect(page.locator('#close-opened-image-button')).toHaveCount(0);
+  await expect(openedFileRow).toHaveCount(1);
+  await expect(openedFileRow.locator('.image-browser-row-meta')).toHaveCount(0);
+  await expect(reloadOpenedFileButton).toBeVisible();
+  await expect(closeOpenedFileButton).toBeVisible();
+  await expect(openedFileRow.locator('.opened-file-label')).toHaveAttribute('title', /Path: .*cbox_rgb\.exr\nSize: .* MB/);
   await expect(layerControl).toBeHidden();
 
   await viewer.hover();
@@ -196,7 +206,7 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-manualMax, 12);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(manualMax, 12);
 
-  await page.getByRole('button', { name: 'Reload', exact: true }).click();
+  await reloadOpenedFileButton.click();
   await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr');
   await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'false');
   await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'true');
@@ -251,10 +261,200 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(layerControl).toBeHidden();
   await expect(rgbGroupSelect).toBeEnabled();
 
-  await page.locator('#close-opened-image-button').click();
+  await closeOpenedFileButton.click();
   await expect(openedImages.locator('option')).toHaveCount(0, { timeout: 30000 });
   await expect(layerControl).toBeHidden();
   await expect(probeCoords).toHaveText('(x: -, y: -)');
+});
+
+test('moves open files and channel view selections with arrow keys', async ({ page }) => {
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  const openedImages = page.locator('#opened-images-select');
+  const channelSelect = page.locator('#rgb-group-select');
+  const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
+
+  await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
+
+  await page.setInputFiles('#file-input', {
+    name: 'scalar_z.exr',
+    mimeType: 'image/exr',
+    buffer: buildScalarChannelExr()
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('scalar_z.exr', { timeout: 30000 });
+
+  await page.setInputFiles('#file-input', {
+    name: 'spectral.exr',
+    mimeType: 'image/exr',
+    buffer: buildSpectralExr()
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('spectral.exr', { timeout: 30000 });
+
+  const openedRows = page.locator('#opened-files-list .opened-file-row');
+  const cboxRow = openedRows.filter({ hasText: 'cbox_rgb.exr' });
+  const scalarRow = openedRows.filter({ hasText: 'scalar_z.exr' });
+  const spectralRow = openedRows.filter({ hasText: 'spectral.exr' });
+  await expect(openedRows).toHaveCount(3);
+
+  await cboxRow.locator('.opened-file-label').click();
+  await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr');
+  await expect(cboxRow).toBeFocused();
+
+  await page.keyboard.press('ArrowDown');
+  await expect(openedImages.locator('option:checked')).toContainText('scalar_z.exr');
+  await expect(scalarRow).toBeFocused();
+
+  await page.keyboard.press('ArrowDown');
+  await expect(openedImages.locator('option:checked')).toContainText('spectral.exr');
+  await expect(spectralRow).toBeFocused();
+
+  await page.keyboard.press('ArrowUp');
+  await expect(openedImages.locator('option:checked')).toContainText('scalar_z.exr');
+  await expect(scalarRow).toBeFocused();
+
+  await cboxRow.locator('.opened-file-label').click();
+  await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr');
+  await expect(channelSelect).toBeEnabled();
+  await expect(rgbSplitToggleButton).toBeVisible();
+  await rgbSplitToggleButton.click();
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(channelSelect.locator('option:checked')).toHaveText('R');
+
+  const channelRows = page.locator('#channel-view-list .channel-view-row');
+  const redRow = channelRows.filter({ hasText: /^R/ });
+  const greenRow = channelRows.filter({ hasText: /^G/ });
+  const blueRow = channelRows.filter({ hasText: /^B/ });
+  await expect(channelRows).toHaveCount(3);
+
+  await redRow.click();
+  await expect(channelSelect.locator('option:checked')).toHaveText('R');
+  await expect(redRow).toBeFocused();
+
+  await page.keyboard.press('ArrowDown');
+  await expect(channelSelect.locator('option:checked')).toHaveText('G');
+  await expect(greenRow).toBeFocused();
+
+  await page.keyboard.press('ArrowDown');
+  await expect(channelSelect.locator('option:checked')).toHaveText('B');
+  await expect(blueRow).toBeFocused();
+
+  await page.keyboard.press('ArrowUp');
+  await expect(channelSelect.locator('option:checked')).toHaveText('G');
+  await expect(greenRow).toBeFocused();
+});
+
+test('resizes desktop panel splits and persists them', async ({ page }) => {
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  const imageResizer = page.locator('#image-panel-resizer');
+  const rightResizer = page.locator('#right-panel-resizer');
+  const histogramResizer = page.locator('#histogram-panel-resizer');
+  const viewer = page.locator('#viewer-container');
+
+  await expect(imageResizer).toBeVisible();
+  await expect(rightResizer).toBeVisible();
+  await expect(histogramResizer).toBeVisible();
+
+  const readLayout = async () => {
+    return await page.evaluate(() => {
+      const imagePanel = document.querySelector('#image-panel');
+      const rightStack = document.querySelector('#right-stack');
+      const histogramPanel = document.querySelector('#histogram-panel');
+      const histogramSvg = document.querySelector('#histogram-svg');
+      const viewerContainer = document.querySelector('#viewer-container');
+      const canvas = document.querySelector('#gl-canvas');
+      if (
+        !(imagePanel instanceof HTMLElement) ||
+        !(rightStack instanceof HTMLElement) ||
+        !(histogramPanel instanceof HTMLElement) ||
+        !(histogramSvg instanceof SVGSVGElement) ||
+        !(viewerContainer instanceof HTMLElement) ||
+        !(canvas instanceof HTMLCanvasElement)
+      ) {
+        throw new Error('Missing layout elements.');
+      }
+
+      return {
+        imageWidth: imagePanel.getBoundingClientRect().width,
+        rightWidth: rightStack.getBoundingClientRect().width,
+        histogramHeight: histogramPanel.getBoundingClientRect().height,
+        histogramSvgHeight: histogramSvg.getBoundingClientRect().height,
+        viewerWidth: viewerContainer.getBoundingClientRect().width,
+        canvasWidth: canvas.width,
+        canvasHeight: canvas.height,
+        stored: window.localStorage.getItem('openexr-viewer:panel-splits:v1')
+      };
+    });
+  };
+
+  const dragBy = async (locator: Locator, dx: number, dy: number) => {
+    const box = await locator.boundingBox();
+    if (!box) {
+      throw new Error('Resizer is not visible.');
+    }
+
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx, y + dy, { steps: 4 });
+    await page.mouse.up();
+    await page.waitForTimeout(100);
+  };
+
+  const initial = await readLayout();
+  await dragBy(imageResizer, 48, 0);
+  const afterImageResize = await readLayout();
+  expect(afterImageResize.imageWidth).toBeGreaterThan(initial.imageWidth + 30);
+  expect(afterImageResize.viewerWidth).toBeGreaterThan(360);
+
+  await dragBy(rightResizer, -48, 0);
+  const afterRightResize = await readLayout();
+  expect(afterRightResize.rightWidth).toBeGreaterThan(afterImageResize.rightWidth + 30);
+  expect(afterRightResize.canvasWidth).toBeGreaterThan(0);
+  expect(afterRightResize.canvasHeight).toBeGreaterThan(0);
+
+  await dragBy(histogramResizer, 0, 48);
+  const afterHistogramResize = await readLayout();
+  expect(afterHistogramResize.histogramHeight).toBeGreaterThan(afterRightResize.histogramHeight + 30);
+  expect(afterHistogramResize.histogramSvgHeight).toBeGreaterThan(afterRightResize.histogramSvgHeight + 20);
+  expect(afterHistogramResize.stored).not.toBeNull();
+
+  const stored = JSON.parse(afterHistogramResize.stored ?? '{}') as {
+    imagePanelWidth?: number;
+    rightPanelWidth?: number;
+    histogramPanelHeight?: number;
+  };
+  expect(stored.imagePanelWidth).toBeCloseTo(afterHistogramResize.imageWidth, 0);
+  expect(stored.rightPanelWidth).toBeCloseTo(afterHistogramResize.rightWidth, 0);
+  expect(stored.histogramPanelHeight).toBeCloseTo(afterHistogramResize.histogramHeight, 0);
+
+  await page.reload();
+  await page.waitForTimeout(1500);
+  const afterReload = await readLayout();
+  expect(afterReload.imageWidth).toBeCloseTo(afterHistogramResize.imageWidth, 0);
+  expect(afterReload.rightWidth).toBeCloseTo(afterHistogramResize.rightWidth, 0);
+  expect(afterReload.histogramHeight).toBeCloseTo(afterHistogramResize.histogramHeight, 0);
+
+  await page.setViewportSize({ width: 800, height: 700 });
+  await expect(imageResizer).toBeHidden();
+  await expect(rightResizer).toBeHidden();
+  await expect(histogramResizer).toBeHidden();
+  await expect(viewer).toBeVisible();
 });
 
 test('loads scalar Stokes channels and applies derived-channel defaults', async ({ page }) => {

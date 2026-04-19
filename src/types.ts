@@ -90,6 +90,7 @@ export interface OpenedImageSession {
   id: string;
   filename: string;
   displayName: string;
+  fileSizeBytes: number | null;
   source: SessionSource;
   decoded: DecodedExrImage;
   state: ViewerState;

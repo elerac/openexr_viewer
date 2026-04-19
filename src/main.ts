@@ -488,7 +488,7 @@ async function bootstrap(): Promise<void> {
       }
 
       const bytes = new Uint8Array(await response.arrayBuffer());
-      await applyDecodedImage(await loadExr(bytes), 'cbox_rgb.exr', {
+      await applyDecodedImage(await loadExr(bytes), 'cbox_rgb.exr', bytes.byteLength, {
         kind: 'url',
         url: defaultImageUrl
       });
@@ -510,7 +510,7 @@ async function bootstrap(): Promise<void> {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const decoded = await loadExr(bytes);
-      await applyDecodedImage(decoded, file.name, {
+      await applyDecodedImage(decoded, file.name, file.size, {
         kind: 'file',
         file
       });
@@ -555,7 +555,12 @@ async function bootstrap(): Promise<void> {
       });
   }
 
-  async function applyDecodedImage(decoded: DecodedExrImage, filename: string, source: SessionSource): Promise<void> {
+  async function applyDecodedImage(
+    decoded: DecodedExrImage,
+    filename: string,
+    fileSizeBytes: number | null,
+    source: SessionSource
+  ): Promise<void> {
     if (!renderer) {
       return;
     }
@@ -597,6 +602,7 @@ async function bootstrap(): Promise<void> {
       id: sessionId,
       filename,
       displayName,
+      fileSizeBytes,
       source,
       decoded,
       state: sessionState,
@@ -608,10 +614,7 @@ async function bootstrap(): Promise<void> {
     sessions = [...sessions, session];
     activeSessionId = session.id;
     releaseInactiveSessionDisplayCaches(activeSessionId);
-    ui.setOpenedImageOptions(
-      sessions.map((item) => ({ id: item.id, label: item.displayName })),
-      activeSessionId
-    );
+    syncOpenedImageOptions();
 
     store.setState(session.state);
   }
@@ -695,10 +698,7 @@ async function bootstrap(): Promise<void> {
         uploadedTextureRevisionKey = '';
       }
 
-      ui.setOpenedImageOptions(
-        sessions.map((item) => ({ id: item.id, label: item.displayName })),
-        activeSessionId
-      );
+      syncOpenedImageOptions();
 
       if (activeSessionId === sessionId) {
         store.setState(nextState);
@@ -1104,10 +1104,7 @@ async function bootstrap(): Promise<void> {
 
     activeSessionId = nextSession.id;
     releaseInactiveSessionDisplayCaches(activeSessionId);
-    ui.setOpenedImageOptions(
-      sessions.map((session) => ({ id: session.id, label: session.displayName })),
-      activeSessionId
-    );
+    syncOpenedImageOptions();
 
     store.setState(nextState);
   }
@@ -1131,10 +1128,7 @@ async function bootstrap(): Promise<void> {
     reordered.splice(targetIndex, 0, draggedSession);
     sessions = reordered;
 
-    ui.setOpenedImageOptions(
-      sessions.map((session) => ({ id: session.id, label: session.displayName })),
-      activeSessionId
-    );
+    syncOpenedImageOptions();
   }
 
   function resetAllState(): void {
@@ -1214,10 +1208,7 @@ async function bootstrap(): Promise<void> {
 
     if (!removingActiveSession) {
       stokesDisplayRestoreStates.delete(sessionId);
-      ui.setOpenedImageOptions(
-        sessions.map((session) => ({ id: session.id, label: session.displayName })),
-        activeSessionId
-      );
+      syncOpenedImageOptions();
       return;
     }
 
@@ -1238,10 +1229,7 @@ async function bootstrap(): Promise<void> {
     activeSessionId = nextSession.id;
     releaseInactiveSessionDisplayCaches(activeSessionId);
 
-    ui.setOpenedImageOptions(
-      sessions.map((session) => ({ id: session.id, label: session.displayName })),
-      activeSessionId
-    );
+    syncOpenedImageOptions();
 
     store.setState(nextState);
   }
@@ -1405,15 +1393,82 @@ async function bootstrap(): Promise<void> {
     return sessions.find((session) => session.id === activeSessionId) ?? null;
   }
 
+  function syncOpenedImageOptions(): void {
+    ui.setOpenedImageOptions(
+      sessions.map((session) => ({
+        id: session.id,
+        label: session.displayName,
+        sizeBytes: session.fileSizeBytes,
+        sourceDetail: getSessionSourceDetail(session.source, session.filename)
+      })),
+      activeSessionId
+    );
+  }
+
+  function getSessionSourceDetail(source: SessionSource, fallbackName: string): string {
+    if (source.kind === 'url') {
+      return source.url;
+    }
+
+    const relativePath = source.file.webkitRelativePath.trim();
+    return relativePath || source.file.name || fallbackName;
+  }
+
   function getSelectedLayer(image: DecodedExrImage, layerIndex: number): DecodedLayer | null {
     return image.layers[layerIndex] ?? null;
   }
 
-  function buildLayerOptions(image: DecodedExrImage): Array<{ index: number; label: string }> {
+  function buildLayerOptions(image: DecodedExrImage): Array<{ index: number; label: string; channelCount: number }> {
     return image.layers.map((layer, index) => ({
       index,
-      label: layer.name ? `Layer ${index + 1}: ${layer.name}` : index === 0 ? 'Main Layer' : `Layer ${index + 1}`
+      label: buildLayerPanelLabel(layer, index),
+      channelCount: layer.channelNames.length
     }));
+  }
+
+  function buildLayerPanelLabel(layer: DecodedLayer, index: number): string {
+    if (layer.name) {
+      return layer.name;
+    }
+
+    const groupedName = inferDominantChannelGroupName(layer.channelNames);
+    if (groupedName) {
+      return groupedName;
+    }
+
+    return index === 0 ? 'Main Layer' : `Layer ${index + 1}`;
+  }
+
+  function inferDominantChannelGroupName(channelNames: string[]): string | null {
+    if (channelNames.length === 0) {
+      return null;
+    }
+
+    const rgbBases = new Map<string, Set<string>>();
+    for (const channelName of channelNames) {
+      const match = /^(?:(.+)\.)?([RGBA])$/.exec(channelName);
+      if (!match) {
+        continue;
+      }
+
+      const base = match[1] ?? '';
+      const suffix = match[2] ?? '';
+      const suffixes = rgbBases.get(base) ?? new Set<string>();
+      suffixes.add(suffix);
+      rgbBases.set(base, suffixes);
+    }
+
+    for (const [base, suffixes] of rgbBases.entries()) {
+      if (suffixes.has('R') && suffixes.has('G') && suffixes.has('B')) {
+        return base || 'RGB';
+      }
+    }
+
+    if (channelNames.length === 1) {
+      return channelNames[0] ?? null;
+    }
+
+    return null;
   }
 
   function releaseInactiveSessionDisplayCaches(activeId: string | null): void {

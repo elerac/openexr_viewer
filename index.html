@@ -10,9 +10,9 @@
     <div id="app" class="app-shell">
       <div id="error-banner" class="error-banner hidden"></div>
 
-      <main class="main-layout">
-        <div class="right-stack">
-          <aside class="histogram-panel">
+      <main id="main-layout" class="main-layout">
+        <div id="right-stack" class="right-stack">
+          <aside id="histogram-panel" class="histogram-panel">
             <div class="histogram-heading">
               <h2>Histogram</h2>
               <div class="histogram-controls">
@@ -36,7 +36,9 @@
             <svg id="histogram-svg" class="histogram-svg" aria-label="Display image histogram"></svg>
           </aside>
 
-          <aside class="side-panel">
+          <div id="histogram-panel-resizer" class="layout-resizer layout-resizer--horizontal" role="separator" tabindex="0" aria-label="Resize histogram and inspector panels" aria-orientation="horizontal"></div>
+
+          <aside id="inspector-panel" class="side-panel">
             <h1>Inspector</h1>
             <div class="control-block">
               <button id="reset-view-button" type="button">Reset</button>
@@ -117,6 +119,8 @@
           </aside>
         </div>
 
+        <div id="right-panel-resizer" class="layout-resizer layout-resizer--vertical" role="separator" tabindex="0" aria-label="Resize viewer and inspector panels" aria-orientation="vertical"></div>
+
         <section id="viewer-container" class="viewer-container">
           <canvas id="gl-canvas"></canvas>
           <canvas id="overlay-canvas"></canvas>
@@ -127,36 +131,59 @@
           </div>
         </section>
 
-        <aside class="image-panel">
-          <h2>Image</h2>
-          <section class="panel-section">
-            <div class="button-stack">
+        <div id="image-panel-resizer" class="layout-resizer layout-resizer--vertical" role="separator" tabindex="0" aria-label="Resize image and viewer panels" aria-orientation="vertical"></div>
+
+        <aside id="image-panel" class="image-panel">
+          <div class="image-panel-titlebar">
+            <h2>Image</h2>
+            <div class="image-panel-actions" aria-label="Image actions">
               <button id="open-file-button" type="button">Open</button>
-              <button id="reload-opened-image-button" type="button">Reload</button>
               <button id="reload-all-opened-images-button" type="button">Reload All</button>
-              <button id="close-opened-image-button" type="button">Close</button>
               <button id="close-all-opened-images-button" type="button">Close All</button>
             </div>
             <input id="file-input" type="file" accept=".exr,image/exr" hidden />
+          </div>
+
+          <section class="image-browser-section" aria-labelledby="opened-files-heading">
+            <div class="image-browser-heading">
+              <button id="opened-files-toggle" class="image-browser-toggle" type="button" aria-label="Toggle Open Files" aria-controls="opened-files-list" aria-expanded="true">
+                <span class="image-browser-chevron" aria-hidden="true"></span>
+              </button>
+              <h3 id="opened-files-heading">Open Files</h3>
+              <span id="opened-files-count" class="image-browser-count">0</span>
+            </div>
+            <div id="opened-files-list" class="image-browser-list image-browser-list--files" role="listbox" aria-label="Open files"></div>
+            <select id="opened-images-select" class="compat-select" multiple aria-hidden="true" tabindex="-1"></select>
           </section>
-          <div class="control-block">
-            <label for="opened-images-select">Opened Images</label>
-            <select id="opened-images-select" multiple></select>
-            <p class="control-hint">Drag filenames to reorder sessions.</p>
-          </div>
 
-          <div id="layer-control" class="control-block hidden">
-            <label for="layer-select">Layer</label>
-            <select id="layer-select" multiple></select>
-          </div>
-
-          <div class="control-block">
-            <div class="channel-control-heading">
-              <label for="rgb-group-select">Channel</label>
+          <section class="image-browser-section" aria-labelledby="channel-view-heading">
+            <div class="image-browser-heading image-browser-heading--actions">
+              <button id="channel-view-toggle" class="image-browser-toggle" type="button" aria-label="Toggle Channel View" aria-controls="channel-view-list" aria-expanded="true">
+                <span class="image-browser-chevron" aria-hidden="true"></span>
+              </button>
+              <h3 id="channel-view-heading">Channel View</h3>
+              <span id="channel-view-count" class="image-browser-count">0</span>
               <button id="rgb-split-toggle-button" class="channel-split-toggle hidden" type="button" aria-pressed="false" aria-controls="rgb-group-select">Split RGB</button>
             </div>
-            <select id="rgb-group-select" multiple></select>
+            <div id="channel-view-list" class="image-browser-list" role="listbox" aria-label="Channel view"></div>
+            <select id="rgb-group-select" class="compat-select" multiple aria-hidden="true" tabindex="-1"></select>
+          </section>
+
+          <div id="layer-control" class="control-block compat-control hidden">
+            <label for="layer-select">Layer</label>
+            <select id="layer-select" class="compat-select" multiple aria-hidden="true" tabindex="-1"></select>
           </div>
+
+          <section class="image-browser-section" aria-labelledby="parts-layers-heading">
+            <div class="image-browser-heading">
+              <button id="parts-layers-toggle" class="image-browser-toggle" type="button" aria-label="Toggle Parts / Layers" aria-controls="parts-layers-list" aria-expanded="true">
+                <span class="image-browser-chevron" aria-hidden="true"></span>
+              </button>
+              <h3 id="parts-layers-heading">Parts / Layers</h3>
+              <span id="parts-layers-count" class="image-browser-count">0</span>
+            </div>
+            <div id="parts-layers-list" class="image-browser-list" role="listbox" aria-label="Parts and layers"></div>
+          </section>
         </aside>
       </main>
     </div>

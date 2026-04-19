@@ -1,5 +1,12 @@
 import { ColormapLut, sampleColormapRgbBytes } from './colormaps';
-import { DisplaySelection, DisplayLuminanceRange, PixelSample, VisualizationMode, ViewerState } from './types';
+import {
+  DisplayChannelMapping,
+  DisplaySelection,
+  DisplayLuminanceRange,
+  PixelSample,
+  VisualizationMode,
+  ViewerState
+} from './types';
 import { ProbeColorPreview, ProbeDisplayValue } from './probe';
 import {
   buildChannelDisplayOptions,
@@ -32,6 +39,21 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const COLORMAP_ZERO_CENTER_SLIDER_MIN_MAGNITUDE = 1e-16;
 const COLORMAP_GRADIENT_STOP_COUNT = 16;
 const DEFAULT_COLORMAP_GRADIENT = 'linear-gradient(90deg, #d95656 0%, #05070a 50%, #59d884 100%)';
+const PANEL_SPLIT_STORAGE_KEY = 'openexr-viewer:panel-splits:v1';
+const PANEL_SPLIT_KEYBOARD_STEP = 16;
+const PANEL_SPLIT_KEYBOARD_LARGE_STEP = 64;
+const IMAGE_PANEL_MIN_WIDTH = 160;
+const IMAGE_PANEL_MAX_WIDTH = 420;
+const RIGHT_PANEL_MIN_WIDTH = 240;
+const RIGHT_PANEL_MAX_WIDTH = 520;
+const VIEWER_MIN_WIDTH = 360;
+const HISTOGRAM_PANEL_MIN_HEIGHT = 104;
+const INSPECTOR_PANEL_MIN_HEIGHT = 220;
+const DEFAULT_PANEL_SPLIT_SIZES = {
+  imagePanelWidth: 220,
+  rightPanelWidth: 320,
+  histogramPanelHeight: 160
+};
 
 export interface UiCallbacks {
   onOpenFileClick: () => void;
@@ -58,6 +80,14 @@ export interface UiCallbacks {
 }
 
 interface Elements {
+  mainLayout: HTMLElement;
+  rightStack: HTMLElement;
+  histogramPanel: HTMLElement;
+  sidePanel: HTMLElement;
+  imagePanel: HTMLElement;
+  imagePanelResizer: HTMLElement;
+  rightPanelResizer: HTMLElement;
+  histogramPanelResizer: HTMLElement;
   openFileButton: HTMLButtonElement;
   fileInput: HTMLInputElement;
   resetViewButton: HTMLButtonElement;
@@ -85,14 +115,21 @@ interface Elements {
   dropOverlay: HTMLDivElement;
   loadingOverlay: HTMLDivElement;
   openedImagesSelect: HTMLSelectElement;
+  openedFilesToggle: HTMLButtonElement;
+  openedFilesList: HTMLElement;
+  openedFilesCount: HTMLElement;
   reloadAllOpenedImagesButton: HTMLButtonElement;
-  reloadOpenedImageButton: HTMLButtonElement;
-  closeOpenedImageButton: HTMLButtonElement;
   closeAllOpenedImagesButton: HTMLButtonElement;
   layerControl: HTMLDivElement;
   layerSelect: HTMLSelectElement;
+  partsLayersToggle: HTMLButtonElement;
+  partsLayersList: HTMLElement;
+  partsLayersCount: HTMLElement;
   rgbSplitToggleButton: HTMLButtonElement;
   rgbGroupSelect: HTMLSelectElement;
+  channelViewToggle: HTMLButtonElement;
+  channelViewList: HTMLElement;
+  channelViewCount: HTMLElement;
   zoomReadout: HTMLElement;
   panReadout: HTMLElement;
   probeMode: HTMLElement;
@@ -120,10 +157,63 @@ export interface ListboxHitTestMetrics {
   optionCount: number;
 }
 
+export interface OpenedImageOptionItem {
+  id: string;
+  label: string;
+  sizeBytes?: number | null;
+  sourceDetail?: string;
+}
+
+export interface LayerOptionItem {
+  index: number;
+  label: string;
+  channelCount?: number;
+  selectable?: boolean;
+}
+
+interface ChannelViewRowItem {
+  value: string;
+  label: string;
+  meta: string;
+  swatches: string[];
+}
+
+export interface PanelSplitSizes {
+  imagePanelWidth: number;
+  rightPanelWidth: number;
+  histogramPanelHeight: number;
+}
+
+export interface PanelSplitMetrics {
+  mainWidth: number;
+  rightStackHeight: number;
+  imageResizerWidth: number;
+  rightResizerWidth: number;
+  histogramResizerHeight: number;
+}
+
+export type PanelSplitSizeKey = keyof PanelSplitSizes;
+
+export type PanelSplitKeyboardOrientation = 'vertical' | 'horizontal';
+
+export type PanelSplitKeyboardAction =
+  | { type: 'delta'; delta: number }
+  | { type: 'snap'; target: 'min' | 'max' };
+
+interface PanelResizeDragState {
+  key: PanelSplitSizeKey;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startSizes: PanelSplitSizes;
+  resizer: HTMLElement;
+}
+
 export class ViewerUi {
   private readonly elements: Elements;
   private readonly rgbGroupMappings = new Map<string, DisplaySelection>();
   private readonly histogramResizeObserver: ResizeObserver;
+  private readonly panelSplitResizeObserver: ResizeObserver;
   private lastHistogram: HistogramData | null = null;
   private histogramViewOptions: HistogramViewOptions = { xAxis: 'ev', yAxis: 'linear' };
   private isLoading = false;
@@ -131,6 +221,10 @@ export class ViewerUi {
   private openedImageCount = 0;
   private hasMultipleLayers = false;
   private openedImagesActiveId: string | null = null;
+  private openedImageItems: OpenedImageOptionItem[] = [];
+  private layerItems: LayerOptionItem[] = [];
+  private activeLayerIndex = 0;
+  private channelViewItems: ChannelViewRowItem[] = [];
   private restoreRgbGroupFocusAfterLoading = false;
   private suppressOpenedImageSelectionUntilMs = 0;
   private openedImageDragState:
@@ -141,6 +235,8 @@ export class ViewerUi {
         isDragging: boolean;
       }
     | null = null;
+  private restoreOpenedFilesFocusAfterLoading = false;
+  private restoreChannelViewFocusAfterLoading = false;
   private hasRgbGroups = false;
   private hasRgbSplitOptions = false;
   private includeSplitRgbChannels = false;
@@ -151,6 +247,8 @@ export class ViewerUi {
   private currentColormapZeroCentered = false;
   private isColormapEnabled = false;
   private hasColormapOptions = false;
+  private panelSplitSizes: PanelSplitSizes = { ...DEFAULT_PANEL_SPLIT_SIZES };
+  private activePanelResize: PanelResizeDragState | null = null;
 
   constructor(private readonly callbacks: UiCallbacks) {
     this.elements = resolveElements();
@@ -159,14 +257,18 @@ export class ViewerUi {
         this.drawHistogram(this.lastHistogram);
       }
     });
+    this.panelSplitResizeObserver = new ResizeObserver(() => {
+      this.reclampPanelSplits();
+    });
     this.bindEvents();
+    this.initializePanelSplits();
     this.histogramResizeObserver.observe(this.elements.histogramSvg);
+    this.panelSplitResizeObserver.observe(this.elements.mainLayout);
+    this.panelSplitResizeObserver.observe(this.elements.rightStack);
     this.clearHistogram();
     this.elements.openedImagesSelect.disabled = true;
     this.elements.openedImagesSelect.title = 'Click and drag filename rows to reorder.';
     this.elements.reloadAllOpenedImagesButton.disabled = true;
-    this.elements.reloadOpenedImageButton.disabled = true;
-    this.elements.closeOpenedImageButton.disabled = true;
     this.elements.closeAllOpenedImagesButton.disabled = true;
     this.elements.visualizationNoneButton.disabled = true;
     this.elements.colormapToggleButton.disabled = true;
@@ -205,6 +307,8 @@ export class ViewerUi {
     if (loading) {
       this.finishOpenedImagesDrag();
       this.restoreRgbGroupFocusAfterLoading = document.activeElement === this.elements.rgbGroupSelect;
+      this.restoreOpenedFilesFocusAfterLoading = isFocusWithinElement(this.elements.openedFilesList);
+      this.restoreChannelViewFocusAfterLoading = isFocusWithinElement(this.elements.channelViewList);
     }
 
     this.isLoading = loading;
@@ -215,11 +319,12 @@ export class ViewerUi {
     this.elements.exposureValue.disabled = loading;
     this.elements.openedImagesSelect.disabled = loading || this.openedImageCount === 0;
     this.elements.reloadAllOpenedImagesButton.disabled = loading || this.openedImageCount === 0;
-    this.elements.reloadOpenedImageButton.disabled = loading || this.openedImageCount === 0;
-    this.elements.closeOpenedImageButton.disabled = loading || this.openedImageCount === 0;
     this.elements.closeAllOpenedImagesButton.disabled = loading || this.openedImageCount === 0;
     this.elements.layerSelect.disabled = loading || !this.hasMultipleLayers;
     this.elements.rgbGroupSelect.disabled = loading || !this.hasRgbGroups;
+    this.renderOpenedFileRows();
+    this.renderLayerRows();
+    this.renderChannelViewRows();
     this.updateRgbSplitToggleState();
     this.updateStokesDegreeModulationDisabled();
 
@@ -227,7 +332,15 @@ export class ViewerUi {
       this.elements.rgbGroupSelect.focus();
     }
     if (!loading) {
+      if (this.restoreOpenedFilesFocusAfterLoading) {
+        focusSelectedImageBrowserRow(this.elements.openedFilesList);
+      }
+      if (this.restoreChannelViewFocusAfterLoading) {
+        focusSelectedImageBrowserRow(this.elements.channelViewList);
+      }
       this.restoreRgbGroupFocusAfterLoading = false;
+      this.restoreOpenedFilesFocusAfterLoading = false;
+      this.restoreChannelViewFocusAfterLoading = false;
     }
 
     this.updateLoadingOverlayVisibility();
@@ -376,8 +489,9 @@ export class ViewerUi {
     this.drawHistogram(histogram);
   }
 
-  setOpenedImageOptions(items: Array<{ id: string; label: string }>, activeId: string | null): void {
+  setOpenedImageOptions(items: OpenedImageOptionItem[], activeId: string | null): void {
     this.openedImageCount = items.length;
+    this.openedImageItems = items.map((item) => ({ ...item }));
     this.elements.openedImagesSelect.innerHTML = '';
     this.applyListboxRowSizing(this.elements.openedImagesSelect, items.length, OPENED_IMAGES_MAX_VISIBLE_ROWS);
     this.openedImagesActiveId = null;
@@ -397,18 +511,20 @@ export class ViewerUi {
       this.openedImagesActiveId = items[0].id;
     }
 
+    this.renderOpenedFileRows();
     this.elements.openedImagesSelect.disabled = this.isLoading || this.openedImageCount === 0;
     this.elements.reloadAllOpenedImagesButton.disabled = this.isLoading || this.openedImageCount === 0;
-    this.elements.reloadOpenedImageButton.disabled = this.isLoading || this.openedImageCount === 0;
-    this.elements.closeOpenedImageButton.disabled = this.isLoading || this.openedImageCount === 0;
     this.elements.closeAllOpenedImagesButton.disabled = this.isLoading || this.openedImageCount === 0;
     this.setVisualizationModeButtonsDisabled(this.isLoading || this.openedImageCount === 0);
     this.setColormapRangeControlsDisabled(this.isLoading || this.openedImageCount === 0 || !this.currentColormapRange);
     this.updateStokesDegreeModulationDisabled();
+    this.renderOpenedFileRows();
   }
 
-  setLayerOptions(items: Array<{ index: number; label: string }>, activeIndex: number): void {
+  setLayerOptions(items: LayerOptionItem[], activeIndex: number): void {
     this.hasMultipleLayers = items.length > 1;
+    this.layerItems = items.map((item) => ({ ...item }));
+    this.activeLayerIndex = Math.min(Math.max(0, Math.floor(activeIndex)), Math.max(0, items.length - 1));
     this.elements.layerSelect.innerHTML = '';
     this.elements.layerControl.classList.toggle('hidden', !this.hasMultipleLayers);
 
@@ -416,6 +532,7 @@ export class ViewerUi {
       this.elements.layerSelect.disabled = true;
       this.elements.layerSelect.size = 1;
       this.elements.layerSelect.classList.remove('single-row-listbox');
+      this.renderLayerRows();
       return;
     }
 
@@ -431,6 +548,8 @@ export class ViewerUi {
     const resolvedIndex = Math.min(items.length - 1, Math.max(0, Math.floor(activeIndex)));
     this.elements.layerSelect.value = String(resolvedIndex);
     this.elements.layerSelect.disabled = this.isLoading;
+    this.activeLayerIndex = resolvedIndex;
+    this.renderLayerRows();
   }
 
   setRgbGroupOptions(
@@ -439,6 +558,12 @@ export class ViewerUi {
   ): void {
     const hadFocus = document.activeElement === this.elements.rgbGroupSelect;
     const nextChannelNames = [...channelNames];
+    if (!this.hasMultipleLayers) {
+      this.layerItems = buildPartLayerItemsFromChannelNames(nextChannelNames);
+      this.activeLayerIndex = 0;
+      this.renderLayerRows();
+    }
+
     const expandedSelection = this.includeSplitRgbChannels
       ? findSplitSelectionForMergedDisplay(nextChannelNames, selected)
       : null;
@@ -476,6 +601,7 @@ export class ViewerUi {
     this.updateRgbSplitToggleState();
     this.rgbGroupMappings.clear();
     this.elements.rgbGroupSelect.innerHTML = '';
+    this.channelViewItems = [];
     this.applyListboxRowSizing(this.elements.rgbGroupSelect, optionCount, CHANNEL_OPTIONS_MAX_VISIBLE_ROWS);
 
     let selectedValue = optionCount > 0 ? 'channels-0' : '';
@@ -492,6 +618,7 @@ export class ViewerUi {
       option.value = value;
       option.textContent = formatCurrentChannelOptionLabel(selected);
       this.elements.rgbGroupSelect.append(option);
+      this.channelViewItems.push(createChannelViewRowItem(value, option.textContent, effectiveSelected));
       selectedValue = value;
     }
 
@@ -507,6 +634,11 @@ export class ViewerUi {
       option.value = value;
       option.textContent = channelOption.label;
       this.elements.rgbGroupSelect.append(option);
+      this.channelViewItems.push(createChannelViewRowItem(value, channelOption.label, {
+        displaySource: 'channels',
+        stokesParameter: null,
+        ...channelOption.mapping
+      }));
 
       if (selectedChannelOption && selectedChannelOption.key === channelOption.key) {
         selectedValue = value;
@@ -525,6 +657,11 @@ export class ViewerUi {
       option.value = value;
       option.textContent = stokesOption.label;
       this.elements.rgbGroupSelect.append(option);
+      this.channelViewItems.push(createChannelViewRowItem(value, stokesOption.label, {
+        displaySource: stokesOption.displaySource,
+        stokesParameter: stokesOption.stokesParameter,
+        ...stokesOption.mapping
+      }));
 
       if (
         selectedStokesOption && selectedStokesOption.key === stokesOption.key
@@ -535,6 +672,7 @@ export class ViewerUi {
 
     this.elements.rgbGroupSelect.value = selectedValue;
     this.elements.rgbGroupSelect.disabled = this.isLoading || !this.hasRgbGroups;
+    this.renderChannelViewRows();
     if (hadFocus && !this.elements.rgbGroupSelect.disabled) {
       this.elements.rgbGroupSelect.focus();
     }
@@ -619,6 +757,388 @@ export class ViewerUi {
       return;
     }
     this.elements.dropOverlay.classList.add('hidden');
+  }
+
+  private renderOpenedFileRows(): void {
+    const disabled = this.isLoading || this.openedImageCount === 0;
+    const shouldRestoreFocus = !disabled && isFocusWithinElement(this.elements.openedFilesList);
+    this.elements.openedFilesCount.textContent = String(this.openedImageItems.length);
+    this.elements.openedFilesList.innerHTML = '';
+    this.elements.openedFilesList.classList.toggle('is-disabled', disabled);
+
+    if (this.openedImageItems.length === 0) {
+      this.elements.openedFilesList.append(createEmptyListMessage('No open files'));
+      return;
+    }
+
+    for (const item of this.openedImageItems) {
+      const sizeText = formatFileSizeMb(item.sizeBytes ?? null);
+      const row = createOpenedFileRow({
+        label: item.label,
+        sourceDetail: item.sourceDetail ?? item.label,
+        sizeText,
+        selected: item.id === this.openedImagesActiveId,
+        disabled,
+        sessionId: item.id,
+        onReload: () => {
+          this.callbacks.onReloadSelectedOpenedImage(item.id);
+        },
+        onClose: () => {
+          this.callbacks.onCloseSelectedOpenedImage(item.id);
+        }
+      });
+      this.elements.openedFilesList.append(row);
+    }
+
+    if (shouldRestoreFocus) {
+      focusSelectedImageBrowserRow(this.elements.openedFilesList);
+    }
+  }
+
+  private renderLayerRows(): void {
+    const hasSelectableRows = this.layerItems.some((item) => item.selectable !== false);
+    this.elements.partsLayersCount.textContent = String(this.layerItems.length);
+    this.elements.partsLayersList.innerHTML = '';
+    this.elements.partsLayersList.classList.toggle('is-disabled', this.isLoading);
+
+    if (this.layerItems.length === 0) {
+      this.elements.partsLayersList.append(createEmptyListMessage('No parts'));
+      return;
+    }
+
+    this.layerItems.forEach((item, itemIndex) => {
+      const selectable = item.selectable !== false && hasSelectableRows;
+      const row = createImageBrowserRow({
+        label: item.label,
+        meta: formatChannelCount(item.channelCount ?? 0),
+        selected: selectable && this.hasMultipleLayers && item.index === this.activeLayerIndex,
+        disabled: this.isLoading || !selectable || this.layerItems.length <= 1,
+        className: 'layer-row',
+        valueAttribute: 'layerItemIndex',
+        value: String(itemIndex)
+      });
+      row.prepend(createLayerRowIcon());
+      this.elements.partsLayersList.append(row);
+    });
+  }
+
+  private renderChannelViewRows(): void {
+    const disabled = this.isLoading || !this.hasRgbGroups;
+    const shouldRestoreFocus = !disabled && isFocusWithinElement(this.elements.channelViewList);
+    this.elements.channelViewCount.textContent = String(this.channelViewItems.length);
+    this.elements.channelViewList.innerHTML = '';
+    this.elements.channelViewList.classList.toggle('is-disabled', disabled);
+
+    if (this.channelViewItems.length === 0) {
+      this.elements.channelViewList.append(createEmptyListMessage('No channels'));
+      return;
+    }
+
+    const selectedValue = this.elements.rgbGroupSelect.value;
+    for (const item of this.channelViewItems) {
+      const row = createImageBrowserRow({
+        label: item.label,
+        meta: item.meta,
+        selected: item.value === selectedValue,
+        disabled,
+        className: 'channel-view-row',
+        valueAttribute: 'channelValue',
+        value: item.value
+      });
+      row.prepend(createChannelViewIcon(item.swatches));
+      this.elements.channelViewList.append(row);
+    }
+
+    if (shouldRestoreFocus) {
+      focusSelectedImageBrowserRow(this.elements.channelViewList);
+    }
+  }
+
+  private chooseOpenedImage(sessionId: string): void {
+    if (!sessionId || this.elements.openedImagesSelect.disabled) {
+      return;
+    }
+
+    this.elements.openedImagesSelect.value = sessionId;
+    this.openedImagesActiveId = sessionId;
+    this.renderOpenedFileRows();
+    this.callbacks.onOpenedImageSelected(sessionId);
+  }
+
+  private chooseLayerIndex(layerIndex: number): void {
+    if (!Number.isFinite(layerIndex) || this.isLoading || this.layerItems.length === 0) {
+      return;
+    }
+
+    const resolvedIndex = Math.min(this.layerItems.length - 1, Math.max(0, Math.floor(layerIndex)));
+    this.elements.layerSelect.value = String(resolvedIndex);
+    this.activeLayerIndex = resolvedIndex;
+    this.renderLayerRows();
+    this.callbacks.onLayerChange(resolvedIndex);
+  }
+
+  private chooseChannelViewValue(value: string): void {
+    if (!value || this.elements.rgbGroupSelect.disabled) {
+      return;
+    }
+
+    const mapping = this.rgbGroupMappings.get(value);
+    if (!mapping) {
+      return;
+    }
+
+    this.elements.rgbGroupSelect.value = value;
+    this.currentRgbSelection = { ...mapping };
+    this.renderChannelViewRows();
+    this.callbacks.onRgbGroupChange(mapping);
+  }
+
+  private onImageBrowserListKeyDown(
+    event: KeyboardEvent,
+    list: HTMLElement,
+    activate: (row: HTMLElement) => void
+  ): void {
+    const rows = getImageBrowserRows(list);
+    if (rows.length === 0) {
+      return;
+    }
+
+    const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusedRow = activeElement ? getFocusedImageBrowserRow(list, activeElement) : null;
+    const focusedIndex = focusedRow ? rows.indexOf(focusedRow) : -1;
+    const selectedIndex = rows.findIndex(isSelectedRow);
+    const currentIndex = Math.max(0, focusedIndex >= 0 ? focusedIndex : selectedIndex);
+    let nextIndex = currentIndex;
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      if (isNestedInteractiveListControl(event.target, focusedRow)) {
+        return;
+      }
+
+      event.preventDefault();
+      const row = rows[currentIndex];
+      if (row) {
+        activate(row);
+      }
+      return;
+    }
+
+    if (event.key === 'ArrowUp' || event.key === 'Up') {
+      nextIndex = Math.max(0, currentIndex - 1);
+    } else if (event.key === 'ArrowDown' || event.key === 'Down') {
+      nextIndex = Math.min(rows.length - 1, currentIndex + 1);
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = rows.length - 1;
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+    const nextRow = rows[nextIndex];
+    if (!nextRow) {
+      return;
+    }
+
+    nextRow.focus();
+    activate(nextRow);
+  }
+
+  private bindImageBrowserToggle(toggle: HTMLButtonElement, content: HTMLElement): void {
+    toggle.addEventListener('click', () => {
+      const collapsed = toggle.getAttribute('aria-expanded') === 'true';
+      this.setImageBrowserCollapsed(toggle, content, collapsed);
+    });
+  }
+
+  private setImageBrowserCollapsed(toggle: HTMLButtonElement, content: HTMLElement, collapsed: boolean): void {
+    toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    content.hidden = collapsed;
+    content.closest('.image-browser-section')?.classList.toggle('is-collapsed', collapsed);
+  }
+
+  private initializePanelSplits(): void {
+    const currentSizes = this.readCurrentPanelSplitSizes();
+    const storedSizes = readStoredPanelSplitSizes();
+    this.applyPanelSplitSizes({ ...currentSizes, ...storedSizes }, null, false);
+  }
+
+  private readCurrentPanelSplitSizes(): PanelSplitSizes {
+    if (!this.isDesktopPanelLayout()) {
+      return { ...DEFAULT_PANEL_SPLIT_SIZES };
+    }
+
+    return {
+      imagePanelWidth: readElementSize(this.elements.imagePanel, 'width', DEFAULT_PANEL_SPLIT_SIZES.imagePanelWidth),
+      rightPanelWidth: readElementSize(this.elements.rightStack, 'width', DEFAULT_PANEL_SPLIT_SIZES.rightPanelWidth),
+      histogramPanelHeight: readElementSize(
+        this.elements.histogramPanel,
+        'height',
+        DEFAULT_PANEL_SPLIT_SIZES.histogramPanelHeight
+      )
+    };
+  }
+
+  private isDesktopPanelLayout(): boolean {
+    return getComputedStyle(this.elements.imagePanelResizer).display !== 'none';
+  }
+
+  private reclampPanelSplits(): void {
+    if (!this.isDesktopPanelLayout()) {
+      return;
+    }
+
+    this.applyPanelSplitSizes(this.panelSplitSizes, null, false);
+  }
+
+  private bindPanelResizer(resizer: HTMLElement, key: PanelSplitSizeKey): void {
+    resizer.addEventListener('pointerdown', (event) => {
+      this.beginPanelResize(event, key);
+    });
+    resizer.addEventListener('pointermove', (event) => {
+      this.onPanelResizePointerMove(event);
+    });
+    resizer.addEventListener('pointerup', (event) => {
+      this.finishPanelResize(event);
+    });
+    resizer.addEventListener('pointercancel', (event) => {
+      this.finishPanelResize(event);
+    });
+    resizer.addEventListener('keydown', (event) => {
+      this.onPanelResizerKeyDown(event, key);
+    });
+  }
+
+  private beginPanelResize(event: PointerEvent, key: PanelSplitSizeKey): void {
+    if (event.button !== 0 || !this.isDesktopPanelLayout()) {
+      return;
+    }
+
+    event.preventDefault();
+    const resizer = event.currentTarget as HTMLElement;
+    this.activePanelResize = {
+      key,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startSizes: { ...this.panelSplitSizes },
+      resizer
+    };
+    resizer.classList.add('is-resizing');
+    document.body.classList.add(key === 'histogramPanelHeight' ? 'is-resizing-panel-rows' : 'is-resizing-panel-columns');
+    resizer.setPointerCapture(event.pointerId);
+  }
+
+  private onPanelResizePointerMove(event: PointerEvent): void {
+    const dragState = this.activePanelResize;
+    if (!dragState || event.pointerId !== dragState.pointerId) {
+      return;
+    }
+
+    event.preventDefault();
+    const nextSizes = { ...dragState.startSizes };
+    const deltaX = event.clientX - dragState.startX;
+    const deltaY = event.clientY - dragState.startY;
+
+    if (dragState.key === 'imagePanelWidth') {
+      nextSizes.imagePanelWidth = dragState.startSizes.imagePanelWidth + deltaX;
+    } else if (dragState.key === 'rightPanelWidth') {
+      nextSizes.rightPanelWidth = dragState.startSizes.rightPanelWidth - deltaX;
+    } else {
+      nextSizes.histogramPanelHeight = dragState.startSizes.histogramPanelHeight + deltaY;
+    }
+
+    this.applyPanelSplitSizes(nextSizes, dragState.key, false);
+  }
+
+  private finishPanelResize(event?: PointerEvent): void {
+    const dragState = this.activePanelResize;
+    if (!dragState || (event && event.pointerId !== dragState.pointerId)) {
+      return;
+    }
+
+    event?.preventDefault();
+    if (dragState.resizer.hasPointerCapture(dragState.pointerId)) {
+      dragState.resizer.releasePointerCapture(dragState.pointerId);
+    }
+    dragState.resizer.classList.remove('is-resizing');
+    document.body.classList.remove('is-resizing-panel-columns', 'is-resizing-panel-rows');
+    this.activePanelResize = null;
+    saveStoredPanelSplitSizes(this.panelSplitSizes);
+  }
+
+  private onPanelResizerKeyDown(event: KeyboardEvent, key: PanelSplitSizeKey): void {
+    if (!this.isDesktopPanelLayout()) {
+      return;
+    }
+
+    const orientation = key === 'histogramPanelHeight' ? 'horizontal' : 'vertical';
+    const action = getPanelSplitKeyboardAction(event.key, event.shiftKey, orientation);
+    if (!action) {
+      return;
+    }
+
+    event.preventDefault();
+    const nextSizes = { ...this.panelSplitSizes };
+
+    if (action.type === 'snap') {
+      const range = getPanelSplitSizeRange(key, this.panelSplitSizes, this.getPanelSplitMetrics());
+      nextSizes[key] = action.target === 'min' ? range.min : range.max;
+    } else {
+      const delta = key === 'rightPanelWidth' ? -action.delta : action.delta;
+      nextSizes[key] += delta;
+    }
+
+    this.applyPanelSplitSizes(nextSizes, key, true);
+  }
+
+  private applyPanelSplitSizes(
+    sizes: PanelSplitSizes,
+    activeKey: PanelSplitSizeKey | null,
+    persist: boolean
+  ): void {
+    const clampedSizes = clampPanelSplitSizes(sizes, this.getPanelSplitMetrics(), activeKey);
+    this.panelSplitSizes = clampedSizes;
+    this.elements.mainLayout.style.setProperty('--image-panel-width', `${Math.round(clampedSizes.imagePanelWidth)}px`);
+    this.elements.mainLayout.style.setProperty('--right-panel-width', `${Math.round(clampedSizes.rightPanelWidth)}px`);
+    this.elements.mainLayout.style.setProperty(
+      '--histogram-panel-height',
+      `${Math.round(clampedSizes.histogramPanelHeight)}px`
+    );
+    this.updatePanelSplitAria();
+
+    if (persist) {
+      saveStoredPanelSplitSizes(clampedSizes);
+    }
+  }
+
+  private getPanelSplitMetrics(): PanelSplitMetrics {
+    return {
+      mainWidth: readElementSize(this.elements.mainLayout, 'width', window.innerWidth),
+      rightStackHeight: readElementSize(this.elements.rightStack, 'height', window.innerHeight),
+      imageResizerWidth: readElementSize(this.elements.imagePanelResizer, 'width', 8),
+      rightResizerWidth: readElementSize(this.elements.rightPanelResizer, 'width', 8),
+      histogramResizerHeight: readElementSize(this.elements.histogramPanelResizer, 'height', 8)
+    };
+  }
+
+  private updatePanelSplitAria(): void {
+    const metrics = this.getPanelSplitMetrics();
+    this.updatePanelResizerAria(this.elements.imagePanelResizer, 'imagePanelWidth', metrics);
+    this.updatePanelResizerAria(this.elements.rightPanelResizer, 'rightPanelWidth', metrics);
+    this.updatePanelResizerAria(this.elements.histogramPanelResizer, 'histogramPanelHeight', metrics);
+  }
+
+  private updatePanelResizerAria(
+    resizer: HTMLElement,
+    key: PanelSplitSizeKey,
+    metrics: PanelSplitMetrics
+  ): void {
+    const range = getPanelSplitSizeRange(key, this.panelSplitSizes, metrics);
+    resizer.setAttribute('aria-valuemin', String(Math.round(range.min)));
+    resizer.setAttribute('aria-valuemax', String(Math.round(range.max)));
+    resizer.setAttribute('aria-valuenow', String(Math.round(this.panelSplitSizes[key])));
   }
 
   private updateRgbSplitToggleState(): void {
@@ -928,6 +1448,13 @@ export class ViewerUi {
   }
 
   private bindEvents(): void {
+    this.bindPanelResizer(this.elements.imagePanelResizer, 'imagePanelWidth');
+    this.bindPanelResizer(this.elements.rightPanelResizer, 'rightPanelWidth');
+    this.bindPanelResizer(this.elements.histogramPanelResizer, 'histogramPanelHeight');
+    this.bindImageBrowserToggle(this.elements.openedFilesToggle, this.elements.openedFilesList);
+    this.bindImageBrowserToggle(this.elements.partsLayersToggle, this.elements.partsLayersList);
+    this.bindImageBrowserToggle(this.elements.channelViewToggle, this.elements.channelViewList);
+
     window.addEventListener('dragover', (event) => {
       if (!hasDroppedFiles(event)) {
         return;
@@ -964,32 +1491,6 @@ export class ViewerUi {
       }
 
       this.callbacks.onReloadAllOpenedImages();
-    });
-
-    this.elements.reloadOpenedImageButton.addEventListener('click', () => {
-      if (this.elements.reloadOpenedImageButton.disabled) {
-        return;
-      }
-
-      const sessionId = this.elements.openedImagesSelect.value;
-      if (!sessionId) {
-        return;
-      }
-
-      this.callbacks.onReloadSelectedOpenedImage(sessionId);
-    });
-
-    this.elements.closeOpenedImageButton.addEventListener('click', () => {
-      if (this.elements.closeOpenedImageButton.disabled) {
-        return;
-      }
-
-      const sessionId = this.elements.openedImagesSelect.value;
-      if (!sessionId) {
-        return;
-      }
-
-      this.callbacks.onCloseSelectedOpenedImage(sessionId);
     });
 
     this.elements.closeAllOpenedImagesButton.addEventListener('click', () => {
@@ -1118,10 +1619,28 @@ export class ViewerUi {
         return;
       }
 
-      this.callbacks.onLayerChange(layerIndex);
+      this.chooseLayerIndex(layerIndex);
     };
     this.elements.layerSelect.addEventListener('change', onLayerSelect);
     this.elements.layerSelect.addEventListener('input', onLayerSelect);
+    this.elements.partsLayersList.addEventListener('click', (event) => {
+      const row = findClosestListRow(event.target, 'layerItemIndex');
+      const item = row ? this.layerItems[Number(row.dataset.layerItemIndex)] : null;
+      if (!row || !item || item.selectable === false || this.isLoading || this.layerItems.length <= 1) {
+        return;
+      }
+
+      this.chooseLayerIndex(item.index);
+    });
+    this.elements.partsLayersList.addEventListener('keydown', (event) => {
+      this.onImageBrowserListKeyDown(event, this.elements.partsLayersList, (row) => {
+        const item = this.layerItems[Number(row.dataset.layerItemIndex)];
+        if (!item || item.selectable === false || this.isLoading || this.layerItems.length <= 1) {
+          return;
+        }
+        this.chooseLayerIndex(item.index);
+      });
+    });
 
     const onOpenedImagesSelect = (event: Event): void => {
       if (this.openedImageDragState || performance.now() < this.suppressOpenedImageSelectionUntilMs) {
@@ -1129,7 +1648,7 @@ export class ViewerUi {
       }
 
       const target = event.currentTarget as HTMLSelectElement;
-      this.callbacks.onOpenedImageSelected(target.value);
+      this.chooseOpenedImage(target.value);
     };
     this.elements.openedImagesSelect.addEventListener('change', onOpenedImagesSelect);
     this.elements.openedImagesSelect.addEventListener('input', onOpenedImagesSelect);
@@ -1148,7 +1667,7 @@ export class ViewerUi {
 
       this.elements.openedImagesSelect.value = sessionId;
       if (sessionId !== this.openedImagesActiveId) {
-        this.callbacks.onOpenedImageSelected(sessionId);
+        this.chooseOpenedImage(sessionId);
       }
 
       this.openedImageDragState = {
@@ -1158,6 +1677,40 @@ export class ViewerUi {
         isDragging: false
       };
     });
+    this.elements.openedFilesList.addEventListener('mousedown', (event) => {
+      if (event.button !== 0 || this.elements.openedImagesSelect.disabled) {
+        return;
+      }
+
+      const row = findClosestListRow(event.target, 'sessionId');
+      if (!row) {
+        return;
+      }
+
+      event.preventDefault();
+      row.focus();
+
+      const sessionId = row.dataset.sessionId ?? '';
+      this.elements.openedImagesSelect.value = sessionId;
+      if (sessionId !== this.openedImagesActiveId) {
+        this.chooseOpenedImage(sessionId);
+      }
+
+      this.openedImageDragState = {
+        sessionId,
+        startY: event.clientY,
+        lastTargetSessionId: null,
+        isDragging: false
+      };
+    });
+    this.elements.openedFilesList.addEventListener('keydown', (event) => {
+      this.onImageBrowserListKeyDown(event, this.elements.openedFilesList, (row) => {
+        if (this.elements.openedImagesSelect.disabled) {
+          return;
+        }
+        this.chooseOpenedImage(row.dataset.sessionId ?? '');
+      });
+    });
     window.addEventListener('mousemove', (event) => {
       this.onOpenedImagesMouseMove(event);
     });
@@ -1166,6 +1719,7 @@ export class ViewerUi {
     });
     window.addEventListener('blur', () => {
       this.finishOpenedImagesDrag();
+      this.finishPanelResize();
     });
 
     this.elements.rgbSplitToggleButton.addEventListener('click', () => {
@@ -1195,13 +1749,7 @@ export class ViewerUi {
 
     const onRgbGroupSelect = (event: Event): void => {
       const target = event.currentTarget as HTMLSelectElement;
-      const mapping = this.rgbGroupMappings.get(target.value);
-      if (!mapping) {
-        return;
-      }
-
-      this.currentRgbSelection = { ...mapping };
-      this.callbacks.onRgbGroupChange(mapping);
+      this.chooseChannelViewValue(target.value);
     };
     this.elements.rgbGroupSelect.addEventListener('change', onRgbGroupSelect);
     this.elements.rgbGroupSelect.addEventListener('input', onRgbGroupSelect);
@@ -1244,7 +1792,24 @@ export class ViewerUi {
         return;
       }
       this.currentRgbSelection = { ...mapping };
+      this.renderChannelViewRows();
       this.callbacks.onRgbGroupChange(mapping);
+    });
+    this.elements.channelViewList.addEventListener('click', (event) => {
+      const row = findClosestListRow(event.target, 'channelValue');
+      if (!row || this.elements.rgbGroupSelect.disabled) {
+        return;
+      }
+
+      this.chooseChannelViewValue(row.dataset.channelValue ?? '');
+    });
+    this.elements.channelViewList.addEventListener('keydown', (event) => {
+      this.onImageBrowserListKeyDown(event, this.elements.channelViewList, (row) => {
+        if (this.elements.rgbGroupSelect.disabled) {
+          return;
+        }
+        this.chooseChannelViewValue(row.dataset.channelValue ?? '');
+      });
     });
 
     this.elements.viewerContainer.addEventListener('dragover', (event) => {
@@ -1305,6 +1870,7 @@ export class ViewerUi {
     if (!dragState.isDragging) {
       dragState.isDragging = true;
       this.elements.openedImagesSelect.classList.add('is-reordering');
+      this.elements.openedFilesList.classList.add('is-reordering');
     }
 
     const targetSessionId = this.getOpenedImageSessionAtClientY(event.clientY);
@@ -1329,6 +1895,7 @@ export class ViewerUi {
     const dragState = this.openedImageDragState;
     this.openedImageDragState = null;
     this.elements.openedImagesSelect.classList.remove('is-reordering');
+    this.elements.openedFilesList.classList.remove('is-reordering');
 
     const activeId = this.openedImagesActiveId;
     if (dragState?.isDragging && activeId) {
@@ -1341,6 +1908,11 @@ export class ViewerUi {
   }
 
   private getOpenedImageSessionAtClientY(clientY: number): string | null {
+    const rowSessionId = getImageBrowserRowValueAtClientY(this.elements.openedFilesList, clientY, 'sessionId');
+    if (rowSessionId) {
+      return rowSessionId;
+    }
+
     const select = this.elements.openedImagesSelect;
     const options = select.options;
     if (options.length === 0) {
@@ -1493,6 +2065,14 @@ export class ViewerUi {
 
 function resolveElements(): Elements {
   return {
+    mainLayout: requireElement('main-layout', HTMLElement),
+    rightStack: requireElement('right-stack', HTMLElement),
+    histogramPanel: requireElement('histogram-panel', HTMLElement),
+    sidePanel: requireElement('inspector-panel', HTMLElement),
+    imagePanel: requireElement('image-panel', HTMLElement),
+    imagePanelResizer: requireElement('image-panel-resizer', HTMLElement),
+    rightPanelResizer: requireElement('right-panel-resizer', HTMLElement),
+    histogramPanelResizer: requireElement('histogram-panel-resizer', HTMLElement),
     openFileButton: requireElement('open-file-button', HTMLButtonElement),
     fileInput: requireElement('file-input', HTMLInputElement),
     resetViewButton: requireElement('reset-view-button', HTMLButtonElement),
@@ -1520,14 +2100,21 @@ function resolveElements(): Elements {
     dropOverlay: requireElement('drop-overlay', HTMLDivElement),
     loadingOverlay: requireElement('loading-overlay', HTMLDivElement),
     openedImagesSelect: requireElement('opened-images-select', HTMLSelectElement),
+    openedFilesToggle: requireElement('opened-files-toggle', HTMLButtonElement),
+    openedFilesList: requireElement('opened-files-list', HTMLElement),
+    openedFilesCount: requireElement('opened-files-count', HTMLElement),
     reloadAllOpenedImagesButton: requireElement('reload-all-opened-images-button', HTMLButtonElement),
-    reloadOpenedImageButton: requireElement('reload-opened-image-button', HTMLButtonElement),
-    closeOpenedImageButton: requireElement('close-opened-image-button', HTMLButtonElement),
     closeAllOpenedImagesButton: requireElement('close-all-opened-images-button', HTMLButtonElement),
     layerControl: requireElement('layer-control', HTMLDivElement),
     layerSelect: requireElement('layer-select', HTMLSelectElement),
+    partsLayersToggle: requireElement('parts-layers-toggle', HTMLButtonElement),
+    partsLayersList: requireElement('parts-layers-list', HTMLElement),
+    partsLayersCount: requireElement('parts-layers-count', HTMLElement),
     rgbSplitToggleButton: requireElement('rgb-split-toggle-button', HTMLButtonElement),
     rgbGroupSelect: requireElement('rgb-group-select', HTMLSelectElement),
+    channelViewToggle: requireElement('channel-view-toggle', HTMLButtonElement),
+    channelViewList: requireElement('channel-view-list', HTMLElement),
+    channelViewCount: requireElement('channel-view-count', HTMLElement),
     zoomReadout: requireElement('zoom-readout', HTMLElement),
     panReadout: requireElement('pan-readout', HTMLElement),
     probeMode: requireElement('probe-mode', HTMLElement),
@@ -1554,6 +2141,459 @@ function formatCurrentChannelOptionLabel(selected: DisplaySelection): string {
   return channels.every((channel) => channel === channels[0])
     ? channels[0] ?? 'Current'
     : channels.join(',');
+}
+
+export function buildPartLayerItemsFromChannelNames(channelNames: string[]): LayerOptionItem[] {
+  type PartGroup = {
+    key: string;
+    label: string;
+    channelNames: Set<string>;
+    firstIndex: number;
+  };
+
+  const groups = new Map<string, PartGroup>();
+  const consumedRgbChannels = new Set<string>();
+
+  const ensureGroup = (key: string, label: string, firstIndex: number): PartGroup => {
+    const existing = groups.get(key);
+    if (existing) {
+      existing.firstIndex = Math.min(existing.firstIndex, firstIndex);
+      return existing;
+    }
+
+    const group: PartGroup = {
+      key,
+      label,
+      channelNames: new Set<string>(),
+      firstIndex
+    };
+    groups.set(key, group);
+    return group;
+  };
+
+  const rgbCandidates = new Map<string, { firstIndex: number; channels: Map<string, string> }>();
+  channelNames.forEach((channelName, index) => {
+    const parsed = parseRgbChannelName(channelName);
+    if (!parsed) {
+      return;
+    }
+
+    const candidate = rgbCandidates.get(parsed.base) ?? {
+      firstIndex: index,
+      channels: new Map<string, string>()
+    };
+    candidate.firstIndex = Math.min(candidate.firstIndex, index);
+    candidate.channels.set(parsed.suffix, channelName);
+    rgbCandidates.set(parsed.base, candidate);
+  });
+
+  for (const [base, candidate] of rgbCandidates.entries()) {
+    if (!candidate.channels.has('R') || !candidate.channels.has('G') || !candidate.channels.has('B')) {
+      continue;
+    }
+
+    const label = base || 'RGB';
+    const group = ensureGroup(`rgb:${base}`, label, candidate.firstIndex);
+    for (const channelName of candidate.channels.values()) {
+      group.channelNames.add(channelName);
+      consumedRgbChannels.add(channelName);
+    }
+  }
+
+  channelNames.forEach((channelName, index) => {
+    if (consumedRgbChannels.has(channelName)) {
+      return;
+    }
+
+    const base = getChannelFamilyName(channelName);
+    const group = ensureGroup(`scalar:${base}`, base, index);
+    group.channelNames.add(channelName);
+  });
+
+  return Array.from(groups.values())
+    .sort((a, b) => a.firstIndex - b.firstIndex || a.label.localeCompare(b.label))
+    .map((group, index) => ({
+      index,
+      label: group.label,
+      channelCount: group.channelNames.size,
+      selectable: false
+    }));
+}
+
+function parseRgbChannelName(channelName: string): { base: string; suffix: string } | null {
+  if (channelName === 'R' || channelName === 'G' || channelName === 'B' || channelName === 'A') {
+    return { base: '', suffix: channelName };
+  }
+
+  const dotIndex = channelName.lastIndexOf('.');
+  if (dotIndex <= 0 || dotIndex >= channelName.length - 1) {
+    return null;
+  }
+
+  const suffix = channelName.slice(dotIndex + 1);
+  if (suffix !== 'R' && suffix !== 'G' && suffix !== 'B' && suffix !== 'A') {
+    return null;
+  }
+
+  return {
+    base: channelName.slice(0, dotIndex),
+    suffix
+  };
+}
+
+function getChannelFamilyName(channelName: string): string {
+  const dotIndex = channelName.lastIndexOf('.');
+  if (dotIndex > 0 && dotIndex < channelName.length - 1) {
+    return channelName.slice(0, dotIndex);
+  }
+
+  return channelName;
+}
+
+function createImageBrowserRow(options: {
+  label: string;
+  meta: string;
+  selected: boolean;
+  disabled: boolean;
+  className: string;
+  valueAttribute: string;
+  value: string;
+}): HTMLButtonElement {
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = `image-browser-row ${options.className}`;
+  row.dataset[options.valueAttribute] = options.value;
+  row.setAttribute('role', 'option');
+  row.setAttribute('aria-selected', options.selected ? 'true' : 'false');
+  row.setAttribute('aria-disabled', options.disabled ? 'true' : 'false');
+  row.disabled = options.disabled;
+
+  const label = document.createElement('span');
+  label.className = 'image-browser-row-label';
+  label.textContent = options.label;
+
+  const meta = document.createElement('span');
+  meta.className = 'image-browser-row-meta';
+  meta.textContent = options.meta;
+
+  row.append(label, meta);
+  return row;
+}
+
+function createOpenedFileRow(options: {
+  label: string;
+  sourceDetail: string;
+  sizeText: string;
+  selected: boolean;
+  disabled: boolean;
+  sessionId: string;
+  onReload: () => void;
+  onClose: () => void;
+}): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'image-browser-row opened-file-row';
+  row.dataset.sessionId = options.sessionId;
+  row.setAttribute('role', 'option');
+  row.setAttribute('aria-selected', options.selected ? 'true' : 'false');
+  row.setAttribute('aria-disabled', options.disabled ? 'true' : 'false');
+  row.tabIndex = options.disabled ? -1 : 0;
+
+  const label = document.createElement('span');
+  label.className = 'image-browser-row-label opened-file-label';
+  label.textContent = options.label;
+  label.title = `Path: ${options.sourceDetail}\nSize: ${options.sizeText}`;
+
+  const actions = document.createElement('span');
+  actions.className = 'opened-file-actions';
+
+  actions.append(
+    createOpenedFileActionButton('reload', `Reload ${options.label}`, options.disabled, options.onReload),
+    createOpenedFileActionButton('close', `Close ${options.label}`, options.disabled, options.onClose)
+  );
+
+  row.append(createFileRowIcon(), label, actions);
+  return row;
+}
+
+function createOpenedFileActionButton(
+  iconName: 'reload' | 'close',
+  label: string,
+  disabled: boolean,
+  onClick: () => void
+): HTMLButtonElement {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `opened-file-action-button opened-file-action-button--${iconName}`;
+  button.disabled = disabled;
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  button.append(createOpenedFileActionIcon(iconName));
+
+  button.addEventListener('mousedown', (event) => {
+    event.stopPropagation();
+  });
+
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (button.disabled) {
+      return;
+    }
+    onClick();
+  });
+
+  return button;
+}
+
+function createOpenedFileActionIcon(iconName: 'reload' | 'close'): SVGSVGElement {
+  const svg = createSvgElement('svg');
+  svg.setAttribute('viewBox', '0 0 20 20');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+
+  if (iconName === 'reload') {
+    const path = createSvgElement('path');
+    path.setAttribute('d', 'M15.5 7.2A6 6 0 1 0 16 12');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('stroke-width', '1.7');
+
+    const arrow = createSvgElement('path');
+    arrow.setAttribute('d', 'M15.5 3.6v3.6h-3.6');
+    arrow.setAttribute('fill', 'none');
+    arrow.setAttribute('stroke', 'currentColor');
+    arrow.setAttribute('stroke-linecap', 'round');
+    arrow.setAttribute('stroke-linejoin', 'round');
+    arrow.setAttribute('stroke-width', '1.7');
+
+    svg.append(path, arrow);
+    return svg;
+  }
+
+  const first = createSvgElement('path');
+  first.setAttribute('d', 'M5.8 5.8l8.4 8.4');
+  first.setAttribute('fill', 'none');
+  first.setAttribute('stroke', 'currentColor');
+  first.setAttribute('stroke-linecap', 'round');
+  first.setAttribute('stroke-width', '1.9');
+
+  const second = createSvgElement('path');
+  second.setAttribute('d', 'M14.2 5.8l-8.4 8.4');
+  second.setAttribute('fill', 'none');
+  second.setAttribute('stroke', 'currentColor');
+  second.setAttribute('stroke-linecap', 'round');
+  second.setAttribute('stroke-width', '1.9');
+
+  svg.append(first, second);
+  return svg;
+}
+
+function createEmptyListMessage(message: string): HTMLElement {
+  const element = document.createElement('p');
+  element.className = 'image-browser-empty';
+  element.textContent = message;
+  return element;
+}
+
+function createFileRowIcon(): HTMLElement {
+  const icon = document.createElement('span');
+  icon.className = 'file-row-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  return icon;
+}
+
+function createLayerRowIcon(): HTMLElement {
+  const icon = document.createElement('span');
+  icon.className = 'layer-row-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  return icon;
+}
+
+function createChannelViewIcon(swatches: string[]): HTMLElement {
+  const icon = document.createElement('span');
+  icon.className = 'channel-view-icon';
+  icon.setAttribute('aria-hidden', 'true');
+
+  for (const swatchColor of swatches.slice(0, 3)) {
+    const swatch = document.createElement('span');
+    swatch.className = 'channel-view-swatch';
+    swatch.style.backgroundColor = swatchColor;
+    icon.append(swatch);
+  }
+
+  if (icon.childElementCount === 0) {
+    const swatch = document.createElement('span');
+    swatch.className = 'channel-view-swatch';
+    swatch.style.backgroundColor = '#9aa4b4';
+    icon.append(swatch);
+  }
+
+  return icon;
+}
+
+function createChannelViewRowItem(value: string, label: string, mapping: DisplaySelection): ChannelViewRowItem {
+  const precisionCount = getDisplayMappingChannelCount(mapping);
+  return {
+    value,
+    label: formatChannelViewLabel(label),
+    meta: precisionCount > 1 ? `32f x ${precisionCount}` : '32f',
+    swatches: getChannelViewSwatches(mapping)
+  };
+}
+
+function formatChannelViewLabel(label: string): string {
+  if (label === 'R,G,B' || label === 'R,G,B,A') {
+    return 'RGB';
+  }
+
+  return label.replace(/\.\(R,G,B(?:,A)?\)/g, '.RGB');
+}
+
+function getDisplayMappingChannelCount(mapping: DisplayChannelMapping): number {
+  return new Set([mapping.displayR, mapping.displayG, mapping.displayB]).size;
+}
+
+function getChannelViewSwatches(mapping: DisplayChannelMapping): string[] {
+  const channels = [mapping.displayR, mapping.displayG, mapping.displayB];
+  const uniqueChannels = Array.from(new Set(channels));
+  if (uniqueChannels.length > 1) {
+    return ['#ff6570', '#6bd66f', '#51aefe'].slice(0, uniqueChannels.length);
+  }
+
+  return [getRepresentativeChannelColor(uniqueChannels[0] ?? '')];
+}
+
+function getRepresentativeChannelColor(channelName: string): string {
+  const suffix = channelName.includes('.') ? channelName.slice(channelName.lastIndexOf('.') + 1) : channelName;
+  const normalized = suffix.toUpperCase();
+  if (normalized === 'R') {
+    return '#ff6570';
+  }
+  if (normalized === 'G') {
+    return '#6bd66f';
+  }
+  if (normalized === 'B') {
+    return '#51aefe';
+  }
+  if (normalized === 'A') {
+    return '#c6cbd2';
+  }
+  if (normalized === 'Z') {
+    return '#8f83e6';
+  }
+  if (normalized === 'Y' || normalized === 'L') {
+    return '#d7dde8';
+  }
+  if (normalized === 'V') {
+    return '#11bfb8';
+  }
+  if (normalized === 'X' || normalized === 'U') {
+    return '#f0b85a';
+  }
+
+  const palette = ['#11bfb8', '#b48cf2', '#f0719a', '#8bd36f', '#f0b85a', '#7aa7ff'];
+  return palette[Math.abs(hashString(channelName)) % palette.length] ?? '#9aa4b4';
+}
+
+function hashString(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) | 0;
+  }
+  return hash;
+}
+
+function formatFileSizeMb(sizeBytes: number | null): string {
+  if (sizeBytes === null || !Number.isFinite(sizeBytes) || sizeBytes < 0) {
+    return '-- MB';
+  }
+
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatChannelCount(channelCount: number): string {
+  const count = Math.max(0, Math.floor(channelCount));
+  return `${count}ch`;
+}
+
+function findClosestListRow(target: EventTarget | null, datasetKey: string): HTMLElement | null {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+
+  const row = target.closest<HTMLElement>('.image-browser-row');
+  if (!row || !row.dataset[datasetKey]) {
+    return null;
+  }
+
+  return row;
+}
+
+function getImageBrowserRows(list: HTMLElement): HTMLElement[] {
+  return Array.from(list.querySelectorAll<HTMLElement>('.image-browser-row')).filter(
+    (row) => !(row instanceof HTMLButtonElement && row.disabled) && row.getAttribute('aria-disabled') !== 'true'
+  );
+}
+
+function getFocusedImageBrowserRow(list: HTMLElement, activeElement: HTMLElement): HTMLElement | null {
+  if (!list.contains(activeElement)) {
+    return null;
+  }
+
+  const row = activeElement.closest<HTMLElement>('.image-browser-row');
+  return row && list.contains(row) ? row : null;
+}
+
+function isFocusWithinElement(element: HTMLElement): boolean {
+  return document.activeElement instanceof HTMLElement && element.contains(document.activeElement);
+}
+
+function focusSelectedImageBrowserRow(list: HTMLElement): void {
+  const selectedRow = getImageBrowserRows(list).find(isSelectedRow);
+  selectedRow?.focus();
+}
+
+function isNestedInteractiveListControl(target: EventTarget | null, row: HTMLElement | null): boolean {
+  if (!row || !(target instanceof Element)) {
+    return false;
+  }
+
+  const control = target.closest<HTMLElement>('button, input, select, textarea, a[href], [role="button"]');
+  return Boolean(control && control !== row && row.contains(control));
+}
+
+function isSelectedRow(row: HTMLElement): boolean {
+  return row.getAttribute('aria-selected') === 'true';
+}
+
+function getImageBrowserRowValueAtClientY(
+  list: HTMLElement,
+  clientY: number,
+  datasetKey: string
+): string | null {
+  const rows = getImageBrowserRows(list);
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const listRect = list.getBoundingClientRect();
+  if (clientY < listRect.top || clientY > listRect.bottom) {
+    return null;
+  }
+
+  for (const row of rows) {
+    const rect = row.getBoundingClientRect();
+    if (clientY >= rect.top && clientY <= rect.bottom) {
+      return row.dataset[datasetKey] ?? null;
+    }
+  }
+
+  if (clientY < rows[0].getBoundingClientRect().top) {
+    return rows[0].dataset[datasetKey] ?? null;
+  }
+
+  return rows[rows.length - 1]?.dataset[datasetKey] ?? null;
 }
 
 function createSvgElement<K extends keyof SVGElementTagNameMap>(tagName: K): SVGElementTagNameMap[K] {
@@ -1648,6 +2688,188 @@ function formatColormapRangeStep(min: number, max: number): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function readElementSize(element: HTMLElement, axis: 'width' | 'height', fallback: number): number {
+  const rect = element.getBoundingClientRect();
+  const value = axis === 'width' ? rect.width : rect.height;
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : fallback;
+}
+
+function readStoredPanelSplitSizes(): Partial<PanelSplitSizes> {
+  try {
+    return parsePanelSplitStorageValue(window.localStorage.getItem(PANEL_SPLIT_STORAGE_KEY));
+  } catch {
+    return {};
+  }
+}
+
+function saveStoredPanelSplitSizes(sizes: PanelSplitSizes): void {
+  try {
+    window.localStorage.setItem(
+      PANEL_SPLIT_STORAGE_KEY,
+      JSON.stringify({
+        imagePanelWidth: Math.round(sizes.imagePanelWidth),
+        rightPanelWidth: Math.round(sizes.rightPanelWidth),
+        histogramPanelHeight: Math.round(sizes.histogramPanelHeight)
+      })
+    );
+  } catch {
+    // Storage can be unavailable in private contexts; resizing should still work for the current page.
+  }
+}
+
+export function parsePanelSplitStorageValue(value: string | null): Partial<PanelSplitSizes> {
+  if (!value) {
+    return {};
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return {};
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {};
+  }
+
+  const record = parsed as Record<string, unknown>;
+  const sizes: Partial<PanelSplitSizes> = {};
+  const keys: PanelSplitSizeKey[] = ['imagePanelWidth', 'rightPanelWidth', 'histogramPanelHeight'];
+
+  for (const key of keys) {
+    const item = record[key];
+    if (typeof item === 'number' && Number.isFinite(item) && item > 0) {
+      sizes[key] = item;
+    }
+  }
+
+  return sizes;
+}
+
+export function getPanelSplitKeyboardAction(
+  key: string,
+  shiftKey: boolean,
+  orientation: PanelSplitKeyboardOrientation
+): PanelSplitKeyboardAction | null {
+  if (key === 'Home') {
+    return { type: 'snap', target: 'min' };
+  }
+  if (key === 'End') {
+    return { type: 'snap', target: 'max' };
+  }
+
+  const step = shiftKey ? PANEL_SPLIT_KEYBOARD_LARGE_STEP : PANEL_SPLIT_KEYBOARD_STEP;
+  if (orientation === 'vertical') {
+    if (key === 'ArrowLeft' || key === 'Left') {
+      return { type: 'delta', delta: -step };
+    }
+    if (key === 'ArrowRight' || key === 'Right') {
+      return { type: 'delta', delta: step };
+    }
+  } else {
+    if (key === 'ArrowUp' || key === 'Up') {
+      return { type: 'delta', delta: -step };
+    }
+    if (key === 'ArrowDown' || key === 'Down') {
+      return { type: 'delta', delta: step };
+    }
+  }
+
+  return null;
+}
+
+export function clampPanelSplitSizes(
+  sizes: PanelSplitSizes,
+  metrics: PanelSplitMetrics,
+  activeKey: PanelSplitSizeKey | null = null
+): PanelSplitSizes {
+  const sideWidthLimit = getSidePanelWidthLimit(metrics);
+  const clampedSizes: PanelSplitSizes = {
+    imagePanelWidth: clampFiniteSize(sizes.imagePanelWidth, IMAGE_PANEL_MIN_WIDTH, IMAGE_PANEL_MAX_WIDTH),
+    rightPanelWidth: clampFiniteSize(sizes.rightPanelWidth, RIGHT_PANEL_MIN_WIDTH, RIGHT_PANEL_MAX_WIDTH),
+    histogramPanelHeight: clampFiniteSize(
+      sizes.histogramPanelHeight,
+      HISTOGRAM_PANEL_MIN_HEIGHT,
+      getPanelSplitSizeRange('histogramPanelHeight', sizes, metrics).max
+    )
+  };
+
+  let overflow = clampedSizes.imagePanelWidth + clampedSizes.rightPanelWidth - sideWidthLimit;
+  if (overflow > 0) {
+    const reductionOrder: PanelSplitSizeKey[] =
+      activeKey === 'imagePanelWidth'
+        ? ['rightPanelWidth', 'imagePanelWidth']
+        : activeKey === 'rightPanelWidth'
+          ? ['imagePanelWidth', 'rightPanelWidth']
+          : ['rightPanelWidth', 'imagePanelWidth'];
+
+    for (const key of reductionOrder) {
+      if (overflow <= 0) {
+        break;
+      }
+
+      const min = key === 'imagePanelWidth' ? IMAGE_PANEL_MIN_WIDTH : RIGHT_PANEL_MIN_WIDTH;
+      const reduction = Math.min(overflow, clampedSizes[key] - min);
+      clampedSizes[key] -= reduction;
+      overflow -= reduction;
+    }
+  }
+
+  const histogramRange = getPanelSplitSizeRange('histogramPanelHeight', clampedSizes, metrics);
+  clampedSizes.histogramPanelHeight = clamp(
+    clampedSizes.histogramPanelHeight,
+    histogramRange.min,
+    histogramRange.max
+  );
+
+  return {
+    imagePanelWidth: Math.round(clampedSizes.imagePanelWidth),
+    rightPanelWidth: Math.round(clampedSizes.rightPanelWidth),
+    histogramPanelHeight: Math.round(clampedSizes.histogramPanelHeight)
+  };
+}
+
+export function getPanelSplitSizeRange(
+  key: PanelSplitSizeKey,
+  sizes: PanelSplitSizes,
+  metrics: PanelSplitMetrics
+): { min: number; max: number } {
+  if (key === 'imagePanelWidth') {
+    const rightWidth = clampFiniteSize(sizes.rightPanelWidth, RIGHT_PANEL_MIN_WIDTH, RIGHT_PANEL_MAX_WIDTH);
+    return {
+      min: IMAGE_PANEL_MIN_WIDTH,
+      max: Math.max(IMAGE_PANEL_MIN_WIDTH, Math.min(IMAGE_PANEL_MAX_WIDTH, getSidePanelWidthLimit(metrics) - rightWidth))
+    };
+  }
+
+  if (key === 'rightPanelWidth') {
+    const imageWidth = clampFiniteSize(sizes.imagePanelWidth, IMAGE_PANEL_MIN_WIDTH, IMAGE_PANEL_MAX_WIDTH);
+    return {
+      min: RIGHT_PANEL_MIN_WIDTH,
+      max: Math.max(RIGHT_PANEL_MIN_WIDTH, Math.min(RIGHT_PANEL_MAX_WIDTH, getSidePanelWidthLimit(metrics) - imageWidth))
+    };
+  }
+
+  return {
+    min: HISTOGRAM_PANEL_MIN_HEIGHT,
+    max: Math.max(
+      HISTOGRAM_PANEL_MIN_HEIGHT,
+      Math.floor(metrics.rightStackHeight - metrics.histogramResizerHeight - INSPECTOR_PANEL_MIN_HEIGHT)
+    )
+  };
+}
+
+function getSidePanelWidthLimit(metrics: PanelSplitMetrics): number {
+  const availableWidth =
+    metrics.mainWidth - metrics.imageResizerWidth - metrics.rightResizerWidth - VIEWER_MIN_WIDTH;
+  return Math.max(IMAGE_PANEL_MIN_WIDTH + RIGHT_PANEL_MIN_WIDTH, Math.floor(availableWidth));
+}
+
+function clampFiniteSize(value: number, min: number, max: number): number {
+  return clamp(Number.isFinite(value) ? value : min, min, max);
 }
 
 export function getListboxOptionIndexAtClientY(clientY: number, metrics: ListboxHitTestMetrics): number {
