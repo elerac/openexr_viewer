@@ -605,7 +605,12 @@ function findMergedSelectionForSplitChannel(
 
   const selectedChannel = selected.displayR;
   for (const group of extractRgbChannelGroups(channelNames)) {
-    if (selectedChannel !== group.r && selectedChannel !== group.g && selectedChannel !== group.b) {
+    if (
+      selectedChannel !== group.r &&
+      selectedChannel !== group.g &&
+      selectedChannel !== group.b &&
+      selectedChannel !== group.a
+    ) {
       continue;
     }
 

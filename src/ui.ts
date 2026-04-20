@@ -1897,15 +1897,6 @@ export class ViewerUi {
         return;
       }
 
-      if (!this.includeSplitRgbChannels) {
-        const collapsedSelection = findMergedSelectionForSplitDisplay(this.currentRgbChannelNames, selection);
-        if (collapsedSelection) {
-          this.currentRgbSelection = { ...collapsedSelection };
-          this.callbacks.onRgbGroupChange(collapsedSelection);
-          return;
-        }
-      }
-
       this.setRgbGroupOptions(this.currentRgbChannelNames, selection);
     });
 

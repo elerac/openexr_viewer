@@ -1532,6 +1532,44 @@ describe('state helpers', () => {
     });
   });
 
+  it('remaps split RGB alpha selections to their merged RGBA group', () => {
+    const bareAlpha = {
+      ...createViewerState(),
+      displayR: 'A',
+      displayG: 'A',
+      displayB: 'A',
+      displayA: null
+    };
+    const namespacedAlpha = {
+      ...createViewerState(),
+      displayR: 'beauty.A',
+      displayG: 'beauty.A',
+      displayB: 'beauty.A',
+      displayA: null
+    };
+
+    expect(findMergedSelectionForSplitDisplay(['R', 'G', 'B', 'A'], bareAlpha)).toEqual({
+      displaySource: 'channels',
+      stokesParameter: null,
+      displayR: 'R',
+      displayG: 'G',
+      displayB: 'B',
+      displayA: 'A'
+    });
+    expect(findMergedSelectionForSplitDisplay(
+      ['beauty.R', 'beauty.G', 'beauty.B', 'beauty.A'],
+      namespacedAlpha
+    )).toEqual({
+      displaySource: 'channels',
+      stokesParameter: null,
+      displayR: 'beauty.R',
+      displayG: 'beauty.G',
+      displayB: 'beauty.B',
+      displayA: 'beauty.A'
+    });
+    expect(findMergedSelectionForSplitDisplay(['A'], bareAlpha)).toBeNull();
+  });
+
   it('keeps alpha-only layers inspectable', () => {
     const options = buildChannelDisplayOptions(['A']);
 
