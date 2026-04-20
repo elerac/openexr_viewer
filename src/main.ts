@@ -572,10 +572,11 @@ async function bootstrap(): Promise<void> {
     );
 
     const fitView = computeFitView(decoded.width, decoded.height);
+    const initialExposureEv = activeSessionId ? store.getState().exposureEv : 0;
 
     const sessionState = buildViewerStateForLayer(
       {
-        exposureEv: 0,
+        exposureEv: initialExposureEv,
         visualizationMode: 'rgb',
         activeColormapId: defaultColormapId,
         colormapRange: null,
@@ -1510,6 +1511,7 @@ async function bootstrap(): Promise<void> {
         zoom: currentState.zoom,
         panX: pan.panX,
         panY: pan.panY,
+        exposureEv: currentState.exposureEv,
         displaySource: currentState.displaySource,
         stokesParameter: currentState.stokesParameter,
         displayR: currentState.displayR,

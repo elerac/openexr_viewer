@@ -28,6 +28,14 @@ async function openGalleryCbox(page: Page): Promise<void> {
   await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr', { timeout: 30000 });
 }
 
+async function setExposureValue(exposureValue: Locator, value: string): Promise<void> {
+  await exposureValue.evaluate((element, nextValue) => {
+    const input = element as HTMLInputElement;
+    input.value = nextValue;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
+}
+
 test('boots empty, opens the gallery demo image, and keeps core controls stable', async ({ page }) => {
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
   await expect(page.locator('#inspector-panel')).toBeVisible();
@@ -417,6 +425,43 @@ test('moves open files and channel view selections with arrow keys', async ({ pa
   await page.keyboard.press('ArrowUp');
   await expect(channelSelect.locator('option:checked')).toHaveText('G');
   await expect(greenRow).toBeFocused();
+});
+
+test('carries exposure when opening and switching files', async ({ page }) => {
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  const openedImages = page.locator('#opened-images-select');
+  const exposureValue = page.locator('#exposure-value');
+
+  await openGalleryCbox(page);
+  await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
+  await expect(exposureValue).toHaveValue('0.0');
+
+  await setExposureValue(exposureValue, '1.7');
+  await expect(exposureValue).toHaveValue('1.7');
+
+  await page.setInputFiles('#file-input', {
+    name: 'scalar_z.exr',
+    mimeType: 'image/exr',
+    buffer: buildScalarChannelExr()
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('scalar_z.exr', { timeout: 30000 });
+  await expect(exposureValue).toHaveValue('1.7');
+
+  await setExposureValue(exposureValue, '-2.5');
+  await expect(exposureValue).toHaveValue('-2.5');
+
+  const cboxRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'cbox_rgb.exr' });
+  await cboxRow.locator('.opened-file-label').click();
+  await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr');
+  await expect(exposureValue).toHaveValue('-2.5');
 });
 
 test('resizes desktop panel splits and persists them', async ({ page }) => {
