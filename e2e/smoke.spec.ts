@@ -96,6 +96,8 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(page.locator('#close-opened-image-button')).toHaveCount(0);
   await expect(openedFileRow).toHaveCount(1);
   await expect(openedFileRow.locator('.image-browser-row-meta')).toHaveCount(0);
+  await expect(openedFileRow.locator('.opened-file-thumbnail')).toHaveAttribute('src', /^data:image\/png;base64,/);
+  await expect(openedFileRow.locator('.file-row-icon')).toHaveCount(0);
   await expect(reloadOpenedFileButton).toBeVisible();
   await expect(closeOpenedFileButton).toBeVisible();
   await expect(openedFileRow.locator('.opened-file-label')).toHaveAttribute('title', /Path: .*cbox_rgb\.exr\nSize: .* MB/);

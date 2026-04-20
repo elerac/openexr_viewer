@@ -564,6 +564,8 @@ body.is-resizing-panel-rows * {
 
 .opened-file-row {
   cursor: pointer;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  min-height: 2.4rem;
 }
 
 .opened-file-row[aria-disabled='true'] {
@@ -629,6 +631,18 @@ body.is-resizing-panel-rows * {
   border-bottom: 0;
   opacity: 0.88;
   clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%);
+}
+
+.opened-file-thumbnail {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: block;
+  justify-self: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 0.2rem;
+  object-fit: cover;
+  background: #171b21;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
 }
 
 .layer-row-icon {

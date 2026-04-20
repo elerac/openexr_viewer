@@ -102,6 +102,7 @@ export interface OpenedImageSession {
   fileSizeBytes: number | null;
   source: SessionSource;
   decoded: DecodedExrImage;
+  thumbnailDataUrl: string | null;
   state: ViewerState;
   textureRevisionKey: string;
   displayTexture: Float32Array | null;

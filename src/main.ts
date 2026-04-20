@@ -12,6 +12,7 @@ import { loadExr } from './exr';
 import { clampZoom, ViewerInteraction } from './interaction';
 import { buildProbeColorPreview, resolveActiveProbePixel, resolveProbeMode } from './probe';
 import { WebGlExrRenderer } from './renderer';
+import { createOpenedImageThumbnailDataUrl } from './thumbnail';
 import {
   buildLayerDisplayHistogram,
   buildDisplayHistogram,
@@ -609,6 +610,7 @@ async function bootstrap(): Promise<void> {
       fileSizeBytes,
       source,
       decoded,
+      thumbnailDataUrl: createOpenedImageThumbnailDataUrl(decoded, sessionState),
       state: sessionState,
       textureRevisionKey: '',
       displayTexture: null,
@@ -689,6 +691,7 @@ async function bootstrap(): Promise<void> {
       const reloadedSession: OpenedImageSession = {
         ...session,
         decoded,
+        thumbnailDataUrl: createOpenedImageThumbnailDataUrl(decoded, nextState),
         state: nextState,
         textureRevisionKey: '',
         displayTexture: null,
@@ -1416,7 +1419,8 @@ async function bootstrap(): Promise<void> {
         id: session.id,
         label: session.displayName,
         sizeBytes: session.fileSizeBytes,
-        sourceDetail: getSessionSourceDetail(session.source, session.filename)
+        sourceDetail: getSessionSourceDetail(session.source, session.filename),
+        thumbnailDataUrl: session.thumbnailDataUrl
       })),
       activeSessionId
     );

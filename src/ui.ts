@@ -163,6 +163,7 @@ export interface OpenedImageOptionItem {
   label: string;
   sizeBytes?: number | null;
   sourceDetail?: string;
+  thumbnailDataUrl?: string | null;
 }
 
 export interface LayerOptionItem {
@@ -869,6 +870,7 @@ export class ViewerUi {
         label: item.label,
         sourceDetail: item.sourceDetail ?? item.label,
         sizeText,
+        thumbnailDataUrl: item.thumbnailDataUrl ?? null,
         selected: item.id === this.openedImagesActiveId,
         disabled,
         sessionId: item.id,
@@ -2471,6 +2473,7 @@ function createOpenedFileRow(options: {
   label: string;
   sourceDetail: string;
   sizeText: string;
+  thumbnailDataUrl: string | null;
   selected: boolean;
   disabled: boolean;
   sessionId: string;
@@ -2498,7 +2501,7 @@ function createOpenedFileRow(options: {
     createOpenedFileActionButton('close', `Close ${options.label}`, options.disabled, options.onClose)
   );
 
-  row.append(createFileRowIcon(), label, actions);
+  row.append(createOpenedFileThumbnail(options.thumbnailDataUrl), label, actions);
   return row;
 }
 
@@ -2588,6 +2591,20 @@ function createFileRowIcon(): HTMLElement {
   icon.className = 'file-row-icon';
   icon.setAttribute('aria-hidden', 'true');
   return icon;
+}
+
+function createOpenedFileThumbnail(thumbnailDataUrl: string | null): HTMLElement {
+  if (!thumbnailDataUrl) {
+    return createFileRowIcon();
+  }
+
+  const image = document.createElement('img');
+  image.className = 'opened-file-thumbnail';
+  image.src = thumbnailDataUrl;
+  image.alt = '';
+  image.draggable = false;
+  image.setAttribute('aria-hidden', 'true');
+  return image;
 }
 
 function createLayerRowIcon(): HTMLElement {
