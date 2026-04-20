@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_COLORMAP_ID } from '../src/colormaps';
 import {
   buildChannelDisplayOptions,
-  buildDisplayHistogram,
-  buildLayerDisplayHistogram,
   buildSelectedDisplayTexture,
   buildDisplayTexture,
   buildStokesDisplayTexture,
@@ -17,7 +15,6 @@ import {
   computeStokesEang,
   computeStokesNormalizedComponent,
   computeDisplayTextureLuminanceRange,
-  computeHistogramRenderCeiling,
   createInitialState,
   detectRgbStokesChannels,
   detectScalarStokesChannels,
@@ -33,7 +30,6 @@ import {
   pickDefaultDisplayChannels,
   pickNextSessionIndexAfterRemoval,
   resolveColormapAutoRange,
-  scaleHistogramCount,
   samplePixelValuesForDisplay,
   samplePixelValues,
   shouldPreserveStokesColormapState
@@ -778,144 +774,6 @@ describe('state helpers', () => {
     expect(sample?.values.B).toBe(23);
   });
 
-  it('builds raw-count luminance histogram with dynamic domain bounds', () => {
-    const displayTexture = new Float32Array([
-      0.01, 0.01, 0.01, 1,
-      0.1, 0.1, 0.1, 1,
-      0.4, 0.4, 0.4, 1,
-      1.0, 1.0, 1.0, 1
-    ]);
-
-    const histogram = buildDisplayHistogram(displayTexture, {
-      bins: 32,
-      xAxis: 'linear'
-    });
-
-    expect(histogram.mode).toBe('luminance');
-    expect(histogram.xAxis).toBe('linear');
-    expect(histogram.channelBins).toBeNull();
-    expect(histogram.bins.length).toBe(32);
-    expect(Array.from(histogram.bins).reduce((sum, value) => sum + value, 0)).toBe(4);
-    expect(histogram.min).toBeCloseTo(0.01, 6);
-    expect(histogram.max).toBeCloseTo(1.0, 6);
-    expect(histogram.mean).toBeCloseTo(0.3775, 6);
-    expect(histogram.channelMeans).toBeNull();
-    expect(histogram.nonPositiveCount).toBe(0);
-  });
-
-  it('builds RGB histogram when requested', () => {
-    const displayTexture = new Float32Array([
-      0.0, 0.2, 0.8, 1,
-      0.2, 0.4, 0.6, 1,
-      0.6, 0.8, 0.4, 1,
-      0.8, 1.0, 0.2, 1
-    ]);
-
-    const histogram = buildDisplayHistogram(displayTexture, {
-      bins: 32,
-      mode: 'rgb',
-      xAxis: 'linear'
-    });
-
-    expect(histogram.mode).toBe('rgb');
-    expect(histogram.channelBins).not.toBeNull();
-    expect(histogram.channelBins?.r.length).toBe(32);
-    expect(histogram.channelBins?.g.length).toBe(32);
-    expect(histogram.channelBins?.b.length).toBe(32);
-    expect(Array.from(histogram.channelBins?.r ?? []).reduce((sum, value) => sum + value, 0)).toBe(4);
-    expect(Array.from(histogram.channelBins?.g ?? []).reduce((sum, value) => sum + value, 0)).toBe(4);
-    expect(Array.from(histogram.channelBins?.b ?? []).reduce((sum, value) => sum + value, 0)).toBe(4);
-    expect(histogram.min).toBeCloseTo(0, 6);
-    expect(histogram.max).toBeCloseTo(1, 6);
-    expect(histogram.mean).toBeCloseTo(0.5, 6);
-    expect(histogram.channelMeans?.r).toBeCloseTo(0.4, 6);
-    expect(histogram.channelMeans?.g).toBeCloseTo(0.6, 6);
-    expect(histogram.channelMeans?.b).toBeCloseTo(0.5, 6);
-    expect(histogram.channelNonPositiveCounts).toEqual({ r: 0, g: 0, b: 0 });
-  });
-
-  it('is exposure independent for same display texture input', () => {
-    const displayTexture = new Float32Array([
-      0.05, 0.1, 0.2, 1,
-      0.2, 0.3, 0.4, 1,
-      0.8, 0.7, 0.6, 1
-    ]);
-
-    const first = buildDisplayHistogram(displayTexture, { bins: 16, xAxis: 'ev' });
-    const second = buildDisplayHistogram(displayTexture, { bins: 16, xAxis: 'ev' });
-    expect(first.mode).toBe('luminance');
-    expect(Array.from(first.bins)).toEqual(Array.from(second.bins));
-    expect(first.min).toBe(second.min);
-    expect(first.max).toBe(second.max);
-  });
-
-  it('uses EV x-axis binning by default', () => {
-    const values = [0.25, 0.5, 1, 2, 4];
-    const displayTexture = new Float32Array(
-      values.flatMap((v) => [v, v, v, 1])
-    );
-
-    const histogram = buildDisplayHistogram(displayTexture, { bins: 5 });
-    const nonZeroBins = Array.from(histogram.bins)
-      .map((v, i) => (v > 0 ? i : -1))
-      .filter((i) => i >= 0);
-
-    expect(nonZeroBins).toEqual([0, 1, 2, 3, 4]);
-    expect(histogram.min).toBeCloseTo(-2, 6);
-    expect(histogram.max).toBeCloseTo(2, 6);
-  });
-
-  it('counts non-positive samples in the dedicated EV bucket only', () => {
-    const values = [0, -1, 1, 2];
-    const displayTexture = new Float32Array(values.flatMap((v) => [v, v, v, 1]));
-
-    const histogram = buildDisplayHistogram(displayTexture, { bins: 4, xAxis: 'ev' });
-
-    expect(histogram.nonPositiveCount).toBe(2);
-    expect(Array.from(histogram.bins).reduce((sum, value) => sum + value, 0)).toBe(2);
-  });
-
-  it('uses linear x-axis binning when requested', () => {
-    const values = [0, 1, 2, 3];
-    const displayTexture = new Float32Array(values.flatMap((v) => [v, v, v, 1]));
-
-    const histogram = buildDisplayHistogram(displayTexture, { bins: 4, xAxis: 'linear' });
-    const nonZeroBins = Array.from(histogram.bins)
-      .map((v, i) => (v > 0 ? i : -1))
-      .filter((i) => i >= 0);
-
-    expect(nonZeroBins).toEqual([0, 1, 2, 3]);
-  });
-
-  it('derives distinct y-axis heights from the same raw histogram counts', () => {
-    const count = 4;
-    const ceiling = 16;
-
-    expect(scaleHistogramCount(count, ceiling, 'linear')).toBeCloseTo(0.25, 6);
-    expect(scaleHistogramCount(count, ceiling, 'sqrt')).toBeCloseTo(0.5, 6);
-    expect(scaleHistogramCount(count, ceiling, 'log')).toBeCloseTo(
-      Math.log1p(4) / Math.log1p(16),
-      6
-    );
-  });
-
-  it('keeps the main distribution visible when one bin dominates', () => {
-    const values = [
-      ...new Array<number>(50).fill(0),
-      ...new Array<number>(5).fill(0.1),
-      ...new Array<number>(5).fill(0.2),
-      ...new Array<number>(5).fill(0.4),
-      ...new Array<number>(5).fill(0.8)
-    ];
-    const displayTexture = new Float32Array(values.flatMap((v) => [v, v, v, 1]));
-
-    const histogram = buildDisplayHistogram(displayTexture, { bins: 64, xAxis: 'ev' });
-    const ceiling = computeHistogramRenderCeiling(histogram);
-
-    expect(ceiling).toBe(5);
-    expect(scaleHistogramCount(histogram.nonPositiveCount, ceiling, 'linear')).toBe(1);
-  });
-
   it('re-resolves display channels when switching to a layer without the current mapping', () => {
     const altLayer: DecodedLayer = {
       name: 'alt',
@@ -1295,28 +1153,6 @@ describe('state helpers', () => {
 
     expect(normalizedSample?.values['S2/S0']).toBeUndefined();
     expect(normalizedSample?.values['S2/S0.G']).toBeCloseTo(1, 6);
-  });
-
-  it('builds layer histograms without counting non-finite samples', () => {
-    const channel = new Float32Array([1, Number.NaN, 0.5, 2]);
-    const layer: DecodedLayer = {
-      name: 'histogram',
-      channelNames: ['R', 'G', 'B'],
-      channelData: new Map([
-        ['R', channel],
-        ['G', channel],
-        ['B', channel]
-      ])
-    };
-
-    const histogram = buildLayerDisplayHistogram(layer, 2, 2, 'R', 'G', 'B', {
-      bins: 4,
-      xAxis: 'linear'
-    });
-
-    expect(histogram.mode).toBe('luminance');
-    expect(Array.from(histogram.bins).reduce((sum, value) => sum + value, 0)).toBe(3);
-    expect(histogram.mean).toBeCloseTo((1 + 0.5 + 2) / 3, 6);
   });
 
   it('extracts RGB groups from channel namespaces', () => {

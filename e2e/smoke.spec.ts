@@ -430,26 +430,20 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
 
   const imageResizer = page.locator('#image-panel-resizer');
   const rightResizer = page.locator('#right-panel-resizer');
-  const histogramResizer = page.locator('#histogram-panel-resizer');
   const viewer = page.locator('#viewer-container');
 
   await expect(imageResizer).toBeVisible();
   await expect(rightResizer).toBeVisible();
-  await expect(histogramResizer).toBeVisible();
 
   const readLayout = async () => {
     return await page.evaluate(() => {
       const imagePanel = document.querySelector('#image-panel');
       const rightStack = document.querySelector('#right-stack');
-      const histogramPanel = document.querySelector('#histogram-panel');
-      const histogramSvg = document.querySelector('#histogram-svg');
       const viewerContainer = document.querySelector('#viewer-container');
       const canvas = document.querySelector('#gl-canvas');
       if (
         !(imagePanel instanceof HTMLElement) ||
         !(rightStack instanceof HTMLElement) ||
-        !(histogramPanel instanceof HTMLElement) ||
-        !(histogramSvg instanceof SVGSVGElement) ||
         !(viewerContainer instanceof HTMLElement) ||
         !(canvas instanceof HTMLCanvasElement)
       ) {
@@ -459,8 +453,6 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
       return {
         imageWidth: imagePanel.getBoundingClientRect().width,
         rightWidth: rightStack.getBoundingClientRect().width,
-        histogramHeight: histogramPanel.getBoundingClientRect().height,
-        histogramSvgHeight: histogramSvg.getBoundingClientRect().height,
         viewerWidth: viewerContainer.getBoundingClientRect().width,
         canvasWidth: canvas.width,
         canvasHeight: canvas.height,
@@ -496,32 +488,24 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
   expect(afterRightResize.canvasWidth).toBeGreaterThan(0);
   expect(afterRightResize.canvasHeight).toBeGreaterThan(0);
 
-  await dragBy(histogramResizer, 0, 48);
-  const afterHistogramResize = await readLayout();
-  expect(afterHistogramResize.histogramHeight).toBeGreaterThan(afterRightResize.histogramHeight + 30);
-  expect(afterHistogramResize.histogramSvgHeight).toBeGreaterThan(afterRightResize.histogramSvgHeight + 20);
-  expect(afterHistogramResize.stored).not.toBeNull();
+  expect(afterRightResize.stored).not.toBeNull();
 
-  const stored = JSON.parse(afterHistogramResize.stored ?? '{}') as {
+  const stored = JSON.parse(afterRightResize.stored ?? '{}') as {
     imagePanelWidth?: number;
     rightPanelWidth?: number;
-    histogramPanelHeight?: number;
   };
-  expect(stored.imagePanelWidth).toBeCloseTo(afterHistogramResize.imageWidth, 0);
-  expect(stored.rightPanelWidth).toBeCloseTo(afterHistogramResize.rightWidth, 0);
-  expect(stored.histogramPanelHeight).toBeCloseTo(afterHistogramResize.histogramHeight, 0);
+  expect(stored.imagePanelWidth).toBeCloseTo(afterRightResize.imageWidth, 0);
+  expect(stored.rightPanelWidth).toBeCloseTo(afterRightResize.rightWidth, 0);
 
   await page.reload();
   await page.waitForTimeout(1500);
   const afterReload = await readLayout();
-  expect(afterReload.imageWidth).toBeCloseTo(afterHistogramResize.imageWidth, 0);
-  expect(afterReload.rightWidth).toBeCloseTo(afterHistogramResize.rightWidth, 0);
-  expect(afterReload.histogramHeight).toBeCloseTo(afterHistogramResize.histogramHeight, 0);
+  expect(afterReload.imageWidth).toBeCloseTo(afterRightResize.imageWidth, 0);
+  expect(afterReload.rightWidth).toBeCloseTo(afterRightResize.rightWidth, 0);
 
   await page.setViewportSize({ width: 800, height: 700 });
   await expect(imageResizer).toBeHidden();
   await expect(rightResizer).toBeHidden();
-  await expect(histogramResizer).toBeHidden();
   await expect(viewer).toBeVisible();
 });
 

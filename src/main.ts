@@ -14,8 +14,6 @@ import { buildProbeColorPreview, resolveActiveProbePixel, resolveProbeMode } fro
 import { WebGlExrRenderer } from './renderer';
 import { createOpenedImageThumbnailDataUrl } from './thumbnail';
 import {
-  buildLayerDisplayHistogram,
-  buildDisplayHistogram,
   buildSelectedDisplayTexture,
   buildViewerStateForLayer,
   buildSessionDisplayName,
@@ -23,8 +21,6 @@ import {
   computeDisplayTextureLuminanceRange,
   createDefaultStokesDegreeModulation,
   createInitialState,
-  extractRgbChannelGroups,
-  findSelectedRgbGroup,
   getStokesDegreeModulationLabel,
   getStokesDisplayColormapDefault,
   isStokesDisplaySelection,
@@ -35,10 +31,7 @@ import {
   samplePixelValuesForDisplay,
   samePixel,
   shouldPreserveStokesColormapState,
-  ViewerStore,
-  type HistogramData,
-  type HistogramMode,
-  type HistogramViewOptions
+  ViewerStore
 } from './state';
 import { ViewerUi } from './ui';
 import {
@@ -54,14 +47,8 @@ import {
   ZERO_CHANNEL
 } from './types';
 
-const HISTOGRAM_BIN_COUNT = 2048;
-const HISTOGRAM_EV_REFERENCE = 1;
 const COLORMAP_ZERO_CENTER_MANUAL_MIN_MAGNITUDE = 1e-16;
 const MIN_RGB_VIEW_LOADING_MS = 120;
-const DEFAULT_HISTOGRAM_VIEW_OPTIONS: HistogramViewOptions = {
-  xAxis: 'ev',
-  yAxis: 'linear'
-};
 const GALLERY_IMAGES = [
   {
     id: 'cbox-rgb',
@@ -89,12 +76,6 @@ async function bootstrap(): Promise<void> {
   let rgbViewChangeToken = 0;
   let colormapChangeToken = 0;
   let loadQueue: Promise<void> = Promise.resolve();
-  let histogramViewOptions: HistogramViewOptions = { ...DEFAULT_HISTOGRAM_VIEW_OPTIONS };
-  let cachedHistogram: HistogramData | null = null;
-  let cachedHistogramSessionId: string | null = null;
-  let cachedHistogramTextureRevisionKey = '';
-  let cachedHistogramMode: HistogramMode | null = null;
-  let cachedHistogramXAxis = histogramViewOptions.xAxis;
 
   let renderedSessionId: string | null = null;
   let uploadedSessionId: string | null = null;
@@ -140,12 +121,6 @@ async function bootstrap(): Promise<void> {
     onExposureChange: (value) => {
       store.setState({ exposureEv: value });
     },
-    onHistogramXAxisChange: (value) => {
-      setHistogramXAxisMode(value);
-    },
-    onHistogramYAxisChange: (value) => {
-      setHistogramYAxisMode(value);
-    },
     onLayerChange: (layerIndex) => {
       setActiveLayer(layerIndex);
     },
@@ -174,7 +149,6 @@ async function bootstrap(): Promise<void> {
       resetAllState();
     }
   });
-  ui.setHistogramViewOptions(histogramViewOptions);
 
   try {
     colormapRegistry = await loadColormapRegistry();
@@ -279,9 +253,7 @@ async function bootstrap(): Promise<void> {
           state.displayB !== previous.displayB ||
           state.displayA !== previous.displayA;
 
-        let rgbGroups: ReturnType<typeof extractRgbChannelGroups> = [];
         if (uiSelectionDirty) {
-          rgbGroups = extractRgbChannelGroups(layer.channelNames);
           ui.setRgbGroupOptions(layer.channelNames, {
             displaySource: state.displaySource,
             stokesParameter: state.stokesParameter,
@@ -353,10 +325,6 @@ async function bootstrap(): Promise<void> {
           uploadedTextureRevisionKey = activeSession.textureRevisionKey;
         }
 
-        if ((sessionChanged || needsUpload) && activeSession.displayTexture) {
-          refreshActiveHistogram(false, rgbGroups);
-        }
-
         const probeDirty =
           sessionChanged ||
           state.activeLayer !== previous.activeLayer ||
@@ -399,7 +367,6 @@ async function bootstrap(): Promise<void> {
           );
         }
       } else {
-        invalidateHistogramCache();
         ui.setLayerOptions([], 0);
         ui.setProbeMetadata(null);
         ui.setRgbGroupOptions([], {
@@ -415,15 +382,12 @@ async function bootstrap(): Promise<void> {
           width: activeImage.width,
           height: activeImage.height
         });
-        ui.clearHistogram();
       }
     } else {
-      invalidateHistogramCache();
       ui.setVisualizationMode('rgb');
       ui.setColormapRange(null, null);
       ui.setProbeMetadata(null);
       ui.setProbeReadout('Hover', null, null);
-      ui.clearHistogram();
     }
 
     const shouldRender =
@@ -981,144 +945,6 @@ async function bootstrap(): Promise<void> {
     store.setState(nextState);
   }
 
-  function setHistogramXAxisMode(value: HistogramViewOptions['xAxis']): void {
-    if (histogramViewOptions.xAxis === value) {
-      return;
-    }
-
-    histogramViewOptions = {
-      ...histogramViewOptions,
-      xAxis: value
-    };
-    ui.setHistogramViewOptions(histogramViewOptions);
-    invalidateHistogramCache();
-
-    if (!getActiveSession()) {
-      ui.clearHistogram();
-      return;
-    }
-
-    refreshActiveHistogram(true);
-  }
-
-  function setHistogramYAxisMode(value: HistogramViewOptions['yAxis']): void {
-    if (histogramViewOptions.yAxis === value) {
-      return;
-    }
-
-    histogramViewOptions = {
-      ...histogramViewOptions,
-      yAxis: value
-    };
-    ui.setHistogramViewOptions(histogramViewOptions);
-
-    if (!getActiveSession()) {
-      ui.clearHistogram();
-    }
-  }
-
-  function refreshActiveHistogram(
-    forceRebuild: boolean,
-    rgbGroupsOverride?: ReturnType<typeof extractRgbChannelGroups>
-  ): void {
-    const activeSession = getActiveSession();
-    if (!activeSession) {
-      invalidateHistogramCache();
-      ui.clearHistogram();
-      return;
-    }
-
-    const state = store.getState();
-    const textureKey = buildTextureRevisionKey(state);
-    const layer = getSelectedLayer(activeSession.decoded, state.activeLayer);
-    if (!layer) {
-      invalidateHistogramCache();
-      ui.clearHistogram();
-      return;
-    }
-
-    const rgbGroups = rgbGroupsOverride ?? extractRgbChannelGroups(layer.channelNames);
-    const histogramMode: HistogramMode =
-      state.displaySource === 'channels' &&
-      Boolean(findSelectedRgbGroup(
-        rgbGroups,
-        state.displayR,
-        state.displayG,
-        state.displayB
-      ))
-        ? 'rgb'
-        : 'luminance';
-
-    const shouldRebuild =
-      forceRebuild ||
-      !cachedHistogram ||
-      cachedHistogramSessionId !== activeSession.id ||
-      cachedHistogramTextureRevisionKey !== textureKey ||
-      cachedHistogramMode !== histogramMode ||
-      cachedHistogramXAxis !== histogramViewOptions.xAxis;
-
-    if (shouldRebuild) {
-      const histogramOptions = {
-        bins: HISTOGRAM_BIN_COUNT,
-        mode: histogramMode,
-        xAxis: histogramViewOptions.xAxis,
-        evReference: HISTOGRAM_EV_REFERENCE
-      };
-
-      if (isStokesDisplaySelection(state)) {
-        if (!activeSession.displayTexture || activeSession.textureRevisionKey !== textureKey) {
-          activeSession.displayTexture = buildSelectedDisplayTexture(
-            layer,
-            activeSession.decoded.width,
-            activeSession.decoded.height,
-            state,
-            activeSession.displayTexture ?? undefined
-          );
-          activeSession.displayLuminanceRange = computeDisplayTextureLuminanceRange(activeSession.displayTexture);
-          activeSession.textureRevisionKey = textureKey;
-        }
-
-        cachedHistogram = buildDisplayHistogram(activeSession.displayTexture, histogramOptions);
-      } else {
-        cachedHistogram = buildLayerDisplayHistogram(
-          layer,
-          activeSession.decoded.width,
-          activeSession.decoded.height,
-          state.displayR,
-          state.displayG,
-          state.displayB,
-          histogramOptions
-        );
-      }
-      cachedHistogramSessionId = activeSession.id;
-      cachedHistogramTextureRevisionKey = textureKey;
-      cachedHistogramMode = histogramMode;
-      cachedHistogramXAxis = histogramViewOptions.xAxis;
-    }
-
-    if (!cachedHistogram) {
-      ui.clearHistogram();
-      return;
-    }
-
-    ui.setHistogramViewOptions(histogramViewOptions);
-    ui.setHistogram(cachedHistogram);
-  }
-
-  function invalidateHistogramCache(): void {
-    cachedHistogram = null;
-    cachedHistogramSessionId = null;
-    cachedHistogramTextureRevisionKey = '';
-    cachedHistogramMode = null;
-    cachedHistogramXAxis = histogramViewOptions.xAxis;
-  }
-
-  function resetHistogramViewOptions(): void {
-    histogramViewOptions = { ...DEFAULT_HISTOGRAM_VIEW_OPTIONS };
-    ui.setHistogramViewOptions(histogramViewOptions);
-    invalidateHistogramCache();
-  }
-
   function switchActiveSession(sessionId: string): void {
     const nextSession = sessions.find((session) => session.id === sessionId);
     if (!nextSession || activeSessionId === nextSession.id) {
@@ -1158,8 +984,6 @@ async function bootstrap(): Promise<void> {
   }
 
   function resetAllState(): void {
-    resetHistogramViewOptions();
-
     const activeSession = getActiveSession();
     if (!activeSession) {
       store.setState({
@@ -1176,7 +1000,6 @@ async function bootstrap(): Promise<void> {
         hoveredPixel: null,
         lockedPixel: null
       });
-      ui.clearHistogram();
       return;
     }
 
@@ -1280,7 +1103,6 @@ async function bootstrap(): Promise<void> {
     uploadedTextureRevisionKey = '';
     renderedSessionId = null;
     stokesDisplayRestoreStates.clear();
-    invalidateHistogramCache();
 
     renderer.clearImage();
 

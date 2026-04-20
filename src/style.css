@@ -180,7 +180,6 @@ input[type='range'] {
 .main-layout {
   --image-panel-width: 220px;
   --right-panel-width: 320px;
-  --histogram-panel-height: auto;
   height: 100%;
   min-height: 0;
   display: grid;
@@ -192,9 +191,8 @@ input[type='range'] {
 .right-stack {
   grid-area: panel;
   min-height: 0;
-  display: grid;
-  grid-template-rows: var(--histogram-panel-height) 0.5rem minmax(0, 1fr);
-  gap: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .layout-resizer {
@@ -226,18 +224,6 @@ input[type='range'] {
   width: 1px;
 }
 
-.layout-resizer--horizontal {
-  height: 0.5rem;
-  cursor: row-resize;
-}
-
-.layout-resizer--horizontal::before {
-  top: calc(50% - 0.5px);
-  right: 0;
-  left: 0;
-  height: 1px;
-}
-
 .layout-resizer:hover::before,
 .layout-resizer:focus-visible::before,
 .layout-resizer.is-resizing::before {
@@ -261,12 +247,6 @@ input[type='range'] {
 body.is-resizing-panel-columns,
 body.is-resizing-panel-columns * {
   cursor: col-resize !important;
-  user-select: none;
-}
-
-body.is-resizing-panel-rows,
-body.is-resizing-panel-rows * {
-  cursor: row-resize !important;
   user-select: none;
 }
 
@@ -338,56 +318,10 @@ body.is-resizing-panel-rows * {
   border: 1px solid var(--panel-border);
   border-radius: 0.5rem;
   padding: 0.75rem;
+  flex: 1 1 auto;
   min-height: 0;
   max-height: 100%;
   overflow: auto;
-}
-
-.histogram-panel {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 0.5rem;
-  padding: 0.75rem;
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.histogram-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-
-.histogram-panel h2 {
-  margin: 0;
-  font-size: 0.95rem;
-}
-
-.histogram-controls {
-  display: flex;
-  gap: 0.45rem;
-  align-items: flex-start;
-}
-
-.histogram-control {
-  display: grid;
-  gap: 0.18rem;
-}
-
-.histogram-control label {
-  color: var(--text-dim);
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.histogram-control select {
-  min-width: 4.5rem;
-  padding: 0.22rem 0.45rem;
 }
 
 .image-panel {
@@ -1023,17 +957,6 @@ body.is-resizing-panel-rows * {
   min-width: 0;
 }
 
-.histogram-svg {
-  width: 100%;
-  height: 6rem;
-  min-height: 2.5rem;
-  flex: 1 1 6rem;
-  display: block;
-  border: 1px solid var(--panel-border);
-  border-radius: 0.35rem;
-  background: rgba(9, 13, 20, 0.9);
-}
-
 .readout-block {
   margin-top: 1rem;
   padding-top: 0.75rem;
@@ -1214,8 +1137,7 @@ body.is-resizing-panel-rows * {
     --right-panel-width: 280px;
   }
 
-  .side-panel,
-  .histogram-panel {
+  .side-panel {
     padding: 0.65rem;
   }
 }
@@ -1249,18 +1171,6 @@ body.is-resizing-panel-rows * {
   }
 
   .right-stack {
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 0.4rem;
-    max-height: 34vh;
-    overflow: auto;
-  }
-
-  .histogram-heading {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .histogram-controls {
-    justify-content: flex-start;
+    max-height: none;
   }
 }

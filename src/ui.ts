@@ -12,27 +12,15 @@ import {
   buildChannelDisplayOptions,
   buildZeroCenteredColormapRange,
   areDisplayChannelsAvailable,
-  computeHistogramRenderCeiling,
   extractRgbChannelGroups,
   findMergedSelectionForSplitDisplay,
   findSelectedChannelDisplayOption,
   findSelectedStokesDisplayOption,
   findSplitSelectionForMergedDisplay,
   formatScientific,
-  getStokesDisplayOptions,
-  scaleHistogramCount,
-  type HistogramData,
-  type HistogramViewOptions,
-  type HistogramXAxisMode,
-  type HistogramYAxisMode
+  getStokesDisplayOptions
 } from './state';
 
-const HISTOGRAM_DEFAULT_BINS = 2048;
-const HISTOGRAM_TICK_COUNT = 5;
-const HISTOGRAM_EPSILON = 1e-12;
-const HISTOGRAM_EV_SPECIAL_BUCKET_GAP = 4;
-const HISTOGRAM_EV_SPECIAL_BUCKET_MIN_WIDTH = 12;
-const HISTOGRAM_EV_SPECIAL_BUCKET_MAX_WIDTH = 22;
 const OPENED_IMAGES_MAX_VISIBLE_ROWS = 10;
 const CHANNEL_OPTIONS_MAX_VISIBLE_ROWS = 10;
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -47,12 +35,9 @@ const IMAGE_PANEL_MAX_WIDTH = 420;
 const RIGHT_PANEL_MIN_WIDTH = 240;
 const RIGHT_PANEL_MAX_WIDTH = 520;
 const VIEWER_MIN_WIDTH = 360;
-const HISTOGRAM_PANEL_MIN_HEIGHT = 104;
-const INSPECTOR_PANEL_MIN_HEIGHT = 220;
 const DEFAULT_PANEL_SPLIT_SIZES = {
   imagePanelWidth: 220,
-  rightPanelWidth: 320,
-  histogramPanelHeight: 160
+  rightPanelWidth: 320
 };
 
 export interface UiCallbacks {
@@ -67,8 +52,6 @@ export interface UiCallbacks {
   onOpenedImageSelected: (sessionId: string) => void;
   onReorderOpenedImage: (draggedSessionId: string, targetSessionId: string) => void;
   onExposureChange: (value: number) => void;
-  onHistogramXAxisChange: (value: HistogramXAxisMode) => void;
-  onHistogramYAxisChange: (value: HistogramYAxisMode) => void;
   onLayerChange: (layerIndex: number) => void;
   onRgbGroupChange: (mapping: DisplaySelection) => void;
   onVisualizationModeChange: (mode: VisualizationMode) => void;
@@ -83,12 +66,10 @@ export interface UiCallbacks {
 interface Elements {
   mainLayout: HTMLElement;
   rightStack: HTMLElement;
-  histogramPanel: HTMLElement;
   sidePanel: HTMLElement;
   imagePanel: HTMLElement;
   imagePanelResizer: HTMLElement;
   rightPanelResizer: HTMLElement;
-  histogramPanelResizer: HTMLElement;
   fileMenuButton: HTMLButtonElement;
   fileMenu: HTMLElement;
   galleryMenuButton: HTMLButtonElement;
@@ -113,9 +94,6 @@ interface Elements {
   exposureControl: HTMLDivElement;
   exposureSlider: HTMLInputElement;
   exposureValue: HTMLInputElement;
-  histogramXAxisSelect: HTMLSelectElement;
-  histogramYAxisSelect: HTMLSelectElement;
-  histogramSvg: SVGSVGElement;
   errorBanner: HTMLDivElement;
   viewerContainer: HTMLElement;
   dropOverlay: HTMLDivElement;
@@ -145,13 +123,6 @@ interface Elements {
   probeMetadata: HTMLElement;
   glCanvas: HTMLCanvasElement;
   overlayCanvas: HTMLCanvasElement;
-}
-
-interface HistogramPlotLayout {
-  plotX: number;
-  plotWidth: number;
-  specialBucketX: number;
-  specialBucketWidth: number;
 }
 
 export interface ListboxHitTestMetrics {
@@ -187,20 +158,15 @@ interface ChannelViewRowItem {
 export interface PanelSplitSizes {
   imagePanelWidth: number;
   rightPanelWidth: number;
-  histogramPanelHeight: number;
 }
 
 export interface PanelSplitMetrics {
   mainWidth: number;
-  rightStackHeight: number;
   imageResizerWidth: number;
   rightResizerWidth: number;
-  histogramResizerHeight: number;
 }
 
 export type PanelSplitSizeKey = keyof PanelSplitSizes;
-
-export type PanelSplitKeyboardOrientation = 'vertical' | 'horizontal';
 
 export type PanelSplitKeyboardAction =
   | { type: 'delta'; delta: number }
@@ -228,10 +194,7 @@ interface TopMenuElements {
 export class ViewerUi {
   private readonly elements: Elements;
   private readonly rgbGroupMappings = new Map<string, DisplaySelection>();
-  private readonly histogramResizeObserver: ResizeObserver;
   private readonly panelSplitResizeObserver: ResizeObserver;
-  private lastHistogram: HistogramData | null = null;
-  private histogramViewOptions: HistogramViewOptions = { xAxis: 'ev', yAxis: 'linear' };
   private isLoading = false;
   private isRgbViewLoading = false;
   private openedImageCount = 0;
@@ -268,20 +231,13 @@ export class ViewerUi {
 
   constructor(private readonly callbacks: UiCallbacks) {
     this.elements = resolveElements();
-    this.histogramResizeObserver = new ResizeObserver(() => {
-      if (this.lastHistogram) {
-        this.drawHistogram(this.lastHistogram);
-      }
-    });
     this.panelSplitResizeObserver = new ResizeObserver(() => {
       this.reclampPanelSplits();
     });
     this.bindEvents();
     this.initializePanelSplits();
-    this.histogramResizeObserver.observe(this.elements.histogramSvg);
     this.panelSplitResizeObserver.observe(this.elements.mainLayout);
     this.panelSplitResizeObserver.observe(this.elements.rightStack);
-    this.clearHistogram();
     this.elements.openedImagesSelect.disabled = true;
     this.elements.openedImagesSelect.title = 'Click and drag filename rows to reorder.';
     this.elements.reloadAllOpenedImagesButton.disabled = true;
@@ -541,45 +497,6 @@ export class ViewerUi {
     }
     this.elements.stokesDegreeModulationButton.setAttribute('aria-pressed', enabled ? 'true' : 'false');
     this.updateStokesDegreeModulationDisabled();
-  }
-
-  setHistogramViewOptions(options: HistogramViewOptions): void {
-    const previous = this.histogramViewOptions;
-    this.histogramViewOptions = { ...options };
-    this.elements.histogramXAxisSelect.value = options.xAxis;
-    this.elements.histogramYAxisSelect.value = options.yAxis;
-
-    if (
-      this.lastHistogram &&
-      previous.xAxis === options.xAxis &&
-      previous.yAxis !== options.yAxis
-    ) {
-      this.drawHistogram(this.lastHistogram);
-    }
-  }
-
-  setHistogram(histogram: HistogramData): void {
-    this.lastHistogram = histogram;
-    this.drawHistogram(histogram);
-  }
-
-  clearHistogram(): void {
-    const fallbackDomain = this.histogramViewOptions.xAxis === 'ev' ? { min: -1, max: 1 } : { min: 0, max: 1 };
-    const histogram: HistogramData = {
-      mode: 'luminance',
-      xAxis: this.histogramViewOptions.xAxis,
-      bins: new Float32Array(HISTOGRAM_DEFAULT_BINS),
-      nonPositiveCount: 0,
-      channelBins: null,
-      channelNonPositiveCounts: null,
-      min: fallbackDomain.min,
-      max: fallbackDomain.max,
-      mean: 0,
-      channelMeans: null,
-      evReference: 1
-    };
-    this.lastHistogram = histogram;
-    this.drawHistogram(histogram);
   }
 
   setOpenedImageOptions(items: OpenedImageOptionItem[], activeId: string | null): void {
@@ -1092,12 +1009,7 @@ export class ViewerUi {
 
     return {
       imagePanelWidth: readElementSize(this.elements.imagePanel, 'width', DEFAULT_PANEL_SPLIT_SIZES.imagePanelWidth),
-      rightPanelWidth: readElementSize(this.elements.rightStack, 'width', DEFAULT_PANEL_SPLIT_SIZES.rightPanelWidth),
-      histogramPanelHeight: readElementSize(
-        this.elements.histogramPanel,
-        'height',
-        DEFAULT_PANEL_SPLIT_SIZES.histogramPanelHeight
-      )
+      rightPanelWidth: readElementSize(this.elements.rightStack, 'width', DEFAULT_PANEL_SPLIT_SIZES.rightPanelWidth)
     };
   }
 
@@ -1147,7 +1059,7 @@ export class ViewerUi {
       resizer
     };
     resizer.classList.add('is-resizing');
-    document.body.classList.add(key === 'histogramPanelHeight' ? 'is-resizing-panel-rows' : 'is-resizing-panel-columns');
+    document.body.classList.add('is-resizing-panel-columns');
     resizer.setPointerCapture(event.pointerId);
   }
 
@@ -1164,10 +1076,8 @@ export class ViewerUi {
 
     if (dragState.key === 'imagePanelWidth') {
       nextSizes.imagePanelWidth = dragState.startSizes.imagePanelWidth + deltaX;
-    } else if (dragState.key === 'rightPanelWidth') {
-      nextSizes.rightPanelWidth = dragState.startSizes.rightPanelWidth - deltaX;
     } else {
-      nextSizes.histogramPanelHeight = dragState.startSizes.histogramPanelHeight + deltaY;
+      nextSizes.rightPanelWidth = dragState.startSizes.rightPanelWidth - deltaX;
     }
 
     this.applyPanelSplitSizes(nextSizes, dragState.key, false);
@@ -1184,7 +1094,7 @@ export class ViewerUi {
       dragState.resizer.releasePointerCapture(dragState.pointerId);
     }
     dragState.resizer.classList.remove('is-resizing');
-    document.body.classList.remove('is-resizing-panel-columns', 'is-resizing-panel-rows');
+    document.body.classList.remove('is-resizing-panel-columns');
     this.activePanelResize = null;
     saveStoredPanelSplitSizes(this.panelSplitSizes);
   }
@@ -1194,8 +1104,7 @@ export class ViewerUi {
       return;
     }
 
-    const orientation = key === 'histogramPanelHeight' ? 'horizontal' : 'vertical';
-    const action = getPanelSplitKeyboardAction(event.key, event.shiftKey, orientation);
+    const action = getPanelSplitKeyboardAction(event.key, event.shiftKey);
     if (!action) {
       return;
     }
@@ -1223,10 +1132,6 @@ export class ViewerUi {
     this.panelSplitSizes = clampedSizes;
     this.elements.mainLayout.style.setProperty('--image-panel-width', `${Math.round(clampedSizes.imagePanelWidth)}px`);
     this.elements.mainLayout.style.setProperty('--right-panel-width', `${Math.round(clampedSizes.rightPanelWidth)}px`);
-    this.elements.mainLayout.style.setProperty(
-      '--histogram-panel-height',
-      `${Math.round(clampedSizes.histogramPanelHeight)}px`
-    );
     this.updatePanelSplitAria();
 
     if (persist) {
@@ -1237,10 +1142,8 @@ export class ViewerUi {
   private getPanelSplitMetrics(): PanelSplitMetrics {
     return {
       mainWidth: readElementSize(this.elements.mainLayout, 'width', window.innerWidth),
-      rightStackHeight: readElementSize(this.elements.rightStack, 'height', window.innerHeight),
       imageResizerWidth: readElementSize(this.elements.imagePanelResizer, 'width', 8),
-      rightResizerWidth: readElementSize(this.elements.rightPanelResizer, 'width', 8),
-      histogramResizerHeight: readElementSize(this.elements.histogramPanelResizer, 'height', 8)
+      rightResizerWidth: readElementSize(this.elements.rightPanelResizer, 'width', 8)
     };
   }
 
@@ -1248,7 +1151,6 @@ export class ViewerUi {
     const metrics = this.getPanelSplitMetrics();
     this.updatePanelResizerAria(this.elements.imagePanelResizer, 'imagePanelWidth', metrics);
     this.updatePanelResizerAria(this.elements.rightPanelResizer, 'rightPanelWidth', metrics);
-    this.updatePanelResizerAria(this.elements.histogramPanelResizer, 'histogramPanelHeight', metrics);
   }
 
   private updatePanelResizerAria(
@@ -1269,303 +1171,6 @@ export class ViewerUi {
       'aria-pressed',
       this.includeSplitRgbChannels ? 'true' : 'false'
     );
-  }
-
-  private drawHistogram(histogram: HistogramData): void {
-    const svg = this.elements.histogramSvg;
-    const width = Math.max(1, Math.floor(svg.clientWidth));
-    const height = Math.max(1, Math.floor(svg.clientHeight));
-
-    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-    svg.setAttribute('preserveAspectRatio', 'none');
-    svg.replaceChildren();
-
-    const background = createSvgElement('rect');
-    background.setAttribute('x', '0');
-    background.setAttribute('y', '0');
-    background.setAttribute('width', `${width}`);
-    background.setAttribute('height', `${height}`);
-    background.setAttribute('fill', 'rgba(9, 13, 20, 0.9)');
-    svg.append(background);
-
-    const topPadding = 1;
-    const tickSize = 3;
-    const tickLabelGap = 2;
-    const tickFontSize = 9;
-    const bottomPadding = tickSize + tickLabelGap + tickFontSize + 1;
-    const drawHeight = Math.max(1, height - topPadding - bottomPadding);
-    const axisY = topPadding + drawHeight;
-    const layout = createHistogramPlotLayout(width, histogram.xAxis);
-    const ceiling = computeHistogramRenderCeiling(histogram);
-
-    if (histogram.mode === 'rgb' && histogram.channelBins) {
-      this.drawHistogramArea(
-        svg,
-        scaleHistogramBins(histogram.channelBins.r, ceiling, this.histogramViewOptions.yAxis),
-        layout.plotX,
-        layout.plotWidth,
-        drawHeight,
-        axisY,
-        'rgba(255, 96, 96, 0.22)',
-        'rgba(255, 112, 112, 0.92)'
-      );
-      this.drawHistogramArea(
-        svg,
-        scaleHistogramBins(histogram.channelBins.g, ceiling, this.histogramViewOptions.yAxis),
-        layout.plotX,
-        layout.plotWidth,
-        drawHeight,
-        axisY,
-        'rgba(120, 255, 120, 0.22)',
-        'rgba(144, 255, 144, 0.92)'
-      );
-      this.drawHistogramArea(
-        svg,
-        scaleHistogramBins(histogram.channelBins.b, ceiling, this.histogramViewOptions.yAxis),
-        layout.plotX,
-        layout.plotWidth,
-        drawHeight,
-        axisY,
-        'rgba(120, 170, 255, 0.22)',
-        'rgba(148, 192, 255, 0.92)'
-      );
-
-      if (histogram.xAxis === 'ev' && histogram.channelNonPositiveCounts && layout.specialBucketWidth > 0) {
-        this.drawHistogramBucket(
-          svg,
-          layout.specialBucketX,
-          layout.specialBucketWidth,
-          scaleHistogramCount(
-            histogram.channelNonPositiveCounts.r,
-            ceiling,
-            this.histogramViewOptions.yAxis
-          ),
-          drawHeight,
-          axisY,
-          'rgba(255, 96, 96, 0.22)',
-          'rgba(255, 112, 112, 0.92)'
-        );
-        this.drawHistogramBucket(
-          svg,
-          layout.specialBucketX,
-          layout.specialBucketWidth,
-          scaleHistogramCount(
-            histogram.channelNonPositiveCounts.g,
-            ceiling,
-            this.histogramViewOptions.yAxis
-          ),
-          drawHeight,
-          axisY,
-          'rgba(120, 255, 120, 0.22)',
-          'rgba(144, 255, 144, 0.92)'
-        );
-        this.drawHistogramBucket(
-          svg,
-          layout.specialBucketX,
-          layout.specialBucketWidth,
-          scaleHistogramCount(
-            histogram.channelNonPositiveCounts.b,
-            ceiling,
-            this.histogramViewOptions.yAxis
-          ),
-          drawHeight,
-          axisY,
-          'rgba(120, 170, 255, 0.22)',
-          'rgba(148, 192, 255, 0.92)'
-        );
-      }
-    } else {
-      const bins = histogram.bins.length > 0 ? histogram.bins : new Float32Array(HISTOGRAM_DEFAULT_BINS);
-      const defs = createSvgElement('defs');
-      const gradient = createSvgElement('linearGradient');
-      const gradientId = 'histogram-gradient';
-      gradient.setAttribute('id', gradientId);
-      gradient.setAttribute('x1', '0%');
-      gradient.setAttribute('y1', '0%');
-      gradient.setAttribute('x2', '100%');
-      gradient.setAttribute('y2', '0%');
-
-      const stop0 = createSvgElement('stop');
-      stop0.setAttribute('offset', '0%');
-      stop0.setAttribute('stop-color', 'rgba(75, 192, 255, 0.95)');
-      gradient.append(stop0);
-
-      const stop1 = createSvgElement('stop');
-      stop1.setAttribute('offset', '50%');
-      stop1.setAttribute('stop-color', 'rgba(130, 225, 255, 0.95)');
-      gradient.append(stop1);
-
-      const stop2 = createSvgElement('stop');
-      stop2.setAttribute('offset', '100%');
-      stop2.setAttribute('stop-color', 'rgba(255, 220, 120, 0.95)');
-      gradient.append(stop2);
-
-      defs.append(gradient);
-      svg.append(defs);
-
-      this.drawHistogramArea(
-        svg,
-        scaleHistogramBins(bins, ceiling, this.histogramViewOptions.yAxis),
-        layout.plotX,
-        layout.plotWidth,
-        drawHeight,
-        axisY,
-        `url(#${gradientId})`,
-        'rgba(216, 234, 255, 0.9)'
-      );
-
-      if (histogram.xAxis === 'ev' && layout.specialBucketWidth > 0) {
-        this.drawHistogramBucket(
-          svg,
-          layout.specialBucketX,
-          layout.specialBucketWidth,
-          scaleHistogramCount(histogram.nonPositiveCount, ceiling, this.histogramViewOptions.yAxis),
-          drawHeight,
-          axisY,
-          'rgba(75, 192, 255, 0.18)',
-          'rgba(216, 234, 255, 0.8)'
-        );
-      }
-    }
-
-    this.drawHistogramTicks(svg, histogram, layout, axisY, tickSize, tickLabelGap, tickFontSize);
-  }
-
-  private drawHistogramArea(
-    svg: SVGSVGElement,
-    bins: Float32Array,
-    plotX: number,
-    plotWidth: number,
-    drawHeight: number,
-    axisY: number,
-    fillStyle: string,
-    strokeStyle: string
-  ): void {
-    const paths = buildHistogramAreaPaths(bins, plotX, plotWidth, drawHeight, axisY);
-    if (!paths) {
-      return;
-    }
-
-    const fillPath = createSvgElement('path');
-    fillPath.setAttribute('d', paths.areaPath);
-    fillPath.setAttribute('fill', fillStyle);
-    fillPath.setAttribute('shape-rendering', 'geometricPrecision');
-
-    const outlinePath = createSvgElement('path');
-    outlinePath.setAttribute('d', paths.outlinePath);
-    outlinePath.setAttribute('fill', 'none');
-    outlinePath.setAttribute('stroke', strokeStyle);
-    outlinePath.setAttribute('stroke-width', '1.15');
-    outlinePath.setAttribute('stroke-linejoin', 'round');
-    outlinePath.setAttribute('stroke-linecap', 'round');
-    outlinePath.setAttribute('vector-effect', 'non-scaling-stroke');
-
-    svg.append(fillPath, outlinePath);
-  }
-
-  private drawHistogramBucket(
-    svg: SVGSVGElement,
-    x: number,
-    width: number,
-    value: number,
-    drawHeight: number,
-    axisY: number,
-    fillStyle: string,
-    strokeStyle: string
-  ): void {
-    if (value <= 0 || width <= 0) {
-      return;
-    }
-
-    const bucketHeight = Math.max(1, value * drawHeight);
-    const rect = createSvgElement('rect');
-    rect.setAttribute('x', `${x}`);
-    rect.setAttribute('width', `${width}`);
-    rect.setAttribute('y', `${axisY - bucketHeight}`);
-    rect.setAttribute('height', `${bucketHeight}`);
-    rect.setAttribute('fill', fillStyle);
-    rect.setAttribute('stroke', strokeStyle);
-    rect.setAttribute('stroke-width', '1');
-    rect.setAttribute('vector-effect', 'non-scaling-stroke');
-    svg.append(rect);
-  }
-
-  private drawHistogramTicks(
-    svg: SVGSVGElement,
-    histogram: HistogramData,
-    layout: HistogramPlotLayout,
-    axisY: number,
-    tickSize: number,
-    tickLabelGap: number,
-    tickFontSize: number
-  ): void {
-    const baselineY = Math.floor(axisY) + 0.5;
-
-    const ticksGroup = createSvgElement('g');
-    ticksGroup.setAttribute('stroke', 'rgba(154, 164, 180, 0.75)');
-    ticksGroup.setAttribute('stroke-width', '1');
-    ticksGroup.setAttribute('shape-rendering', 'geometricPrecision');
-
-    const axis = createSvgElement('line');
-    axis.setAttribute('x1', '0');
-    axis.setAttribute('y1', `${baselineY}`);
-    axis.setAttribute('x2', `${layout.plotX + layout.plotWidth}`);
-    axis.setAttribute('y2', `${baselineY}`);
-    ticksGroup.append(axis);
-
-    const labelsGroup = createSvgElement('g');
-    labelsGroup.setAttribute('fill', 'rgba(154, 164, 180, 0.95)');
-    labelsGroup.setAttribute('font-family', '"IBM Plex Mono", "Cascadia Mono", monospace');
-    labelsGroup.setAttribute('font-size', `${tickFontSize}`);
-    labelsGroup.setAttribute('dominant-baseline', 'hanging');
-
-    if (histogram.xAxis === 'ev' && layout.specialBucketWidth > 0) {
-      const specialCenterX = layout.specialBucketX + layout.specialBucketWidth * 0.5;
-      appendHistogramTick(
-        ticksGroup,
-        labelsGroup,
-        specialCenterX,
-        baselineY,
-        tickSize,
-        tickLabelGap,
-        '<=0',
-        'middle'
-      );
-    }
-
-    const ticks =
-      histogram.xAxis === 'ev'
-        ? buildEvTicks(histogram.min, histogram.max, histogram.evReference)
-        : buildLinearTicks(histogram.min, histogram.max, HISTOGRAM_TICK_COUNT);
-
-    ticks.forEach((tick, index) => {
-      const x =
-        layout.plotX +
-        projectHistogramDomainValue(tick.value, histogram.min, histogram.max, layout.plotWidth);
-      let align: 'start' | 'middle' | 'end' = 'middle';
-      let drawX = x;
-
-      if (index === 0) {
-        align = 'start';
-        drawX = Math.max(layout.plotX + 1, x);
-      } else if (index === ticks.length - 1) {
-        align = 'end';
-        drawX = layout.plotX + layout.plotWidth - 1;
-      }
-
-      appendHistogramTick(
-        ticksGroup,
-        labelsGroup,
-        drawX,
-        baselineY,
-        tickSize,
-        tickLabelGap,
-        tick.label,
-        align
-      );
-    });
-
-    svg.append(ticksGroup, labelsGroup);
   }
 
   private bindTopMenu(menu: TopMenuElements): void {
@@ -1631,7 +1236,6 @@ export class ViewerUi {
   private bindEvents(): void {
     this.bindPanelResizer(this.elements.imagePanelResizer, 'imagePanelWidth');
     this.bindPanelResizer(this.elements.rightPanelResizer, 'rightPanelWidth');
-    this.bindPanelResizer(this.elements.histogramPanelResizer, 'histogramPanelHeight');
     this.bindImageBrowserToggle(this.elements.openedFilesToggle, this.elements.openedFilesList);
     this.bindImageBrowserToggle(this.elements.partsLayersToggle, this.elements.partsLayersList);
     this.bindImageBrowserToggle(this.elements.channelViewToggle, this.elements.channelViewList);
@@ -1805,16 +1409,6 @@ export class ViewerUi {
       const max = Number(this.elements.exposureSlider.max);
       const clamped = Math.min(max, Math.max(min, value));
       this.callbacks.onExposureChange(clamped);
-    });
-
-    this.elements.histogramXAxisSelect.addEventListener('change', (event) => {
-      const target = event.currentTarget as HTMLSelectElement;
-      this.callbacks.onHistogramXAxisChange(parseHistogramXAxisMode(target.value));
-    });
-
-    this.elements.histogramYAxisSelect.addEventListener('change', (event) => {
-      const target = event.currentTarget as HTMLSelectElement;
-      this.callbacks.onHistogramYAxisChange(parseHistogramYAxisMode(target.value));
     });
 
     const onLayerSelect = (event: Event): void => {
@@ -2267,12 +1861,10 @@ function resolveElements(): Elements {
   return {
     mainLayout: requireElement('main-layout', HTMLElement),
     rightStack: requireElement('right-stack', HTMLElement),
-    histogramPanel: requireElement('histogram-panel', HTMLElement),
     sidePanel: requireElement('inspector-panel', HTMLElement),
     imagePanel: requireElement('image-panel', HTMLElement),
     imagePanelResizer: requireElement('image-panel-resizer', HTMLElement),
     rightPanelResizer: requireElement('right-panel-resizer', HTMLElement),
-    histogramPanelResizer: requireElement('histogram-panel-resizer', HTMLElement),
     fileMenuButton: requireElement('file-menu-button', HTMLButtonElement),
     fileMenu: requireElement('file-menu', HTMLElement),
     galleryMenuButton: requireElement('gallery-menu-button', HTMLButtonElement),
@@ -2297,9 +1889,6 @@ function resolveElements(): Elements {
     exposureControl: requireElement('exposure-control', HTMLDivElement),
     exposureSlider: requireElement('exposure-slider', HTMLInputElement),
     exposureValue: requireElement('exposure-value', HTMLInputElement),
-    histogramXAxisSelect: requireElement('histogram-x-axis-select', HTMLSelectElement),
-    histogramYAxisSelect: requireElement('histogram-y-axis-select', HTMLSelectElement),
-    histogramSvg: requireElement('histogram-svg', SVGSVGElement),
     errorBanner: requireElement('error-banner', HTMLDivElement),
     viewerContainer: requireElement('viewer-container', HTMLElement),
     dropOverlay: requireElement('drop-overlay', HTMLDivElement),
@@ -2980,8 +2569,7 @@ function saveStoredPanelSplitSizes(sizes: PanelSplitSizes): void {
       PANEL_SPLIT_STORAGE_KEY,
       JSON.stringify({
         imagePanelWidth: Math.round(sizes.imagePanelWidth),
-        rightPanelWidth: Math.round(sizes.rightPanelWidth),
-        histogramPanelHeight: Math.round(sizes.histogramPanelHeight)
+        rightPanelWidth: Math.round(sizes.rightPanelWidth)
       })
     );
   } catch {
@@ -3007,7 +2595,7 @@ export function parsePanelSplitStorageValue(value: string | null): Partial<Panel
 
   const record = parsed as Record<string, unknown>;
   const sizes: Partial<PanelSplitSizes> = {};
-  const keys: PanelSplitSizeKey[] = ['imagePanelWidth', 'rightPanelWidth', 'histogramPanelHeight'];
+  const keys: PanelSplitSizeKey[] = ['imagePanelWidth', 'rightPanelWidth'];
 
   for (const key of keys) {
     const item = record[key];
@@ -3021,8 +2609,7 @@ export function parsePanelSplitStorageValue(value: string | null): Partial<Panel
 
 export function getPanelSplitKeyboardAction(
   key: string,
-  shiftKey: boolean,
-  orientation: PanelSplitKeyboardOrientation
+  shiftKey: boolean
 ): PanelSplitKeyboardAction | null {
   if (key === 'Home') {
     return { type: 'snap', target: 'min' };
@@ -3032,20 +2619,11 @@ export function getPanelSplitKeyboardAction(
   }
 
   const step = shiftKey ? PANEL_SPLIT_KEYBOARD_LARGE_STEP : PANEL_SPLIT_KEYBOARD_STEP;
-  if (orientation === 'vertical') {
-    if (key === 'ArrowLeft' || key === 'Left') {
-      return { type: 'delta', delta: -step };
-    }
-    if (key === 'ArrowRight' || key === 'Right') {
-      return { type: 'delta', delta: step };
-    }
-  } else {
-    if (key === 'ArrowUp' || key === 'Up') {
-      return { type: 'delta', delta: -step };
-    }
-    if (key === 'ArrowDown' || key === 'Down') {
-      return { type: 'delta', delta: step };
-    }
+  if (key === 'ArrowLeft' || key === 'Left') {
+    return { type: 'delta', delta: -step };
+  }
+  if (key === 'ArrowRight' || key === 'Right') {
+    return { type: 'delta', delta: step };
   }
 
   return null;
@@ -3059,12 +2637,7 @@ export function clampPanelSplitSizes(
   const sideWidthLimit = getSidePanelWidthLimit(metrics);
   const clampedSizes: PanelSplitSizes = {
     imagePanelWidth: clampFiniteSize(sizes.imagePanelWidth, IMAGE_PANEL_MIN_WIDTH, IMAGE_PANEL_MAX_WIDTH),
-    rightPanelWidth: clampFiniteSize(sizes.rightPanelWidth, RIGHT_PANEL_MIN_WIDTH, RIGHT_PANEL_MAX_WIDTH),
-    histogramPanelHeight: clampFiniteSize(
-      sizes.histogramPanelHeight,
-      HISTOGRAM_PANEL_MIN_HEIGHT,
-      getPanelSplitSizeRange('histogramPanelHeight', sizes, metrics).max
-    )
+    rightPanelWidth: clampFiniteSize(sizes.rightPanelWidth, RIGHT_PANEL_MIN_WIDTH, RIGHT_PANEL_MAX_WIDTH)
   };
 
   let overflow = clampedSizes.imagePanelWidth + clampedSizes.rightPanelWidth - sideWidthLimit;
@@ -3088,17 +2661,9 @@ export function clampPanelSplitSizes(
     }
   }
 
-  const histogramRange = getPanelSplitSizeRange('histogramPanelHeight', clampedSizes, metrics);
-  clampedSizes.histogramPanelHeight = clamp(
-    clampedSizes.histogramPanelHeight,
-    histogramRange.min,
-    histogramRange.max
-  );
-
   return {
     imagePanelWidth: Math.round(clampedSizes.imagePanelWidth),
-    rightPanelWidth: Math.round(clampedSizes.rightPanelWidth),
-    histogramPanelHeight: Math.round(clampedSizes.histogramPanelHeight)
+    rightPanelWidth: Math.round(clampedSizes.rightPanelWidth)
   };
 }
 
@@ -3123,13 +2688,7 @@ export function getPanelSplitSizeRange(
     };
   }
 
-  return {
-    min: HISTOGRAM_PANEL_MIN_HEIGHT,
-    max: Math.max(
-      HISTOGRAM_PANEL_MIN_HEIGHT,
-      Math.floor(metrics.rightStackHeight - metrics.histogramResizerHeight - INSPECTOR_PANEL_MIN_HEIGHT)
-    )
-  };
+  throw new Error(`Unknown panel split size key: ${key}`);
 }
 
 function getSidePanelWidthLimit(metrics: PanelSplitMetrics): number {
@@ -3161,290 +2720,4 @@ export function getListboxOptionIndexAtClientY(clientY: number, metrics: Listbox
   const position = metrics.scrollTop + relativeY;
   const rawIndex = Math.floor(position / rowHeight);
   return Math.min(metrics.optionCount - 1, Math.max(0, rawIndex));
-}
-
-function parseHistogramXAxisMode(value: string): HistogramXAxisMode {
-  return value === 'linear' ? 'linear' : 'ev';
-}
-
-function parseHistogramYAxisMode(value: string): HistogramYAxisMode {
-  if (value === 'linear' || value === 'log') {
-    return value;
-  }
-  return 'sqrt';
-}
-
-function formatHistogramTickLabel(value: number): string {
-  if (!Number.isFinite(value)) {
-    return '-';
-  }
-
-  const abs = Math.abs(value);
-  if (abs !== 0 && (abs < 0.01 || abs >= 1000)) {
-    return value.toExponential(1);
-  }
-
-  return value.toPrecision(3);
-}
-
-function buildLinearTicks(min: number, max: number, targetCount: number): Array<{ value: number; label: string }> {
-  if (!Number.isFinite(min) || !Number.isFinite(max)) {
-    return [];
-  }
-
-  if (Math.abs(max - min) <= HISTOGRAM_EPSILON) {
-    return [{ value: min, label: formatHistogramTickLabel(min) }];
-  }
-
-  const step = computeNiceLinearStep((max - min) / Math.max(1, targetCount - 1));
-  const start = Math.ceil((min - HISTOGRAM_EPSILON) / step) * step;
-  const end = Math.floor((max + HISTOGRAM_EPSILON) / step) * step;
-  const ticks: Array<{ value: number; label: string }> = [];
-
-  for (let value = start; value <= end + HISTOGRAM_EPSILON; value += step) {
-    const normalized = Math.abs(value) < HISTOGRAM_EPSILON ? 0 : value;
-    ticks.push({
-      value: normalized,
-      label: formatHistogramTickLabel(normalized)
-    });
-  }
-
-  if (ticks.length > 0) {
-    return ticks;
-  }
-
-  return [
-    { value: min, label: formatHistogramTickLabel(min) },
-    { value: max, label: formatHistogramTickLabel(max) }
-  ];
-}
-
-function buildEvTicks(
-  min: number,
-  max: number,
-  evReference: number
-): Array<{ value: number; label: string }> {
-  if (!Number.isFinite(min) || !Number.isFinite(max)) {
-    return [];
-  }
-
-  if (Math.abs(max - min) <= HISTOGRAM_EPSILON) {
-    return [{ value: min, label: formatHistogramTickLabel(evReference * 2 ** min) }];
-  }
-
-  const candidateSteps = [0.5, 1, 2, 4, 8];
-  let bestStep = candidateSteps[0];
-  let bestScore = Number.POSITIVE_INFINITY;
-
-  for (const step of candidateSteps) {
-    const count = countTicksForStep(min, max, step);
-    if (count <= 0) {
-      continue;
-    }
-
-    const penalty = count < 4 || count > 6 ? 10 : 0;
-    const score = penalty + Math.abs(count - HISTOGRAM_TICK_COUNT);
-    if (score < bestScore) {
-      bestScore = score;
-      bestStep = step;
-    }
-  }
-
-  const start = Math.ceil((min - HISTOGRAM_EPSILON) / bestStep) * bestStep;
-  const end = Math.floor((max + HISTOGRAM_EPSILON) / bestStep) * bestStep;
-  const ticks: Array<{ value: number; label: string }> = [];
-
-  for (let value = start; value <= end + HISTOGRAM_EPSILON; value += bestStep) {
-    const normalized = Math.abs(value) < HISTOGRAM_EPSILON ? 0 : value;
-    ticks.push({
-      value: normalized,
-      label: formatHistogramTickLabel(evReference * 2 ** normalized)
-    });
-  }
-
-  if (ticks.length >= 2) {
-    return ticks;
-  }
-
-  return [
-    { value: min, label: formatHistogramTickLabel(evReference * 2 ** min) },
-    { value: max, label: formatHistogramTickLabel(evReference * 2 ** max) }
-  ];
-}
-
-function countTicksForStep(min: number, max: number, step: number): number {
-  const start = Math.ceil((min - HISTOGRAM_EPSILON) / step) * step;
-  const end = Math.floor((max + HISTOGRAM_EPSILON) / step) * step;
-  if (end < start) {
-    return 0;
-  }
-  return Math.floor((end - start) / step) + 1;
-}
-
-function computeNiceLinearStep(rawStep: number): number {
-  if (!Number.isFinite(rawStep) || rawStep <= 0) {
-    return 1;
-  }
-
-  const exponent = Math.floor(Math.log10(rawStep));
-  const power = 10 ** exponent;
-  const scaled = rawStep / power;
-
-  if (scaled <= 1) {
-    return power;
-  }
-  if (scaled <= 2) {
-    return 2 * power;
-  }
-  if (scaled <= 5) {
-    return 5 * power;
-  }
-  return 10 * power;
-}
-
-function appendHistogramTick(
-  ticksGroup: SVGGElement,
-  labelsGroup: SVGGElement,
-  x: number,
-  baselineY: number,
-  tickSize: number,
-  tickLabelGap: number,
-  label: string,
-  align: 'start' | 'middle' | 'end'
-): void {
-  const tickX = Math.floor(x) + 0.5;
-  const tickLine = createSvgElement('line');
-  tickLine.setAttribute('x1', `${tickX}`);
-  tickLine.setAttribute('y1', `${baselineY}`);
-  tickLine.setAttribute('x2', `${tickX}`);
-  tickLine.setAttribute('y2', `${baselineY + tickSize}`);
-  ticksGroup.append(tickLine);
-
-  const text = createSvgElement('text');
-  text.setAttribute('x', `${x}`);
-  text.setAttribute('y', `${baselineY + tickSize + tickLabelGap}`);
-  text.setAttribute('text-anchor', align);
-  text.textContent = label;
-  labelsGroup.append(text);
-}
-
-function projectHistogramDomainValue(value: number, min: number, max: number, plotWidth: number): number {
-  if (plotWidth <= 1 || Math.abs(max - min) <= HISTOGRAM_EPSILON) {
-    return Math.max(0, plotWidth * 0.5);
-  }
-
-  const unit = Math.min(1, Math.max(0, (value - min) / (max - min)));
-  return unit * Math.max(1, plotWidth - 1);
-}
-
-function scaleHistogramBins(
-  bins: Float32Array,
-  ceiling: number,
-  yAxis: HistogramYAxisMode
-): Float32Array {
-  const scaledBins = new Float32Array(bins.length);
-  for (let i = 0; i < bins.length; i += 1) {
-    scaledBins[i] = scaleHistogramCount(bins[i], ceiling, yAxis);
-  }
-  return scaledBins;
-}
-
-function createHistogramPlotLayout(totalWidth: number, xAxis: HistogramXAxisMode): HistogramPlotLayout {
-  if (xAxis !== 'ev') {
-    return {
-      plotX: 0,
-      plotWidth: totalWidth,
-      specialBucketX: 0,
-      specialBucketWidth: 0
-    };
-  }
-
-  const maxSpecialBucketWidth = Math.max(0, totalWidth - HISTOGRAM_EV_SPECIAL_BUCKET_GAP - 1);
-  if (maxSpecialBucketWidth <= 0) {
-    return {
-      plotX: 0,
-      plotWidth: Math.max(1, totalWidth),
-      specialBucketX: 0,
-      specialBucketWidth: 0
-    };
-  }
-
-  const desiredSpecialBucketWidth = Math.min(
-    HISTOGRAM_EV_SPECIAL_BUCKET_MAX_WIDTH,
-    Math.max(HISTOGRAM_EV_SPECIAL_BUCKET_MIN_WIDTH, totalWidth * 0.075)
-  );
-  const specialBucketWidth = Math.min(desiredSpecialBucketWidth, maxSpecialBucketWidth);
-  const plotX = specialBucketWidth + HISTOGRAM_EV_SPECIAL_BUCKET_GAP;
-  return {
-    plotX,
-    plotWidth: Math.max(1, totalWidth - plotX),
-    specialBucketX: 0,
-    specialBucketWidth
-  };
-}
-
-function buildHistogramAreaPaths(
-  bins: Float32Array,
-  xStart: number,
-  width: number,
-  drawHeight: number,
-  axisY: number
-): { areaPath: string; outlinePath: string } | null {
-  if (bins.length === 0) {
-    return null;
-  }
-
-  let hasVisibleValue = false;
-  for (let i = 0; i < bins.length; i += 1) {
-    if (bins[i] > 0) {
-      hasVisibleValue = true;
-      break;
-    }
-  }
-
-  if (!hasVisibleValue) {
-    return null;
-  }
-
-  const safeWidth = Math.max(1, width);
-  // Use one continuous stepped path so adjacent bins share edges without visible seams.
-  const firstY = histogramValueToY(bins[0], drawHeight, axisY);
-  const startX = formatSvgNumber(xStart);
-  const areaSegments = [`M ${startX} ${formatSvgNumber(axisY)}`, `L ${startX} ${formatSvgNumber(firstY)}`];
-  const outlineSegments = [`M ${startX} ${formatSvgNumber(firstY)}`];
-
-  for (let i = 0; i < bins.length; i += 1) {
-    const currentY = histogramValueToY(bins[i], drawHeight, axisY);
-    const nextX = xStart + ((i + 1) / bins.length) * safeWidth;
-    const formattedNextX = formatSvgNumber(nextX);
-    const formattedCurrentY = formatSvgNumber(currentY);
-
-    areaSegments.push(`L ${formattedNextX} ${formattedCurrentY}`);
-    outlineSegments.push(`L ${formattedNextX} ${formattedCurrentY}`);
-
-    if (i + 1 < bins.length) {
-      const nextY = histogramValueToY(bins[i + 1], drawHeight, axisY);
-      if (Math.abs(nextY - currentY) > 1e-6) {
-        const formattedNextY = formatSvgNumber(nextY);
-        areaSegments.push(`L ${formattedNextX} ${formattedNextY}`);
-        outlineSegments.push(`L ${formattedNextX} ${formattedNextY}`);
-      }
-    }
-  }
-
-  areaSegments.push(`L ${formatSvgNumber(xStart + safeWidth)} ${formatSvgNumber(axisY)}`, 'Z');
-
-  return {
-    areaPath: areaSegments.join(' '),
-    outlinePath: outlineSegments.join(' ')
-  };
-}
-
-function histogramValueToY(value: number, drawHeight: number, axisY: number): number {
-  const clampedValue = Math.max(0, Math.min(1, value));
-  return axisY - clampedValue * drawHeight;
-}
-
-function formatSvgNumber(value: number): string {
-  return Number(value.toFixed(3)).toString();
 }

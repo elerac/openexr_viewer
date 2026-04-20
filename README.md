@@ -32,7 +32,7 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - `Auto Range` has two modes: highlighted always-auto mode follows each image/layer/channel, while one-time/manual mode preserves the current min/max across targets.
   - `Zero Center` keeps the range symmetric around zero (`min=-v`, `max=v`), and in auto mode uses `v=max(abs(min), abs(max))`.
   - Angle Stokes colormaps expose a paired degree modulation toggle: AoLP can be modulated by DoLP, CoP by DoCP, and ToP by DoP. CoP and ToP modulation default to on; AoLP defaults to off.
-  - Leaves histogram and raw numeric probe values unchanged.
+  - Leaves raw numeric probe values unchanged.
 - Nearest-neighbor rendering at all zoom levels (no interpolation).
 - Zoom range: `0.125x` to `512x`, wheel zoom anchored to cursor.
 - Pan with left mouse drag.
@@ -45,15 +45,6 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - RGB values shown inside image pixels.
   - 3-channel values stacked vertically.
   - Label colors follow channel mapping (`R`, `G`, `B`).
-- Histogram panel:
-  - Uses 2048 bins for higher detail.
-  - RGB images: separate `R/G/B` channel histograms.
-  - Non-RGB images: luminance histogram fallback.
-  - Default `X` axis uses `EV` (`log2(value)`, with `0 EV = 1.0`).
-  - `Y` axis defaults to `linear` and can switch to `sqrt` or `log`.
-  - Histogram controls expose `X: EV/Linear` and `Y: Sqrt/Log/Linear`.
-  - Shows X-axis tick marks and tick labels inside the histogram; in `EV` mode the bins use EV/log2 spacing while tick labels show the corresponding linear values.
-  - Not affected by exposure slider.
 - Channel controls:
   - `Channel` selector for grouped channels such as `HOGE.R/G/B`, `FUGA.R/G/B`; grouped RGB remains the default display when available.
   - Alpha is applied to normal channel displays when a matching companion exists: bare `R/G/B` and bare scalar channels use bare `A`, while namespaced channels such as `beauty.R` or `depth.Z` use `beauty.A` or `depth.A`. Collapsed channel choices group alpha into labels such as `R,G,B,A`, `mask,A`, and `beauty.(R,G,B,A)` instead of showing the companion alpha separately.
@@ -63,13 +54,12 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - RGB Stokes layers with `S0.R/G/B` through `S3.R/G/B` expose grouped `S1/S0.(R,G,B)`, `S2/S0.(R,G,B)`, `S3/S0.(R,G,B)`, `AoLP.(R,G,B)`, `DoP.(R,G,B)`, `DoLP.(R,G,B)`, `DoCP.(R,G,B)`, `CoP.(R,G,B)`, and `ToP.(R,G,B)` entries; grouped entries keep the Rec.709 mono-derived visualization, while `Split RGB` exposes per-component entries such as `S1/S0.R`, `AoLP.G`, and `DoP.B`.
   - When a selected layer does not expose the previous channel mapping, the viewer falls back to bare `R/G/B`, then the first RGB group, then the first non-alpha channel as grayscale.
 - Reset button resets view and display state, including exposure.
-  - Reset also restores histogram axes to the default mode (`X = EV`, `Y = Linear`).
 
 ## UI Layout
 
 - Left panel: open files, channel view, and parts/layers controls.
 - Center: image viewer canvas.
-- Right side: `Histogram` panel above `Inspector`.
+- Right side: `Inspector`.
 
 ## Tech Stack
 

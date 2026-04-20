@@ -61,10 +61,8 @@ describe('probe coordinate formatting', () => {
 describe('panel split sizing', () => {
   const metrics: PanelSplitMetrics = {
     mainWidth: 900,
-    rightStackHeight: 500,
     imageResizerWidth: 8,
-    rightResizerWidth: 8,
-    histogramResizerHeight: 8
+    rightResizerWidth: 8
   };
 
   it('ignores corrupt panel split storage', () => {
@@ -78,7 +76,7 @@ describe('panel split sizing', () => {
         JSON.stringify({
           imagePanelWidth: 260,
           rightPanelWidth: 'wide',
-          histogramPanelHeight: -20
+          removedPanelHeight: 180
         })
       )
     ).toEqual({ imagePanelWidth: 260 });
@@ -88,8 +86,7 @@ describe('panel split sizing', () => {
     const sizes = clampPanelSplitSizes(
       {
         imagePanelWidth: 999,
-        rightPanelWidth: 999,
-        histogramPanelHeight: 999
+        rightPanelWidth: 999
       },
       metrics
     );
@@ -97,15 +94,13 @@ describe('panel split sizing', () => {
     expect(sizes.imagePanelWidth + sizes.rightPanelWidth).toBeLessThanOrEqual(524);
     expect(sizes.imagePanelWidth).toBeGreaterThanOrEqual(160);
     expect(sizes.rightPanelWidth).toBeGreaterThanOrEqual(240);
-    expect(sizes.histogramPanelHeight).toBe(272);
   });
 
   it('preserves the active side split as much as possible while clamping overflow', () => {
     const sizes = clampPanelSplitSizes(
       {
         imagePanelWidth: 420,
-        rightPanelWidth: 520,
-        histogramPanelHeight: 160
+        rightPanelWidth: 520
       },
       metrics,
       'imagePanelWidth'
@@ -116,12 +111,11 @@ describe('panel split sizing', () => {
   });
 
   it('maps splitter keyboard input to resize actions', () => {
-    expect(getPanelSplitKeyboardAction('ArrowRight', false, 'vertical')).toEqual({ type: 'delta', delta: 16 });
-    expect(getPanelSplitKeyboardAction('ArrowLeft', true, 'vertical')).toEqual({ type: 'delta', delta: -64 });
-    expect(getPanelSplitKeyboardAction('ArrowDown', false, 'horizontal')).toEqual({ type: 'delta', delta: 16 });
-    expect(getPanelSplitKeyboardAction('Home', false, 'horizontal')).toEqual({ type: 'snap', target: 'min' });
-    expect(getPanelSplitKeyboardAction('End', false, 'vertical')).toEqual({ type: 'snap', target: 'max' });
-    expect(getPanelSplitKeyboardAction('ArrowDown', false, 'vertical')).toBeNull();
+    expect(getPanelSplitKeyboardAction('ArrowRight', false)).toEqual({ type: 'delta', delta: 16 });
+    expect(getPanelSplitKeyboardAction('ArrowLeft', true)).toEqual({ type: 'delta', delta: -64 });
+    expect(getPanelSplitKeyboardAction('Home', false)).toEqual({ type: 'snap', target: 'min' });
+    expect(getPanelSplitKeyboardAction('End', false)).toEqual({ type: 'snap', target: 'max' });
+    expect(getPanelSplitKeyboardAction('ArrowDown', false)).toBeNull();
   });
 });
 
