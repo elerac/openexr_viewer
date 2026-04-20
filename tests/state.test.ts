@@ -32,6 +32,7 @@ import {
   resolveColormapAutoRange,
   samplePixelValuesForDisplay,
   samplePixelValues,
+  shouldRefreshDisplayLuminanceRange,
   shouldPreserveStokesColormapState
 } from '../src/state';
 import {
@@ -1520,6 +1521,13 @@ describe('state helpers', () => {
       min: 0.25,
       max: 0.5
     });
+  });
+
+  it('refreshes display luminance range lazily only for stale colormap textures', () => {
+    expect(shouldRefreshDisplayLuminanceRange('rgb', 'next', '', true)).toBe(false);
+    expect(shouldRefreshDisplayLuminanceRange('colormap', 'next', '', false)).toBe(false);
+    expect(shouldRefreshDisplayLuminanceRange('colormap', 'next', 'next', true)).toBe(false);
+    expect(shouldRefreshDisplayLuminanceRange('colormap', 'next', 'previous', true)).toBe(true);
   });
 
   it('uses single-channel layers as grayscale default display mapping', () => {

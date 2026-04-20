@@ -1145,6 +1145,19 @@ export function computeDisplayTextureLuminanceRange(
   return { min, max };
 }
 
+export function shouldRefreshDisplayLuminanceRange(
+  visualizationMode: ViewerState['visualizationMode'],
+  textureRevisionKey: string,
+  displayLuminanceRangeRevisionKey: string,
+  hasDisplayTexture: boolean
+): boolean {
+  return (
+    visualizationMode === 'colormap' &&
+    hasDisplayTexture &&
+    displayLuminanceRangeRevisionKey !== textureRevisionKey
+  );
+}
+
 export function buildZeroCenteredColormapRange(
   range: DisplayLuminanceRange | null,
   fallbackMagnitude = 1

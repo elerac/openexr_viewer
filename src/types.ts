@@ -106,6 +106,7 @@ export interface OpenedImageSession {
   state: ViewerState;
   textureRevisionKey: string;
   displayTexture: Float32Array | null;
+  displayLuminanceRangeRevisionKey: string;
   displayLuminanceRange: DisplayLuminanceRange | null;
 }
 

@@ -30,6 +30,7 @@ import {
   resolveColormapAutoRange,
   samplePixelValuesForDisplay,
   samePixel,
+  shouldRefreshDisplayLuminanceRange,
   shouldPreserveStokesColormapState,
   ViewerStore
 } from './state';
@@ -274,10 +275,21 @@ async function bootstrap(): Promise<void> {
             state,
             activeSession.displayTexture ?? undefined
           );
+          activeSession.textureRevisionKey = textureKey;
+        }
+
+        const luminanceRangeDirty = shouldRefreshDisplayLuminanceRange(
+          state.visualizationMode,
+          textureKey,
+          activeSession.displayLuminanceRangeRevisionKey,
+          Boolean(activeSession.displayTexture)
+        );
+
+        if (luminanceRangeDirty && activeSession.displayTexture) {
           activeSession.displayLuminanceRange = computeDisplayTextureLuminanceRange(
             activeSession.displayTexture
           );
-          activeSession.textureRevisionKey = textureKey;
+          activeSession.displayLuminanceRangeRevisionKey = textureKey;
         }
 
         const activeAutoColormapRange = resolveColormapAutoRange(
@@ -287,7 +299,8 @@ async function bootstrap(): Promise<void> {
         );
 
         if (
-          textureDirty &&
+          state.visualizationMode === 'colormap' &&
+          (textureDirty || luminanceRangeDirty) &&
           state.colormapRangeMode === 'alwaysAuto' &&
           !sameDisplayLuminanceRange(state.colormapRange, activeAutoColormapRange)
         ) {
@@ -302,7 +315,7 @@ async function bootstrap(): Promise<void> {
           state.colormapRange !== previous.colormapRange ||
           state.colormapRangeMode !== previous.colormapRangeMode ||
           state.colormapZeroCentered !== previous.colormapZeroCentered ||
-          textureDirty
+          luminanceRangeDirty
         ) {
           ui.setColormapRange(
             state.colormapRange,
@@ -596,6 +609,7 @@ async function bootstrap(): Promise<void> {
       state: sessionState,
       textureRevisionKey: '',
       displayTexture: null,
+      displayLuminanceRangeRevisionKey: '',
       displayLuminanceRange: null
     };
 
@@ -677,6 +691,7 @@ async function bootstrap(): Promise<void> {
         state: nextState,
         textureRevisionKey: '',
         displayTexture: null,
+        displayLuminanceRangeRevisionKey: '',
         displayLuminanceRange: null
       };
 
@@ -706,6 +721,27 @@ async function bootstrap(): Promise<void> {
       return;
     }
 
+    const currentState = store.getState();
+    const stokesDefaults = getStokesDisplayColormapDefault(selection);
+    if (!stokesDefaults) {
+      const patch: Partial<ViewerState> = { ...selection };
+      if (selection.displaySource === 'channels' && isStokesDisplaySelection(currentState)) {
+        Object.assign(patch, resolveStokesDisplayRestoreState(activeSession.id));
+      }
+
+      rgbViewChangeToken += 1;
+      ui.setRgbViewLoading(false);
+      const sessionId = activeSession.id;
+      queueMicrotask(() => {
+        if (getActiveSession()?.id !== sessionId) {
+          return;
+        }
+
+        store.setState({ ...patch });
+      });
+      return;
+    }
+
     const token = ++rgbViewChangeToken;
     const startedAt = performance.now();
     ui.setRgbViewLoading(true);
@@ -722,43 +758,40 @@ async function bootstrap(): Promise<void> {
         Object.assign(patch, resolveStokesDisplayRestoreState(activeSession.id));
       }
 
-      const stokesDefaults = getStokesDisplayColormapDefault(selection);
-      if (stokesDefaults) {
-        if (!isStokesDisplaySelection(currentState)) {
-          stokesDisplayRestoreStates.set(activeSession.id, captureRestorableVisualizationState(currentState));
-        }
-
-        if (shouldPreserveStokesColormapState(currentState, selection)) {
-          patch.visualizationMode = 'colormap';
-          store.setState({ ...patch });
-
-          const elapsedMs = performance.now() - startedAt;
-          if (elapsedMs < MIN_RGB_VIEW_LOADING_MS) {
-            await waitMs(MIN_RGB_VIEW_LOADING_MS - elapsedMs);
-          }
-          return;
-        }
-
-        const registry = getLoadedColormapRegistry();
-        const colormapId = findColormapIdByLabel(registry, stokesDefaults.colormapLabel);
-        if (!colormapId) {
-          ui.setError(`Required colormap not found: ${stokesDefaults.colormapLabel}`);
-          return;
-        }
-
-        const colormapToken = ++colormapChangeToken;
-        const lut = await loadColormapLut(registry, colormapId);
-        if (token !== rgbViewChangeToken || colormapToken !== colormapChangeToken) {
-          return;
-        }
-
-        uploadLoadedColormap(colormapId, lut);
-        patch.visualizationMode = 'colormap';
-        patch.activeColormapId = colormapId;
-        patch.colormapRange = stokesDefaults.range;
-        patch.colormapRangeMode = 'oneTime';
-        patch.colormapZeroCentered = stokesDefaults.zeroCentered;
+      if (!isStokesDisplaySelection(currentState)) {
+        stokesDisplayRestoreStates.set(activeSession.id, captureRestorableVisualizationState(currentState));
       }
+
+      if (shouldPreserveStokesColormapState(currentState, selection)) {
+        patch.visualizationMode = 'colormap';
+        store.setState({ ...patch });
+
+        const elapsedMs = performance.now() - startedAt;
+        if (elapsedMs < MIN_RGB_VIEW_LOADING_MS) {
+          await waitMs(MIN_RGB_VIEW_LOADING_MS - elapsedMs);
+        }
+        return;
+      }
+
+      const registry = getLoadedColormapRegistry();
+      const colormapId = findColormapIdByLabel(registry, stokesDefaults.colormapLabel);
+      if (!colormapId) {
+        ui.setError(`Required colormap not found: ${stokesDefaults.colormapLabel}`);
+        return;
+      }
+
+      const colormapToken = ++colormapChangeToken;
+      const lut = await loadColormapLut(registry, colormapId);
+      if (token !== rgbViewChangeToken || colormapToken !== colormapChangeToken) {
+        return;
+      }
+
+      uploadLoadedColormap(colormapId, lut);
+      patch.visualizationMode = 'colormap';
+      patch.activeColormapId = colormapId;
+      patch.colormapRange = stokesDefaults.range;
+      patch.colormapRangeMode = 'oneTime';
+      patch.colormapZeroCentered = stokesDefaults.zeroCentered;
 
       store.setState({ ...patch });
 
@@ -1033,6 +1066,7 @@ async function bootstrap(): Promise<void> {
 
     activeSession.state = nextState;
     activeSession.textureRevisionKey = '';
+    activeSession.displayLuminanceRangeRevisionKey = '';
     activeSession.displayLuminanceRange = null;
 
     store.setState(nextState);
@@ -1340,6 +1374,7 @@ async function bootstrap(): Promise<void> {
 
       session.displayTexture = null;
       session.displayLuminanceRange = null;
+      session.displayLuminanceRangeRevisionKey = '';
       session.textureRevisionKey = '';
     }
 
