@@ -57,6 +57,7 @@ export function buildProbeColorPreview(
   }
 
   const [rawR, rawG, rawB] = readProbeDisplayValues(sample, selection);
+  const rawA = readProbeDisplayAlpha(sample, selection);
   const exposureScale = 2 ** exposureEv;
   let bytes: [number, number, number];
   const monoValue = computeProbeLuminanceValue(rawR, rawG, rawB);
@@ -89,8 +90,17 @@ export function buildProbeColorPreview(
         ];
   }
 
+  if (rawA !== null) {
+    displayValues = [
+      ...displayValues,
+      { label: 'A', value: formatProbeRgbValue(rawA) }
+    ];
+  }
+
   return {
-    cssColor: `rgb(${bytes[0]}, ${bytes[1]}, ${bytes[2]})`,
+    cssColor: rawA === null
+      ? `rgb(${bytes[0]}, ${bytes[1]}, ${bytes[2]})`
+      : `rgba(${bytes[0]}, ${bytes[1]}, ${bytes[2]}, ${formatCssAlpha(rawA)})`,
     displayValues
   };
 }
@@ -117,6 +127,14 @@ function readProbeDisplayValues(sample: PixelSample, selection: DisplaySelection
     readProbeChannel(sample, selection.displayG),
     readProbeChannel(sample, selection.displayB)
   ];
+}
+
+function readProbeDisplayAlpha(sample: PixelSample, selection: DisplaySelection): number | null {
+  if (selection.displaySource !== 'channels' || !selection.displayA) {
+    return null;
+  }
+
+  return clampAlpha(readProbeChannel(sample, selection.displayA));
 }
 
 function readFirstProbeChannel(sample: PixelSample, channelNames: Array<string | null>): number {
@@ -156,6 +174,18 @@ function toSrgbByte(value: number): number {
       : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055;
 
   return Math.max(0, Math.min(255, Math.round(srgb * 255)));
+}
+
+function clampAlpha(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.min(1, Math.max(0, value));
+}
+
+function formatCssAlpha(value: number): string {
+  return Number(clampAlpha(value).toPrecision(4)).toString();
 }
 
 function formatProbeRgbValue(value: number): string {

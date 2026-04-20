@@ -845,13 +845,13 @@ test('loads arbitrary scalar channels as grayscale display options', async ({ pa
   await expect(channelSelect.locator('option').filter({ hasText: /^R$/ })).toHaveCount(0);
   await expect(channelSelect.locator('option').filter({ hasText: /^G$/ })).toHaveCount(0);
   await expect(channelSelect.locator('option').filter({ hasText: /^B$/ })).toHaveCount(0);
-  await expect(channelSelect.locator('option').filter({ hasText: /^A$/ })).toHaveCount(1);
-  await expect(channelSelect.locator('option').filter({ hasText: /^mask$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option').filter({ hasText: /^A$/ })).toHaveCount(0);
+  await expect(channelSelect.locator('option').filter({ hasText: /^mask,A$/ })).toHaveCount(1);
 
-  await channelSelect.selectOption({ label: 'mask' });
-  await expect(channelSelect.locator('option:checked')).toHaveText('mask');
+  await channelSelect.selectOption({ label: 'mask,A' });
+  await expect(channelSelect.locator('option:checked')).toHaveText('mask,A');
   await viewer.hover();
-  await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['Mono:']);
+  await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['Mono:', 'A:']);
 
   await rgbSplitToggleButton.click();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
@@ -862,6 +862,46 @@ test('loads arbitrary scalar channels as grayscale display options', async ({ pa
   await expect(channelSelect.locator('option').filter({ hasText: /^B$/ })).toHaveCount(1);
   await expect(channelSelect.locator('option').filter({ hasText: /^A$/ })).toHaveCount(1);
   await expect(channelSelect.locator('option').filter({ hasText: /^mask$/ })).toHaveCount(1);
+  await rgbSplitToggleButton.click();
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');
+  await channelSelect.selectOption({ label: 'R,G,B,A' });
+  await expect(channelSelect.locator('option:checked')).toHaveText('R,G,B,A');
+
+  await page.setInputFiles('#file-input', {
+    name: 'named_rgba.exr',
+    mimeType: 'image/exr',
+    buffer: buildNamedRgbaExr()
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('named_rgba.exr', { timeout: 30000 });
+  await expect(channelSelect.locator('option:checked')).toHaveText('beauty.(R,G,B,A)');
+
+  await page.setInputFiles('#file-input', {
+    name: 'named_rgb_bare_alpha.exr',
+    mimeType: 'image/exr',
+    buffer: buildNamedRgbBareAlphaExr()
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('named_rgb_bare_alpha.exr', { timeout: 30000 });
+  await expect(channelSelect.locator('option:checked')).toHaveText('beauty.(R,G,B)');
+
+  await page.setInputFiles('#file-input', {
+    name: 'scalar_alpha.exr',
+    mimeType: 'image/exr',
+    buffer: buildScalarAlphaExr()
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('scalar_alpha.exr', { timeout: 30000 });
+  await expect(channelSelect.locator('option:checked')).toHaveText('Z,A');
+  await viewer.hover();
+  await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['Mono:', 'A:']);
+
+  await page.setInputFiles('#file-input', {
+    name: 'depth_alpha.exr',
+    mimeType: 'image/exr',
+    buffer: buildDepthAlphaExr()
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('depth_alpha.exr', { timeout: 30000 });
+  await expect(channelSelect.locator('option:checked')).toHaveText('depth.Z,depth.A');
+  await viewer.hover();
+  await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['Mono:', 'A:']);
 });
 
 function buildScalarChannelExr(): Buffer {
@@ -923,6 +963,98 @@ function buildRgbAuxExr(): Buffer {
         0, 1, 0, 0.5, 20,
         0, 0, 1, 0.75, 30,
         1, 1, 1, 1, 40
+      ]),
+      SamplePrecision.F32,
+      CompressionMethod.None
+    );
+    return Buffer.from(encoder.encode());
+  } finally {
+    encoder.free();
+  }
+}
+
+function buildNamedRgbaExr(): Buffer {
+  ensureExrEncoderInitialized();
+
+  const encoder = new ExrEncoder(2, 2);
+  try {
+    encoder.addLayer(
+      null,
+      ['beauty.R', 'beauty.G', 'beauty.B', 'beauty.A'],
+      new Float32Array([
+        1, 0, 0, 0.25,
+        0, 1, 0, 0.5,
+        0, 0, 1, 0.75,
+        1, 1, 1, 1
+      ]),
+      SamplePrecision.F32,
+      CompressionMethod.None
+    );
+    return Buffer.from(encoder.encode());
+  } finally {
+    encoder.free();
+  }
+}
+
+function buildNamedRgbBareAlphaExr(): Buffer {
+  ensureExrEncoderInitialized();
+
+  const encoder = new ExrEncoder(2, 2);
+  try {
+    encoder.addLayer(
+      null,
+      ['beauty.R', 'beauty.G', 'beauty.B', 'A'],
+      new Float32Array([
+        1, 0, 0, 0.25,
+        0, 1, 0, 0.5,
+        0, 0, 1, 0.75,
+        1, 1, 1, 1
+      ]),
+      SamplePrecision.F32,
+      CompressionMethod.None
+    );
+    return Buffer.from(encoder.encode());
+  } finally {
+    encoder.free();
+  }
+}
+
+function buildScalarAlphaExr(): Buffer {
+  ensureExrEncoderInitialized();
+
+  const encoder = new ExrEncoder(2, 2);
+  try {
+    encoder.addLayer(
+      null,
+      ['Z', 'A'],
+      new Float32Array([
+        1, 0.25,
+        0.5, 0.5,
+        0.25, 0.75,
+        0, 1
+      ]),
+      SamplePrecision.F32,
+      CompressionMethod.None
+    );
+    return Buffer.from(encoder.encode());
+  } finally {
+    encoder.free();
+  }
+}
+
+function buildDepthAlphaExr(): Buffer {
+  ensureExrEncoderInitialized();
+
+  const encoder = new ExrEncoder(2, 2);
+  try {
+    encoder.addLayer(
+      null,
+      ['depth.Z', 'depth.A'],
+      new Float32Array([
+        1, 0.25,
+        0.5, 0.5,
+        0.25, 0.75,
+        0, 1
       ]),
       SamplePrecision.F32,
       CompressionMethod.None

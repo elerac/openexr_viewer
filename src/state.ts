@@ -78,6 +78,7 @@ export interface ChannelDisplayOption {
 export interface ChannelDisplayOptionsConfig {
   includeRgbGroups?: boolean;
   includeSplitChannels?: boolean;
+  includeAlphaCompanions?: boolean;
 }
 
 export interface StokesDisplayOptionsConfig {
@@ -167,6 +168,7 @@ export function createInitialState(): ViewerState {
     displayR: ZERO_CHANNEL,
     displayG: ZERO_CHANNEL,
     displayB: ZERO_CHANNEL,
+    displayA: null,
     hoveredPixel: null,
     lockedPixel: null
   };
@@ -258,7 +260,8 @@ export function buildViewerStateForLayer(
       stokesParameter: null,
       displayR: ZERO_CHANNEL,
       displayG: ZERO_CHANNEL,
-      displayB: ZERO_CHANNEL
+      displayB: ZERO_CHANNEL,
+      displayA: null
     };
   }
 
@@ -275,10 +278,12 @@ export function areDisplayChannelsAvailable(
 ): boolean {
   const channels = new Set(channelNames);
   const isAvailable = (channelName: string): boolean => channelName === ZERO_CHANNEL || channels.has(channelName);
+  const alphaChannel = selection.displayA ?? null;
   return (
     isAvailable(selection.displayR) &&
     isAvailable(selection.displayG) &&
-    isAvailable(selection.displayB)
+    isAvailable(selection.displayB) &&
+    (alphaChannel === null || channels.has(alphaChannel))
   );
 }
 
@@ -287,28 +292,38 @@ export function pickDefaultDisplayChannels(channelNames: string[]): DisplayChann
   const rgbGroups = extractRgbChannelGroups(names);
   if (rgbGroups.length > 0) {
     const firstGroup = rgbGroups[0];
-    return {
+    const mapping = {
       displayR: firstGroup.r,
       displayG: firstGroup.g,
-      displayB: firstGroup.b
+      displayB: firstGroup.b,
+      displayA: firstGroup.a ?? null
     };
+    return mapping;
   }
 
   const grayscaleChannel = pickGrayscaleDisplayChannel(names);
   if (grayscaleChannel) {
-    return {
+    const mapping = {
       displayR: grayscaleChannel,
       displayG: grayscaleChannel,
       displayB: grayscaleChannel
+    };
+    return {
+      ...mapping,
+      displayA: resolveAlphaChannelForMapping(names, mapping)
     };
   }
 
   const firstNonAlphaChannel = names.find((channelName) => !isAlphaChannel(channelName));
   const fallbackChannel = firstNonAlphaChannel ?? names[0] ?? ZERO_CHANNEL;
-  return {
+  const mapping = {
     displayR: fallbackChannel,
     displayG: fallbackChannel,
     displayB: fallbackChannel
+  };
+  return {
+    ...mapping,
+    displayA: resolveAlphaChannelForMapping(names, mapping)
   };
 }
 
@@ -326,10 +341,14 @@ export function resolveDisplayChannelsForLayer(
     areDisplayChannelsAvailable(channelNames, currentSelection) &&
     isDisplayChannelSelectionPreservable(channelNames, currentSelection)
   ) {
-    return {
+    const mapping = {
       displayR: currentSelection.displayR,
       displayG: currentSelection.displayG,
       displayB: currentSelection.displayB
+    };
+    return {
+      ...mapping,
+      displayA: resolveAlphaChannelForMapping(channelNames, mapping)
     };
   }
 
@@ -418,22 +437,28 @@ export function buildChannelDisplayOptions(
   const options: ChannelDisplayOption[] = [];
   const includeRgbGroups = config.includeRgbGroups ?? true;
   const includeSplitChannels = config.includeSplitChannels ?? false;
+  const includeAlphaCompanions = config.includeAlphaCompanions ?? !includeSplitChannels;
   const rgbComponentChannels = new Set<string>();
+  const consumedAlphaChannels = new Set<string>();
   const singleChannelOptions = new Set<string>();
 
-  const pushSingleChannelOption = (channelName: string): void => {
+  const pushSingleChannelOption = (channelName: string, labelOverride?: string): void => {
     if (singleChannelOptions.has(channelName)) {
       return;
     }
 
     singleChannelOptions.add(channelName);
-    options.push(buildSingleChannelDisplayOption(channelName));
+    options.push(buildSingleChannelDisplayOption(channelName, channelNames, labelOverride, includeAlphaCompanions));
   };
 
   for (const group of extractRgbChannelGroups(channelNames)) {
     rgbComponentChannels.add(group.r);
     rgbComponentChannels.add(group.g);
     rgbComponentChannels.add(group.b);
+    if (group.a) {
+      rgbComponentChannels.add(group.a);
+      consumedAlphaChannels.add(group.a);
+    }
 
     if (includeRgbGroups) {
       options.push({
@@ -442,15 +467,34 @@ export function buildChannelDisplayOptions(
         mapping: {
           displayR: group.r,
           displayG: group.g,
-          displayB: group.b
+          displayB: group.b,
+          displayA: group.a ?? null
         }
       });
     }
 
     if (includeSplitChannels) {
-      pushSingleChannelOption(group.r);
-      pushSingleChannelOption(group.g);
-      pushSingleChannelOption(group.b);
+      pushSingleChannelOption(group.r, group.r);
+      pushSingleChannelOption(group.g, group.g);
+      pushSingleChannelOption(group.b, group.b);
+      if (group.a) {
+        pushSingleChannelOption(group.a, group.a);
+      }
+    }
+  }
+
+  for (const channelName of channelNames) {
+    if (!includeAlphaCompanions || rgbComponentChannels.has(channelName) || isAlphaChannel(channelName)) {
+      continue;
+    }
+
+    const alphaChannel = resolveAlphaChannelForMapping(channelNames, {
+      displayR: channelName,
+      displayG: channelName,
+      displayB: channelName
+    });
+    if (alphaChannel) {
+      consumedAlphaChannels.add(alphaChannel);
     }
   }
 
@@ -458,8 +502,23 @@ export function buildChannelDisplayOptions(
     if (rgbComponentChannels.has(channelName)) {
       continue;
     }
+    if (consumedAlphaChannels.has(channelName)) {
+      continue;
+    }
 
-    pushSingleChannelOption(channelName);
+    const option = buildSingleChannelDisplayOption(channelName, channelNames, undefined, includeAlphaCompanions);
+    if (option.mapping.displayA) {
+      consumedAlphaChannels.add(option.mapping.displayA);
+    }
+    if (isAlphaChannel(channelName) && consumedAlphaChannels.has(channelName)) {
+      continue;
+    }
+    if (singleChannelOptions.has(channelName)) {
+      continue;
+    }
+
+    singleChannelOptions.add(channelName);
+    options.push(option);
   }
 
   return options;
@@ -469,13 +528,15 @@ export function findSelectedChannelDisplayOption(
   options: ChannelDisplayOption[],
   displayR: string,
   displayG: string,
-  displayB: string
+  displayB: string,
+  displayA: string | null = null
 ): ChannelDisplayOption | null {
   return options.find((option) => {
     return (
       option.mapping.displayR === displayR &&
       option.mapping.displayG === displayG &&
-      option.mapping.displayB === displayB
+      option.mapping.displayB === displayB &&
+      (option.mapping.displayA ?? null) === displayA
     );
   }) ?? null;
 }
@@ -503,14 +564,20 @@ function areDisplayMappingsEqual(
   a: DisplayChannelMapping,
   b: DisplayChannelMapping
 ): boolean {
-  return a.displayR === b.displayR && a.displayG === b.displayG && a.displayB === b.displayB;
+  return (
+    a.displayR === b.displayR &&
+    a.displayG === b.displayG &&
+    a.displayB === b.displayB &&
+    (a.displayA ?? null) === (b.displayA ?? null)
+  );
 }
 
 function buildRgbStokesGroupMapping(channels: RgbStokesChannels): DisplayChannelMapping {
   return {
     displayR: channels.r.s0,
     displayG: channels.g.s0,
-    displayB: channels.b.s0
+    displayB: channels.b.s0,
+    displayA: null
   };
 }
 
@@ -518,7 +585,8 @@ function buildRgbStokesSplitMapping(channels: ScalarStokesChannels): DisplayChan
   return {
     displayR: channels.s0,
     displayG: channels.s0,
-    displayB: channels.s0
+    displayB: channels.s0,
+    displayA: null
   };
 }
 
@@ -546,7 +614,24 @@ function findMergedSelectionForSplitChannel(
       stokesParameter: null,
       displayR: group.r,
       displayG: group.g,
-      displayB: group.b
+      displayB: group.b,
+      displayA: group.a ?? null
+    };
+  }
+
+  const displayA = resolveAlphaChannelForMapping(channelNames, {
+    displayR: selectedChannel,
+    displayG: selectedChannel,
+    displayB: selectedChannel
+  });
+  if (displayA) {
+    return {
+      displaySource: 'channels',
+      stokesParameter: null,
+      displayR: selectedChannel,
+      displayG: selectedChannel,
+      displayB: selectedChannel,
+      displayA
     };
   }
 
@@ -571,7 +656,23 @@ function findSplitSelectionForMergedGroup(
       stokesParameter: null,
       displayR: group.r,
       displayG: group.r,
-      displayB: group.r
+      displayB: group.r,
+      displayA: null
+    };
+  }
+
+  if (
+    selected.displayR === selected.displayG &&
+    selected.displayR === selected.displayB &&
+    selected.displayA
+  ) {
+    return {
+      displaySource: 'channels',
+      stokesParameter: null,
+      displayR: selected.displayR,
+      displayG: selected.displayR,
+      displayB: selected.displayR,
+      displayA: null
     };
   }
 
@@ -724,7 +825,8 @@ function buildScalarStokesDisplayOption(
     mapping: {
       displayR: channels.s0,
       displayG: channels.s1,
-      displayB: channels.s2
+      displayB: channels.s2,
+      displayA: null
     },
     component: null
   };
@@ -873,22 +975,28 @@ export function buildDisplayTexture(
   displayR: string,
   displayG: string,
   displayB: string,
+  displayAOrOutput?: string | null | Float32Array,
   output?: Float32Array
 ): Float32Array {
   const pixelCount = width * height;
   const requiredLength = pixelCount * 4;
-  const out = output && output.length === requiredLength ? output : new Float32Array(requiredLength);
+  const displayA = displayAOrOutput instanceof Float32Array ? null : displayAOrOutput ?? null;
+  const outputBuffer = displayAOrOutput instanceof Float32Array ? displayAOrOutput : output;
+  const out = outputBuffer && outputBuffer.length === requiredLength
+    ? outputBuffer
+    : new Float32Array(requiredLength);
 
   const channelR = getChannel(layer, displayR);
   const channelG = getChannel(layer, displayG);
   const channelB = getChannel(layer, displayB);
+  const channelA = displayA ? getChannel(layer, displayA) : null;
 
   for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
     const outIndex = pixelIndex * 4;
     out[outIndex + 0] = sanitizeDisplayValue(readChannelValue(channelR, pixelIndex));
     out[outIndex + 1] = sanitizeDisplayValue(readChannelValue(channelG, pixelIndex));
     out[outIndex + 2] = sanitizeDisplayValue(readChannelValue(channelB, pixelIndex));
-    out[outIndex + 3] = 1;
+    out[outIndex + 3] = channelA ? sanitizeAlphaValue(readChannelValue(channelA, pixelIndex)) : 1;
   }
 
   return out;
@@ -913,7 +1021,16 @@ export function buildSelectedDisplayTexture(
     );
   }
 
-  return buildDisplayTexture(layer, width, height, selection.displayR, selection.displayG, selection.displayB, output);
+  return buildDisplayTexture(
+    layer,
+    width,
+    height,
+    selection.displayR,
+    selection.displayG,
+    selection.displayB,
+    selection.displayA ?? null,
+    output
+  );
 }
 
 export function buildStokesDisplayTexture(
@@ -1081,6 +1198,14 @@ function cloneDisplayLuminanceRange(range: DisplayLuminanceRange | null): Displa
 
 export function sanitizeDisplayValue(value: number): number {
   return Number.isFinite(value) ? value : 0;
+}
+
+export function sanitizeAlphaValue(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.min(1, Math.max(0, value));
 }
 
 export function samplePixelValues(
@@ -2219,19 +2344,73 @@ function parseRgbChannel(channelName: string): { base: string; suffix: RgbSuffix
   };
 }
 
+export function resolveAlphaChannelForMapping(
+  channelNames: string[],
+  mapping: Pick<DisplayChannelMapping, 'displayR' | 'displayG' | 'displayB'>
+): string | null {
+  const channels = new Set(channelNames);
+  const group = findSelectedRgbGroup(
+    extractRgbChannelGroups(channelNames),
+    mapping.displayR,
+    mapping.displayG,
+    mapping.displayB
+  );
+  if (group) {
+    return group.a ?? null;
+  }
+
+  if (
+    mapping.displayR !== mapping.displayG ||
+    mapping.displayR !== mapping.displayB ||
+    mapping.displayR === ZERO_CHANNEL
+  ) {
+    return null;
+  }
+
+  const sourceChannel = mapping.displayR;
+  if (isAlphaChannel(sourceChannel)) {
+    return null;
+  }
+
+  const parsed = parseRgbChannel(sourceChannel);
+  if (parsed?.base) {
+    const alphaChannel = `${parsed.base}.A`;
+    return channels.has(alphaChannel) ? alphaChannel : null;
+  }
+
+  if (sourceChannel.includes('.')) {
+    const dotIndex = sourceChannel.lastIndexOf('.');
+    const alphaChannel = `${sourceChannel.slice(0, dotIndex)}.A`;
+    return channels.has(alphaChannel) ? alphaChannel : null;
+  }
+
+  return channels.has('A') ? 'A' : null;
+}
+
 function buildRgbGroupLabel(base: string, hasAlpha: boolean): string {
   const channelsLabel = hasAlpha ? 'R,G,B,A' : 'R,G,B';
   return base.length > 0 ? `${base}.(${channelsLabel})` : channelsLabel;
 }
 
-function buildSingleChannelDisplayOption(channelName: string): ChannelDisplayOption {
+function buildSingleChannelDisplayOption(
+  channelName: string,
+  channelNames: string[],
+  labelOverride?: string,
+  includeAlphaCompanion = true
+): ChannelDisplayOption {
+  const mapping = {
+    displayR: channelName,
+    displayG: channelName,
+    displayB: channelName
+  };
+  const displayA = includeAlphaCompanion ? resolveAlphaChannelForMapping(channelNames, mapping) : null;
+
   return {
     key: `channel:${channelName}`,
-    label: channelName,
+    label: labelOverride ?? (displayA ? `${channelName},${displayA}` : channelName),
     mapping: {
-      displayR: channelName,
-      displayG: channelName,
-      displayB: channelName
+      ...mapping,
+      displayA
     }
   };
 }

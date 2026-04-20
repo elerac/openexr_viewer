@@ -42,6 +42,7 @@ uniform float uColormapMax;
 uniform ivec2 uColormapTextureSize;
 uniform int uColormapEntryCount;
 uniform bool uUseStokesDegreeModulation;
+uniform bool uUseImageAlpha;
 out vec4 outColor;
 
 vec3 linearToSrgb(vec3 linear) {
@@ -142,6 +143,7 @@ void main() {
   ivec2 pixel = ivec2(floor(imagePos));
   vec4 texel = texelFetch(uTexture, pixel, 0);
   vec3 linear = texel.rgb;
+  float imageAlpha = uUseImageAlpha ? clamp(texel.a, 0.0, 1.0) : 1.0;
   if (uUseColormap) {
     float luminance = dot(linear, vec3(0.2126, 0.7152, 0.0722));
     vec3 color = sampleColormap(luminance, uColormapMin, uColormapMax);
@@ -150,14 +152,14 @@ void main() {
       hsv.z *= clamp(texel.a, 0.0, 1.0);
       color = hsvToRgb(hsv);
     }
-    outColor = vec4(color, 1.0);
+    outColor = vec4(mix(checker(screen), color, imageAlpha), 1.0);
     return;
   }
 
   linear = max(linear * exp2(uExposure), vec3(0.0));
   vec3 srgb = linearToSrgb(linear);
 
-  outColor = vec4(srgb, 1.0);
+  outColor = vec4(mix(checker(screen), srgb, imageAlpha), 1.0);
 }
 `;
 
@@ -173,6 +175,7 @@ interface Uniforms {
   colormapTextureSize: WebGLUniformLocation;
   colormapEntryCount: WebGLUniformLocation;
   useStokesDegreeModulation: WebGLUniformLocation;
+  useImageAlpha: WebGLUniformLocation;
 }
 
 export class WebGlExrRenderer {
@@ -238,6 +241,7 @@ export class WebGlExrRenderer {
     const colormapTextureSize = gl.getUniformLocation(this.program, 'uColormapTextureSize');
     const colormapEntryCount = gl.getUniformLocation(this.program, 'uColormapEntryCount');
     const useStokesDegreeModulation = gl.getUniformLocation(this.program, 'uUseStokesDegreeModulation');
+    const useImageAlpha = gl.getUniformLocation(this.program, 'uUseImageAlpha');
 
     if (
       !viewport ||
@@ -250,7 +254,8 @@ export class WebGlExrRenderer {
       !colormapMax ||
       !colormapTextureSize ||
       !colormapEntryCount ||
-      !useStokesDegreeModulation
+      !useStokesDegreeModulation ||
+      !useImageAlpha
     ) {
       throw new Error('Failed to resolve shader uniforms.');
     }
@@ -266,7 +271,8 @@ export class WebGlExrRenderer {
       colormapMax,
       colormapTextureSize,
       colormapEntryCount,
-      useStokesDegreeModulation
+      useStokesDegreeModulation,
+      useImageAlpha
     };
 
     gl.useProgram(this.program);
@@ -444,6 +450,7 @@ export class WebGlExrRenderer {
       this.uniforms.useStokesDegreeModulation,
       isStokesDegreeModulationEnabled(state, state.stokesDegreeModulation) ? 1 : 0
     );
+    gl.uniform1i(this.uniforms.useImageAlpha, state.displaySource === 'channels' ? 1 : 0);
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }

@@ -62,6 +62,7 @@ export interface ViewerState {
   displayR: string;
   displayG: string;
   displayB: string;
+  displayA: string | null;
   hoveredPixel: ImagePixel | null;
   lockedPixel: ImagePixel | null;
 }
@@ -70,6 +71,7 @@ export interface DisplayChannelMapping {
   displayR: string;
   displayG: string;
   displayB: string;
+  displayA?: string | null;
 }
 
 export interface DisplaySelection extends DisplayChannelMapping {

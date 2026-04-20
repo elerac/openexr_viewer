@@ -265,7 +265,8 @@ async function bootstrap(): Promise<void> {
           state.stokesParameter !== previous.stokesParameter ||
           state.displayR !== previous.displayR ||
           state.displayG !== previous.displayG ||
-          state.displayB !== previous.displayB;
+          state.displayB !== previous.displayB ||
+          state.displayA !== previous.displayA;
 
         let rgbGroups: ReturnType<typeof extractRgbChannelGroups> = [];
         if (uiSelectionDirty) {
@@ -275,7 +276,8 @@ async function bootstrap(): Promise<void> {
             stokesParameter: state.stokesParameter,
             displayR: state.displayR,
             displayG: state.displayG,
-            displayB: state.displayB
+            displayB: state.displayB,
+            displayA: state.displayA
           });
         }
 
@@ -353,6 +355,7 @@ async function bootstrap(): Promise<void> {
           state.displayR !== previous.displayR ||
           state.displayG !== previous.displayG ||
           state.displayB !== previous.displayB ||
+          state.displayA !== previous.displayA ||
           state.visualizationMode !== previous.visualizationMode ||
           state.activeColormapId !== previous.activeColormapId ||
           state.colormapRange !== previous.colormapRange ||
@@ -374,7 +377,8 @@ async function bootstrap(): Promise<void> {
               stokesParameter: state.stokesParameter,
               displayR: state.displayR,
               displayG: state.displayG,
-              displayB: state.displayB
+              displayB: state.displayB,
+              displayA: state.displayA
             },
             state.exposureEv,
             state.visualizationMode,
@@ -392,7 +396,8 @@ async function bootstrap(): Promise<void> {
           stokesParameter: null,
           displayR: ZERO_CHANNEL,
           displayG: ZERO_CHANNEL,
-          displayB: ZERO_CHANNEL
+          displayB: ZERO_CHANNEL,
+          displayA: null
         });
         ui.setColormapRange(null, null);
         ui.setProbeReadout('Hover', null, null, {
@@ -424,6 +429,7 @@ async function bootstrap(): Promise<void> {
       state.displayR !== previous.displayR ||
       state.displayG !== previous.displayG ||
       state.displayB !== previous.displayB ||
+      state.displayA !== previous.displayA ||
       state.visualizationMode !== previous.visualizationMode ||
       state.activeColormapId !== previous.activeColormapId ||
       state.colormapRange !== previous.colormapRange ||
@@ -585,6 +591,7 @@ async function bootstrap(): Promise<void> {
         displayR: ZERO_CHANNEL,
         displayG: ZERO_CHANNEL,
         displayB: ZERO_CHANNEL,
+        displayA: null,
         hoveredPixel: null,
         lockedPixel: null,
         zoom: fitView.zoom,
@@ -944,7 +951,8 @@ async function bootstrap(): Promise<void> {
       nextState.stokesParameter === currentState.stokesParameter &&
       nextState.displayR === currentState.displayR &&
       nextState.displayG === currentState.displayG &&
-      nextState.displayB === currentState.displayB
+      nextState.displayB === currentState.displayB &&
+      nextState.displayA === currentState.displayA
     ) {
       return;
     }
@@ -1143,6 +1151,7 @@ async function bootstrap(): Promise<void> {
         stokesDegreeModulation: createDefaultStokesDegreeModulation(),
         displaySource: 'channels',
         stokesParameter: null,
+        displayA: null,
         hoveredPixel: null,
         lockedPixel: null
       });
@@ -1167,6 +1176,7 @@ async function bootstrap(): Promise<void> {
         displayR: ZERO_CHANNEL,
         displayG: ZERO_CHANNEL,
         displayB: ZERO_CHANNEL,
+        displayA: null,
         zoom: fitView.zoom,
         panX: fitView.panX,
         panY: fitView.panY,
@@ -1270,6 +1280,7 @@ async function bootstrap(): Promise<void> {
       displayR: ZERO_CHANNEL,
       displayG: ZERO_CHANNEL,
       displayB: ZERO_CHANNEL,
+      displayA: null,
       hoveredPixel: null,
       lockedPixel: null
     });
@@ -1282,7 +1293,8 @@ async function bootstrap(): Promise<void> {
       stokesParameter: null,
       displayR: ZERO_CHANNEL,
       displayG: ZERO_CHANNEL,
-      displayB: ZERO_CHANNEL
+      displayB: ZERO_CHANNEL,
+      displayA: null
     });
 
     renderer.render(store.getState());
@@ -1379,7 +1391,8 @@ async function bootstrap(): Promise<void> {
         stokesParameter: state.stokesParameter,
         displayR: state.displayR,
         displayG: state.displayG,
-        displayB: state.displayB
+        displayB: state.displayB,
+        displayA: state.displayA
       },
       state.exposureEv,
       state.visualizationMode,
@@ -1622,6 +1635,7 @@ async function bootstrap(): Promise<void> {
         displayR: currentState.displayR,
         displayG: currentState.displayG,
         displayB: currentState.displayB,
+        displayA: currentState.displayA,
         visualizationMode: currentState.visualizationMode,
         activeColormapId: currentState.activeColormapId,
         colormapRange: currentState.colormapRange,
@@ -1685,7 +1699,8 @@ async function bootstrap(): Promise<void> {
       state.stokesParameter ?? '',
       state.displayR,
       state.displayG,
-      state.displayB
+      state.displayB,
+      state.displayA ?? ''
     ].join(':');
   }
 

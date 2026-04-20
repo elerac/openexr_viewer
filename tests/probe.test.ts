@@ -61,6 +61,40 @@ describe('probe helpers', () => {
     });
   });
 
+  it('includes active display alpha in probe preview swatches and values', () => {
+    const preview = buildProbeColorPreview(
+      {
+        x: 4,
+        y: 7,
+        values: {
+          R: 1,
+          G: 0.5,
+          B: 0.25,
+          A: 0.25
+        }
+      },
+      {
+        displaySource: 'channels',
+        stokesParameter: null,
+        displayR: 'R',
+        displayG: 'G',
+        displayB: 'B',
+        displayA: 'A'
+      },
+      0
+    );
+
+    expect(preview).toEqual({
+      cssColor: 'rgba(255, 188, 137, 0.25)',
+      displayValues: [
+        { label: 'R', value: '1' },
+        { label: 'G', value: '0.5' },
+        { label: 'B', value: '0.25' },
+        { label: 'A', value: '0.25' }
+      ]
+    });
+  });
+
   it('applies exposure and clamps missing channels when building the preview swatch', () => {
     const preview = buildProbeColorPreview(
       {

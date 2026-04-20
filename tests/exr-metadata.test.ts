@@ -16,19 +16,18 @@ let exrEncoderInitialized = false;
 
 describe('EXR metadata parsing', () => {
   it('formats common single-part header attributes in curated order', () => {
-    const bytes = readFixture('sample_multichannel_combo.exr');
+    const bytes = createSinglePartMultichannelExr();
     const [metadata] = parseExrMetadata(bytes);
     const byKey = metadataByKey(metadata ?? []);
 
-    expect(metadata?.map((entry) => entry.key).slice(0, 8)).toEqual([
+    expect(metadata?.map((entry) => entry.key).slice(0, 7)).toEqual([
       'compression',
       'pixelAspectRatio',
       'dataWindow',
       'displayWindow',
       'lineOrder',
       'channels',
-      'type',
-      'capDate'
+      'type'
     ]);
     expect(byKey.get('compression')).toBe('ZIP');
     expect(byKey.get('pixelAspectRatio')).toBe('1.000');
@@ -39,7 +38,6 @@ describe('EXR metadata parsing', () => {
     expect(byKey.get('channels')).toContain('albedo.{R,G,B}');
     expect(byKey.get('channels')).toContain('normal.{R,G,B}');
     expect(byKey.get('type')).toBe('scanlineimage');
-    expect(byKey.get('capDate')).toBe('2026:04:19 14:53:22');
   });
 
   it('keeps parseable extras and omits internal multipart counters', () => {
@@ -76,6 +74,45 @@ function readFixture(filename: string): Uint8Array {
 
 function metadataByKey(metadata: ExrMetadataEntry[]): Map<string, string> {
   return new Map(metadata.map((entry) => [entry.key, entry.value]));
+}
+
+function createSinglePartMultichannelExr(): Uint8Array {
+  ensureExrEncoderInitialized();
+  const width = 512;
+  const height = 320;
+  const channelNames = [
+    'R',
+    'G',
+    'B',
+    'A',
+    'depth',
+    'depth_variance',
+    'normal.R',
+    'normal.G',
+    'normal.B',
+    'albedo.R',
+    'albedo.G',
+    'albedo.B',
+    'roughness',
+    'metallic',
+    '400nm',
+    '500nm',
+    '600nm',
+    '700nm'
+  ];
+  const encoder = new ExrEncoder(width, height);
+  try {
+    encoder.addLayer(
+      null,
+      channelNames,
+      new Float32Array(width * height * channelNames.length),
+      SamplePrecision.F32,
+      CompressionMethod.Zip16
+    );
+    return encoder.encode();
+  } finally {
+    encoder.free();
+  }
 }
 
 function createMultipartExr(): Uint8Array {

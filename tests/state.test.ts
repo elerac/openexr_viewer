@@ -113,6 +113,23 @@ describe('state helpers', () => {
     expect(Array.from(texture.slice(12, 16))).toEqual([3, 13, 23, 1]);
   });
 
+  it('writes selected display alpha into RGBA display textures', () => {
+    const layer: DecodedLayer = {
+      name: 'rgba',
+      channelNames: ['R', 'G', 'B', 'A'],
+      channelData: new Map([
+        ['R', new Float32Array([1, 1, 1, 1])],
+        ['G', new Float32Array([0, 0, 0, 0])],
+        ['B', new Float32Array([0, 0, 0, 0])],
+        ['A', new Float32Array([0.25, 2, -1, Number.NaN])]
+      ])
+    };
+
+    const texture = buildDisplayTexture(layer, 2, 2, 'R', 'G', 'B', 'A');
+
+    expect(Array.from(texture.filter((_, index) => index % 4 === 3))).toEqual([0.25, 1, 0, 0]);
+  });
+
   it('builds grayscale display texture when one channel drives RGB', () => {
     const layer: DecodedLayer = {
       name: 'gray',
@@ -226,7 +243,8 @@ describe('state helpers', () => {
     })[0]?.mapping).toEqual({
       displayR: 'S0.R',
       displayG: 'S0.R',
-      displayB: 'S0.R'
+      displayB: 'S0.R',
+      displayA: null
     });
   });
 
@@ -1345,23 +1363,26 @@ describe('state helpers', () => {
     expect(options[0]?.mapping).toEqual({
       displayR: 'R',
       displayG: 'G',
-      displayB: 'B'
+      displayB: 'B',
+      displayA: null
     });
   });
 
-  it('adds auxiliary and alpha channel display options while keeping RGB grouped by default', () => {
+  it('groups auxiliary channels with alpha while keeping RGB grouped by default', () => {
     const options = buildChannelDisplayOptions(['R', 'G', 'B', 'A', 'mask']);
 
-    expect(options.map((option) => option.label)).toEqual(['R,G,B,A', 'A', 'mask']);
-    expect(options[1]?.mapping).toEqual({
-      displayR: 'A',
-      displayG: 'A',
-      displayB: 'A'
+    expect(options.map((option) => option.label)).toEqual(['R,G,B,A', 'mask,A']);
+    expect(options[0]?.mapping).toEqual({
+      displayR: 'R',
+      displayG: 'G',
+      displayB: 'B',
+      displayA: 'A'
     });
-    expect(options[2]?.mapping).toEqual({
+    expect(options[1]?.mapping).toEqual({
       displayR: 'mask',
       displayG: 'mask',
-      displayB: 'mask'
+      displayB: 'mask',
+      displayA: 'A'
     });
   });
 
@@ -1372,22 +1393,26 @@ describe('state helpers', () => {
     expect(options[0]?.mapping).toEqual({
       displayR: 'R',
       displayG: 'G',
-      displayB: 'B'
+      displayB: 'B',
+      displayA: null
     });
     expect(options[1]?.mapping).toEqual({
       displayR: 'R',
       displayG: 'R',
-      displayB: 'R'
+      displayB: 'R',
+      displayA: null
     });
     expect(options[2]?.mapping).toEqual({
       displayR: 'G',
       displayG: 'G',
-      displayB: 'G'
+      displayB: 'G',
+      displayA: null
     });
     expect(options[3]?.mapping).toEqual({
       displayR: 'B',
       displayG: 'B',
-      displayB: 'B'
+      displayB: 'B',
+      displayA: null
     });
   });
 
@@ -1421,7 +1446,8 @@ describe('state helpers', () => {
     expect(options[0]?.mapping).toEqual({
       displayR: 'R',
       displayG: 'R',
-      displayB: 'R'
+      displayB: 'R',
+      displayA: null
     });
   });
 
@@ -1435,7 +1461,7 @@ describe('state helpers', () => {
       includeSplitChannels: true
     });
 
-    expect(defaultOptions.map((option) => option.label)).toEqual(['HOGE.(R,G,B,A)', 'HOGE.A']);
+    expect(defaultOptions.map((option) => option.label)).toEqual(['HOGE.(R,G,B,A)']);
     expect(splitOptions.map((option) => option.label)).toEqual([
       'HOGE.(R,G,B,A)',
       'HOGE.R',
@@ -1446,9 +1472,76 @@ describe('state helpers', () => {
     expect(splitOptions[1]?.mapping).toEqual({
       displayR: 'HOGE.R',
       displayG: 'HOGE.R',
-      displayB: 'HOGE.R'
+      displayB: 'HOGE.R',
+      displayA: null
     });
     expect(splitOnlyOptions.map((option) => option.label)).toEqual(['HOGE.R', 'HOGE.G', 'HOGE.B', 'HOGE.A']);
+  });
+
+  it('resolves alpha companions for scalar options and splits alpha companions into separate rows', () => {
+    const bareOptions = buildChannelDisplayOptions(['Z', 'A']);
+    const namespacedOptions = buildChannelDisplayOptions(['depth.Z', 'depth.A', 'A']);
+    const splitRgbOptions = buildChannelDisplayOptions(['R', 'G', 'B', 'A'], {
+      includeRgbGroups: false,
+      includeSplitChannels: true
+    });
+    const splitNamespacedOptions = buildChannelDisplayOptions(['beauty.R', 'beauty.G', 'beauty.B', 'beauty.A'], {
+      includeRgbGroups: false,
+      includeSplitChannels: true
+    });
+    const rgbWithoutAlphaOptions = buildChannelDisplayOptions(['beauty.R', 'beauty.G', 'beauty.B', 'A']);
+
+    expect(bareOptions.map((option) => option.label)).toEqual(['Z,A']);
+    expect(bareOptions.find((option) => option.label === 'Z,A')?.mapping.displayA).toBe('A');
+    expect(namespacedOptions.map((option) => option.label)).toEqual(['depth.Z,depth.A', 'A']);
+    expect(namespacedOptions.find((option) => option.label === 'depth.Z,depth.A')?.mapping.displayA).toBe('depth.A');
+    expect(splitRgbOptions.map((option) => option.label)).toEqual(['R', 'G', 'B', 'A']);
+    expect(splitRgbOptions.find((option) => option.label === 'R')?.mapping.displayA).toBeNull();
+    expect(splitNamespacedOptions.find((option) => option.label === 'beauty.R')?.mapping.displayA).toBeNull();
+    expect(rgbWithoutAlphaOptions.find((option) => option.label === 'beauty.(R,G,B)')?.mapping.displayA).toBeNull();
+  });
+
+  it('remaps scalar alpha selections when toggling split mode', () => {
+    const grouped = {
+      ...createViewerState(),
+      displayR: 'mask',
+      displayG: 'mask',
+      displayB: 'mask',
+      displayA: 'A'
+    };
+    const split = findSplitSelectionForMergedDisplay(['R', 'G', 'B', 'A', 'mask'], grouped);
+
+    expect(split).toEqual({
+      displaySource: 'channels',
+      stokesParameter: null,
+      displayR: 'mask',
+      displayG: 'mask',
+      displayB: 'mask',
+      displayA: null
+    });
+    if (!split) {
+      throw new Error('Expected split scalar alpha selection.');
+    }
+    expect(findMergedSelectionForSplitDisplay(['R', 'G', 'B', 'A', 'mask'], split)).toEqual({
+      displaySource: 'channels',
+      stokesParameter: null,
+      displayR: 'mask',
+      displayG: 'mask',
+      displayB: 'mask',
+      displayA: 'A'
+    });
+  });
+
+  it('keeps alpha-only layers inspectable', () => {
+    const options = buildChannelDisplayOptions(['A']);
+
+    expect(options.map((option) => option.label)).toEqual(['A']);
+    expect(options[0]?.mapping).toEqual({
+      displayR: 'A',
+      displayG: 'A',
+      displayB: 'A',
+      displayA: null
+    });
   });
 
   it('builds grayscale options for scalar-only and non-RGB channel lists', () => {
@@ -1459,7 +1552,8 @@ describe('state helpers', () => {
     expect(scalarOptions[0]?.mapping).toEqual({
       displayR: 'Z',
       displayG: 'Z',
-      displayB: 'Z'
+      displayB: 'Z',
+      displayA: null
     });
     expect(nonRgbOptions.map((option) => option.label)).toEqual(['X', 'Y', 'Z']);
     expect(findSelectedChannelDisplayOption(nonRgbOptions, 'X', 'Y', 'Z')).toBeNull();
@@ -1487,7 +1581,8 @@ describe('state helpers', () => {
       stokesParameter: 'aolp',
       displayR: 'S0.R',
       displayG: 'S0.R',
-      displayB: 'S0.R'
+      displayB: 'S0.R',
+      displayA: null
     });
     if (!split) {
       throw new Error('Expected split Stokes selection.');
@@ -1497,7 +1592,8 @@ describe('state helpers', () => {
       stokesParameter: 'aolp',
       displayR: 'S0.R',
       displayG: 'S0.G',
-      displayB: 'S0.B'
+      displayB: 'S0.B',
+      displayA: null
     });
   });
 
@@ -1517,7 +1613,8 @@ describe('state helpers', () => {
     expect(defaults).toEqual({
       displayR: 'HOGE.R',
       displayG: 'HOGE.G',
-      displayB: 'HOGE.B'
+      displayB: 'HOGE.B',
+      displayA: null
     });
   });
 
@@ -1539,13 +1636,26 @@ describe('state helpers', () => {
     expect(range?.max).toBeCloseTo(0.75, 6);
   });
 
+  it('does not include display alpha in luminance range computation', () => {
+    const texture = new Float32Array([
+      0.25, 0.25, 0.25, 0,
+      0.5, 0.5, 0.5, 1
+    ]);
+
+    expect(computeDisplayTextureLuminanceRange(texture)).toEqual({
+      min: 0.25,
+      max: 0.5
+    });
+  });
+
   it('uses single-channel layers as grayscale default display mapping', () => {
     const defaults = pickDefaultDisplayChannels(['Y']);
 
     expect(defaults).toEqual({
       displayR: 'Y',
       displayG: 'Y',
-      displayB: 'Y'
+      displayB: 'Y',
+      displayA: null
     });
   });
 
@@ -1555,7 +1665,19 @@ describe('state helpers', () => {
     expect(defaults).toEqual({
       displayR: 'Y',
       displayG: 'Y',
-      displayB: 'Y'
+      displayB: 'Y',
+      displayA: 'A'
+    });
+  });
+
+  it('uses the non-alpha grayscale default even when alpha is listed first', () => {
+    const defaults = pickDefaultDisplayChannels(['A', 'Z']);
+
+    expect(defaults).toEqual({
+      displayR: 'Z',
+      displayG: 'Z',
+      displayB: 'Z',
+      displayA: 'A'
     });
   });
 
@@ -1565,7 +1687,8 @@ describe('state helpers', () => {
     expect(defaults).toEqual({
       displayR: '400nm',
       displayG: '400nm',
-      displayB: '400nm'
+      displayB: '400nm',
+      displayA: null
     });
   });
 

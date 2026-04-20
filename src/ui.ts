@@ -649,7 +649,8 @@ export class ViewerUi {
       channelOptions,
       effectiveSelected.displayR,
       effectiveSelected.displayG,
-      effectiveSelected.displayB
+      effectiveSelected.displayB,
+      effectiveSelected.displayA ?? null
     );
     const selectedStokesOption = findSelectedStokesDisplayOption(stokesOptions, effectiveSelected);
     const showCurrentChannelOption =
@@ -2299,7 +2300,12 @@ function createEmptyProbeDisplayValues(): ProbeDisplayValue[] {
 }
 
 function formatCurrentChannelOptionLabel(selected: DisplaySelection): string {
-  const channels = [selected.displayR, selected.displayG, selected.displayB];
+  const channels = [
+    selected.displayR,
+    selected.displayG,
+    selected.displayB,
+    ...(selected.displayA ? [selected.displayA] : [])
+  ];
   return channels.every((channel) => channel === channels[0])
     ? channels[0] ?? 'Current'
     : channels.join(',');
@@ -2633,25 +2639,43 @@ function createChannelViewRowItem(value: string, label: string, mapping: Display
 }
 
 function formatChannelViewLabel(label: string): string {
-  if (label === 'R,G,B' || label === 'R,G,B,A') {
+  if (label === 'R,G,B,A') {
+    return 'RGBA';
+  }
+  if (label === 'R,G,B') {
     return 'RGB';
   }
 
-  return label.replace(/\.\(R,G,B(?:,A)?\)/g, '.RGB');
+  return label
+    .replace(/\.\(R,G,B,A\)/g, '.RGBA')
+    .replace(/\.\(R,G,B\)/g, '.RGB');
 }
 
 function getDisplayMappingChannelCount(mapping: DisplayChannelMapping): number {
-  return new Set([mapping.displayR, mapping.displayG, mapping.displayB]).size;
+  return new Set([
+    mapping.displayR,
+    mapping.displayG,
+    mapping.displayB,
+    ...(mapping.displayA ? [mapping.displayA] : [])
+  ]).size;
 }
 
-function getChannelViewSwatches(mapping: DisplayChannelMapping): string[] {
-  const channels = [mapping.displayR, mapping.displayG, mapping.displayB];
-  const uniqueChannels = Array.from(new Set(channels));
-  if (uniqueChannels.length > 1) {
-    return ['#ff6570', '#6bd66f', '#51aefe'].slice(0, uniqueChannels.length);
+export function getChannelViewSwatches(mapping: DisplayChannelMapping): string[] {
+  const displayChannels = [mapping.displayR, mapping.displayG, mapping.displayB];
+  if (displayChannels.every((channelName) => channelName === mapping.displayR)) {
+    const swatches = [getRepresentativeChannelColor(mapping.displayR)];
+    if (mapping.displayA && mapping.displayA !== mapping.displayR) {
+      swatches.push(getRepresentativeChannelColor(mapping.displayA));
+    }
+    return swatches;
   }
 
-  return [getRepresentativeChannelColor(uniqueChannels[0] ?? '')];
+  const channels = [
+    ...displayChannels,
+    ...(mapping.displayA ? [mapping.displayA] : [])
+  ];
+  const uniqueChannels = Array.from(new Set(channels));
+  return uniqueChannels.slice(0, 3).map(getRepresentativeChannelColor);
 }
 
 function getRepresentativeChannelColor(channelName: string): string {

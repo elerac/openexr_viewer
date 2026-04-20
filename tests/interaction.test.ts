@@ -20,6 +20,7 @@ const state: ViewerState = {
   displayR: 'R',
   displayG: 'G',
   displayB: 'B',
+  displayA: null,
   hoveredPixel: null,
   lockedPixel: null
 };

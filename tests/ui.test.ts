@@ -3,6 +3,7 @@ import {
   buildPartLayerItemsFromChannelNames,
   clampPanelSplitSizes,
   formatProbeCoordinates,
+  getChannelViewSwatches,
   getListboxOptionIndexAtClientY,
   getPanelSplitKeyboardAction,
   parsePanelSplitStorageValue,
@@ -146,5 +147,32 @@ describe('image panel layer summaries', () => {
       { label: 'variance', channelCount: 1, selectable: false },
       { label: 'Y', channelCount: 1, selectable: false }
     ]);
+  });
+});
+
+describe('channel view icons', () => {
+  it('uses semantic channel colors instead of positional RGB colors', () => {
+    expect(getChannelViewSwatches({
+      displayR: 'R',
+      displayG: 'G',
+      displayB: 'B',
+      displayA: 'A'
+    })).toEqual(['#ff6570', '#6bd66f', '#51aefe']);
+
+    const scalarAlphaSwatches = getChannelViewSwatches({
+      displayR: 'mask',
+      displayG: 'mask',
+      displayB: 'mask',
+      displayA: 'A'
+    });
+    expect(scalarAlphaSwatches).not.toEqual(['#ff6570', '#6bd66f']);
+    expect(scalarAlphaSwatches[1]).toBe('#c6cbd2');
+
+    expect(getChannelViewSwatches({
+      displayR: 'G',
+      displayG: 'G',
+      displayB: 'G',
+      displayA: null
+    })).toEqual(['#6bd66f']);
   });
 });
