@@ -30,7 +30,8 @@ async function openGalleryCbox(page: Page): Promise<void> {
 
 test('boots empty, opens the gallery demo image, and keeps core controls stable', async ({ page }) => {
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
-  await expect(page.getByRole('heading', { name: 'Inspector' })).toBeVisible();
+  await expect(page.locator('#inspector-panel')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Inspector' })).toHaveCount(0);
   await expect(page.locator('#gl-canvas')).toBeVisible();
   await expect(page.locator('#opened-images-select')).toBeVisible();
 
