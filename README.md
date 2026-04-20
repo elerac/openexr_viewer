@@ -7,7 +7,7 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
 ## Current MVP Features
 
 - OpenEXR decode via a browser-safe `exrs` WASM adapter with full layer/channel extraction.
-- Auto-loads `public/cbox_rgb.exr` at startup.
+- Built-in Gallery sample: `Gallery > cbox_rgb.exr`.
 - Local EXR load via `File > Open...` or drag/drop (drag-and-drop supports multiple files in one action).
 - Multi-image sessions:
   - New image opens as active while previously opened images are kept in memory.
@@ -133,6 +133,7 @@ npm run test:e2e
 - `Opened Images` selector: switch active image session by filename.
 - `Layer` selector: switch the active layer for the selected multi-layer EXR.
 - `Opened Images` list: click-hold-move a filename row to reorder.
+- `Gallery > cbox_rgb.exr`: open the built-in Cornell box sample and append it as a new session.
 - `File > Open...`: open one EXR file and append it as a new session.
 - Per-file row `Reload` action: reload and re-decode that entry in `Opened Images`.
 - `File > Reload All`: reload and re-decode all opened image entries.

@@ -62,6 +62,13 @@ const DEFAULT_HISTOGRAM_VIEW_OPTIONS: HistogramViewOptions = {
   xAxis: 'ev',
   yAxis: 'linear'
 };
+const GALLERY_IMAGES = [
+  {
+    id: 'cbox-rgb',
+    label: 'cbox_rgb.exr',
+    filename: 'cbox_rgb.exr'
+  }
+] as const;
 
 type RestorableVisualizationState = Pick<
   ViewerState,
@@ -108,6 +115,9 @@ async function bootstrap(): Promise<void> {
     },
     onFilesDropped: (files) => {
       enqueueFileLoads(files);
+    },
+    onGalleryImageSelected: (galleryId) => {
+      enqueueGalleryImageLoad(galleryId);
     },
     onReloadAllOpenedImages: () => {
       enqueueAllSessionsReload();
@@ -461,20 +471,14 @@ async function bootstrap(): Promise<void> {
     ui.viewerContainer.getBoundingClientRect().height
   );
   renderer.render(store.getState());
-
-  loadQueue = loadQueue
-    .catch(() => undefined)
-    .then(async () => {
-      await loadDefaultImage();
-    });
-  await loadQueue;
+  syncOpenedImageOptions();
 
   window.addEventListener('beforeunload', () => {
     interaction?.destroy();
     resizeObserver.disconnect();
   });
 
-  async function loadDefaultImage(): Promise<void> {
+  async function loadGalleryImage(galleryId: string): Promise<void> {
     if (!renderer) {
       return;
     }
@@ -482,22 +486,28 @@ async function bootstrap(): Promise<void> {
     ui.setLoading(true);
     ui.setError(null);
 
-    const defaultImageFilename = 'cbox_rgb.exr';
-    const defaultImageUrl = `${import.meta.env.BASE_URL}${defaultImageFilename}`;
+    const galleryImage = GALLERY_IMAGES.find((item) => item.id === galleryId);
+    if (!galleryImage) {
+      ui.setError(`Unknown gallery image: ${galleryId}`);
+      ui.setLoading(false);
+      return;
+    }
+
+    const galleryImageUrl = `${import.meta.env.BASE_URL}${galleryImage.filename}`;
 
     try {
-      const response = await fetch(defaultImageUrl);
+      const response = await fetch(galleryImageUrl);
       if (!response.ok) {
-        throw new Error(`Failed to load ${defaultImageUrl} (${response.status})`);
+        throw new Error(`Failed to load ${galleryImageUrl} (${response.status})`);
       }
 
       const bytes = new Uint8Array(await response.arrayBuffer());
-      await applyDecodedImage(await loadExr(bytes), 'cbox_rgb.exr', bytes.byteLength, {
+      await applyDecodedImage(await loadExr(bytes), galleryImage.filename, bytes.byteLength, {
         kind: 'url',
-        url: defaultImageUrl
+        url: galleryImageUrl
       });
     } catch (error) {
-      ui.setError(error instanceof Error ? error.message : `Unknown error while loading ${defaultImageFilename}`);
+      ui.setError(error instanceof Error ? error.message : `Unknown error while loading ${galleryImage.label}`);
     } finally {
       ui.setLoading(false);
     }
@@ -536,6 +546,14 @@ async function bootstrap(): Promise<void> {
         for (const file of files) {
           await loadFile(file);
         }
+      });
+  }
+
+  function enqueueGalleryImageLoad(galleryId: string): void {
+    loadQueue = loadQueue
+      .catch(() => undefined)
+      .then(async () => {
+        await loadGalleryImage(galleryId);
       });
   }
 

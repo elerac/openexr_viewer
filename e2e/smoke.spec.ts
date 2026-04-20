@@ -1,4 +1,4 @@
-import { expect, test, type Locator } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { Buffer } from 'node:buffer';
 import {
@@ -20,7 +20,15 @@ const colormapManifest = JSON.parse(
 const expectedColormapLabels = colormapManifest.colormaps.map((colormap) => colormap.label);
 let exrEncoderInitialized = false;
 
-test('boots the default demo image and keeps core controls stable', async ({ page }) => {
+async function openGalleryCbox(page: Page): Promise<void> {
+  const openedImages = page.locator('#opened-images-select');
+
+  await page.getByRole('button', { name: 'Gallery', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'cbox_rgb.exr', exact: true }).click();
+  await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr', { timeout: 30000 });
+}
+
+test('boots empty, opens the gallery demo image, and keeps core controls stable', async ({ page }) => {
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
   await expect(page.getByRole('heading', { name: 'Inspector' })).toBeVisible();
   await expect(page.locator('#gl-canvas')).toBeVisible();
@@ -55,6 +63,9 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   const appMenuTitle = page.locator('.app-menu-title');
   const fileMenuButton = page.getByRole('button', { name: 'File', exact: true });
   const fileMenu = page.locator('#file-menu');
+  const galleryMenuButton = page.getByRole('button', { name: 'Gallery', exact: true });
+  const galleryMenu = page.locator('#gallery-menu');
+  const galleryCboxItem = page.getByRole('menuitem', { name: 'cbox_rgb.exr', exact: true });
   const openMenuItem = page.locator('#open-file-button');
   const reloadAllMenuItem = page.locator('#reload-all-opened-images-button');
   const closeAllMenuItem = page.locator('#close-all-opened-images-button');
@@ -83,12 +94,38 @@ test('boots the default demo image and keeps core controls stable', async ({ pag
   await expect(fileMenuButton).toHaveAttribute('aria-haspopup', 'menu');
   await expect(fileMenuButton).toHaveAttribute('aria-expanded', 'false');
   await expect(fileMenu).toBeHidden();
+  await expect(galleryMenuButton).toBeVisible();
+  await expect(galleryMenuButton).toHaveAttribute('aria-haspopup', 'menu');
+  await expect(galleryMenuButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(galleryMenu).toBeHidden();
   await expect(page.locator('.image-panel-actions')).toHaveCount(0);
   await expect(page.locator('.image-panel-titlebar')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Image', exact: true })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'View', exact: true })).toHaveCount(0);
   await expect(page.locator('#zoom-readout')).toHaveCount(0);
   await expect(page.locator('#pan-readout')).toHaveCount(0);
+  await expect(openedImages.locator('option')).toHaveCount(0);
+  await expect(page.locator('#opened-files-list')).toContainText('No open files');
+
+  await fileMenuButton.click();
+  await expect(fileMenu).toBeVisible();
+  await expect(openMenuItem).toBeEnabled();
+  await expect(reloadAllMenuItem).toBeDisabled();
+  await expect(closeAllMenuItem).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(fileMenu).toBeHidden();
+  await expect(fileMenuButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(fileMenuButton).toBeFocused();
+
+  await galleryMenuButton.click();
+  await expect(galleryMenu).toBeVisible();
+  await expect(galleryMenuButton).toHaveAttribute('aria-expanded', 'true');
+  await expect(galleryCboxItem).toBeVisible();
+  await expect(galleryCboxItem).toBeEnabled();
+  await galleryCboxItem.click();
+  await expect(galleryMenu).toBeHidden();
+  await expect(galleryMenuButton).toHaveAttribute('aria-expanded', 'false');
+
   await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
   await expect(openedImages.locator('option').first()).toContainText('cbox_rgb.exr');
   await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr');
@@ -311,6 +348,7 @@ test('moves open files and channel view selections with arrow keys', async ({ pa
   const channelSelect = page.locator('#rgb-group-select');
   const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
 
+  await openGalleryCbox(page);
   await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
 
   await page.setInputFiles('#file-input', {
@@ -498,7 +536,7 @@ test('loads scalar Stokes channels and applies derived-channel defaults', async 
   }
 
   const openedImages = page.locator('#opened-images-select');
-  await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
+  await expect(openedImages.locator('option')).toHaveCount(0);
 
   await page.setInputFiles('#file-input', {
     name: 'stokes_scalar.exr',
@@ -610,7 +648,7 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   }
 
   const openedImages = page.locator('#opened-images-select');
-  await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
+  await expect(openedImages.locator('option')).toHaveCount(0);
 
   await page.setInputFiles('#file-input', {
     name: 'stokes_rgb.exr',
@@ -795,7 +833,7 @@ test('loads arbitrary scalar channels as grayscale display options', async ({ pa
   const probeColorValues = page.locator('#probe-color-values');
   const viewer = page.locator('#viewer-container');
 
-  await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
+  await expect(openedImages.locator('option')).toHaveCount(0);
 
   await page.setInputFiles('#file-input', {
     name: 'scalar_z.exr',

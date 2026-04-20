@@ -59,6 +59,7 @@ export interface UiCallbacks {
   onOpenFileClick: () => void;
   onFileSelected: (file: File) => void;
   onFilesDropped: (files: File[]) => void;
+  onGalleryImageSelected: (galleryId: string) => void;
   onReloadAllOpenedImages: () => void;
   onReloadSelectedOpenedImage: (sessionId: string) => void;
   onCloseSelectedOpenedImage: (sessionId: string) => void;
@@ -90,6 +91,9 @@ interface Elements {
   histogramPanelResizer: HTMLElement;
   fileMenuButton: HTMLButtonElement;
   fileMenu: HTMLElement;
+  galleryMenuButton: HTMLButtonElement;
+  galleryMenu: HTMLElement;
+  galleryCboxRgbButton: HTMLButtonElement;
   openFileButton: HTMLButtonElement;
   fileInput: HTMLInputElement;
   resetViewButton: HTMLButtonElement;
@@ -216,6 +220,11 @@ interface ProbeCoordinateImageSize {
   height: number;
 }
 
+interface TopMenuElements {
+  button: HTMLButtonElement;
+  menu: HTMLElement;
+}
+
 export class ViewerUi {
   private readonly elements: Elements;
   private readonly rgbGroupMappings = new Map<string, DisplaySelection>();
@@ -320,6 +329,7 @@ export class ViewerUi {
 
     this.isLoading = loading;
     this.elements.openFileButton.disabled = loading;
+    this.elements.galleryCboxRgbButton.disabled = loading;
     this.elements.resetViewButton.disabled = loading;
     this.setVisualizationModeButtonsDisabled(loading || this.openedImageCount === 0);
     this.setColormapRangeControlsDisabled(loading || this.openedImageCount === 0);
@@ -367,51 +377,68 @@ export class ViewerUi {
     this.elements.loadingOverlay.classList.add('hidden');
   }
 
-  private isFileMenuOpen(): boolean {
-    return !this.elements.fileMenu.classList.contains('hidden');
+  private getTopMenus(): TopMenuElements[] {
+    return [
+      { button: this.elements.fileMenuButton, menu: this.elements.fileMenu },
+      { button: this.elements.galleryMenuButton, menu: this.elements.galleryMenu }
+    ];
   }
 
-  private openFileMenu(focusTarget: 'first' | 'last' | null = null): void {
-    this.elements.fileMenu.classList.remove('hidden');
-    this.elements.fileMenuButton.setAttribute('aria-expanded', 'true');
+  private isTopMenuOpen(menu: TopMenuElements): boolean {
+    return !menu.menu.classList.contains('hidden');
+  }
+
+  private openTopMenu(menu: TopMenuElements, focusTarget: 'first' | 'last' | null = null): void {
+    this.closeAllTopMenus(false, menu);
+    menu.menu.classList.remove('hidden');
+    menu.button.setAttribute('aria-expanded', 'true');
 
     if (focusTarget) {
-      this.focusFileMenuItem(focusTarget);
+      this.focusTopMenuItem(menu, focusTarget);
     }
   }
 
-  private closeFileMenu(restoreFocus = false): void {
-    this.elements.fileMenu.classList.add('hidden');
-    this.elements.fileMenuButton.setAttribute('aria-expanded', 'false');
+  private closeTopMenu(menu: TopMenuElements, restoreFocus = false): void {
+    menu.menu.classList.add('hidden');
+    menu.button.setAttribute('aria-expanded', 'false');
 
     if (restoreFocus) {
-      this.elements.fileMenuButton.focus();
+      menu.button.focus();
     }
   }
 
-  private toggleFileMenu(): void {
-    if (this.isFileMenuOpen()) {
-      this.closeFileMenu();
+  private closeAllTopMenus(restoreFocus = false, exceptMenu: TopMenuElements | null = null): void {
+    for (const menu of this.getTopMenus()) {
+      if (menu.menu === exceptMenu?.menu) {
+        continue;
+      }
+      this.closeTopMenu(menu, restoreFocus && this.isTopMenuOpen(menu));
+    }
+  }
+
+  private toggleTopMenu(menu: TopMenuElements): void {
+    if (this.isTopMenuOpen(menu)) {
+      this.closeTopMenu(menu);
       return;
     }
 
-    this.openFileMenu();
+    this.openTopMenu(menu);
   }
 
-  private getEnabledFileMenuItems(): HTMLButtonElement[] {
-    return Array.from(this.elements.fileMenu.querySelectorAll<HTMLButtonElement>('.app-menu-item')).filter(
+  private getEnabledTopMenuItems(menu: TopMenuElements): HTMLButtonElement[] {
+    return Array.from(menu.menu.querySelectorAll<HTMLButtonElement>('.app-menu-item')).filter(
       (button) => !button.disabled
     );
   }
 
-  private focusFileMenuItem(target: 'first' | 'last'): void {
-    const items = this.getEnabledFileMenuItems();
+  private focusTopMenuItem(menu: TopMenuElements, target: 'first' | 'last'): void {
+    const items = this.getEnabledTopMenuItems(menu);
     const item = target === 'first' ? items.at(0) : items.at(-1);
     item?.focus();
   }
 
-  private focusNextFileMenuItem(delta: -1 | 1): void {
-    const items = this.getEnabledFileMenuItems();
+  private focusNextTopMenuItem(menu: TopMenuElements, delta: -1 | 1): void {
+    const items = this.getEnabledTopMenuItems(menu);
     if (items.length === 0) {
       return;
     }
@@ -1541,6 +1568,66 @@ export class ViewerUi {
     svg.append(ticksGroup, labelsGroup);
   }
 
+  private bindTopMenu(menu: TopMenuElements): void {
+    menu.button.addEventListener('click', () => {
+      this.toggleTopMenu(menu);
+    });
+
+    menu.button.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        this.toggleTopMenu(menu);
+        return;
+      }
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        this.openTopMenu(menu, 'first');
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        this.openTopMenu(menu, 'last');
+        return;
+      }
+
+      if (event.key === 'Escape' && this.isTopMenuOpen(menu)) {
+        event.preventDefault();
+        this.closeTopMenu(menu, true);
+        return;
+      }
+
+      if (event.key === 'Tab' && this.isTopMenuOpen(menu)) {
+        this.closeTopMenu(menu);
+      }
+    });
+
+    menu.menu.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        this.closeTopMenu(menu, true);
+        return;
+      }
+
+      if (event.key === 'Tab') {
+        this.closeTopMenu(menu);
+        return;
+      }
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        this.focusNextTopMenuItem(menu, 1);
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        this.focusNextTopMenuItem(menu, -1);
+      }
+    });
+  }
+
   private bindEvents(): void {
     this.bindPanelResizer(this.elements.imagePanelResizer, 'imagePanelWidth');
     this.bindPanelResizer(this.elements.rightPanelResizer, 'rightPanelWidth');
@@ -1549,71 +1636,20 @@ export class ViewerUi {
     this.bindImageBrowserToggle(this.elements.partsLayersToggle, this.elements.partsLayersList);
     this.bindImageBrowserToggle(this.elements.channelViewToggle, this.elements.channelViewList);
 
-    this.elements.fileMenuButton.addEventListener('click', () => {
-      this.toggleFileMenu();
-    });
-
-    this.elements.fileMenuButton.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        this.toggleFileMenu();
-        return;
-      }
-
-      if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        this.openFileMenu('first');
-        return;
-      }
-
-      if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        this.openFileMenu('last');
-        return;
-      }
-
-      if (event.key === 'Escape' && this.isFileMenuOpen()) {
-        event.preventDefault();
-        this.closeFileMenu(true);
-        return;
-      }
-
-      if (event.key === 'Tab' && this.isFileMenuOpen()) {
-        this.closeFileMenu();
-      }
-    });
-
-    this.elements.fileMenu.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        this.closeFileMenu(true);
-        return;
-      }
-
-      if (event.key === 'Tab') {
-        this.closeFileMenu();
-        return;
-      }
-
-      if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        this.focusNextFileMenuItem(1);
-        return;
-      }
-
-      if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        this.focusNextFileMenuItem(-1);
-      }
-    });
+    for (const menu of this.getTopMenus()) {
+      this.bindTopMenu(menu);
+    }
 
     document.addEventListener('click', (event) => {
       const target = event.target;
-      if (!(target instanceof Node) || this.elements.fileMenuButton.parentElement?.contains(target)) {
+      if (
+        !(target instanceof Node) ||
+        this.getTopMenus().some((menu) => menu.button.parentElement?.contains(target))
+      ) {
         return;
       }
 
-      this.closeFileMenu();
+      this.closeAllTopMenus();
     });
 
     window.addEventListener('dragover', (event) => {
@@ -1643,8 +1679,17 @@ export class ViewerUi {
     });
 
     this.elements.openFileButton.addEventListener('click', () => {
-      this.closeFileMenu();
+      this.closeAllTopMenus();
       this.callbacks.onOpenFileClick();
+    });
+
+    this.elements.galleryCboxRgbButton.addEventListener('click', () => {
+      if (this.elements.galleryCboxRgbButton.disabled) {
+        return;
+      }
+
+      this.closeAllTopMenus();
+      this.callbacks.onGalleryImageSelected(this.elements.galleryCboxRgbButton.dataset.galleryId ?? '');
     });
 
     this.elements.reloadAllOpenedImagesButton.addEventListener('click', () => {
@@ -1652,7 +1697,7 @@ export class ViewerUi {
         return;
       }
 
-      this.closeFileMenu();
+      this.closeAllTopMenus();
       this.callbacks.onReloadAllOpenedImages();
     });
 
@@ -1661,7 +1706,7 @@ export class ViewerUi {
         return;
       }
 
-      this.closeFileMenu();
+      this.closeAllTopMenus();
       this.callbacks.onCloseAllOpenedImages();
     });
 
@@ -2230,6 +2275,9 @@ function resolveElements(): Elements {
     histogramPanelResizer: requireElement('histogram-panel-resizer', HTMLElement),
     fileMenuButton: requireElement('file-menu-button', HTMLButtonElement),
     fileMenu: requireElement('file-menu', HTMLElement),
+    galleryMenuButton: requireElement('gallery-menu-button', HTMLButtonElement),
+    galleryMenu: requireElement('gallery-menu', HTMLElement),
+    galleryCboxRgbButton: requireElement('gallery-cbox-rgb-button', HTMLButtonElement),
     openFileButton: requireElement('open-file-button', HTMLButtonElement),
     fileInput: requireElement('file-input', HTMLInputElement),
     resetViewButton: requireElement('reset-view-button', HTMLButtonElement),

@@ -64,6 +64,8 @@ async function captureThumbnail() {
       timeout: viewerTimeoutMs
     });
 
+    await waitForAppReady(page);
+    await openGallerySample(page);
     await waitForViewerReady(page);
 
     if (pageErrors.length > 0) {
@@ -81,6 +83,48 @@ async function captureThumbnail() {
   } finally {
     await browser.close();
   }
+}
+
+async function waitForAppReady(page) {
+  const deadline = Date.now() + viewerTimeoutMs;
+  let lastState = null;
+
+  while (Date.now() < deadline) {
+    const state = await page.evaluate(() => {
+      const errorBanner = document.querySelector('#error-banner');
+      const errorText =
+        errorBanner && !errorBanner.classList.contains('hidden')
+          ? (errorBanner.textContent ?? '').trim()
+          : '';
+      const galleryButton = document.querySelector('#gallery-menu-button');
+      const canvas = document.querySelector('#gl-canvas');
+
+      return {
+        errorText,
+        hasGalleryButton: galleryButton instanceof HTMLButtonElement,
+        canvasWidth: canvas instanceof HTMLCanvasElement ? canvas.width : 0,
+        canvasHeight: canvas instanceof HTMLCanvasElement ? canvas.height : 0
+      };
+    });
+
+    if (state.errorText) {
+      throw new Error(`The viewer failed before thumbnail capture: ${state.errorText}`);
+    }
+
+    if (state.hasGalleryButton && state.canvasWidth > 0 && state.canvasHeight > 0) {
+      return;
+    }
+
+    lastState = state;
+    await waitMs(250);
+  }
+
+  throw new Error(`Timed out waiting for the app shell. Last state: ${JSON.stringify(lastState)}`);
+}
+
+async function openGallerySample(page) {
+  await page.getByRole('button', { name: 'Gallery', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'cbox_rgb.exr', exact: true }).click();
 }
 
 async function waitForViewerReady(page) {
@@ -113,8 +157,8 @@ async function waitForViewerReady(page) {
       throw new Error(`The viewer failed before thumbnail capture: ${state.errorText}`);
     }
 
-    const hasDefaultImage = state.options.some((option) => option.includes('cbox_rgb.exr'));
-    if (!state.loading && hasDefaultImage && state.canvasWidth > 0 && state.canvasHeight > 0) {
+    const hasGalleryImage = state.options.some((option) => option.includes('cbox_rgb.exr'));
+    if (!state.loading && hasGalleryImage && state.canvasWidth > 0 && state.canvasHeight > 0) {
       return;
     }
 
@@ -122,7 +166,7 @@ async function waitForViewerReady(page) {
     await waitMs(250);
   }
 
-  throw new Error(`Timed out waiting for the default EXR to render. Last state: ${JSON.stringify(lastState)}`);
+  throw new Error(`Timed out waiting for the gallery EXR to render. Last state: ${JSON.stringify(lastState)}`);
 }
 
 async function waitForNextPaint(page) {

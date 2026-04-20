@@ -21,6 +21,14 @@
               <button id="close-all-opened-images-button" class="app-menu-item" type="button" role="menuitem">Close All</button>
             </div>
           </div>
+          <div class="app-menu">
+            <button id="gallery-menu-button" class="app-menu-tab" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="gallery-menu">
+              Gallery
+            </button>
+            <div id="gallery-menu" class="app-menu-dropdown hidden" role="menu" aria-labelledby="gallery-menu-button">
+              <button id="gallery-cbox-rgb-button" class="app-menu-item" type="button" role="menuitem" data-gallery-id="cbox-rgb">cbox_rgb.exr</button>
+            </div>
+          </div>
         </nav>
         <input id="file-input" type="file" accept=".exr,image/exr" hidden />
       </header>
