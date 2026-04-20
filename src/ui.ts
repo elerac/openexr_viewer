@@ -36,19 +36,22 @@ const RIGHT_PANEL_MIN_WIDTH = 240;
 const RIGHT_PANEL_MAX_WIDTH = 520;
 const VIEWER_MIN_WIDTH = 360;
 const LOADING_OVERLAY_SUBTLE_DELAY_MS = 200;
-const LOADING_OVERLAY_MESSAGE_DELAY_MS = 1000;
+const LOADING_OVERLAY_DARKENING_DELAY_MS = 1000;
+const LOADING_OVERLAY_MESSAGE_DELAY_MS = 1500;
 const LOADING_OVERLAY_SUBTLE_CLASS = 'loading-overlay--subtle';
+const LOADING_OVERLAY_DARKENING_CLASS = 'loading-overlay--darkening';
 const LOADING_OVERLAY_MESSAGE_CLASS = 'loading-overlay--message';
 const DEFAULT_PANEL_SPLIT_SIZES = {
   imagePanelWidth: 220,
   rightPanelWidth: 320
 };
 
-export type LoadingOverlayPhase = 'hidden' | 'subtle' | 'message';
+export type LoadingOverlayPhase = 'hidden' | 'subtle' | 'darkening' | 'message';
 
 export class ProgressiveLoadingOverlayDisclosure {
   private active = false;
   private subtleTimer: ReturnType<typeof setTimeout> | null = null;
+  private darkeningTimer: ReturnType<typeof setTimeout> | null = null;
   private messageTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly render: (phase: LoadingOverlayPhase) => void) {}
@@ -72,6 +75,11 @@ export class ProgressiveLoadingOverlayDisclosure {
         this.render('subtle');
       }
     }, LOADING_OVERLAY_SUBTLE_DELAY_MS);
+    this.darkeningTimer = setTimeout(() => {
+      if (this.active) {
+        this.render('darkening');
+      }
+    }, LOADING_OVERLAY_DARKENING_DELAY_MS);
     this.messageTimer = setTimeout(() => {
       if (this.active) {
         this.render('message');
@@ -83,6 +91,10 @@ export class ProgressiveLoadingOverlayDisclosure {
     if (this.subtleTimer !== null) {
       clearTimeout(this.subtleTimer);
       this.subtleTimer = null;
+    }
+    if (this.darkeningTimer !== null) {
+      clearTimeout(this.darkeningTimer);
+      this.darkeningTimer = null;
     }
     if (this.messageTimer !== null) {
       clearTimeout(this.messageTimer);
@@ -387,6 +399,7 @@ export class ViewerUi {
   private renderLoadingOverlayPhase(phase: LoadingOverlayPhase): void {
     this.elements.loadingOverlay.classList.toggle('hidden', phase === 'hidden');
     this.elements.loadingOverlay.classList.toggle(LOADING_OVERLAY_SUBTLE_CLASS, phase === 'subtle');
+    this.elements.loadingOverlay.classList.toggle(LOADING_OVERLAY_DARKENING_CLASS, phase === 'darkening');
     this.elements.loadingOverlay.classList.toggle(LOADING_OVERLAY_MESSAGE_CLASS, phase === 'message');
   }
 

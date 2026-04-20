@@ -8,7 +8,7 @@ import {
   type ColormapLut,
   type ColormapRegistry
 } from './colormaps';
-import { loadExr } from './exr';
+import { loadExrOffMainThread } from './exr-worker-client';
 import { clampZoom, ViewerInteraction } from './interaction';
 import { buildProbeColorPreview, resolveActiveProbePixel, resolveProbeMode } from './probe';
 import { WebGlExrRenderer } from './renderer';
@@ -479,7 +479,8 @@ async function bootstrap(): Promise<void> {
       }
 
       const bytes = new Uint8Array(await response.arrayBuffer());
-      await applyDecodedImage(await loadExr(bytes), galleryImage.filename, bytes.byteLength, {
+      const byteLength = bytes.byteLength;
+      await applyDecodedImage(await loadExrOffMainThread(bytes), galleryImage.filename, byteLength, {
         kind: 'url',
         url: galleryImageUrl
       });
@@ -500,7 +501,7 @@ async function bootstrap(): Promise<void> {
 
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
-      const decoded = await loadExr(bytes);
+      const decoded = await loadExrOffMainThread(bytes);
       await applyDecodedImage(decoded, file.name, file.size, {
         kind: 'file',
         file
@@ -1445,11 +1446,11 @@ async function bootstrap(): Promise<void> {
         throw new Error(`Failed to load ${source.url} (${response.status})`);
       }
       const bytes = new Uint8Array(await response.arrayBuffer());
-      return await loadExr(bytes);
+      return await loadExrOffMainThread(bytes);
     }
 
     const bytes = new Uint8Array(await source.file.arrayBuffer());
-    return await loadExr(bytes);
+    return await loadExrOffMainThread(bytes);
   }
 
   function buildReloadedSessionState(

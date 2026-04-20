@@ -41,6 +41,7 @@ describe('progressive loading overlay disclosure', () => {
 
     expect(phases).toEqual(['hidden', 'hidden']);
     expect(phases).not.toContain('subtle');
+    expect(phases).not.toContain('darkening');
     expect(phases).not.toContain('message');
   });
 
@@ -55,14 +56,29 @@ describe('progressive loading overlay disclosure', () => {
     expect(phases).toEqual(['hidden', 'subtle']);
   });
 
-  it('shows the explicit message after 1 s', () => {
+  it('starts darkening at 1 s without showing the explicit message yet', () => {
     vi.useFakeTimers();
     const { disclosure, phases } = createDisclosure();
 
     disclosure.setLoading(true);
     vi.advanceTimersByTime(1000);
 
-    expect(phases).toEqual(['hidden', 'subtle', 'message']);
+    expect(phases).toEqual(['hidden', 'subtle', 'darkening']);
+    expect(phases).not.toContain('message');
+  });
+
+  it('shows the explicit message after the 0.5 s darkening transition', () => {
+    vi.useFakeTimers();
+    const { disclosure, phases } = createDisclosure();
+
+    disclosure.setLoading(true);
+    vi.advanceTimersByTime(1499);
+
+    expect(phases).toEqual(['hidden', 'subtle', 'darkening']);
+
+    vi.advanceTimersByTime(1);
+
+    expect(phases).toEqual(['hidden', 'subtle', 'darkening', 'message']);
   });
 
   it('hides and clears pending phases after the subtle state', () => {
@@ -77,15 +93,27 @@ describe('progressive loading overlay disclosure', () => {
     expect(phases).toEqual(['hidden', 'subtle', 'hidden']);
   });
 
-  it('hides after the explicit message state', () => {
+  it('hides and clears pending phases after the darkening state', () => {
     vi.useFakeTimers();
     const { disclosure, phases } = createDisclosure();
 
     disclosure.setLoading(true);
     vi.advanceTimersByTime(1000);
     disclosure.setLoading(false);
+    vi.advanceTimersByTime(500);
 
-    expect(phases).toEqual(['hidden', 'subtle', 'message', 'hidden']);
+    expect(phases).toEqual(['hidden', 'subtle', 'darkening', 'hidden']);
+  });
+
+  it('hides after the explicit message state', () => {
+    vi.useFakeTimers();
+    const { disclosure, phases } = createDisclosure();
+
+    disclosure.setLoading(true);
+    vi.advanceTimersByTime(1500);
+    disclosure.setLoading(false);
+
+    expect(phases).toEqual(['hidden', 'subtle', 'darkening', 'message', 'hidden']);
   });
 
   it('keeps the original disclosure schedule while loading remains active', () => {
@@ -95,9 +123,9 @@ describe('progressive loading overlay disclosure', () => {
     disclosure.setLoading(true);
     vi.advanceTimersByTime(500);
     disclosure.setLoading(true);
-    vi.advanceTimersByTime(500);
+    vi.advanceTimersByTime(1000);
 
-    expect(phases).toEqual(['hidden', 'subtle', 'message']);
+    expect(phases).toEqual(['hidden', 'subtle', 'darkening', 'message']);
   });
 });
 

@@ -287,28 +287,39 @@ body.is-resizing-panel-columns * {
   position: absolute;
   inset: 0;
   z-index: 8;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 0.6rem;
-  background: transparent;
+  background-color: transparent;
   color: #e7edf8;
   font-weight: 600;
   letter-spacing: 0.02em;
   pointer-events: none;
+  transition: background-color 0.5s ease;
 }
 
 .loading-overlay--subtle {
-  background: rgba(8, 12, 19, 0.08);
+  background-color: rgba(8, 12, 19, 0.08);
+}
+
+.loading-overlay--darkening {
+  background-color: rgba(8, 12, 19, 0.72);
 }
 
 .loading-overlay--message {
-  background: rgba(8, 12, 19, 0.72);
+  background-color: rgba(8, 12, 19, 0.72);
 }
 
 .loading-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 1.9rem;
   height: 1.9rem;
+  transform: translate(-50%, -50%);
+}
+
+.loading-spinner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
   border-radius: 999px;
   border: 3px solid rgba(255, 255, 255, 0.2);
   border-top-color: var(--accent);
@@ -316,11 +327,19 @@ body.is-resizing-panel-columns * {
 }
 
 .loading-message {
-  display: none;
+  position: absolute;
+  top: calc(50% + 2rem);
+  left: 50%;
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity 0.16s ease;
+  visibility: hidden;
+  white-space: nowrap;
 }
 
 .loading-overlay--message .loading-message {
-  display: inline;
+  opacity: 1;
+  visibility: visible;
 }
 
 @keyframes spin {
