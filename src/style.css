@@ -291,11 +291,19 @@ body.is-resizing-panel-columns * {
   place-content: center;
   justify-items: center;
   gap: 0.6rem;
-  background: rgba(8, 12, 19, 0.72);
+  background: transparent;
   color: #e7edf8;
   font-weight: 600;
   letter-spacing: 0.02em;
   pointer-events: none;
+}
+
+.loading-overlay--subtle {
+  background: rgba(8, 12, 19, 0.08);
+}
+
+.loading-overlay--message {
+  background: rgba(8, 12, 19, 0.72);
 }
 
 .loading-spinner {
@@ -305,6 +313,14 @@ body.is-resizing-panel-columns * {
   border: 3px solid rgba(255, 255, 255, 0.2);
   border-top-color: var(--accent);
   animation: spin 0.85s linear infinite;
+}
+
+.loading-message {
+  display: none;
+}
+
+.loading-overlay--message .loading-message {
+  display: inline;
 }
 
 @keyframes spin {

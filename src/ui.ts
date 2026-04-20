@@ -35,10 +35,61 @@ const IMAGE_PANEL_MAX_WIDTH = 420;
 const RIGHT_PANEL_MIN_WIDTH = 240;
 const RIGHT_PANEL_MAX_WIDTH = 520;
 const VIEWER_MIN_WIDTH = 360;
+const LOADING_OVERLAY_SUBTLE_DELAY_MS = 200;
+const LOADING_OVERLAY_MESSAGE_DELAY_MS = 1000;
+const LOADING_OVERLAY_SUBTLE_CLASS = 'loading-overlay--subtle';
+const LOADING_OVERLAY_MESSAGE_CLASS = 'loading-overlay--message';
 const DEFAULT_PANEL_SPLIT_SIZES = {
   imagePanelWidth: 220,
   rightPanelWidth: 320
 };
+
+export type LoadingOverlayPhase = 'hidden' | 'subtle' | 'message';
+
+export class ProgressiveLoadingOverlayDisclosure {
+  private active = false;
+  private subtleTimer: ReturnType<typeof setTimeout> | null = null;
+  private messageTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(private readonly render: (phase: LoadingOverlayPhase) => void) {}
+
+  setLoading(loading: boolean): void {
+    if (this.active === loading) {
+      return;
+    }
+
+    this.active = loading;
+    this.clearTimers();
+
+    if (!loading) {
+      this.render('hidden');
+      return;
+    }
+
+    this.render('hidden');
+    this.subtleTimer = setTimeout(() => {
+      if (this.active) {
+        this.render('subtle');
+      }
+    }, LOADING_OVERLAY_SUBTLE_DELAY_MS);
+    this.messageTimer = setTimeout(() => {
+      if (this.active) {
+        this.render('message');
+      }
+    }, LOADING_OVERLAY_MESSAGE_DELAY_MS);
+  }
+
+  private clearTimers(): void {
+    if (this.subtleTimer !== null) {
+      clearTimeout(this.subtleTimer);
+      this.subtleTimer = null;
+    }
+    if (this.messageTimer !== null) {
+      clearTimeout(this.messageTimer);
+      this.messageTimer = null;
+    }
+  }
+}
 
 export interface UiCallbacks {
   onOpenFileClick: () => void;
@@ -195,6 +246,7 @@ export class ViewerUi {
   private readonly elements: Elements;
   private readonly rgbGroupMappings = new Map<string, DisplaySelection>();
   private readonly panelSplitResizeObserver: ResizeObserver;
+  private readonly loadingOverlayDisclosure: ProgressiveLoadingOverlayDisclosure;
   private isLoading = false;
   private isRgbViewLoading = false;
   private openedImageCount = 0;
@@ -231,6 +283,9 @@ export class ViewerUi {
 
   constructor(private readonly callbacks: UiCallbacks) {
     this.elements = resolveElements();
+    this.loadingOverlayDisclosure = new ProgressiveLoadingOverlayDisclosure((phase) => {
+      this.renderLoadingOverlayPhase(phase);
+    });
     this.panelSplitResizeObserver = new ResizeObserver(() => {
       this.reclampPanelSplits();
     });
@@ -326,11 +381,13 @@ export class ViewerUi {
   }
 
   private updateLoadingOverlayVisibility(): void {
-    if (this.isLoading || this.isRgbViewLoading) {
-      this.elements.loadingOverlay.classList.remove('hidden');
-      return;
-    }
-    this.elements.loadingOverlay.classList.add('hidden');
+    this.loadingOverlayDisclosure.setLoading(this.isLoading || this.isRgbViewLoading);
+  }
+
+  private renderLoadingOverlayPhase(phase: LoadingOverlayPhase): void {
+    this.elements.loadingOverlay.classList.toggle('hidden', phase === 'hidden');
+    this.elements.loadingOverlay.classList.toggle(LOADING_OVERLAY_SUBTLE_CLASS, phase === 'subtle');
+    this.elements.loadingOverlay.classList.toggle(LOADING_OVERLAY_MESSAGE_CLASS, phase === 'message');
   }
 
   private getTopMenus(): TopMenuElements[] {

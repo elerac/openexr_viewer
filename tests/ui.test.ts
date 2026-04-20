@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildPartLayerItemsFromChannelNames,
   clampPanelSplitSizes,
@@ -7,8 +7,99 @@ import {
   getListboxOptionIndexAtClientY,
   getPanelSplitKeyboardAction,
   parsePanelSplitStorageValue,
+  ProgressiveLoadingOverlayDisclosure,
+  type LoadingOverlayPhase,
   type PanelSplitMetrics
 } from '../src/ui';
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('progressive loading overlay disclosure', () => {
+  function createDisclosure(): {
+    disclosure: ProgressiveLoadingOverlayDisclosure;
+    phases: LoadingOverlayPhase[];
+  } {
+    const phases: LoadingOverlayPhase[] = [];
+    return {
+      disclosure: new ProgressiveLoadingOverlayDisclosure((phase) => {
+        phases.push(phase);
+      }),
+      phases
+    };
+  }
+
+  it('does not reveal loading UI when loading finishes before 200 ms', () => {
+    vi.useFakeTimers();
+    const { disclosure, phases } = createDisclosure();
+
+    disclosure.setLoading(true);
+    vi.advanceTimersByTime(199);
+    disclosure.setLoading(false);
+    vi.advanceTimersByTime(1000);
+
+    expect(phases).toEqual(['hidden', 'hidden']);
+    expect(phases).not.toContain('subtle');
+    expect(phases).not.toContain('message');
+  });
+
+  it('shows only the subtle indicator from 200 ms until 1 s', () => {
+    vi.useFakeTimers();
+    const { disclosure, phases } = createDisclosure();
+
+    disclosure.setLoading(true);
+    vi.advanceTimersByTime(200);
+    vi.advanceTimersByTime(799);
+
+    expect(phases).toEqual(['hidden', 'subtle']);
+  });
+
+  it('shows the explicit message after 1 s', () => {
+    vi.useFakeTimers();
+    const { disclosure, phases } = createDisclosure();
+
+    disclosure.setLoading(true);
+    vi.advanceTimersByTime(1000);
+
+    expect(phases).toEqual(['hidden', 'subtle', 'message']);
+  });
+
+  it('hides and clears pending phases after the subtle state', () => {
+    vi.useFakeTimers();
+    const { disclosure, phases } = createDisclosure();
+
+    disclosure.setLoading(true);
+    vi.advanceTimersByTime(200);
+    disclosure.setLoading(false);
+    vi.advanceTimersByTime(1000);
+
+    expect(phases).toEqual(['hidden', 'subtle', 'hidden']);
+  });
+
+  it('hides after the explicit message state', () => {
+    vi.useFakeTimers();
+    const { disclosure, phases } = createDisclosure();
+
+    disclosure.setLoading(true);
+    vi.advanceTimersByTime(1000);
+    disclosure.setLoading(false);
+
+    expect(phases).toEqual(['hidden', 'subtle', 'message', 'hidden']);
+  });
+
+  it('keeps the original disclosure schedule while loading remains active', () => {
+    vi.useFakeTimers();
+    const { disclosure, phases } = createDisclosure();
+
+    disclosure.setLoading(true);
+    vi.advanceTimersByTime(500);
+    disclosure.setLoading(true);
+    vi.advanceTimersByTime(500);
+
+    expect(phases).toEqual(['hidden', 'subtle', 'message']);
+  });
+});
 
 describe('listbox hit testing', () => {
   it('maps client coordinates using the full scrollable content height', () => {
