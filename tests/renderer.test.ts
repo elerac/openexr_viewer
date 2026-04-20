@@ -8,7 +8,8 @@ describe('renderer overlay value helpers', () => {
         visualizationMode: 'colormap',
         displayR: 'R',
         displayG: 'G',
-        displayB: 'B'
+        displayB: 'B',
+        displayA: null
       },
       1,
       0.5,
@@ -29,7 +30,8 @@ describe('renderer overlay value helpers', () => {
         visualizationMode: 'rgb',
         displayR: 'R',
         displayG: 'G',
-        displayB: 'B'
+        displayB: 'B',
+        displayA: null
       },
       1,
       0.5,
@@ -46,7 +48,8 @@ describe('renderer overlay value helpers', () => {
         visualizationMode: 'rgb',
         displayR: 'R',
         displayG: 'R',
-        displayB: 'R'
+        displayB: 'R',
+        displayA: null
       },
       0.25,
       0.25,
@@ -57,6 +60,79 @@ describe('renderer overlay value helpers', () => {
       {
         color: 'rgba(255, 120, 120, 0.96)',
         value: '0.250'
+      }
+    ]);
+  });
+
+  it('appends alpha for non-colormap RGB displays with active alpha', () => {
+    const lines = buildOverlayValueLines(
+      {
+        visualizationMode: 'rgb',
+        displayR: 'R',
+        displayG: 'G',
+        displayB: 'B',
+        displayA: 'A'
+      },
+      1,
+      0.5,
+      0.25,
+      0.125
+    );
+
+    expect(lines.map((line) => line.value)).toEqual(['1.00', '0.500', '0.250', '0.125']);
+    expect(lines).toHaveLength(4);
+  });
+
+  it('appends alpha for repeated-channel RGB displays with active alpha', () => {
+    const lines = buildOverlayValueLines(
+      {
+        visualizationMode: 'rgb',
+        displayR: 'mask',
+        displayG: 'mask',
+        displayB: 'mask',
+        displayA: 'A'
+      },
+      0.25,
+      0.25,
+      0.25,
+      0.75
+    );
+
+    expect(lines).toEqual([
+      {
+        color: 'rgba(255, 255, 255, 0.95)',
+        value: '0.250'
+      },
+      {
+        color: 'rgba(255, 255, 255, 0.95)',
+        value: '0.750'
+      }
+    ]);
+  });
+
+  it('appends alpha for colormap RGB displays with active alpha', () => {
+    const lines = buildOverlayValueLines(
+      {
+        visualizationMode: 'colormap',
+        displayR: 'R',
+        displayG: 'G',
+        displayB: 'B',
+        displayA: 'A'
+      },
+      1,
+      0.5,
+      0.25,
+      0.875
+    );
+
+    expect(lines).toEqual([
+      {
+        color: 'rgba(255, 255, 255, 0.95)',
+        value: '0.588'
+      },
+      {
+        color: 'rgba(255, 255, 255, 0.95)',
+        value: '0.875'
       }
     ]);
   });

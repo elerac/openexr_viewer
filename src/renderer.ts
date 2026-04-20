@@ -537,7 +537,8 @@ export class WebGlExrRenderer {
           state,
           data[dataIndex + 0],
           data[dataIndex + 1],
-          data[dataIndex + 2]
+          data[dataIndex + 2],
+          data[dataIndex + 3]
         );
 
         const centerX = (x + 0.5 - state.panX) * state.zoom + halfViewWidth;
@@ -604,40 +605,47 @@ export interface OverlayValueLine {
 }
 
 export function buildOverlayValueLines(
-  state: Pick<ViewerState, 'visualizationMode' | 'displayR' | 'displayG' | 'displayB'>,
+  state: Pick<ViewerState, 'visualizationMode' | 'displayR' | 'displayG' | 'displayB' | 'displayA'>,
   r: number,
   g: number,
-  b: number
+  b: number,
+  a: number = 1
 ): OverlayValueLine[] {
+  let lines: OverlayValueLine[];
   if (state.visualizationMode === 'colormap') {
-    return [
+    lines = [
       {
         color: OVERLAY_MONO_LABEL_COLOR,
         value: formatOverlayValue(computeOverlayLuminanceValue(r, g, b))
       }
     ];
-  }
-
-  if (isSingleChannelDisplay(state)) {
-    return [
+  } else if (isSingleChannelDisplay(state)) {
+    lines = [
       {
         color: overlayLabelColorForChannel(state.displayR),
         value: formatOverlayValue(r)
       }
     ];
+  } else {
+    lines = [
+      { color: OVERLAY_RGB_LABEL_COLORS[0], value: formatOverlayValue(r) },
+      { color: OVERLAY_RGB_LABEL_COLORS[1], value: formatOverlayValue(g) },
+      { color: OVERLAY_RGB_LABEL_COLORS[2], value: formatOverlayValue(b) }
+    ];
   }
 
-  return [
-    { color: OVERLAY_RGB_LABEL_COLORS[0], value: formatOverlayValue(r) },
-    { color: OVERLAY_RGB_LABEL_COLORS[1], value: formatOverlayValue(g) },
-    { color: OVERLAY_RGB_LABEL_COLORS[2], value: formatOverlayValue(b) }
-  ];
+  if (state.displayA) {
+    lines.push({ color: OVERLAY_MONO_LABEL_COLOR, value: formatOverlayValue(a) });
+  }
+
+  return lines;
 }
 
 function getOverlayValueLineCount(
-  state: Pick<ViewerState, 'visualizationMode' | 'displayR' | 'displayG' | 'displayB'>
+  state: Pick<ViewerState, 'visualizationMode' | 'displayR' | 'displayG' | 'displayB' | 'displayA'>
 ): number {
-  return state.visualizationMode === 'colormap' || isSingleChannelDisplay(state) ? 1 : 3;
+  const colorLineCount = state.visualizationMode === 'colormap' || isSingleChannelDisplay(state) ? 1 : 3;
+  return state.displayA ? colorLineCount + 1 : colorLineCount;
 }
 
 function isSingleChannelDisplay(state: Pick<ViewerState, 'displayR' | 'displayG' | 'displayB'>): boolean {
