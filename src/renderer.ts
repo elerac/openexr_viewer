@@ -1,6 +1,6 @@
 import { imageToScreen } from './interaction';
 import { resolveActiveProbePixel } from './probe';
-import { isStokesDegreeModulationEnabled } from './state';
+import { isStokesDegreeModulationEnabled } from './stokes';
 import { ImagePixel, ViewerState, ViewportInfo } from './types';
 
 const VALUE_LABEL_ZOOM_THRESHOLD = 28;

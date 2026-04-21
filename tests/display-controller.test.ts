@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DisplayController } from '../src/controllers/display-controller';
-import { ViewerStore, buildViewerStateForLayer, createInitialState } from '../src/state';
+import { buildViewerStateForLayer, createInitialState, ViewerStore } from '../src/viewer-store';
 import { DecodedExrImage, DecodedLayer, OpenedImageSession, ViewerState } from '../src/types';
 
 const colormapMocks = vi.hoisted(() => ({

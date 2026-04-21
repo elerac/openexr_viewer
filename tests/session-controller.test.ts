@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SessionController } from '../src/controllers/session-controller';
 import { LoadQueueService } from '../src/services/load-queue';
-import { ViewerStore, createInitialState } from '../src/state';
+import { ViewerStore, createInitialState } from '../src/viewer-store';
 import { DecodedExrImage, DecodedLayer, OpenedImageSession, ViewerState } from '../src/types';
 
 function createDecodedImage(width = 4, height = 4): DecodedExrImage {

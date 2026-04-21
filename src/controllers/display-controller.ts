@@ -8,24 +8,29 @@ import {
   type ColormapLut,
   type ColormapRegistry
 } from '../colormaps';
+import {
+  buildZeroCenteredColormapRange,
+  cloneDisplayLuminanceRange,
+  computeDisplayTextureLuminanceRange,
+  resolveColormapAutoRange,
+  sameDisplayLuminanceRange,
+  shouldPreserveStokesColormapState,
+  shouldRefreshDisplayLuminanceRange
+} from '../colormap-range';
 import { pruneDisplayCachesToBudget } from '../display-cache';
+import {
+  buildDisplayTextureRevisionKey,
+  buildSelectedDisplayTexture,
+  samplePixelValuesForDisplay
+} from '../display-texture';
 import { buildProbeColorPreview, resolveActiveProbePixel, resolveProbeMode } from '../probe';
 import { WebGlExrRenderer } from '../renderer';
 import {
-  buildSelectedDisplayTexture,
-  buildViewerStateForLayer,
-  buildZeroCenteredColormapRange,
-  computeDisplayTextureLuminanceRange,
   getStokesDegreeModulationLabel,
   getStokesDisplayColormapDefault,
   isStokesDisplaySelection,
-  isStokesDegreeModulationParameter,
-  resolveColormapAutoRange,
-  samplePixelValuesForDisplay,
-  shouldPreserveStokesColormapState,
-  shouldRefreshDisplayLuminanceRange,
-  ViewerStore
-} from '../state';
+  isStokesDegreeModulationParameter
+} from '../stokes';
 import { ViewerUi } from '../ui';
 import {
   DecodedExrImage,
@@ -38,6 +43,7 @@ import {
   VisualizationMode,
   ZERO_CHANNEL
 } from '../types';
+import { buildViewerStateForLayer, ViewerStore } from '../viewer-store';
 
 const COLORMAP_ZERO_CENTER_MANUAL_MIN_MAGNITUDE = 1e-16;
 const MIN_RGB_VIEW_LOADING_MS = 120;
@@ -185,7 +191,7 @@ export class DisplayController {
           });
         }
 
-        const textureKey = buildTextureRevisionKey(state);
+        const textureKey = buildDisplayTextureRevisionKey(state);
         const textureDirty = textureKey !== activeSession.textureRevisionKey || !activeSession.displayTexture;
         if (textureDirty) {
           activeSession.displayTexture = buildSelectedDisplayTexture(
@@ -868,22 +874,6 @@ function createZeroDisplaySelection(): DisplaySelection {
   };
 }
 
-function buildTextureRevisionKey(state: ViewerState): string {
-  return [
-    state.activeLayer,
-    state.displaySource,
-    state.stokesParameter ?? '',
-    state.displayR,
-    state.displayG,
-    state.displayB,
-    state.displayA ?? ''
-  ].join(':');
-}
-
-function cloneDisplayLuminanceRange(range: DisplayLuminanceRange | null): DisplayLuminanceRange | null {
-  return range ? { min: range.min, max: range.max } : null;
-}
-
 function captureRestorableVisualizationState(state: ViewerState): RestorableVisualizationState {
   return {
     visualizationMode: state.visualizationMode,
@@ -892,21 +882,6 @@ function captureRestorableVisualizationState(state: ViewerState): RestorableVisu
     colormapRangeMode: state.colormapRangeMode,
     colormapZeroCentered: state.colormapZeroCentered
   };
-}
-
-function sameDisplayLuminanceRange(
-  a: DisplayLuminanceRange | null,
-  b: DisplayLuminanceRange | null
-): boolean {
-  if (!a && !b) {
-    return true;
-  }
-
-  if (!a || !b) {
-    return false;
-  }
-
-  return a.min === b.min && a.max === b.max;
 }
 
 function waitForNextPaint(): Promise<void> {

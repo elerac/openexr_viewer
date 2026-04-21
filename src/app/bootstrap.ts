@@ -1,5 +1,5 @@
 import { loadExrOffMainThread } from '../exr-worker-client';
-import { samePixel, ViewerStore, createInitialState } from '../state';
+import { ViewerStore, createInitialState } from '../viewer-store';
 import { ViewerUi } from '../ui';
 import { clampZoom, ViewerInteraction } from '../interaction';
 import { WebGlExrRenderer } from '../renderer';
@@ -198,4 +198,16 @@ export async function bootstrapApp(): Promise<void> {
     ui.setError(message);
     ui.setLoading(false);
   }
+}
+
+function samePixel(a: { ix: number; iy: number } | null, b: { ix: number; iy: number } | null): boolean {
+  if (!a && !b) {
+    return true;
+  }
+
+  if (!a || !b) {
+    return false;
+  }
+
+  return a.ix === b.ix && a.iy === b.iy;
 }

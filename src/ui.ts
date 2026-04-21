@@ -1,4 +1,17 @@
+import { buildZeroCenteredColormapRange } from './colormap-range';
 import { ColormapLut, sampleColormapRgbBytes } from './colormaps';
+import {
+  areDisplayChannelsAvailable,
+  buildChannelDisplayOptions,
+  extractRgbChannelGroups,
+  findMergedSelectionForSplitDisplay,
+  findSelectedChannelDisplayOption,
+  findSplitSelectionForMergedDisplay
+} from './display-selection';
+import {
+  findSelectedStokesDisplayOption,
+  getStokesDisplayOptions
+} from './stokes';
 import {
   DisplayChannelMapping,
   DisplaySelection,
@@ -8,18 +21,6 @@ import {
   VisualizationMode
 } from './types';
 import { ProbeColorPreview, ProbeDisplayValue } from './probe';
-import {
-  buildChannelDisplayOptions,
-  buildZeroCenteredColormapRange,
-  areDisplayChannelsAvailable,
-  extractRgbChannelGroups,
-  findMergedSelectionForSplitDisplay,
-  findSelectedChannelDisplayOption,
-  findSelectedStokesDisplayOption,
-  findSplitSelectionForMergedDisplay,
-  formatScientific,
-  getStokesDisplayOptions
-} from './state';
 
 const OPENED_IMAGES_MAX_VISIBLE_ROWS = 10;
 const CHANNEL_OPTIONS_MAX_VISIBLE_ROWS = 10;
@@ -2924,6 +2925,14 @@ function getSidePanelWidthLimit(metrics: PanelSplitMetrics): number {
 
 function clampFiniteSize(value: number, min: number, max: number): number {
   return clamp(Number.isFinite(value) ? value : min, min, max);
+}
+
+function formatScientific(value: number): string {
+  if (!Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return value.toExponential(5);
 }
 
 export function getListboxOptionIndexAtClientY(clientY: number, metrics: ListboxHitTestMetrics): number {

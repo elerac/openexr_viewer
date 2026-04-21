@@ -7,7 +7,7 @@ import {
   getStokesDisplayValueLabel,
   getStokesParameterLabel,
   isStokesDegreeModulationEnabled
-} from './state';
+} from './stokes';
 import {
   DisplaySelection,
   DisplayLuminanceRange,

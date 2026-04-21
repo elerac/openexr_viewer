@@ -1,4 +1,5 @@
-import { buildSelectedDisplayTexture } from '../state';
+import { cloneDisplayLuminanceRange } from '../colormap-range';
+import { buildDisplayTextureRevisionKey, buildSelectedDisplayTexture } from '../display-texture';
 import { createOpenedImageThumbnailDataUrlFromDisplayTexture } from '../thumbnail';
 import { DecodedLayer, OpenedImageSession, ViewerState } from '../types';
 
@@ -131,7 +132,7 @@ export class ThumbnailService {
     }
 
     try {
-      const thumbnailTextureRevisionKey = buildTextureRevisionKey(stateSnapshot);
+      const thumbnailTextureRevisionKey = buildDisplayTextureRevisionKey(stateSnapshot);
       const displayTexture = session.displayTexture && session.textureRevisionKey === thumbnailTextureRevisionKey
         ? session.displayTexture
         : buildSelectedDisplayTexture(
@@ -220,22 +221,6 @@ function resolveWindowLike(): ThumbnailWindowLike | null {
 
 function getSelectedLayer(session: OpenedImageSession, layerIndex: number): DecodedLayer | null {
   return session.decoded.layers[layerIndex] ?? null;
-}
-
-function buildTextureRevisionKey(state: ViewerState): string {
-  return [
-    state.activeLayer,
-    state.displaySource,
-    state.stokesParameter ?? '',
-    state.displayR,
-    state.displayG,
-    state.displayB,
-    state.displayA ?? ''
-  ].join(':');
-}
-
-function cloneDisplayLuminanceRange(range: ViewerState['colormapRange']): ViewerState['colormapRange'] {
-  return range ? { min: range.min, max: range.max } : null;
 }
 
 function cloneViewerState(state: ViewerState): ViewerState {

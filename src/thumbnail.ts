@@ -1,4 +1,4 @@
-import { buildSelectedDisplayTexture } from './state';
+import { buildSelectedDisplayTexture } from './display-texture';
 import { DecodedExrImage, ViewerState } from './types';
 
 const OPENED_IMAGE_THUMBNAIL_SIZE = 40;

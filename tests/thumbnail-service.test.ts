@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildViewerStateForLayer, createInitialState } from '../src/state';
 import { ThumbnailService } from '../src/services/thumbnail-service';
 import { DecodedExrImage, DecodedLayer, OpenedImageSession, ViewerState } from '../src/types';
+import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
 
 function createDecodedImage(): DecodedExrImage {
   const layer: DecodedLayer = {

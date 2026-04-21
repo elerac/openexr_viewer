@@ -7,14 +7,15 @@ import {
   saveStoredDisplayCacheBudgetMb
 } from '../display-cache';
 import { clampZoom } from '../interaction';
+import { cloneDisplayLuminanceRange } from '../colormap-range';
 import {
   buildSessionDisplayName,
-  buildViewerStateForLayer,
-  createDefaultStokesDegreeModulation,
   pickNextSessionIndexAfterRemoval,
   persistActiveSessionState
-} from '../state';
+} from '../session-state';
+import { createDefaultStokesDegreeModulation } from '../stokes';
 import { ViewerUi } from '../ui';
+import { buildViewerStateForLayer } from '../viewer-store';
 import { LoadQueueService } from '../services/load-queue';
 import { ThumbnailService } from '../services/thumbnail-service';
 import {
@@ -682,10 +683,6 @@ function clampPixelToImageBounds(pixel: ImagePixel, width: number, height: numbe
     ix: pixel.ix,
     iy: pixel.iy
   };
-}
-
-function cloneDisplayLuminanceRange(range: ViewerState['colormapRange']): ViewerState['colormapRange'] {
-  return range ? { min: range.min, max: range.max } : null;
 }
 
 function cloneViewerState(state: ViewerState): ViewerState {
