@@ -262,6 +262,8 @@ interface TopMenuElements {
   menu: HTMLElement;
 }
 
+type TopMenuTrackingMode = 'inactive' | 'pointer';
+
 export class ViewerUi {
   private readonly elements: Elements;
   private readonly rgbGroupMappings = new Map<string, DisplaySelection>();
@@ -301,6 +303,7 @@ export class ViewerUi {
   private hasColormapOptions = false;
   private panelSplitSizes: PanelSplitSizes = { ...DEFAULT_PANEL_SPLIT_SIZES };
   private activePanelResize: PanelResizeDragState | null = null;
+  private topMenuTrackingMode: TopMenuTrackingMode = 'inactive';
 
   constructor(private readonly callbacks: UiCallbacks) {
     this.elements = resolveElements();
@@ -442,10 +445,15 @@ export class ViewerUi {
     return !menu.menu.classList.contains('hidden');
   }
 
-  private openTopMenu(menu: TopMenuElements, focusTarget: 'first' | 'last' | null = null): void {
+  private openTopMenu(
+    menu: TopMenuElements,
+    focusTarget: 'first' | 'last' | null = null,
+    trackingMode: TopMenuTrackingMode | null = null
+  ): void {
     this.closeAllTopMenus(false, menu);
     menu.menu.classList.remove('hidden');
     menu.button.setAttribute('aria-expanded', 'true');
+    this.topMenuTrackingMode = trackingMode ?? this.topMenuTrackingMode;
 
     if (focusTarget) {
       this.focusTopMenuItem(menu, focusTarget);
@@ -455,6 +463,9 @@ export class ViewerUi {
   private closeTopMenu(menu: TopMenuElements, restoreFocus = false): void {
     menu.menu.classList.add('hidden');
     menu.button.setAttribute('aria-expanded', 'false');
+    if (!this.getTopMenus().some((item) => item.menu !== menu.menu && this.isTopMenuOpen(item))) {
+      this.topMenuTrackingMode = 'inactive';
+    }
 
     if (restoreFocus) {
       menu.button.focus();
@@ -476,7 +487,7 @@ export class ViewerUi {
       return;
     }
 
-    this.openTopMenu(menu);
+    this.openTopMenu(menu, null, 'pointer');
   }
 
   private getEnabledTopMenuItems(menu: TopMenuElements): HTMLElement[] {
@@ -1279,6 +1290,15 @@ export class ViewerUi {
       this.toggleTopMenu(menu);
     });
 
+    menu.button.addEventListener('pointerenter', () => {
+      if (this.topMenuTrackingMode !== 'pointer' || this.isTopMenuOpen(menu)) {
+        return;
+      }
+
+      menu.button.focus();
+      this.openTopMenu(menu, null, 'pointer');
+    });
+
     menu.button.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
@@ -1288,13 +1308,13 @@ export class ViewerUi {
 
       if (event.key === 'ArrowDown') {
         event.preventDefault();
-        this.openTopMenu(menu, 'first');
+        this.openTopMenu(menu, 'first', 'inactive');
         return;
       }
 
       if (event.key === 'ArrowUp') {
         event.preventDefault();
-        this.openTopMenu(menu, 'last');
+        this.openTopMenu(menu, 'last', 'inactive');
         return;
       }
 

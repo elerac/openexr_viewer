@@ -242,6 +242,31 @@ test('boots empty, opens the gallery demo image, and keeps core controls stable'
   await expect(settingsMenuButton).toHaveAttribute('aria-expanded', 'false');
   await expect(settingsMenuButton).toBeFocused();
 
+  await fileMenuButton.hover();
+  await expect(fileMenu).toBeHidden();
+  await expect(fileMenuButton).toHaveAttribute('aria-expanded', 'false');
+
+  await fileMenuButton.click();
+  await expect(fileMenu).toBeVisible();
+  await expect(fileMenuButton).toHaveAttribute('aria-expanded', 'true');
+  await galleryMenuButton.hover();
+  await expect(fileMenu).toBeHidden();
+  await expect(fileMenuButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(galleryMenu).toBeVisible();
+  await expect(galleryMenuButton).toHaveAttribute('aria-expanded', 'true');
+  await settingsMenuButton.hover();
+  await expect(galleryMenu).toBeHidden();
+  await expect(galleryMenuButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(settingsMenu).toBeVisible();
+  await expect(settingsMenuButton).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Escape');
+  await expect(settingsMenu).toBeHidden();
+  await expect(settingsMenuButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(settingsMenuButton).toBeFocused();
+  await galleryMenuButton.hover();
+  await expect(galleryMenu).toBeHidden();
+  await expect(galleryMenuButton).toHaveAttribute('aria-expanded', 'false');
+
   await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
   await expect(openedImages.locator('option').first()).toContainText('cbox_rgb.exr');
   await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr');
