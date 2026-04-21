@@ -195,4 +195,54 @@ describe('thumbnail service', () => {
     expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
     expect(service.getThumbnailDataUrl(session.id)).toBe('thumb');
   });
+
+  it('stops pending thumbnail work after dispose', async () => {
+    const session = createSession();
+    const renderCache = createRenderCacheStub();
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const idleCallbacks: Array<() => void> = [];
+    const createThumbnailDataUrl = vi.fn(() => 'thumb');
+    const onThumbnailUpdated = vi.fn();
+    const service = new ThumbnailService({
+      getSession: () => session,
+      renderCache: renderCache as never,
+      onThumbnailUpdated,
+      windowLike: {
+        requestAnimationFrame: (callback) => {
+          rafCallbacks.push(callback);
+          return rafCallbacks.length;
+        },
+        cancelAnimationFrame: vi.fn(),
+        setTimeout,
+        clearTimeout,
+        requestIdleCallback: (callback) => {
+          idleCallbacks.push(() => {
+            callback({
+              didTimeout: false,
+              timeRemaining: () => 1
+            });
+          });
+          return idleCallbacks.length;
+        },
+        cancelIdleCallback: vi.fn()
+      },
+      createThumbnailDataUrl
+    });
+
+    const pending = service.enqueue(session.id, session.state).catch((error) => error);
+    service.dispose();
+
+    for (const callback of rafCallbacks) {
+      callback(0);
+    }
+    for (const callback of idleCallbacks) {
+      callback();
+    }
+
+    await pending;
+
+    expect(createThumbnailDataUrl).not.toHaveBeenCalled();
+    expect(onThumbnailUpdated).not.toHaveBeenCalled();
+    expect(service.getThumbnailDataUrl(session.id)).toBeNull();
+  });
 });

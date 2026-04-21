@@ -6,6 +6,7 @@ import {
   persistActiveSessionState
 } from '../session-state';
 import { cloneDisplaySelection } from '../display-model';
+import { createAbortError, isAbortError, throwIfAborted, type Disposable } from '../lifecycle';
 import { createDefaultStokesDegreeModulation } from '../stokes';
 import { buildDefaultExportFilename, ViewerUi } from '../ui';
 import { buildViewerStateForLayer } from '../viewer-store';
@@ -52,7 +53,7 @@ export interface SessionControllerDependencies {
   onAllSessionsClosed?: () => void;
 }
 
-export class SessionController {
+export class SessionController implements Disposable {
   private readonly ui: SessionUi;
   private readonly loadQueue: LoadQueueService;
   private readonly thumbnailService: ThumbnailService;
@@ -69,6 +70,8 @@ export class SessionController {
   private sessions: OpenedImageSession[] = [];
   private activeSessionId: string | null = null;
   private sessionCounter = 0;
+  private readonly abortController = new AbortController();
+  private disposed = false;
 
   constructor(dependencies: SessionControllerDependencies) {
     this.ui = dependencies.ui;
@@ -86,40 +89,76 @@ export class SessionController {
   }
 
   enqueueFiles(files: File[]): Promise<void> {
-    if (files.length === 0) {
+    if (this.disposed || files.length === 0) {
       return Promise.resolve();
     }
 
-    return this.loadQueue.enqueue(async () => {
+    return this.loadQueue.enqueue(async (signal) => {
+      this.throwIfStopped(signal);
       for (const file of files) {
-        await this.loadFile(file);
+        await this.loadFile(file, signal);
       }
+    }).catch((error) => {
+      if (isAbortError(error)) {
+        return;
+      }
+      throw error;
     });
   }
 
   enqueueGalleryImage(galleryId: string): Promise<void> {
-    return this.loadQueue.enqueue(async () => {
-      await this.loadGalleryImage(galleryId);
+    if (this.disposed) {
+      return Promise.resolve();
+    }
+
+    return this.loadQueue.enqueue(async (signal) => {
+      this.throwIfStopped(signal);
+      await this.loadGalleryImage(galleryId, signal);
+    }).catch((error) => {
+      if (isAbortError(error)) {
+        return;
+      }
+      throw error;
     });
   }
 
   reloadSession(sessionId: string): Promise<void> {
-    return this.loadQueue.enqueue(async () => {
-      await this.reloadSessionWithUi(sessionId);
+    if (this.disposed) {
+      return Promise.resolve();
+    }
+
+    return this.loadQueue.enqueue(async (signal) => {
+      this.throwIfStopped(signal);
+      await this.reloadSessionWithUi(sessionId, signal);
+    }).catch((error) => {
+      if (isAbortError(error)) {
+        return;
+      }
+      throw error;
     });
   }
 
   reloadAllSessions(): Promise<void> {
-    if (this.sessions.length === 0) {
+    if (this.disposed || this.sessions.length === 0) {
       return Promise.resolve();
     }
 
-    return this.loadQueue.enqueue(async () => {
-      await this.reloadAllSessionsWithUi();
+    return this.loadQueue.enqueue(async (signal) => {
+      this.throwIfStopped(signal);
+      await this.reloadAllSessionsWithUi(signal);
+    }).catch((error) => {
+      if (isAbortError(error)) {
+        return;
+      }
+      throw error;
     });
   }
 
   switchActiveSession(sessionId: string): void {
+    if (this.disposed) {
+      return;
+    }
+
     const nextSession = this.sessions.find((session) => session.id === sessionId);
     if (!nextSession || this.activeSessionId === nextSession.id) {
       return;
@@ -136,6 +175,10 @@ export class SessionController {
   }
 
   reorderSessions(draggedSessionId: string, targetSessionId: string): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (this.sessions.length <= 1 || draggedSessionId === targetSessionId) {
       return;
     }
@@ -158,6 +201,10 @@ export class SessionController {
   }
 
   closeSession(sessionId: string): void {
+    if (this.disposed) {
+      return;
+    }
+
     const removeIndex = this.sessions.findIndex((session) => session.id === sessionId);
     if (removeIndex < 0) {
       return;
@@ -197,6 +244,10 @@ export class SessionController {
   }
 
   closeAllSessions(): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (this.sessions.length === 0) {
       return;
     }
@@ -205,6 +256,10 @@ export class SessionController {
   }
 
   resetActiveSessionState(): void {
+    if (this.disposed) {
+      return;
+    }
+
     const defaultColormapId = this.getDefaultColormapId();
     const activeSession = this.getActiveSession();
     const currentState = this.getCurrentState();
@@ -233,6 +288,10 @@ export class SessionController {
   }
 
   handleStoreChange(state: ViewerState): void {
+    if (this.disposed) {
+      return;
+    }
+
     persistActiveSessionState(this.sessions, this.activeSessionId, state);
   }
 
@@ -253,6 +312,10 @@ export class SessionController {
   }
 
   syncOpenedImageOptions(): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.ui.setOpenedImageOptions(
       this.sessions.map((session) => ({
         id: session.id,
@@ -267,6 +330,10 @@ export class SessionController {
   }
 
   syncActiveSessionExportTarget(): void {
+    if (this.disposed) {
+      return;
+    }
+
     const activeSession = this.getActiveSession();
     if (!activeSession) {
       this.ui.setExportTarget(null);
@@ -280,52 +347,78 @@ export class SessionController {
     });
   }
 
-  private async loadGalleryImage(galleryId: string): Promise<void> {
+  dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.disposed = true;
+    this.abortController.abort(createAbortError('Session controller has been disposed.'));
+    this.sessions = [];
+    this.activeSessionId = null;
+  }
+
+  private async loadGalleryImage(galleryId: string, signal: AbortSignal): Promise<void> {
+    this.throwIfStopped(signal);
     this.ui.setLoading(true);
     this.ui.setError(null);
 
     const galleryImage = GALLERY_IMAGES.find((item) => item.id === galleryId);
     if (!galleryImage) {
-      this.ui.setError(`Unknown gallery image: ${galleryId}`);
-      this.ui.setLoading(false);
+      if (!this.disposed) {
+        this.ui.setError(`Unknown gallery image: ${galleryId}`);
+        this.ui.setLoading(false);
+      }
       return;
     }
 
     const galleryImageUrl = `${import.meta.env.BASE_URL}${galleryImage.filename}`;
 
     try {
-      const response = await fetch(galleryImageUrl);
+      const response = await fetch(galleryImageUrl, { signal: this.abortController.signal });
       if (!response.ok) {
         throw new Error(`Failed to load ${galleryImageUrl} (${response.status})`);
       }
 
       const bytes = new Uint8Array(await response.arrayBuffer());
+      this.throwIfStopped(signal);
       await this.applyDecodedImage(await this.decodeBytes(bytes), galleryImage.filename, bytes.byteLength, {
         kind: 'url',
         url: galleryImageUrl
-      });
+      }, signal);
     } catch (error) {
-      this.ui.setError(error instanceof Error ? error.message : `Unknown error while loading ${galleryImage.label}`);
+      if (!isAbortError(error) && !this.disposed) {
+        this.ui.setError(error instanceof Error ? error.message : `Unknown error while loading ${galleryImage.label}`);
+      }
     } finally {
-      this.ui.setLoading(false);
+      if (!this.disposed) {
+        this.ui.setLoading(false);
+      }
     }
   }
 
-  private async loadFile(file: File): Promise<void> {
+  private async loadFile(file: File, signal: AbortSignal): Promise<void> {
+    this.throwIfStopped(signal);
     this.ui.setLoading(true);
     this.ui.setError(null);
 
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
+      this.throwIfStopped(signal);
       const decoded = await this.decodeBytes(bytes);
+      this.throwIfStopped(signal);
       await this.applyDecodedImage(decoded, file.name, file.size, {
         kind: 'file',
         file
-      });
+      }, signal);
     } catch (error) {
-      this.ui.setError(error instanceof Error ? `Load failed: ${error.message}` : 'Load failed.');
+      if (!isAbortError(error) && !this.disposed) {
+        this.ui.setError(error instanceof Error ? `Load failed: ${error.message}` : 'Load failed.');
+      }
     } finally {
-      this.ui.setLoading(false);
+      if (!this.disposed) {
+        this.ui.setLoading(false);
+      }
     }
   }
 
@@ -333,8 +426,10 @@ export class SessionController {
     decoded: DecodedExrImage,
     filename: string,
     fileSizeBytes: number | null,
-    source: SessionSource
+    source: SessionSource,
+    signal: AbortSignal
   ): Promise<void> {
+    this.throwIfStopped(signal);
     const sessionId = `session-${++this.sessionCounter}`;
     const displayName = buildSessionDisplayName(
       filename,
@@ -370,51 +465,60 @@ export class SessionController {
     this.syncOpenedImageOptions();
     this.syncActiveSessionExportTarget();
 
+    this.throwIfStopped(signal);
     this.setState(session.state);
     await this.thumbnailService.enqueue(session.id, session.state);
   }
 
-  private async reloadSessionWithUi(sessionId: string): Promise<void> {
+  private async reloadSessionWithUi(sessionId: string, signal: AbortSignal): Promise<void> {
+    this.throwIfStopped(signal);
     this.ui.setLoading(true);
     this.ui.setError(null);
 
     try {
-      const error = await this.reloadSessionByIdInternal(sessionId);
-      if (error) {
+      const error = await this.reloadSessionByIdInternal(sessionId, signal);
+      if (error && !this.disposed) {
         this.ui.setError(`Reload failed: ${error}`);
       }
     } finally {
-      this.ui.setLoading(false);
+      if (!this.disposed) {
+        this.ui.setLoading(false);
+      }
     }
   }
 
-  private async reloadAllSessionsWithUi(): Promise<void> {
+  private async reloadAllSessionsWithUi(signal: AbortSignal): Promise<void> {
     const reloadIds = this.sessions.map((session) => session.id);
     const failures: string[] = [];
 
+    this.throwIfStopped(signal);
     this.ui.setLoading(true);
     this.ui.setError(null);
 
     try {
       for (const sessionId of reloadIds) {
+        this.throwIfStopped(signal);
         const label = this.sessions.find((session) => session.id === sessionId)?.displayName ?? sessionId;
-        const error = await this.reloadSessionByIdInternal(sessionId);
+        const error = await this.reloadSessionByIdInternal(sessionId, signal);
         if (error) {
           failures.push(`${label}: ${error}`);
         }
       }
 
-      if (failures.length > 0) {
+      if (failures.length > 0 && !this.disposed) {
         const preview = failures.slice(0, 3).join(' | ');
         const suffix = failures.length > 3 ? ` (+${failures.length - 3} more)` : '';
         this.ui.setError(`Reload all finished with ${failures.length} failure(s): ${preview}${suffix}`);
       }
     } finally {
-      this.ui.setLoading(false);
+      if (!this.disposed) {
+        this.ui.setLoading(false);
+      }
     }
   }
 
-  private async reloadSessionByIdInternal(sessionId: string): Promise<string | null> {
+  private async reloadSessionByIdInternal(sessionId: string, signal: AbortSignal): Promise<string | null> {
+    this.throwIfStopped(signal);
     const sessionIndex = this.sessions.findIndex((session) => session.id === sessionId);
     if (sessionIndex < 0) {
       return 'Session not found.';
@@ -426,7 +530,8 @@ export class SessionController {
     }
 
     try {
-      const decoded = await decodeExrFromSessionSource(session.source, this.decodeBytes);
+      const decoded = await decodeExrFromSessionSource(session.source, this.decodeBytes, this.abortController.signal);
+      this.throwIfStopped(signal);
       const baseState = this.activeSessionId === sessionId ? this.getCurrentState() : session.state;
       const nextState = buildReloadedSessionState(baseState, session.decoded, decoded);
       this.renderCache.discard(sessionId, { preservePinned: true });
@@ -442,12 +547,16 @@ export class SessionController {
       this.syncActiveSessionExportTarget();
 
       if (this.activeSessionId === sessionId) {
+        this.throwIfStopped(signal);
         this.setState(nextState);
       }
 
       await this.thumbnailService.enqueue(sessionId, nextState);
       return null;
     } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
       return error instanceof Error ? error.message : 'Unknown error.';
     }
   }
@@ -479,23 +588,41 @@ export class SessionController {
       panY: height * 0.5
     };
   }
+
+  private throwIfStopped(signal?: AbortSignal): void {
+    if (this.disposed) {
+      throw createAbortError('Session controller has been disposed.');
+    }
+
+    throwIfAborted(this.abortController.signal, 'Session controller has been disposed.');
+    if (signal) {
+      throwIfAborted(signal, 'Load queue has been disposed.');
+    }
+  }
 }
 
 async function decodeExrFromSessionSource(
   source: SessionSource,
-  decodeBytes: (bytes: Uint8Array) => Promise<DecodedExrImage>
+  decodeBytes: (bytes: Uint8Array) => Promise<DecodedExrImage>,
+  signal?: AbortSignal
 ): Promise<DecodedExrImage> {
   if (source.kind === 'url') {
-    const response = await fetch(source.url);
+    const response = await fetch(source.url, { signal });
     if (!response.ok) {
       throw new Error(`Failed to load ${source.url} (${response.status})`);
     }
 
     const bytes = new Uint8Array(await response.arrayBuffer());
+    if (signal) {
+      throwIfAborted(signal, 'Session reload was aborted.');
+    }
     return await decodeBytes(bytes);
   }
 
   const bytes = new Uint8Array(await source.file.arrayBuffer());
+  if (signal) {
+    throwIfAborted(signal, 'Session reload was aborted.');
+  }
   return await decodeBytes(bytes);
 }
 

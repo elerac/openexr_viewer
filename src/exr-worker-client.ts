@@ -1,4 +1,5 @@
 import { loadExr } from './exr';
+import { createAbortError } from './lifecycle';
 import type { DecodedExrImage } from './types';
 
 interface DecodeWorkerRequest {
@@ -26,6 +27,9 @@ interface PendingDecode {
 let decodeWorker: Worker | null = null;
 let nextRequestId = 1;
 const pendingDecodes = new Map<number, PendingDecode>();
+let onWorkerMessage: ((event: MessageEvent<DecodeWorkerResponse>) => void) | null = null;
+let onWorkerError: ((event: ErrorEvent) => void) | null = null;
+let onWorkerMessageError: (() => void) | null = null;
 
 export async function loadExrOffMainThread(bytes: Uint8Array): Promise<DecodedExrImage> {
   if (typeof Worker === 'undefined') {
@@ -65,7 +69,7 @@ function getDecodeWorker(): Worker {
   }
 
   decodeWorker = new Worker(new URL('./exr-worker.ts', import.meta.url), { type: 'module' });
-  decodeWorker.addEventListener('message', (event: MessageEvent<DecodeWorkerResponse>) => {
+  onWorkerMessage = (event: MessageEvent<DecodeWorkerResponse>) => {
     const response = event.data;
     const pending = pendingDecodes.get(response.id);
     if (!pending) {
@@ -79,19 +83,42 @@ function getDecodeWorker(): Worker {
     }
 
     pending.reject(new Error(response.error));
-  });
-  decodeWorker.addEventListener('error', (event) => {
-    rejectPendingDecodes(new Error(event.message || 'EXR decode worker failed.'));
-    decodeWorker?.terminate();
-    decodeWorker = null;
-  });
-  decodeWorker.addEventListener('messageerror', () => {
-    rejectPendingDecodes(new Error('EXR decode worker returned an unreadable response.'));
-    decodeWorker?.terminate();
-    decodeWorker = null;
-  });
+  };
+  onWorkerError = (event: ErrorEvent) => {
+    disposeDecodeWorker(new Error(event.message || 'EXR decode worker failed.'));
+  };
+  onWorkerMessageError = () => {
+    disposeDecodeWorker(new Error('EXR decode worker returned an unreadable response.'));
+  };
+  decodeWorker.addEventListener('message', onWorkerMessage);
+  decodeWorker.addEventListener('error', onWorkerError);
+  decodeWorker.addEventListener('messageerror', onWorkerMessageError);
 
   return decodeWorker;
+}
+
+export function disposeDecodeWorker(error: Error = createAbortError('EXR decode worker was terminated.')): void {
+  rejectPendingDecodes(error);
+
+  if (!decodeWorker) {
+    return;
+  }
+
+  if (onWorkerMessage) {
+    decodeWorker.removeEventListener('message', onWorkerMessage);
+  }
+  if (onWorkerError) {
+    decodeWorker.removeEventListener('error', onWorkerError);
+  }
+  if (onWorkerMessageError) {
+    decodeWorker.removeEventListener('messageerror', onWorkerMessageError);
+  }
+
+  decodeWorker.terminate();
+  decodeWorker = null;
+  onWorkerMessage = null;
+  onWorkerError = null;
+  onWorkerMessageError = null;
 }
 
 function rejectPendingDecodes(error: Error): void {

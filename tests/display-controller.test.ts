@@ -291,4 +291,25 @@ describe('display controller', () => {
     expect(store.getState().viewerMode).toBe('panorama');
     expect(store.getState().hoveredPixel).toBeNull();
   });
+
+  it('suppresses late colormap loads after dispose', async () => {
+    const deferred = createDeferred<(typeof luts)['1']>();
+    colormapMocks.loadColormapLut.mockImplementation((_registry: unknown, id: string) => {
+      if (id === '0') {
+        return Promise.resolve(luts['0']);
+      }
+      return deferred.promise;
+    });
+
+    const { controller, store, renderer } = createController();
+    await controller.initialize();
+
+    const pending = controller.setActiveColormap('1');
+    controller.dispose();
+    deferred.resolve(luts['1']);
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(store.getState().activeColormapId).toBe('0');
+    expect(renderer.setColormapTexture).toHaveBeenCalledTimes(1);
+  });
 });

@@ -1,5 +1,6 @@
 import { buildZeroCenteredColormapRange } from '../colormap-range';
 import { ColormapLut, sampleColormapRgbBytes } from '../colormaps';
+import { DisposableBag, type Disposable } from '../lifecycle';
 import type { DisplayLuminanceRange, VisualizationMode } from '../types';
 import type { ColormapPanelElements } from './elements';
 import { syncSelectOptions } from './render-helpers';
@@ -18,7 +19,8 @@ interface ColormapPanelCallbacks {
   onStokesDegreeModulationToggle: () => void;
 }
 
-export class ColormapPanel {
+export class ColormapPanel implements Disposable {
+  private readonly disposables = new DisposableBag();
   private isLoading = false;
   private openedImageCount = 0;
   private currentColormapRange: DisplayLuminanceRange | null = null;
@@ -26,6 +28,7 @@ export class ColormapPanel {
   private currentColormapZeroCentered = false;
   private isColormapEnabled = false;
   private hasColormapOptions = false;
+  private disposed = false;
 
   constructor(
     private readonly elements: ColormapPanelElements,
@@ -37,7 +40,7 @@ export class ColormapPanel {
     this.elements.stokesDegreeModulationButton.disabled = true;
     this.setColormapRangeControlsDisabled(true);
 
-    this.elements.visualizationNoneButton.addEventListener('click', () => {
+    this.disposables.addEventListener(this.elements.visualizationNoneButton, 'click', () => {
       if (this.elements.visualizationNoneButton.disabled) {
         return;
       }
@@ -45,7 +48,7 @@ export class ColormapPanel {
       this.callbacks.onVisualizationModeChange('rgb');
     });
 
-    this.elements.colormapToggleButton.addEventListener('click', () => {
+    this.disposables.addEventListener(this.elements.colormapToggleButton, 'click', () => {
       if (this.elements.colormapToggleButton.disabled) {
         return;
       }
@@ -53,7 +56,7 @@ export class ColormapPanel {
       this.callbacks.onVisualizationModeChange('colormap');
     });
 
-    this.elements.colormapSelect.addEventListener('change', (event) => {
+    this.disposables.addEventListener(this.elements.colormapSelect, 'change', (event) => {
       if (this.elements.colormapSelect.disabled) {
         return;
       }
@@ -62,7 +65,7 @@ export class ColormapPanel {
       this.callbacks.onColormapChange(target.value);
     });
 
-    this.elements.colormapAutoRangeButton.addEventListener('click', () => {
+    this.disposables.addEventListener(this.elements.colormapAutoRangeButton, 'click', () => {
       if (this.elements.colormapAutoRangeButton.disabled) {
         return;
       }
@@ -70,7 +73,7 @@ export class ColormapPanel {
       this.callbacks.onColormapAutoRange();
     });
 
-    this.elements.colormapZeroCenterButton.addEventListener('click', () => {
+    this.disposables.addEventListener(this.elements.colormapZeroCenterButton, 'click', () => {
       if (this.elements.colormapZeroCenterButton.disabled) {
         return;
       }
@@ -78,7 +81,7 @@ export class ColormapPanel {
       this.callbacks.onColormapZeroCenterToggle();
     });
 
-    this.elements.stokesDegreeModulationButton.addEventListener('click', () => {
+    this.disposables.addEventListener(this.elements.stokesDegreeModulationButton, 'click', () => {
       if (this.elements.stokesDegreeModulationButton.disabled) {
         return;
       }
@@ -86,28 +89,28 @@ export class ColormapPanel {
       this.callbacks.onStokesDegreeModulationToggle();
     });
 
-    this.elements.colormapVminSlider.addEventListener('input', () => {
+    this.disposables.addEventListener(this.elements.colormapVminSlider, 'input', () => {
       this.commitColormapMin(Number(this.elements.colormapVminSlider.value));
     });
 
-    this.elements.colormapVmaxSlider.addEventListener('input', () => {
+    this.disposables.addEventListener(this.elements.colormapVmaxSlider, 'input', () => {
       this.commitColormapMax(Number(this.elements.colormapVmaxSlider.value));
     });
 
-    this.elements.colormapVminInput.addEventListener('change', () => {
+    this.disposables.addEventListener(this.elements.colormapVminInput, 'change', () => {
       this.commitColormapMin(Number(this.elements.colormapVminInput.value));
     });
 
-    this.elements.colormapVmaxInput.addEventListener('change', () => {
+    this.disposables.addEventListener(this.elements.colormapVmaxInput, 'change', () => {
       this.commitColormapMax(Number(this.elements.colormapVmaxInput.value));
     });
 
-    this.elements.exposureSlider.addEventListener('input', (event) => {
+    this.disposables.addEventListener(this.elements.exposureSlider, 'input', (event) => {
       const target = event.currentTarget as HTMLInputElement;
       this.callbacks.onExposureChange(Number(target.value));
     });
 
-    this.elements.exposureValue.addEventListener('change', (event) => {
+    this.disposables.addEventListener(this.elements.exposureValue, 'change', (event) => {
       const target = event.currentTarget as HTMLInputElement;
       const value = Number(target.value);
       if (!Number.isFinite(value)) {
@@ -121,7 +124,20 @@ export class ColormapPanel {
     });
   }
 
+  dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.disposed = true;
+    this.disposables.dispose();
+  }
+
   setLoading(loading: boolean): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.isLoading = loading;
     this.setVisualizationModeButtonsDisabled(loading || this.openedImageCount === 0);
     this.setColormapRangeControlsDisabled(loading || this.openedImageCount === 0 || !this.currentColormapRange);
@@ -130,6 +146,10 @@ export class ColormapPanel {
   }
 
   setOpenedImageCount(count: number): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.openedImageCount = count;
     this.setVisualizationModeButtonsDisabled(this.isLoading || this.openedImageCount === 0);
     this.setColormapRangeControlsDisabled(
@@ -139,11 +159,19 @@ export class ColormapPanel {
   }
 
   setExposure(exposureEv: number): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.elements.exposureSlider.value = exposureEv.toFixed(1);
     this.elements.exposureValue.value = exposureEv.toFixed(1);
   }
 
   setVisualizationMode(mode: VisualizationMode): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.isColormapEnabled = mode === 'colormap';
     this.elements.visualizationNoneButton.setAttribute('aria-pressed', mode === 'rgb' ? 'true' : 'false');
     this.elements.colormapToggleButton.setAttribute('aria-pressed', this.isColormapEnabled ? 'true' : 'false');
@@ -157,6 +185,10 @@ export class ColormapPanel {
   }
 
   setColormapOptions(items: Array<{ id: string; label: string }>, activeId: string): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.hasColormapOptions = items.length > 0;
     const hadFocus = document.activeElement === this.elements.colormapSelect;
     syncSelectOptions(
@@ -178,6 +210,10 @@ export class ColormapPanel {
   }
 
   setActiveColormap(activeId: string): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (!this.hasColormapOptions) {
       this.elements.colormapSelect.value = '';
       return;
@@ -190,6 +226,10 @@ export class ColormapPanel {
   }
 
   setColormapGradient(lut: ColormapLut | null): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.elements.colormapRangeSlider.style.setProperty(
       '--colormap-gradient',
       lut ? buildColormapCssGradient(lut) : DEFAULT_COLORMAP_GRADIENT
@@ -202,6 +242,10 @@ export class ColormapPanel {
     alwaysAuto = false,
     zeroCentered = false
   ): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.currentColormapRange = cloneRange(range);
     this.currentAutoColormapRange = cloneRange(autoRange);
     this.currentColormapZeroCentered = zeroCentered;
@@ -220,6 +264,10 @@ export class ColormapPanel {
   }
 
   setStokesDegreeModulationControl(label: string | null, enabled = false): void {
+    if (this.disposed) {
+      return;
+    }
+
     const visible = Boolean(label);
     this.elements.stokesDegreeModulationControl.classList.toggle('hidden', !visible);
     if (label) {

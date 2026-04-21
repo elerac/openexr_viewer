@@ -1,4 +1,5 @@
 import { cloneDisplaySelection } from '../display-model';
+import { DisposableBag, type Disposable } from '../lifecycle';
 import {
   buildChannelDisplayOptions,
   extractRgbChannelGroups,
@@ -36,7 +37,8 @@ interface ChannelViewRowItem {
   swatches: string[];
 }
 
-export class ChannelPanel {
+export class ChannelPanel implements Disposable {
+  private readonly disposables = new DisposableBag();
   private readonly rgbGroupMappings = new Map<string, DisplaySelection>();
   private isLoading = false;
   private isRgbViewLoading = false;
@@ -49,6 +51,7 @@ export class ChannelPanel {
   private currentRgbChannelNames: string[] = [];
   private currentRgbSelection: DisplaySelection | null = null;
   private channelViewItems: ChannelViewRowItem[] = [];
+  private disposed = false;
 
   constructor(
     private readonly elements: ChannelPanelElements,
@@ -57,7 +60,7 @@ export class ChannelPanel {
     this.elements.rgbSplitToggleButton.disabled = true;
     this.elements.rgbGroupSelect.disabled = true;
 
-    this.elements.rgbSplitToggleButton.addEventListener('click', () => {
+    this.disposables.addEventListener(this.elements.rgbSplitToggleButton, 'click', () => {
       if (this.elements.rgbSplitToggleButton.disabled) {
         return;
       }
@@ -77,9 +80,9 @@ export class ChannelPanel {
       const target = event.currentTarget as HTMLSelectElement;
       this.chooseChannelViewValue(target.value);
     };
-    this.elements.rgbGroupSelect.addEventListener('change', onRgbGroupSelect);
-    this.elements.rgbGroupSelect.addEventListener('input', onRgbGroupSelect);
-    this.elements.rgbGroupSelect.addEventListener('keydown', (event) => {
+    this.disposables.addEventListener(this.elements.rgbGroupSelect, 'change', onRgbGroupSelect);
+    this.disposables.addEventListener(this.elements.rgbGroupSelect, 'input', onRgbGroupSelect);
+    this.disposables.addEventListener(this.elements.rgbGroupSelect, 'keydown', (event) => {
       if (this.elements.rgbGroupSelect.disabled) {
         return;
       }
@@ -122,7 +125,7 @@ export class ChannelPanel {
       this.callbacks.onRgbGroupChange(mapping);
     });
 
-    this.elements.channelViewList.addEventListener('click', (event) => {
+    this.disposables.addEventListener(this.elements.channelViewList, 'click', (event) => {
       const row = findClosestListRow(event.target, 'channelValue');
       if (!row || this.elements.rgbGroupSelect.disabled) {
         return;
@@ -130,7 +133,7 @@ export class ChannelPanel {
 
       this.chooseChannelViewValue(row.dataset.channelValue ?? '');
     });
-    this.elements.channelViewList.addEventListener('keydown', (event) => {
+    this.disposables.addEventListener(this.elements.channelViewList, 'keydown', (event) => {
       handleImageBrowserListKeyDown(event, this.elements.channelViewList, (row) => {
         if (this.elements.rgbGroupSelect.disabled) {
           return;
@@ -140,7 +143,20 @@ export class ChannelPanel {
     });
   }
 
+  dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.disposed = true;
+    this.disposables.dispose();
+  }
+
   setLoading(loading: boolean): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (loading) {
       this.restoreRgbGroupFocusAfterLoading = document.activeElement === this.elements.rgbGroupSelect;
       this.restoreChannelViewFocusAfterLoading = isFocusWithinElement(this.elements.channelViewList);
@@ -164,11 +180,19 @@ export class ChannelPanel {
   }
 
   setRgbViewLoading(loading: boolean): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.isRgbViewLoading = loading;
     this.updateRgbSplitToggleState();
   }
 
   setRgbGroupOptions(channelNames: string[], selected: DisplaySelection | null): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.hasActiveImage = true;
     const hadFocus = document.activeElement === this.elements.rgbGroupSelect;
     const nextChannelNames = [...channelNames];
@@ -253,6 +277,10 @@ export class ChannelPanel {
   }
 
   clearForNoImage(): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.hasActiveImage = false;
     this.hasRgbGroups = false;
     this.hasRgbSplitOptions = false;
@@ -311,6 +339,10 @@ export class ChannelPanel {
   }
 
   private chooseChannelViewValue(value: string): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (!value || this.elements.rgbGroupSelect.disabled) {
       return;
     }

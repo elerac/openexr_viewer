@@ -266,4 +266,29 @@ describe('session controller', () => {
     expect(renderCache.clear).toHaveBeenCalledTimes(1);
     expect(first?.id).toBeDefined();
   });
+
+  it('suppresses late decoded images after the controller is disposed', async () => {
+    let resolveDecode!: (image: DecodedExrImage) => void;
+    const decodeBytes = vi.fn(
+      () =>
+        new Promise<DecodedExrImage>((resolve) => {
+          resolveDecode = resolve;
+        })
+    );
+    const { controller, thumbnailService, ui } = createController({ decodeBytes });
+
+    const pending = controller.enqueueFiles([createFile('dispose.exr')]);
+    for (let index = 0; index < 6 && !resolveDecode; index += 1) {
+      await Promise.resolve();
+    }
+
+    expect(resolveDecode).toBeTypeOf('function');
+    controller.dispose();
+    resolveDecode(createDecodedImage());
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(controller.getActiveSession()).toBeNull();
+    expect(thumbnailService.enqueue).not.toHaveBeenCalled();
+    expect(ui.setOpenedImageOptions).not.toHaveBeenCalled();
+  });
 });

@@ -14,6 +14,7 @@ import {
   getOpenedFilePinButtonLabel,
   OpenedImagesPanel
 } from './ui/opened-images-panel';
+import { DisposableBag, type Disposable } from './lifecycle';
 import { getListboxOptionIndexAtClientY } from './ui/render-helpers';
 import { formatOverlayValue } from './value-format';
 import type { ColormapLut } from './colormaps';
@@ -119,7 +120,7 @@ interface TopMenuElements {
 type TopMenuTrackingMode = 'inactive' | 'pointer';
 type ExportDialogDimensionField = 'width' | 'height';
 
-export class ProgressiveLoadingOverlayDisclosure {
+export class ProgressiveLoadingOverlayDisclosure implements Disposable {
   private active = false;
   private subtleTimer: ReturnType<typeof setTimeout> | null = null;
   private darkeningTimer: ReturnType<typeof setTimeout> | null = null;
@@ -158,6 +159,11 @@ export class ProgressiveLoadingOverlayDisclosure {
     }, LOADING_OVERLAY_MESSAGE_DELAY_MS);
   }
 
+  dispose(): void {
+    this.active = false;
+    this.clearTimers();
+  }
+
   private clearTimers(): void {
     if (this.subtleTimer !== null) {
       clearTimeout(this.subtleTimer);
@@ -174,7 +180,8 @@ export class ProgressiveLoadingOverlayDisclosure {
   }
 }
 
-export class ViewerUi {
+export class ViewerUi implements Disposable {
+  private readonly disposables = new DisposableBag();
   private readonly elements: Elements;
   private readonly loadingOverlayDisclosure: ProgressiveLoadingOverlayDisclosure;
   private readonly openedImagesPanel: OpenedImagesPanel;
@@ -192,6 +199,7 @@ export class ViewerUi {
   private lastExportDimensionEdited: ExportDialogDimensionField = 'width';
   private topMenuTrackingMode: TopMenuTrackingMode = 'inactive';
   private hoverOpenedTopMenuButton: HTMLButtonElement | null = null;
+  private disposed = false;
 
   constructor(private readonly callbacks: UiCallbacks) {
     this.elements = resolveElements();
@@ -252,6 +260,12 @@ export class ViewerUi {
       }
     });
     this.layoutSplitController = new LayoutSplitController(this.elements);
+    this.disposables.addDisposable(this.loadingOverlayDisclosure);
+    this.disposables.addDisposable(this.openedImagesPanel);
+    this.disposables.addDisposable(this.layerPanel);
+    this.disposables.addDisposable(this.channelPanel);
+    this.disposables.addDisposable(this.colormapPanel);
+    this.disposables.addDisposable(this.layoutSplitController);
     this.setViewerMode('image');
     this.updateViewerModeMenuItemsDisabled();
     this.updateFileMenuItemsDisabled();
@@ -270,7 +284,23 @@ export class ViewerUi {
     return this.elements.overlayCanvas;
   }
 
+  dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.closeExportDialog(false);
+    this.closeAllTopMenus(false);
+    this.showDropOverlay(false);
+    this.disposed = true;
+    this.disposables.dispose();
+  }
+
   setError(message: string | null): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (!message) {
       this.elements.errorBanner.classList.add('hidden');
       this.elements.errorBanner.textContent = '';
@@ -282,6 +312,10 @@ export class ViewerUi {
   }
 
   setLoading(loading: boolean): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.isLoading = loading;
     this.elements.openFileButton.disabled = loading;
     this.elements.galleryCboxRgbButton.disabled = loading;
@@ -299,6 +333,10 @@ export class ViewerUi {
   }
 
   setRgbViewLoading(loading: boolean): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.isRgbViewLoading = loading;
     this.channelPanel.setRgbViewLoading(loading);
     this.updateFileMenuItemsDisabled();
@@ -306,35 +344,67 @@ export class ViewerUi {
   }
 
   setDisplayCacheBudget(mb: number): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.openedImagesPanel.setDisplayCacheBudget(mb);
   }
 
   setDisplayCacheUsage(usedBytes: number, budgetBytes: number): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.openedImagesPanel.setDisplayCacheUsage(usedBytes, budgetBytes);
   }
 
   setExposure(exposureEv: number): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.colormapPanel.setExposure(exposureEv);
   }
 
   setViewerMode(mode: ViewerMode): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.elements.imageViewerMenuItem.setAttribute('aria-checked', mode === 'image' ? 'true' : 'false');
     this.elements.panoramaViewerMenuItem.setAttribute('aria-checked', mode === 'panorama' ? 'true' : 'false');
   }
 
   setVisualizationMode(mode: VisualizationMode): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.colormapPanel.setVisualizationMode(mode);
   }
 
   setColormapOptions(items: Array<{ id: string; label: string }>, activeId: string): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.colormapPanel.setColormapOptions(items, activeId);
   }
 
   setActiveColormap(activeId: string): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.colormapPanel.setActiveColormap(activeId);
   }
 
   setColormapGradient(lut: ColormapLut | null): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.colormapPanel.setColormapGradient(lut);
   }
 
@@ -344,14 +414,26 @@ export class ViewerUi {
     alwaysAuto = false,
     zeroCentered = false
   ): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.colormapPanel.setColormapRange(range, autoRange, alwaysAuto, zeroCentered);
   }
 
   setStokesDegreeModulationControl(label: string | null, enabled = false): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.colormapPanel.setStokesDegreeModulationControl(label, enabled);
   }
 
   setOpenedImageOptions(items: OpenedImageOptionItem[], activeId: string | null): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.openedImageCount = items.length;
     this.openedImagesPanel.setOpenedImageOptions(items, activeId);
     this.colormapPanel.setOpenedImageCount(this.openedImagesPanel.getOpenedImageCount());
@@ -363,6 +445,10 @@ export class ViewerUi {
   }
 
   setExportTarget(target: ExportImageTarget | null): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.exportTarget = target ? { ...target } : null;
     if (!this.exportTarget) {
       this.closeExportDialog(false);
@@ -374,15 +460,27 @@ export class ViewerUi {
   }
 
   clearImageBrowserPanels(): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.layerPanel.clearForNoImage();
     this.channelPanel.clearForNoImage();
   }
 
   setLayerOptions(items: LayerOptionItem[], activeIndex: number): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.layerPanel.setLayerOptions(items, activeIndex);
   }
 
   setRgbGroupOptions(channelNames: string[], selected: DisplaySelection | null): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (!this.layerPanel.hasMultipleLayers()) {
       this.layerPanel.setFallbackPartLayerItemsFromChannelNames(channelNames);
     }
@@ -395,6 +493,10 @@ export class ViewerUi {
     colorPreview: ProbeColorPreview | null,
     imageSize: ProbeCoordinateImageSize | null = null
   ): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.elements.probeMode.textContent = mode;
 
     if (!sample) {
@@ -438,6 +540,10 @@ export class ViewerUi {
   }
 
   setProbeMetadata(metadata: ExrMetadataEntry[] | null): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (!metadata || metadata.length === 0) {
       this.elements.probeMetadata.classList.add('hidden');
       this.elements.probeMetadata.replaceChildren();
@@ -465,6 +571,10 @@ export class ViewerUi {
   }
 
   showDropOverlay(show: boolean): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (show) {
       this.elements.dropOverlay.classList.remove('hidden');
       return;
@@ -473,10 +583,18 @@ export class ViewerUi {
   }
 
   private updateLoadingOverlayVisibility(): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.loadingOverlayDisclosure.setLoading(this.isLoading || this.isRgbViewLoading);
   }
 
   private renderLoadingOverlayPhase(phase: LoadingOverlayPhase): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.elements.loadingOverlay.classList.toggle('hidden', phase === 'hidden');
     this.elements.loadingOverlay.classList.toggle(LOADING_OVERLAY_SUBTLE_CLASS, phase === 'subtle');
     this.elements.loadingOverlay.classList.toggle(LOADING_OVERLAY_DARKENING_CLASS, phase === 'darkening');
@@ -484,6 +602,10 @@ export class ViewerUi {
   }
 
   private updateFileMenuItemsDisabled(): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.elements.exportImageButton.disabled = this.isLoading || this.isRgbViewLoading || !this.exportTarget;
   }
 
@@ -497,12 +619,20 @@ export class ViewerUi {
   }
 
   private updateViewerModeMenuItemsDisabled(): void {
+    if (this.disposed) {
+      return;
+    }
+
     const disabled = this.isLoading || this.openedImageCount === 0;
     this.elements.imageViewerMenuItem.disabled = disabled;
     this.elements.panoramaViewerMenuItem.disabled = disabled;
   }
 
   private openExportDialog(): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (!this.exportTarget || this.elements.exportImageButton.disabled) {
       return;
     }
@@ -519,6 +649,10 @@ export class ViewerUi {
   }
 
   private closeExportDialog(restoreFocus = true): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (!this.exportDialogOpen && this.elements.exportDialogBackdrop.classList.contains('hidden')) {
       return;
     }
@@ -555,6 +689,10 @@ export class ViewerUi {
   }
 
   private setExportDialogBusy(busy: boolean): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.exportDialogBusy = busy;
     this.elements.exportFilenameInput.disabled = busy;
     this.elements.exportWidthInput.disabled = busy;
@@ -567,6 +705,10 @@ export class ViewerUi {
   }
 
   private setExportDialogError(message: string | null): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (!message) {
       this.elements.exportDialogError.classList.add('hidden');
       this.elements.exportDialogError.textContent = '';
@@ -578,6 +720,10 @@ export class ViewerUi {
   }
 
   private syncExportDialogDimensions(changedField: ExportDialogDimensionField): void {
+    if (this.disposed) {
+      return;
+    }
+
     const target = this.exportTarget;
     if (!target) {
       return;
@@ -599,6 +745,10 @@ export class ViewerUi {
   }
 
   private async handleExportDialogSubmit(): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+
     const target = this.exportTarget;
     if (!target || this.exportDialogBusy) {
       return;
@@ -724,7 +874,7 @@ export class ViewerUi {
   }
 
   private bindImageBrowserToggle(toggle: HTMLButtonElement, content: HTMLElement): void {
-    toggle.addEventListener('click', () => {
+    this.disposables.addEventListener(toggle, 'click', () => {
       const collapsed = toggle.getAttribute('aria-expanded') === 'true';
       this.setImageBrowserCollapsed(toggle, content, collapsed);
     });
@@ -737,7 +887,7 @@ export class ViewerUi {
   }
 
   private bindTopMenu(menu: TopMenuElements): void {
-    menu.button.addEventListener('click', () => {
+    this.disposables.addEventListener(menu.button, 'click', () => {
       if (this.hoverOpenedTopMenuButton === menu.button && this.isTopMenuOpen(menu)) {
         this.hoverOpenedTopMenuButton = null;
         return;
@@ -747,7 +897,7 @@ export class ViewerUi {
       this.toggleTopMenu(menu);
     });
 
-    menu.button.addEventListener('pointerenter', () => {
+    this.disposables.addEventListener(menu.button, 'pointerenter', () => {
       if (this.topMenuTrackingMode !== 'pointer' || this.isTopMenuOpen(menu)) {
         return;
       }
@@ -757,7 +907,7 @@ export class ViewerUi {
       this.hoverOpenedTopMenuButton = menu.button;
     });
 
-    menu.button.addEventListener('keydown', (event) => {
+    this.disposables.addEventListener(menu.button, 'keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         this.toggleTopMenu(menu);
@@ -787,7 +937,7 @@ export class ViewerUi {
       }
     });
 
-    menu.menu.addEventListener('keydown', (event) => {
+    this.disposables.addEventListener(menu.menu, 'keydown', (event) => {
       const target = event.target;
       const shouldPreserveFieldArrowKeys =
         (event.key === 'ArrowDown' || event.key === 'ArrowUp') &&
@@ -828,7 +978,7 @@ export class ViewerUi {
       this.bindTopMenu(menu);
     }
 
-    document.addEventListener('click', (event) => {
+    this.disposables.addEventListener(document, 'click', (event) => {
       const target = event.target;
       if (
         !(target instanceof Node) ||
@@ -840,7 +990,7 @@ export class ViewerUi {
       this.closeAllTopMenus();
     });
 
-    window.addEventListener('dragover', (event) => {
+    this.disposables.addEventListener(window, 'dragover', (event) => {
       if (!hasDroppedFiles(event)) {
         return;
       }
@@ -850,7 +1000,7 @@ export class ViewerUi {
       }
     });
 
-    window.addEventListener('drop', (event) => {
+    this.disposables.addEventListener(window, 'drop', (event) => {
       if (!hasDroppedFiles(event)) {
         return;
       }
@@ -866,12 +1016,12 @@ export class ViewerUi {
       this.callbacks.onFilesDropped(files);
     });
 
-    this.elements.openFileButton.addEventListener('click', () => {
+    this.disposables.addEventListener(this.elements.openFileButton, 'click', () => {
       this.closeAllTopMenus();
       this.callbacks.onOpenFileClick();
     });
 
-    this.elements.exportImageButton.addEventListener('click', () => {
+    this.disposables.addEventListener(this.elements.exportImageButton, 'click', () => {
       if (this.elements.exportImageButton.disabled) {
         return;
       }
@@ -879,7 +1029,7 @@ export class ViewerUi {
       this.openExportDialog();
     });
 
-    this.elements.galleryCboxRgbButton.addEventListener('click', () => {
+    this.disposables.addEventListener(this.elements.galleryCboxRgbButton, 'click', () => {
       if (this.elements.galleryCboxRgbButton.disabled) {
         return;
       }
@@ -888,7 +1038,7 @@ export class ViewerUi {
       this.callbacks.onGalleryImageSelected(this.elements.galleryCboxRgbButton.dataset.galleryId ?? '');
     });
 
-    this.elements.reloadAllOpenedImagesButton.addEventListener('click', () => {
+    this.disposables.addEventListener(this.elements.reloadAllOpenedImagesButton, 'click', () => {
       if (this.elements.reloadAllOpenedImagesButton.disabled) {
         return;
       }
@@ -897,7 +1047,7 @@ export class ViewerUi {
       this.callbacks.onReloadAllOpenedImages();
     });
 
-    this.elements.closeAllOpenedImagesButton.addEventListener('click', () => {
+    this.disposables.addEventListener(this.elements.closeAllOpenedImagesButton, 'click', () => {
       if (this.elements.closeAllOpenedImagesButton.disabled) {
         return;
       }
@@ -906,7 +1056,7 @@ export class ViewerUi {
       this.callbacks.onCloseAllOpenedImages();
     });
 
-    this.elements.imageViewerMenuItem.addEventListener('click', () => {
+    this.disposables.addEventListener(this.elements.imageViewerMenuItem, 'click', () => {
       if (this.elements.imageViewerMenuItem.disabled) {
         return;
       }
@@ -915,7 +1065,7 @@ export class ViewerUi {
       this.callbacks.onViewerModeChange('image');
     });
 
-    this.elements.panoramaViewerMenuItem.addEventListener('click', () => {
+    this.disposables.addEventListener(this.elements.panoramaViewerMenuItem, 'click', () => {
       if (this.elements.panoramaViewerMenuItem.disabled) {
         return;
       }
@@ -924,7 +1074,7 @@ export class ViewerUi {
       this.callbacks.onViewerModeChange('panorama');
     });
 
-    this.elements.fileInput.addEventListener('change', (event) => {
+    this.disposables.addEventListener(this.elements.fileInput, 'change', (event) => {
       const input = event.currentTarget as HTMLInputElement;
       const file = input.files?.[0] ?? null;
       if (!file) {
@@ -934,54 +1084,54 @@ export class ViewerUi {
       input.value = '';
     });
 
-    this.elements.resetViewButton.addEventListener('click', () => {
+    this.disposables.addEventListener(this.elements.resetViewButton, 'click', () => {
       this.callbacks.onResetView();
     });
 
-    this.elements.exportDialogBackdrop.addEventListener('click', (event) => {
+    this.disposables.addEventListener(this.elements.exportDialogBackdrop, 'click', (event) => {
       if (event.target === this.elements.exportDialogBackdrop && !this.exportDialogBusy) {
         this.closeExportDialog(true);
       }
     });
 
-    this.elements.exportDialogCancelButton.addEventListener('click', () => {
+    this.disposables.addEventListener(this.elements.exportDialogCancelButton, 'click', () => {
       if (this.exportDialogBusy) {
         return;
       }
       this.closeExportDialog(true);
     });
 
-    this.elements.exportDialogForm.addEventListener('submit', (event) => {
+    this.disposables.addEventListener(this.elements.exportDialogForm, 'submit', (event) => {
       event.preventDefault();
       void this.handleExportDialogSubmit();
     });
 
-    this.elements.exportWidthInput.addEventListener('input', () => {
+    this.disposables.addEventListener(this.elements.exportWidthInput, 'input', () => {
       this.syncExportDialogDimensions('width');
     });
-    this.elements.exportWidthInput.addEventListener('change', () => {
+    this.disposables.addEventListener(this.elements.exportWidthInput, 'change', () => {
       this.syncExportDialogDimensions('width');
     });
-    this.elements.exportHeightInput.addEventListener('input', () => {
+    this.disposables.addEventListener(this.elements.exportHeightInput, 'input', () => {
       this.syncExportDialogDimensions('height');
     });
-    this.elements.exportHeightInput.addEventListener('change', () => {
+    this.disposables.addEventListener(this.elements.exportHeightInput, 'change', () => {
       this.syncExportDialogDimensions('height');
     });
-    this.elements.exportAspectLockInput.addEventListener('change', () => {
+    this.disposables.addEventListener(this.elements.exportAspectLockInput, 'change', () => {
       if (this.elements.exportAspectLockInput.checked) {
         this.syncExportDialogDimensions(this.lastExportDimensionEdited);
       }
     });
 
-    document.addEventListener('keydown', (event) => {
+    this.disposables.addEventListener(document, 'keydown', (event) => {
       if (event.key === 'Escape' && this.exportDialogOpen && !this.exportDialogBusy) {
         event.preventDefault();
         this.closeExportDialog(true);
       }
     });
 
-    this.elements.viewerContainer.addEventListener('dragover', (event) => {
+    this.disposables.addEventListener(this.elements.viewerContainer, 'dragover', (event) => {
       if (!hasDroppedFiles(event)) {
         return;
       }
@@ -989,7 +1139,7 @@ export class ViewerUi {
       this.showDropOverlay(true);
     });
 
-    this.elements.viewerContainer.addEventListener('dragleave', (event) => {
+    this.disposables.addEventListener(this.elements.viewerContainer, 'dragleave', (event) => {
       if (!hasDroppedFiles(event)) {
         return;
       }
@@ -1002,7 +1152,7 @@ export class ViewerUi {
       this.showDropOverlay(false);
     });
 
-    this.elements.viewerContainer.addEventListener('drop', (event) => {
+    this.disposables.addEventListener(this.elements.viewerContainer, 'drop', (event) => {
       if (!hasDroppedFiles(event)) {
         return;
       }

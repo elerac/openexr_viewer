@@ -1,4 +1,5 @@
 import type { LayerOptionItem } from '../ui';
+import { DisposableBag, type Disposable } from '../lifecycle';
 import type { LayerPanelElements } from './elements';
 import {
   applyListboxRowSizing,
@@ -13,13 +14,15 @@ interface LayerPanelCallbacks {
   onLayerChange: (layerIndex: number) => void;
 }
 
-export class LayerPanel {
+export class LayerPanel implements Disposable {
+  private readonly disposables = new DisposableBag();
   private isLoading = false;
   private hasActiveImage = false;
   private hasMultipleLayersState = false;
   private layerItems: LayerOptionItem[] = [];
   private fallbackPartLayerItems: LayerOptionItem[] | null = null;
   private activeLayerIndex = 0;
+  private disposed = false;
 
   constructor(
     private readonly elements: LayerPanelElements,
@@ -43,9 +46,9 @@ export class LayerPanel {
       this.chooseLayerIndex(layerIndex);
     };
 
-    this.elements.layerSelect.addEventListener('change', onLayerSelect);
-    this.elements.layerSelect.addEventListener('input', onLayerSelect);
-    this.elements.partsLayersList.addEventListener('click', (event) => {
+    this.disposables.addEventListener(this.elements.layerSelect, 'change', onLayerSelect);
+    this.disposables.addEventListener(this.elements.layerSelect, 'input', onLayerSelect);
+    this.disposables.addEventListener(this.elements.partsLayersList, 'click', (event) => {
       const row = findClosestListRow(event.target, 'layerItemIndex');
       const item = row ? this.getVisibleItems()[Number(row.dataset.layerItemIndex)] : null;
       if (!row || !item || item.selectable === false || this.isLoading || this.getVisibleItems().length <= 1) {
@@ -54,7 +57,7 @@ export class LayerPanel {
 
       this.chooseLayerIndex(item.index);
     });
-    this.elements.partsLayersList.addEventListener('keydown', (event) => {
+    this.disposables.addEventListener(this.elements.partsLayersList, 'keydown', (event) => {
       handleImageBrowserListKeyDown(event, this.elements.partsLayersList, (row) => {
         const item = this.getVisibleItems()[Number(row.dataset.layerItemIndex)];
         if (!item || item.selectable === false || this.isLoading || this.getVisibleItems().length <= 1) {
@@ -65,17 +68,34 @@ export class LayerPanel {
     });
   }
 
+  dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.disposed = true;
+    this.disposables.dispose();
+  }
+
   hasMultipleLayers(): boolean {
     return this.hasMultipleLayersState;
   }
 
   setLoading(loading: boolean): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.isLoading = loading;
     this.updateLayerSelectState();
     this.renderLayerRows();
   }
 
   setLayerOptions(items: LayerOptionItem[], activeIndex: number): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.hasActiveImage = true;
     this.hasMultipleLayersState = items.length > 1;
     this.layerItems = items.map((item) => ({ ...item }));
@@ -107,6 +127,10 @@ export class LayerPanel {
   }
 
   clearForNoImage(): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.hasActiveImage = false;
     this.hasMultipleLayersState = false;
     this.layerItems = [];
@@ -119,6 +143,10 @@ export class LayerPanel {
   }
 
   setFallbackPartLayerItemsFromChannelNames(channelNames: string[]): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (this.hasMultipleLayersState) {
       return;
     }
@@ -139,6 +167,10 @@ export class LayerPanel {
   }
 
   private chooseLayerIndex(layerIndex: number): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (!Number.isFinite(layerIndex) || this.isLoading || this.layerItems.length === 0) {
       return;
     }

@@ -4,6 +4,7 @@ import type {
   PanelSplitSizeKey,
   PanelSplitSizes
 } from '../ui';
+import { DisposableBag, type Disposable } from '../lifecycle';
 import type { LayoutSplitElements } from './elements';
 
 const PANEL_SPLIT_STORAGE_KEY = 'openexr-viewer:panel-splits:v1';
@@ -28,10 +29,12 @@ interface PanelResizeDragState {
   resizer: HTMLElement;
 }
 
-export class LayoutSplitController {
+export class LayoutSplitController implements Disposable {
+  private readonly disposables = new DisposableBag();
   private readonly resizeObserver: ResizeObserver;
   private panelSplitSizes: PanelSplitSizes = { ...DEFAULT_PANEL_SPLIT_SIZES };
   private activePanelResize: PanelResizeDragState | null = null;
+  private disposed = false;
 
   constructor(private readonly elements: LayoutSplitElements) {
     this.resizeObserver = new ResizeObserver(() => {
@@ -42,11 +45,24 @@ export class LayoutSplitController {
     this.bindPanelResizer(this.elements.rightPanelResizer, 'rightPanelWidth');
     this.resizeObserver.observe(this.elements.mainLayout);
     this.resizeObserver.observe(this.elements.rightStack);
-    window.addEventListener('blur', () => {
+    this.disposables.add(() => {
+      this.resizeObserver.disconnect();
+    });
+    this.disposables.addEventListener(window, 'blur', () => {
       this.finishPanelResize();
     });
 
     this.initializePanelSplits();
+  }
+
+  dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.disposed = true;
+    this.finishPanelResize();
+    this.disposables.dispose();
   }
 
   private initializePanelSplits(): void {
@@ -79,24 +95,28 @@ export class LayoutSplitController {
   }
 
   private bindPanelResizer(resizer: HTMLElement, key: PanelSplitSizeKey): void {
-    resizer.addEventListener('pointerdown', (event) => {
+    this.disposables.addEventListener(resizer, 'pointerdown', (event) => {
       this.beginPanelResize(event, key);
     });
-    resizer.addEventListener('pointermove', (event) => {
+    this.disposables.addEventListener(resizer, 'pointermove', (event) => {
       this.onPanelResizePointerMove(event);
     });
-    resizer.addEventListener('pointerup', (event) => {
+    this.disposables.addEventListener(resizer, 'pointerup', (event) => {
       this.finishPanelResize(event);
     });
-    resizer.addEventListener('pointercancel', (event) => {
+    this.disposables.addEventListener(resizer, 'pointercancel', (event) => {
       this.finishPanelResize(event);
     });
-    resizer.addEventListener('keydown', (event) => {
+    this.disposables.addEventListener(resizer, 'keydown', (event) => {
       this.onPanelResizerKeyDown(event, key);
     });
   }
 
   private beginPanelResize(event: PointerEvent, key: PanelSplitSizeKey): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (event.button !== 0 || !this.isDesktopPanelLayout()) {
       return;
     }
@@ -117,6 +137,10 @@ export class LayoutSplitController {
   }
 
   private onPanelResizePointerMove(event: PointerEvent): void {
+    if (this.disposed) {
+      return;
+    }
+
     const dragState = this.activePanelResize;
     if (!dragState || event.pointerId !== dragState.pointerId) {
       return;
@@ -152,6 +176,10 @@ export class LayoutSplitController {
   }
 
   private onPanelResizerKeyDown(event: KeyboardEvent, key: PanelSplitSizeKey): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (!this.isDesktopPanelLayout()) {
       return;
     }

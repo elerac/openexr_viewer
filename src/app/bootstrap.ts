@@ -1,4 +1,5 @@
-import { loadExrOffMainThread } from '../exr-worker-client';
+import { disposeDecodeWorker, loadExrOffMainThread } from '../exr-worker-client';
+import { createAbortError } from '../lifecycle';
 import { ViewerStore, createInitialState } from '../viewer-store';
 import { ViewerUi } from '../ui';
 import { clampZoom, ViewerInteraction } from '../interaction';
@@ -10,14 +11,25 @@ import { LoadQueueService } from '../services/load-queue';
 import { ThumbnailService } from '../services/thumbnail-service';
 import { RenderCacheService } from '../services/render-cache-service';
 
-export async function bootstrapApp(): Promise<void> {
+export interface AppHandle {
+  dispose(): void;
+}
+
+export async function bootstrapApp(): Promise<AppHandle> {
   const store = new ViewerStore(createInitialState());
 
   let sessionController!: SessionController;
   let displayController!: DisplayController;
   let renderCache!: RenderCacheService;
+  let renderer: WebGlExrRenderer | null = null;
+  let thumbnailService: ThumbnailService | null = null;
   let interaction: ViewerInteraction | null = null;
   let resizeObserver: ResizeObserver | null = null;
+  let unsubscribeStore: (() => void) | null = null;
+  let disposed = false;
+  const onBeforeUnload = () => {
+    app.dispose();
+  };
 
   const loadQueue = new LoadQueueService();
   const ui = new ViewerUi({
@@ -26,6 +38,10 @@ export async function bootstrapApp(): Promise<void> {
       input.click();
     },
     onExportImage: async (request) => {
+      if (disposed) {
+        throw createAbortError('Viewer application has been disposed.');
+      }
+
       const activeSession = sessionController.getActiveSession();
       if (!activeSession) {
         const error = new Error('No image is active.');
@@ -48,8 +64,15 @@ export async function bootstrapApp(): Promise<void> {
           state,
           colormapLut
         });
+        if (disposed) {
+          throw createAbortError('Viewer application has been disposed.');
+        }
         triggerBrowserDownload(blob, request.filename);
       } catch (error) {
+        if (disposed) {
+          throw error instanceof Error ? error : createAbortError('Viewer application has been disposed.');
+        }
+
         const message = error instanceof Error ? error.message : 'Export failed.';
         ui.setError(message);
         throw new Error(message);
@@ -123,15 +146,39 @@ export async function bootstrapApp(): Promise<void> {
       sessionController.resetActiveSessionState();
     }
   });
+  const app: AppHandle = {
+    dispose: () => {
+      if (disposed) {
+        return;
+      }
+
+      disposed = true;
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      unsubscribeStore?.();
+      unsubscribeStore = null;
+      interaction?.destroy();
+      interaction = null;
+      resizeObserver?.disconnect();
+      resizeObserver = null;
+      displayController?.dispose();
+      sessionController?.dispose();
+      thumbnailService?.dispose();
+      renderCache?.dispose();
+      loadQueue.dispose();
+      renderer?.dispose();
+      ui.dispose();
+      disposeDecodeWorker();
+    }
+  };
 
   try {
-    const renderer = new WebGlExrRenderer(ui.glCanvas, ui.overlayCanvas);
+    renderer = new WebGlExrRenderer(ui.glCanvas, ui.overlayCanvas);
     renderCache = new RenderCacheService({
       ui,
       renderer,
       getActiveSessionId: () => sessionController?.getActiveSessionId() ?? null
     });
-    const thumbnailService = new ThumbnailService({
+    thumbnailService = new ThumbnailService({
       getSession: (sessionId) => {
         return sessionController?.getSessions().find((session) => session.id === sessionId) ?? null;
       },
@@ -205,12 +252,20 @@ export async function bootstrapApp(): Promise<void> {
       }
     });
 
-    store.subscribe((state, previous) => {
+    unsubscribeStore = store.subscribe((state, previous) => {
+      if (disposed) {
+        return;
+      }
+
       sessionController.handleStoreChange(state);
       displayController.handleStoreChange(state, previous);
     });
 
     resizeObserver = new ResizeObserver(() => {
+      if (disposed || !renderer) {
+        return;
+      }
+
       const rect = ui.viewerContainer.getBoundingClientRect();
       renderer.resize(rect.width, rect.height);
       renderer.render(store.getState());
@@ -222,15 +277,16 @@ export async function bootstrapApp(): Promise<void> {
     renderer.render(store.getState());
     sessionController.syncOpenedImageOptions();
 
-    window.addEventListener('beforeunload', () => {
-      interaction?.destroy();
-      resizeObserver?.disconnect();
-    });
+    window.addEventListener('beforeunload', onBeforeUnload);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to initialize WebGL2 renderer.';
-    ui.setError(message);
-    ui.setLoading(false);
+    if (!disposed) {
+      ui.setError(message);
+      ui.setLoading(false);
+    }
   }
+
+  return app;
 }
 
 function samePixel(a: { ix: number; iy: number } | null, b: { ix: number; iy: number } | null): boolean {

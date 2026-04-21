@@ -44,8 +44,8 @@ const COLORMAP_MANIFEST_PATH = 'colormaps/manifest.json';
 const NPY_MAGIC = [0x93, 0x4e, 0x55, 0x4d, 0x50, 0x59];
 const cache = new Map<string, Promise<ColormapLut>>();
 
-export async function loadColormapRegistry(): Promise<ColormapRegistry> {
-  const response = await fetch(resolvePublicAssetUrl(COLORMAP_MANIFEST_PATH));
+export async function loadColormapRegistry(signal?: AbortSignal): Promise<ColormapRegistry> {
+  const response = await fetch(resolvePublicAssetUrl(COLORMAP_MANIFEST_PATH), { signal });
   if (!response.ok) {
     throw new Error(`Failed to load ${COLORMAP_MANIFEST_PATH} (${response.status})`);
   }
@@ -100,7 +100,11 @@ export function findColormapIdByLabel(registry: ColormapRegistry, label: string)
   return registry.options.find((option) => option.label.toLocaleLowerCase() === normalizedLabel)?.id ?? null;
 }
 
-export async function loadColormapLut(registry: ColormapRegistry, id: string): Promise<ColormapLut> {
+export async function loadColormapLut(
+  registry: ColormapRegistry,
+  id: string,
+  signal?: AbortSignal
+): Promise<ColormapLut> {
   const asset = getColormapAsset(registry, id);
   if (!asset) {
     throw new Error(`Unknown colormap "${id}".`);
@@ -109,13 +113,17 @@ export async function loadColormapLut(registry: ColormapRegistry, id: string): P
   const cacheKey = `${id}:${asset.file}`;
   let promise = cache.get(cacheKey);
   if (!promise) {
-    promise = fetch(resolvePublicAssetUrl(asset.file))
+    promise = fetch(resolvePublicAssetUrl(asset.file), { signal })
       .then(async (response) => {
         if (!response.ok) {
           throw new Error(`Failed to load ${asset.file} (${response.status})`);
         }
 
         return parseNpyColormap(await response.arrayBuffer(), { id, label: asset.label });
+      })
+      .catch((error) => {
+        cache.delete(cacheKey);
+        throw error;
       });
     cache.set(cacheKey, promise);
   }

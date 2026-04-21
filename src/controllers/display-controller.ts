@@ -23,6 +23,7 @@ import {
   sameDisplaySelection,
   type DisplaySelection
 } from '../display-model';
+import { createAbortError, isAbortError, throwIfAborted, type Disposable } from '../lifecycle';
 import { buildProbeColorPreview, resolveActiveProbePixel, resolveProbeMode } from '../probe';
 import { WebGlExrRenderer } from '../renderer';
 import {
@@ -80,7 +81,7 @@ export interface DisplayControllerDependencies {
   getActiveSession: () => OpenedImageSession | null;
 }
 
-export class DisplayController {
+export class DisplayController implements Disposable {
   private readonly store: ViewerStore;
   private readonly ui: DisplayUi;
   private readonly renderer: WebGlExrRenderer;
@@ -95,6 +96,8 @@ export class DisplayController {
   private defaultColormapId = DEFAULT_COLORMAP_ID;
   private colormapRegistry: ColormapRegistry | null = null;
   private readonly stokesDisplayRestoreStates = new Map<string, RestorableVisualizationState>();
+  private readonly abortController = new AbortController();
+  private disposed = false;
 
   constructor(dependencies: DisplayControllerDependencies) {
     this.store = dependencies.store;
@@ -105,14 +108,26 @@ export class DisplayController {
   }
 
   async initialize(): Promise<void> {
-    this.colormapRegistry = await loadColormapRegistry();
-    this.defaultColormapId = this.colormapRegistry.defaultId;
-    this.ui.setColormapOptions(getColormapOptions(this.colormapRegistry), this.defaultColormapId);
-    this.store.setState({ activeColormapId: this.defaultColormapId });
-    await this.uploadColormapToRenderer(this.defaultColormapId);
+    try {
+      this.throwIfStopped();
+      this.colormapRegistry = await loadColormapRegistry(this.abortController.signal);
+      this.throwIfStopped();
+      this.defaultColormapId = this.colormapRegistry.defaultId;
+      this.ui.setColormapOptions(getColormapOptions(this.colormapRegistry), this.defaultColormapId);
+      this.store.setState({ activeColormapId: this.defaultColormapId });
+      await this.uploadColormapToRenderer(this.defaultColormapId);
+    } catch (error) {
+      if (!isAbortError(error)) {
+        throw error;
+      }
+    }
   }
 
   handleStoreChange(state: ViewerState, previous: ViewerState): void {
+    if (this.disposed) {
+      return;
+    }
+
     const activeSession = this.getActiveSession();
     const nextRenderedSessionId = activeSession?.id ?? null;
     const sessionChanged = nextRenderedSessionId !== this.renderedSessionId;
@@ -288,6 +303,10 @@ export class DisplayController {
   }
 
   async applyDisplaySelection(selection: DisplaySelection): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+
     const activeSession = this.getActiveSession();
     if (!activeSession) {
       this.store.setState({ displaySelection: cloneDisplaySelection(selection) });
@@ -308,7 +327,7 @@ export class DisplayController {
       this.ui.setRgbViewLoading(false);
       const sessionId = activeSession.id;
       queueMicrotask(() => {
-        if (this.getActiveSession()?.id !== sessionId) {
+        if (this.disposed || this.getActiveSession()?.id !== sessionId) {
           return;
         }
 
@@ -322,7 +341,8 @@ export class DisplayController {
     this.ui.setRgbViewLoading(true);
 
     try {
-      await waitForNextPaint();
+      await waitForNextPaint(this.abortController.signal);
+      this.throwIfStopped();
       if (token !== this.rgbViewChangeToken) {
         return;
       }
@@ -345,7 +365,7 @@ export class DisplayController {
 
         const elapsedMs = performance.now() - startedAt;
         if (elapsedMs < MIN_RGB_VIEW_LOADING_MS) {
-          await waitMs(MIN_RGB_VIEW_LOADING_MS - elapsedMs);
+          await waitMs(MIN_RGB_VIEW_LOADING_MS - elapsedMs, this.abortController.signal);
         }
         return;
       }
@@ -358,7 +378,8 @@ export class DisplayController {
       }
 
       const colormapToken = ++this.colormapChangeToken;
-      const lut = await loadColormapLut(registry, colormapId);
+      const lut = await loadColormapLut(registry, colormapId, this.abortController.signal);
+      this.throwIfStopped();
       if (token !== this.rgbViewChangeToken || colormapToken !== this.colormapChangeToken) {
         return;
       }
@@ -374,16 +395,24 @@ export class DisplayController {
 
       const elapsedMs = performance.now() - startedAt;
       if (elapsedMs < MIN_RGB_VIEW_LOADING_MS) {
-        await waitMs(MIN_RGB_VIEW_LOADING_MS - elapsedMs);
+        await waitMs(MIN_RGB_VIEW_LOADING_MS - elapsedMs, this.abortController.signal);
+      }
+    } catch (error) {
+      if (!isAbortError(error) && !this.disposed) {
+        throw error;
       }
     } finally {
-      if (token === this.rgbViewChangeToken) {
+      if (!this.disposed && token === this.rgbViewChangeToken) {
         this.ui.setRgbViewLoading(false);
       }
     }
   }
 
   async setActiveColormap(colormapId: string): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+
     const registry = this.getLoadedColormapRegistry();
     if (!getColormapAsset(registry, colormapId)) {
       this.ui.setActiveColormap(this.store.getState().activeColormapId);
@@ -401,7 +430,8 @@ export class DisplayController {
     this.ui.setRgbViewLoading(true);
 
     try {
-      const lut = await loadColormapLut(registry, colormapId);
+      const lut = await loadColormapLut(registry, colormapId, this.abortController.signal);
+      this.throwIfStopped();
       if (token !== this.colormapChangeToken) {
         return;
       }
@@ -413,19 +443,25 @@ export class DisplayController {
 
       const elapsedMs = performance.now() - startedAt;
       if (elapsedMs < MIN_RGB_VIEW_LOADING_MS) {
-        await waitMs(MIN_RGB_VIEW_LOADING_MS - elapsedMs);
+        await waitMs(MIN_RGB_VIEW_LOADING_MS - elapsedMs, this.abortController.signal);
       }
     } catch (error) {
-      this.ui.setActiveColormap(currentState.activeColormapId);
-      this.ui.setError(error instanceof Error ? error.message : 'Failed to load colormap.');
+      if (!isAbortError(error) && !this.disposed) {
+        this.ui.setActiveColormap(currentState.activeColormapId);
+        this.ui.setError(error instanceof Error ? error.message : 'Failed to load colormap.');
+      }
     } finally {
-      if (token === this.colormapChangeToken) {
+      if (!this.disposed && token === this.colormapChangeToken) {
         this.ui.setRgbViewLoading(false);
       }
     }
   }
 
   setVisualizationMode(mode: VisualizationMode): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (!this.getActiveSession()) {
       return;
     }
@@ -445,6 +481,10 @@ export class DisplayController {
   }
 
   setViewerMode(mode: ViewerMode): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (!this.getActiveSession()) {
       return;
     }
@@ -461,6 +501,10 @@ export class DisplayController {
   }
 
   setColormapRange(range: DisplayLuminanceRange): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (!this.getActiveSession() || !Number.isFinite(range.min) || !Number.isFinite(range.max)) {
       return;
     }
@@ -487,6 +531,10 @@ export class DisplayController {
   }
 
   applyAutoColormapRange(): void {
+    if (this.disposed) {
+      return;
+    }
+
     const activeSession = this.getActiveSession();
     if (!activeSession) {
       return;
@@ -507,6 +555,10 @@ export class DisplayController {
   }
 
   toggleColormapZeroCenter(): void {
+    if (this.disposed) {
+      return;
+    }
+
     const activeSession = this.getActiveSession();
     if (!activeSession) {
       return;
@@ -528,6 +580,10 @@ export class DisplayController {
   }
 
   toggleStokesDegreeModulation(): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (!this.getActiveSession()) {
       return;
     }
@@ -547,6 +603,10 @@ export class DisplayController {
   }
 
   setActiveLayer(layerIndex: number): void {
+    if (this.disposed) {
+      return;
+    }
+
     const activeSession = this.getActiveSession();
     if (!activeSession) {
       return;
@@ -562,6 +622,10 @@ export class DisplayController {
   }
 
   refreshProbeReadout(): void {
+    if (this.disposed) {
+      return;
+    }
+
     const activeSession = this.getActiveSession();
     if (!activeSession) {
       this.ui.setProbeMetadata(null);
@@ -605,6 +669,10 @@ export class DisplayController {
   }
 
   handleSessionClosed(sessionId: string): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.stokesDisplayRestoreStates.delete(sessionId);
     if (this.renderedSessionId === sessionId) {
       this.renderedSessionId = null;
@@ -612,14 +680,34 @@ export class DisplayController {
   }
 
   handleAllSessionsClosed(): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.stokesDisplayRestoreStates.clear();
     this.renderedSessionId = null;
   }
 
+  dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.disposed = true;
+    this.rgbViewChangeToken += 1;
+    this.colormapChangeToken += 1;
+    this.abortController.abort(createAbortError('Display controller has been disposed.'));
+    this.stokesDisplayRestoreStates.clear();
+    this.renderedSessionId = null;
+    this.uploadedColormapId = null;
+    this.activeColormapLut = null;
+  }
+
   private async uploadColormapToRenderer(colormapId: string): Promise<void> {
+    this.throwIfStopped();
     this.uploadLoadedColormap(
       colormapId,
-      await loadColormapLut(this.getLoadedColormapRegistry(), colormapId)
+      await loadColormapLut(this.getLoadedColormapRegistry(), colormapId, this.abortController.signal)
     );
   }
 
@@ -632,6 +720,10 @@ export class DisplayController {
   }
 
   private uploadLoadedColormap(colormapId: string, lut: ColormapLut): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.renderer.setColormapTexture(lut.entryCount, lut.rgba8);
     this.uploadedColormapId = colormapId;
     this.activeColormapLut = lut;
@@ -639,14 +731,22 @@ export class DisplayController {
   }
 
   private syncColormapTextureForState(colormapId: string): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (this.uploadedColormapId === colormapId) {
       return;
     }
 
     const token = ++this.colormapChangeToken;
-    void loadColormapLut(this.getLoadedColormapRegistry(), colormapId)
+    void loadColormapLut(this.getLoadedColormapRegistry(), colormapId, this.abortController.signal)
       .then((lut) => {
-        if (token !== this.colormapChangeToken || this.store.getState().activeColormapId !== colormapId) {
+        if (
+          this.disposed ||
+          token !== this.colormapChangeToken ||
+          this.store.getState().activeColormapId !== colormapId
+        ) {
           return;
         }
 
@@ -655,7 +755,9 @@ export class DisplayController {
         this.renderer.render(this.store.getState());
       })
       .catch((error) => {
-        this.ui.setError(error instanceof Error ? error.message : 'Failed to load colormap.');
+        if (!isAbortError(error) && !this.disposed) {
+          this.ui.setError(error instanceof Error ? error.message : 'Failed to load colormap.');
+        }
       });
   }
 
@@ -728,6 +830,14 @@ export class DisplayController {
       colormapZeroCentered: false
     };
   }
+
+  private throwIfStopped(): void {
+    if (this.disposed) {
+      throw createAbortError('Display controller has been disposed.');
+    }
+
+    throwIfAborted(this.abortController.signal, 'Display controller has been disposed.');
+  }
 }
 
 function getSelectedLayer(image: DecodedExrImage, layerIndex: number): DecodedLayer | null {
@@ -797,18 +907,63 @@ function captureRestorableVisualizationState(state: ViewerState): RestorableVisu
   };
 }
 
-function waitForNextPaint(): Promise<void> {
-  return new Promise((resolve) => {
-    window.requestAnimationFrame(() => {
+function waitForNextPaint(signal?: AbortSignal): Promise<void> {
+  if (!signal) {
+    return new Promise((resolve) => {
       window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          resolve();
+        });
+      });
+    });
+  }
+
+  throwIfAborted(signal, 'Display controller has been disposed.');
+  return new Promise((resolve, reject) => {
+    let firstHandle = 0;
+    let secondHandle = 0;
+    const onAbort = () => {
+      if (firstHandle && typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(firstHandle);
+      }
+      if (secondHandle && typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(secondHandle);
+      }
+      reject(signal.reason instanceof Error ? signal.reason : createAbortError('Display controller has been disposed.'));
+    };
+
+    signal.addEventListener('abort', onAbort, { once: true });
+    firstHandle = window.requestAnimationFrame(() => {
+      firstHandle = 0;
+      secondHandle = window.requestAnimationFrame(() => {
+        secondHandle = 0;
+        signal.removeEventListener('abort', onAbort);
         resolve();
       });
     });
   });
 }
 
-function waitMs(durationMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, Math.max(0, durationMs));
+function waitMs(durationMs: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) {
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, Math.max(0, durationMs));
+    });
+  }
+
+  throwIfAborted(signal, 'Display controller has been disposed.');
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      if (typeof window.clearTimeout === 'function') {
+        window.clearTimeout(handle);
+      }
+      reject(signal.reason instanceof Error ? signal.reason : createAbortError('Display controller has been disposed.'));
+    };
+    const handle = window.setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, Math.max(0, durationMs));
+
+    signal.addEventListener('abort', onAbort, { once: true });
   });
 }

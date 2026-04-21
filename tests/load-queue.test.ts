@@ -52,4 +52,35 @@ describe('load queue service', () => {
     await expect(third).resolves.toBeUndefined();
     expect(events).toEqual(['first', 'second', 'third']);
   });
+
+  it('aborts the active task signal and rejects queued tasks after dispose', async () => {
+    const queue = new LoadQueueService();
+    let activeSignal: AbortSignal | null = null;
+    let markFirstStarted!: () => void;
+    let releaseFirst!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+      markFirstStarted = resolve;
+    });
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+
+    const first = queue.enqueue(async (signal) => {
+      activeSignal = signal;
+      markFirstStarted();
+      await firstGate;
+    });
+    await firstStarted;
+
+    const second = queue.enqueue(async () => {
+      throw new Error('should not run');
+    });
+
+    queue.dispose();
+    releaseFirst();
+
+    await expect(first).resolves.toBeUndefined();
+    await expect(second).rejects.toMatchObject({ name: 'AbortError' });
+    expect(activeSignal?.aborted).toBe(true);
+  });
 });

@@ -429,6 +429,60 @@ describe('view menu', () => {
   });
 });
 
+describe('ui disposal', () => {
+  it('clears pending loading overlay timers when disposed', () => {
+    vi.useFakeTimers();
+    const phases: LoadingOverlayPhase[] = [];
+    const disclosure = new ProgressiveLoadingOverlayDisclosure((phase) => {
+      phases.push(phase);
+    });
+
+    disclosure.setLoading(true);
+    disclosure.dispose();
+    vi.advanceTimersByTime(2000);
+
+    expect(phases).toEqual(['hidden']);
+  });
+
+  it('removes listeners and disconnects observers on dispose', () => {
+    const html = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
+    const bodyMarkup = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1] ?? html;
+    document.body.innerHTML = bodyMarkup;
+
+    const disconnectSpy = vi.fn();
+    class ResizeObserverMock {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect = disconnectSpy;
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+    const onOpenFileClick = vi.fn();
+    const onFilesDropped = vi.fn();
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenFileClick, onFilesDropped, onReorderOpenedImage }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'first.exr' },
+      { id: 'session-2', label: 'second.exr' }
+    ], 'session-1');
+
+    const firstRow = document.querySelector('.opened-file-row') as HTMLDivElement;
+    firstRow.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientY: 10 }));
+
+    ui.dispose();
+
+    (document.getElementById('open-file-button') as HTMLButtonElement).click();
+    window.dispatchEvent(createFileDropEvent('drop'));
+    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientY: 80 }));
+
+    expect(onOpenFileClick).not.toHaveBeenCalled();
+    expect(onFilesDropped).not.toHaveBeenCalled();
+    expect(onReorderOpenedImage).not.toHaveBeenCalled();
+    expect(disconnectSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('display cache UI helpers', () => {
   it('formats pin button labels from the pinned state', () => {
     expect(getOpenedFilePinButtonLabel('beauty.exr', false)).toBe('Pin cache for beauty.exr');
@@ -565,4 +619,18 @@ function createDeferred<T>() {
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function createFileDropEvent(type: 'drop' | 'dragover'): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', {
+    value: {
+      types: ['Files'],
+      files: {
+        length: 1,
+        0: new File(['pixels'], 'sample.exr')
+      }
+    }
+  });
+  return event;
 }

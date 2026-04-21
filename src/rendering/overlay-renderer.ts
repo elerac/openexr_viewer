@@ -1,4 +1,5 @@
 import { imageToScreen } from '../interaction';
+import type { Disposable } from '../lifecycle';
 import { resolveActiveProbePixel } from '../probe';
 import type { ImagePixel, ViewerState, ViewportInfo } from '../types';
 import { buildOverlayValueLines } from './overlay-value-lines';
@@ -6,12 +7,13 @@ import { buildOverlayValueLines } from './overlay-value-lines';
 const VALUE_LABEL_MIN_SCREEN_SIZE = 28;
 const MAX_VALUE_LABELS = 1800;
 
-export class OverlayRenderer {
+export class OverlayRenderer implements Disposable {
   private readonly overlayCanvas: HTMLCanvasElement;
   private readonly overlayContext: CanvasRenderingContext2D;
   private viewport: ViewportInfo = { width: 1, height: 1 };
   private imageSize: { width: number; height: number } | null = null;
   private displayTextureData: Float32Array | null = null;
+  private disposed = false;
 
   constructor(overlayCanvas: HTMLCanvasElement) {
     const overlayContext = overlayCanvas.getContext('2d');
@@ -24,6 +26,10 @@ export class OverlayRenderer {
   }
 
   resize(width: number, height: number): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.viewport = {
       width: Math.max(1, Math.floor(width)),
       height: Math.max(1, Math.floor(height))
@@ -34,16 +40,28 @@ export class OverlayRenderer {
   }
 
   setDisplayTexture(width: number, height: number, rgbaTexture: Float32Array): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.imageSize = { width, height };
     this.displayTextureData = rgbaTexture;
   }
 
   clearImage(): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.imageSize = null;
     this.displayTextureData = null;
   }
 
   render(state: ViewerState): void {
+    if (this.disposed) {
+      return;
+    }
+
     const ctx = this.overlayContext;
     const imageSize = this.imageSize;
 
@@ -120,6 +138,17 @@ export class OverlayRenderer {
     ctx.strokeStyle = state.lockedPixel ? 'rgba(255, 196, 0, 0.95)' : 'rgba(255, 255, 255, 0.95)';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(topLeft.x, topLeft.y, state.zoom, state.zoom);
+  }
+
+  dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.disposed = true;
+    this.imageSize = null;
+    this.displayTextureData = null;
+    this.overlayContext.clearRect(0, 0, this.viewport.width, this.viewport.height);
   }
 }
 

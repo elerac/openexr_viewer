@@ -1,4 +1,5 @@
 import type { ListboxHitTestMetrics, OpenedImageOptionItem } from '../ui';
+import { DisposableBag, type Disposable } from '../lifecycle';
 import type { OpenedImagesPanelElements } from './elements';
 import {
   applyListboxRowSizing,
@@ -42,7 +43,8 @@ interface OpenedFileRowRefs {
 
 const openedFileRowRefs = new WeakMap<HTMLElement, OpenedFileRowRefs>();
 
-export class OpenedImagesPanel {
+export class OpenedImagesPanel implements Disposable {
+  private readonly disposables = new DisposableBag();
   private isLoading = false;
   private openedImageCount = 0;
   private openedImagesActiveId: string | null = null;
@@ -51,6 +53,7 @@ export class OpenedImagesPanel {
   private openedImageDragState: OpenedImageDragState | null = null;
   private restoreOpenedFilesFocusAfterLoading = false;
   private displayCacheBudgetMb = 256;
+  private disposed = false;
 
   constructor(
     private readonly elements: OpenedImagesPanelElements,
@@ -70,9 +73,9 @@ export class OpenedImagesPanel {
       const target = event.currentTarget as HTMLSelectElement;
       this.chooseOpenedImage(target.value);
     };
-    this.elements.openedImagesSelect.addEventListener('change', onOpenedImagesSelect);
-    this.elements.openedImagesSelect.addEventListener('input', onOpenedImagesSelect);
-    this.elements.openedImagesSelect.addEventListener('mousedown', (event) => {
+    this.disposables.addEventListener(this.elements.openedImagesSelect, 'change', onOpenedImagesSelect);
+    this.disposables.addEventListener(this.elements.openedImagesSelect, 'input', onOpenedImagesSelect);
+    this.disposables.addEventListener(this.elements.openedImagesSelect, 'mousedown', (event) => {
       if (event.button !== 0 || this.elements.openedImagesSelect.disabled) {
         return;
       }
@@ -97,7 +100,7 @@ export class OpenedImagesPanel {
         isDragging: false
       };
     });
-    this.elements.openedFilesList.addEventListener('mousedown', (event) => {
+    this.disposables.addEventListener(this.elements.openedFilesList, 'mousedown', (event) => {
       if (event.button !== 0 || this.elements.openedImagesSelect.disabled) {
         return;
       }
@@ -123,7 +126,7 @@ export class OpenedImagesPanel {
         isDragging: false
       };
     });
-    this.elements.openedFilesList.addEventListener('keydown', (event) => {
+    this.disposables.addEventListener(this.elements.openedFilesList, 'keydown', (event) => {
       handleImageBrowserListKeyDown(event, this.elements.openedFilesList, (row) => {
         if (this.elements.openedImagesSelect.disabled) {
           return;
@@ -132,7 +135,7 @@ export class OpenedImagesPanel {
       });
     });
 
-    this.elements.displayCacheBudgetInput.addEventListener('change', (event) => {
+    this.disposables.addEventListener(this.elements.displayCacheBudgetInput, 'change', (event) => {
       const target = event.currentTarget as HTMLSelectElement;
       const value = Number(target.value);
       if (!Number.isFinite(value)) {
@@ -143,15 +146,27 @@ export class OpenedImagesPanel {
       this.callbacks.onDisplayCacheBudgetChange(value);
     });
 
-    window.addEventListener('mousemove', (event) => {
+    this.disposables.addEventListener(window, 'mousemove', (event) => {
       this.onOpenedImagesMouseMove(event);
     });
-    window.addEventListener('mouseup', () => {
+    this.disposables.addEventListener(window, 'mouseup', () => {
       this.finishOpenedImagesDrag();
     });
-    window.addEventListener('blur', () => {
+    this.disposables.addEventListener(window, 'blur', () => {
       this.finishOpenedImagesDrag();
     });
+  }
+
+  dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.disposed = true;
+    this.finishOpenedImagesDrag();
+    this.elements.openedFilesList.replaceChildren();
+    this.elements.openedImagesSelect.replaceChildren();
+    this.disposables.dispose();
   }
 
   getOpenedImageCount(): number {
@@ -159,6 +174,10 @@ export class OpenedImagesPanel {
   }
 
   setLoading(loading: boolean): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (loading) {
       this.finishOpenedImagesDrag();
       this.restoreOpenedFilesFocusAfterLoading = isFocusWithinElement(this.elements.openedFilesList);
@@ -177,11 +196,19 @@ export class OpenedImagesPanel {
   }
 
   setDisplayCacheBudget(mb: number): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.displayCacheBudgetMb = Math.max(0, Math.round(mb));
     this.elements.displayCacheBudgetInput.value = String(this.displayCacheBudgetMb);
   }
 
   setDisplayCacheUsage(usedBytes: number, budgetBytes: number): void {
+    if (this.disposed) {
+      return;
+    }
+
     const state = getDisplayCacheUsageState(usedBytes, budgetBytes);
     this.elements.displayCacheUsage.textContent = state.text;
     this.elements.displayCacheUsage.setAttribute(
@@ -193,6 +220,10 @@ export class OpenedImagesPanel {
   }
 
   setOpenedImageOptions(items: OpenedImageOptionItem[], activeId: string | null): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.openedImageCount = items.length;
     this.openedImageItems = items.map((item) => ({ ...item }));
     applyListboxRowSizing(this.elements.openedImagesSelect, items.length, OPENED_IMAGES_MAX_VISIBLE_ROWS);
@@ -260,6 +291,10 @@ export class OpenedImagesPanel {
   }
 
   private chooseOpenedImage(sessionId: string): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (!sessionId || this.elements.openedImagesSelect.disabled) {
       return;
     }
@@ -271,6 +306,10 @@ export class OpenedImagesPanel {
   }
 
   private onOpenedImagesMouseMove(event: MouseEvent): void {
+    if (this.disposed) {
+      return;
+    }
+
     const dragState = this.openedImageDragState;
     if (!dragState) {
       return;

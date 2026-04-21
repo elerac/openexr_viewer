@@ -1,4 +1,5 @@
 import { isChannelSelection } from '../display-model';
+import type { Disposable } from '../lifecycle';
 import { isStokesDegreeModulationEnabled } from '../stokes';
 import type { ViewerState, ViewportInfo } from '../types';
 import imageFragmentSource from './shaders/exr-image.frag.glsl?raw';
@@ -34,7 +35,7 @@ interface ProgramBundle<TUniforms extends CommonUniforms> {
   uniforms: TUniforms;
 }
 
-export class GlImageRenderer {
+export class GlImageRenderer implements Disposable {
   private readonly glCanvas: HTMLCanvasElement;
   private readonly gl: WebGL2RenderingContext;
   private readonly vao: WebGLVertexArrayObject;
@@ -46,6 +47,7 @@ export class GlImageRenderer {
   private imageSize: { width: number; height: number } | null = null;
   private colormapTextureSize = { width: 1, height: 1 };
   private colormapEntryCount = 0;
+  private disposed = false;
 
   constructor(glCanvas: HTMLCanvasElement) {
     const gl = glCanvas.getContext('webgl2', { antialias: false });
@@ -117,6 +119,10 @@ export class GlImageRenderer {
   }
 
   resize(width: number, height: number): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.viewport = {
       width: Math.max(1, Math.floor(width)),
       height: Math.max(1, Math.floor(height))
@@ -128,6 +134,10 @@ export class GlImageRenderer {
   }
 
   setDisplayTexture(width: number, height: number, rgbaTexture: Float32Array): void {
+    if (this.disposed) {
+      return;
+    }
+
     const sameSize = this.imageSize?.width === width && this.imageSize?.height === height;
     this.imageSize = { width, height };
     this.gl.activeTexture(this.gl.TEXTURE0);
@@ -160,6 +170,10 @@ export class GlImageRenderer {
   }
 
   setColormapTexture(entryCount: number, rgba8: Uint8Array): void {
+    if (this.disposed) {
+      return;
+    }
+
     if (!Number.isInteger(entryCount) || entryCount < 2) {
       throw new Error('Colormap texture requires at least 2 entries.');
     }
@@ -208,10 +222,18 @@ export class GlImageRenderer {
   }
 
   clearImage(): void {
+    if (this.disposed) {
+      return;
+    }
+
     this.imageSize = null;
   }
 
   render(state: ViewerState): void {
+    if (this.disposed) {
+      return;
+    }
+
     const gl = this.gl;
     const program = state.viewerMode === 'panorama' ? this.panoramaProgram : this.imageProgram;
 
@@ -234,6 +256,27 @@ export class GlImageRenderer {
     }
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.disposed = true;
+    this.imageSize = null;
+    this.colormapEntryCount = 0;
+    this.gl.bindVertexArray(null);
+    this.gl.useProgram(null);
+    this.gl.activeTexture(this.gl.TEXTURE0);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+    this.gl.activeTexture(this.gl.TEXTURE1);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+    this.gl.deleteTexture(this.texture);
+    this.gl.deleteTexture(this.colormapTexture);
+    this.gl.deleteVertexArray(this.vao);
+    this.gl.deleteProgram(this.imageProgram.program);
+    this.gl.deleteProgram(this.panoramaProgram.program);
   }
 
   private createImageProgram(): ProgramBundle<ImageUniforms> {
