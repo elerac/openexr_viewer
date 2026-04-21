@@ -125,6 +125,27 @@ output {
   white-space: nowrap;
 }
 
+.app-menu-item[role='menuitemradio'] {
+  display: flex;
+  align-items: center;
+  gap: 0.38rem;
+}
+
+.app-menu-item[role='menuitemradio']::before {
+  content: "✓";
+  width: 0.8rem;
+  color: var(--accent);
+  opacity: 0;
+}
+
+.app-menu-item[role='menuitemradio'][aria-checked='true'] {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.app-menu-item[role='menuitemradio'][aria-checked='true']::before {
+  opacity: 1;
+}
+
 .app-menu-item:hover:not(:disabled),
 .app-menu-item:focus-visible {
   outline: none;

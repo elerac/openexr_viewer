@@ -128,6 +128,77 @@ describe('session controller', () => {
     });
   });
 
+  it('preserves inactive image camera while carrying panorama camera across session switches', async () => {
+    const decodeBytes = vi
+      .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
+      .mockResolvedValueOnce(createDecodedImage(6, 6))
+      .mockResolvedValueOnce(createDecodedImage(6, 6));
+    const { controller, store } = createController({ decodeBytes });
+
+    await controller.enqueueFiles([createFile('first.exr')]);
+    await controller.enqueueFiles([createFile('second.exr')]);
+
+    const [firstSession] = controller.getSessions();
+    firstSession!.state = {
+      ...firstSession!.state,
+      zoom: 7,
+      panX: 8,
+      panY: 9,
+      panoramaYawDeg: 15,
+      panoramaPitchDeg: 10,
+      panoramaHfovDeg: 70
+    };
+
+    store.setState({
+      viewerMode: 'panorama',
+      zoom: 3,
+      panX: 4,
+      panY: 5,
+      panoramaYawDeg: 45,
+      panoramaPitchDeg: 20,
+      panoramaHfovDeg: 80
+    });
+
+    controller.switchActiveSession(firstSession!.id);
+
+    expect(store.getState()).toMatchObject({
+      viewerMode: 'panorama',
+      zoom: 7,
+      panX: 8,
+      panY: 9,
+      panoramaYawDeg: 45,
+      panoramaPitchDeg: 20,
+      panoramaHfovDeg: 80
+    });
+  });
+
+  it('resets panorama mode to default forward view while keeping the mode active', async () => {
+    const { controller, store } = createController();
+
+    await controller.enqueueFiles([createFile('reset.exr')]);
+
+    store.setState({
+      viewerMode: 'panorama',
+      visualizationMode: 'colormap',
+      exposureEv: 3,
+      panoramaYawDeg: 60,
+      panoramaPitchDeg: 15,
+      panoramaHfovDeg: 55
+    });
+    controller.handleStoreChange(store.getState());
+
+    controller.resetActiveSessionState();
+
+    expect(store.getState()).toMatchObject({
+      viewerMode: 'panorama',
+      visualizationMode: 'rgb',
+      exposureEv: 0,
+      panoramaYawDeg: 0,
+      panoramaPitchDeg: 0,
+      panoramaHfovDeg: 100
+    });
+  });
+
   it('reloads the active session and re-enqueues its thumbnail', async () => {
     const decodeBytes = vi
       .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()

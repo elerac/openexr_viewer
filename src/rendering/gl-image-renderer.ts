@@ -1,14 +1,13 @@
 import { isChannelSelection } from '../display-model';
 import { isStokesDegreeModulationEnabled } from '../stokes';
 import type { ViewerState, ViewportInfo } from '../types';
-import fragmentSource from './shaders/exr-image.frag.glsl?raw';
+import imageFragmentSource from './shaders/exr-image.frag.glsl?raw';
+import panoramaFragmentSource from './shaders/panorama-image.frag.glsl?raw';
 import vertexSource from './shaders/fullscreen-triangle.vert.glsl?raw';
 
-interface Uniforms {
+interface CommonUniforms {
   viewport: WebGLUniformLocation;
   imageSize: WebGLUniformLocation;
-  pan: WebGLUniformLocation;
-  zoom: WebGLUniformLocation;
   exposure: WebGLUniformLocation;
   useColormap: WebGLUniformLocation;
   colormapMin: WebGLUniformLocation;
@@ -19,14 +18,30 @@ interface Uniforms {
   useImageAlpha: WebGLUniformLocation;
 }
 
+interface ImageUniforms extends CommonUniforms {
+  pan: WebGLUniformLocation;
+  zoom: WebGLUniformLocation;
+}
+
+interface PanoramaUniforms extends CommonUniforms {
+  panoramaYawDeg: WebGLUniformLocation;
+  panoramaPitchDeg: WebGLUniformLocation;
+  panoramaHfovDeg: WebGLUniformLocation;
+}
+
+interface ProgramBundle<TUniforms extends CommonUniforms> {
+  program: WebGLProgram;
+  uniforms: TUniforms;
+}
+
 export class GlImageRenderer {
   private readonly glCanvas: HTMLCanvasElement;
   private readonly gl: WebGL2RenderingContext;
-  private readonly program: WebGLProgram;
   private readonly vao: WebGLVertexArrayObject;
   private readonly texture: WebGLTexture;
   private readonly colormapTexture: WebGLTexture;
-  private readonly uniforms: Uniforms;
+  private readonly imageProgram: ProgramBundle<ImageUniforms>;
+  private readonly panoramaProgram: ProgramBundle<PanoramaUniforms>;
   private viewport: ViewportInfo = { width: 1, height: 1 };
   private imageSize: { width: number; height: number } | null = null;
   private colormapTextureSize = { width: 1, height: 1 };
@@ -40,7 +55,6 @@ export class GlImageRenderer {
 
     this.glCanvas = glCanvas;
     this.gl = gl;
-    this.program = createProgram(gl, vertexSource, fragmentSource);
 
     const vao = gl.createVertexArray();
     if (!vao) {
@@ -60,22 +74,9 @@ export class GlImageRenderer {
     }
     this.colormapTexture = colormapTexture;
 
-    this.uniforms = {
-      viewport: getRequiredUniformLocation(gl, this.program, 'uViewport'),
-      imageSize: getRequiredUniformLocation(gl, this.program, 'uImageSize'),
-      pan: getRequiredUniformLocation(gl, this.program, 'uPan'),
-      zoom: getRequiredUniformLocation(gl, this.program, 'uZoom'),
-      exposure: getRequiredUniformLocation(gl, this.program, 'uExposure'),
-      useColormap: getRequiredUniformLocation(gl, this.program, 'uUseColormap'),
-      colormapMin: getRequiredUniformLocation(gl, this.program, 'uColormapMin'),
-      colormapMax: getRequiredUniformLocation(gl, this.program, 'uColormapMax'),
-      colormapTextureSize: getRequiredUniformLocation(gl, this.program, 'uColormapTextureSize'),
-      colormapEntryCount: getRequiredUniformLocation(gl, this.program, 'uColormapEntryCount'),
-      useStokesDegreeModulation: getRequiredUniformLocation(gl, this.program, 'uUseStokesDegreeModulation'),
-      useImageAlpha: getRequiredUniformLocation(gl, this.program, 'uUseImageAlpha')
-    };
+    this.imageProgram = this.createImageProgram();
+    this.panoramaProgram = this.createPanoramaProgram();
 
-    gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
@@ -84,7 +85,6 @@ export class GlImageRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.uniform1i(gl.getUniformLocation(this.program, 'uTexture'), 0);
 
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.colormapTexture);
@@ -103,7 +103,9 @@ export class GlImageRenderer {
       gl.UNSIGNED_BYTE,
       new Uint8Array([0, 0, 0, 255])
     );
-    gl.uniform1i(gl.getUniformLocation(this.program, 'uColormapTexture'), 1);
+
+    this.configureProgramSamplers(this.imageProgram.program);
+    this.configureProgramSamplers(this.panoramaProgram.program);
   }
 
   getViewport(): ViewportInfo {
@@ -211,38 +213,100 @@ export class GlImageRenderer {
 
   render(state: ViewerState): void {
     const gl = this.gl;
+    const program = state.viewerMode === 'panorama' ? this.panoramaProgram : this.imageProgram;
 
-    gl.useProgram(this.program);
+    gl.useProgram(program.program);
     gl.bindVertexArray(this.vao);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.colormapTexture);
 
-    gl.uniform2f(this.uniforms.viewport, this.viewport.width, this.viewport.height);
+    this.setCommonUniforms(program.uniforms, state);
+
+    if (state.viewerMode === 'panorama') {
+      gl.uniform1f(program.uniforms.panoramaYawDeg, state.panoramaYawDeg);
+      gl.uniform1f(program.uniforms.panoramaPitchDeg, state.panoramaPitchDeg);
+      gl.uniform1f(program.uniforms.panoramaHfovDeg, state.panoramaHfovDeg);
+    } else {
+      gl.uniform2f(program.uniforms.pan, state.panX, state.panY);
+      gl.uniform1f(program.uniforms.zoom, state.zoom);
+    }
+
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  private createImageProgram(): ProgramBundle<ImageUniforms> {
+    const program = createProgram(this.gl, vertexSource, imageFragmentSource);
+    return {
+      program,
+      uniforms: {
+        ...this.getCommonUniforms(program),
+        pan: getRequiredUniformLocation(this.gl, program, 'uPan'),
+        zoom: getRequiredUniformLocation(this.gl, program, 'uZoom')
+      }
+    };
+  }
+
+  private createPanoramaProgram(): ProgramBundle<PanoramaUniforms> {
+    const program = createProgram(this.gl, vertexSource, panoramaFragmentSource);
+    return {
+      program,
+      uniforms: {
+        ...this.getCommonUniforms(program),
+        panoramaYawDeg: getRequiredUniformLocation(this.gl, program, 'uPanoramaYawDeg'),
+        panoramaPitchDeg: getRequiredUniformLocation(this.gl, program, 'uPanoramaPitchDeg'),
+        panoramaHfovDeg: getRequiredUniformLocation(this.gl, program, 'uPanoramaHfovDeg')
+      }
+    };
+  }
+
+  private getCommonUniforms(program: WebGLProgram): CommonUniforms {
+    return {
+      viewport: getRequiredUniformLocation(this.gl, program, 'uViewport'),
+      imageSize: getRequiredUniformLocation(this.gl, program, 'uImageSize'),
+      exposure: getRequiredUniformLocation(this.gl, program, 'uExposure'),
+      useColormap: getRequiredUniformLocation(this.gl, program, 'uUseColormap'),
+      colormapMin: getRequiredUniformLocation(this.gl, program, 'uColormapMin'),
+      colormapMax: getRequiredUniformLocation(this.gl, program, 'uColormapMax'),
+      colormapTextureSize: getRequiredUniformLocation(this.gl, program, 'uColormapTextureSize'),
+      colormapEntryCount: getRequiredUniformLocation(this.gl, program, 'uColormapEntryCount'),
+      useStokesDegreeModulation: getRequiredUniformLocation(this.gl, program, 'uUseStokesDegreeModulation'),
+      useImageAlpha: getRequiredUniformLocation(this.gl, program, 'uUseImageAlpha')
+    };
+  }
+
+  private configureProgramSamplers(program: WebGLProgram): void {
+    this.gl.useProgram(program);
+    this.gl.uniform1i(this.gl.getUniformLocation(program, 'uTexture'), 0);
+    this.gl.uniform1i(this.gl.getUniformLocation(program, 'uColormapTexture'), 1);
+  }
+
+  private setCommonUniforms(
+    uniforms: CommonUniforms,
+    state: ViewerState
+  ): void {
+    const gl = this.gl;
+    gl.uniform2f(uniforms.viewport, this.viewport.width, this.viewport.height);
 
     const width = this.imageSize?.width ?? 0;
     const height = this.imageSize?.height ?? 0;
-    gl.uniform2f(this.uniforms.imageSize, width, height);
-    gl.uniform2f(this.uniforms.pan, state.panX, state.panY);
-    gl.uniform1f(this.uniforms.zoom, state.zoom);
-    gl.uniform1f(this.uniforms.exposure, state.exposureEv);
-    gl.uniform1i(this.uniforms.useColormap, state.visualizationMode === 'colormap' ? 1 : 0);
-    gl.uniform1f(this.uniforms.colormapMin, state.colormapRange?.min ?? 0);
-    gl.uniform1f(this.uniforms.colormapMax, state.colormapRange?.max ?? 0);
+    gl.uniform2f(uniforms.imageSize, width, height);
+    gl.uniform1f(uniforms.exposure, state.exposureEv);
+    gl.uniform1i(uniforms.useColormap, state.visualizationMode === 'colormap' ? 1 : 0);
+    gl.uniform1f(uniforms.colormapMin, state.colormapRange?.min ?? 0);
+    gl.uniform1f(uniforms.colormapMax, state.colormapRange?.max ?? 0);
     gl.uniform2i(
-      this.uniforms.colormapTextureSize,
+      uniforms.colormapTextureSize,
       this.colormapTextureSize.width,
       this.colormapTextureSize.height
     );
-    gl.uniform1i(this.uniforms.colormapEntryCount, this.colormapEntryCount);
+    gl.uniform1i(uniforms.colormapEntryCount, this.colormapEntryCount);
     gl.uniform1i(
-      this.uniforms.useStokesDegreeModulation,
+      uniforms.useStokesDegreeModulation,
       isStokesDegreeModulationEnabled(state.displaySelection, state.stokesDegreeModulation) ? 1 : 0
     );
-    gl.uniform1i(this.uniforms.useImageAlpha, isChannelSelection(state.displaySelection) ? 1 : 0);
-
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.uniform1i(uniforms.useImageAlpha, isChannelSelection(state.displaySelection) ? 1 : 0);
   }
 }
 

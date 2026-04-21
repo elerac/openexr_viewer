@@ -45,6 +45,7 @@ import {
   DisplayLuminanceRange,
   ImagePixel,
   OpenedImageSession,
+  ViewerMode,
   ViewerState,
   VisualizationMode
 } from '../types';
@@ -73,6 +74,7 @@ type DisplayUi = Pick<
   | 'setRgbGroupOptions'
   | 'setRgbViewLoading'
   | 'setStokesDegreeModulationControl'
+  | 'setViewerMode'
   | 'setVisualizationMode'
 >;
 
@@ -141,6 +143,10 @@ export class DisplayController {
 
     if (sessionChanged || state.exposureEv !== previous.exposureEv) {
       this.ui.setExposure(state.exposureEv);
+    }
+
+    if (sessionChanged || state.viewerMode !== previous.viewerMode) {
+      this.ui.setViewerMode(state.viewerMode);
     }
 
     if (sessionChanged || state.visualizationMode !== previous.visualizationMode) {
@@ -271,6 +277,10 @@ export class DisplayController {
           sessionChanged ||
           state.activeLayer !== previous.activeLayer ||
           state.exposureEv !== previous.exposureEv ||
+          state.viewerMode !== previous.viewerMode ||
+          state.panoramaYawDeg !== previous.panoramaYawDeg ||
+          state.panoramaPitchDeg !== previous.panoramaPitchDeg ||
+          state.panoramaHfovDeg !== previous.panoramaHfovDeg ||
           selectionChanged ||
           state.visualizationMode !== previous.visualizationMode ||
           state.activeColormapId !== previous.activeColormapId ||
@@ -310,6 +320,7 @@ export class DisplayController {
       this.renderedSessionId = null;
       this.uploadedSessionId = null;
       this.uploadedTextureRevisionKey = '';
+      this.ui.setViewerMode('image');
       this.ui.setVisualizationMode('rgb');
       this.ui.clearImageBrowserPanels();
       this.ui.setColormapRange(null, null);
@@ -319,9 +330,13 @@ export class DisplayController {
 
     const shouldRender =
       sessionChanged ||
+      state.viewerMode !== previous.viewerMode ||
       state.zoom !== previous.zoom ||
       state.panX !== previous.panX ||
       state.panY !== previous.panY ||
+      state.panoramaYawDeg !== previous.panoramaYawDeg ||
+      state.panoramaPitchDeg !== previous.panoramaPitchDeg ||
+      state.panoramaHfovDeg !== previous.panoramaHfovDeg ||
       state.exposureEv !== previous.exposureEv ||
       state.hoveredPixel !== previous.hoveredPixel ||
       state.lockedPixel !== previous.lockedPixel ||
@@ -495,6 +510,22 @@ export class DisplayController {
 
     this.store.setState({
       visualizationMode: mode
+    });
+  }
+
+  setViewerMode(mode: ViewerMode): void {
+    if (!this.getActiveSession()) {
+      return;
+    }
+
+    const currentState = this.store.getState();
+    if (currentState.viewerMode === mode) {
+      return;
+    }
+
+    this.store.setState({
+      viewerMode: mode,
+      hoveredPixel: null
     });
   }
 

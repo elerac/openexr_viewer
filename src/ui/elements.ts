@@ -7,10 +7,14 @@ export interface Elements {
   rightPanelResizer: HTMLElement;
   fileMenuButton: HTMLButtonElement;
   fileMenu: HTMLElement;
+  viewMenuButton: HTMLButtonElement;
+  viewMenu: HTMLElement;
   galleryMenuButton: HTMLButtonElement;
   galleryMenu: HTMLElement;
   settingsMenuButton: HTMLButtonElement;
   settingsMenu: HTMLElement;
+  imageViewerMenuItem: HTMLButtonElement;
+  panoramaViewerMenuItem: HTMLButtonElement;
   galleryCboxRgbButton: HTMLButtonElement;
   openFileButton: HTMLButtonElement;
   fileInput: HTMLInputElement;
@@ -122,10 +126,14 @@ export function resolveElements(): Elements {
     rightPanelResizer: requireElement('right-panel-resizer', HTMLElement),
     fileMenuButton: requireElement('file-menu-button', HTMLButtonElement),
     fileMenu: requireElement('file-menu', HTMLElement),
+    viewMenuButton: requireElement('view-menu-button', HTMLButtonElement),
+    viewMenu: requireElement('view-menu', HTMLElement),
     galleryMenuButton: requireElement('gallery-menu-button', HTMLButtonElement),
     galleryMenu: requireElement('gallery-menu', HTMLElement),
     settingsMenuButton: requireElement('settings-menu-button', HTMLButtonElement),
     settingsMenu: requireElement('settings-menu', HTMLElement),
+    imageViewerMenuItem: requireElement('image-viewer-menu-item', HTMLButtonElement),
+    panoramaViewerMenuItem: requireElement('panorama-viewer-menu-item', HTMLButtonElement),
     galleryCboxRgbButton: requireElement('gallery-cbox-rgb-button', HTMLButtonElement),
     openFileButton: requireElement('open-file-button', HTMLButtonElement),
     fileInput: requireElement('file-input', HTMLInputElement),

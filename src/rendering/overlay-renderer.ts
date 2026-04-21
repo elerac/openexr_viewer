@@ -1,9 +1,9 @@
 import { imageToScreen } from '../interaction';
 import { resolveActiveProbePixel } from '../probe';
 import type { ImagePixel, ViewerState, ViewportInfo } from '../types';
-import { buildOverlayValueLines, getOverlayValueLineCount } from './overlay-value-lines';
+import { buildOverlayValueLines } from './overlay-value-lines';
 
-const VALUE_LABEL_ZOOM_THRESHOLD = 28;
+const VALUE_LABEL_MIN_SCREEN_SIZE = 28;
 const MAX_VALUE_LABELS = 1800;
 
 export class OverlayRenderer {
@@ -53,7 +53,11 @@ export class OverlayRenderer {
       return;
     }
 
-    if (state.zoom >= VALUE_LABEL_ZOOM_THRESHOLD) {
+    if (state.viewerMode === 'panorama') {
+      return;
+    }
+
+    if (state.zoom >= VALUE_LABEL_MIN_SCREEN_SIZE) {
       this.drawPixelValues(state, imageSize.width, imageSize.height);
     }
 
@@ -85,34 +89,7 @@ export class OverlayRenderer {
     }
 
     const ctx = this.overlayContext;
-    const maxTextWidth = Math.max(1, state.zoom - 5);
-    const maxTextHeight = Math.max(1, state.zoom - 5);
-    const lineCount = getOverlayValueLineCount(state);
-    let fontSize = Math.min(20, state.zoom * 0.33);
-    ctx.font = `${fontSize}px "IBM Plex Mono", monospace`;
-
-    const sizingProbe = '-1.2e+3';
-    const probeWidth = ctx.measureText(sizingProbe).width;
-    if (probeWidth > maxTextWidth) {
-      fontSize *= maxTextWidth / probeWidth;
-    }
-
-    const maxLineHeight = maxTextHeight / lineCount;
-    if (fontSize > maxLineHeight) {
-      fontSize = maxLineHeight;
-    }
-
-    fontSize = Math.floor(fontSize);
-    if (fontSize < 5) {
-      return;
-    }
-
-    ctx.font = `${fontSize}px "IBM Plex Mono", monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+    prepareValueLabelContext(ctx);
 
     const halfViewWidth = this.viewport.width * 0.5;
     const halfViewHeight = this.viewport.height * 0.5;
@@ -131,17 +108,7 @@ export class OverlayRenderer {
 
         const centerX = (x + 0.5 - state.panX) * state.zoom + halfViewWidth;
         const centerY = (y + 0.5 - state.panY) * state.zoom + halfViewHeight;
-        const lineHeight = fontSize;
-        const blockHeight = lineHeight * valueLines.length;
-        let textY = centerY - blockHeight * 0.5 + lineHeight * 0.5;
-
-        for (let lineIndex = 0; lineIndex < valueLines.length; lineIndex += 1) {
-          const line = valueLines[lineIndex];
-          ctx.fillStyle = line?.color ?? 'rgba(255, 255, 255, 0.95)';
-          ctx.strokeText(line?.value ?? '', centerX, textY);
-          ctx.fillText(line?.value ?? '', centerX, textY);
-          textY += lineHeight;
-        }
+        drawValueLines(ctx, valueLines, centerX, centerY, state.zoom, state.zoom);
       }
     }
   }
@@ -156,6 +123,65 @@ export class OverlayRenderer {
   }
 }
 
+function prepareValueLabelContext(ctx: CanvasRenderingContext2D): void {
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+}
+
+function drawValueLines(
+  ctx: CanvasRenderingContext2D,
+  valueLines: ReturnType<typeof buildOverlayValueLines>,
+  centerX: number,
+  centerY: number,
+  cellWidth: number,
+  cellHeight: number
+): void {
+  const fontSize = resolveValueLabelFontSize(ctx, cellWidth, cellHeight, valueLines.length);
+  if (fontSize < 5) {
+    return;
+  }
+
+  ctx.font = `${fontSize}px "IBM Plex Mono", monospace`;
+  const lineHeight = fontSize;
+  const blockHeight = lineHeight * valueLines.length;
+  let textY = centerY - blockHeight * 0.5 + lineHeight * 0.5;
+
+  for (let lineIndex = 0; lineIndex < valueLines.length; lineIndex += 1) {
+    const line = valueLines[lineIndex];
+    ctx.fillStyle = line?.color ?? 'rgba(255, 255, 255, 0.95)';
+    ctx.strokeText(line?.value ?? '', centerX, textY);
+    ctx.fillText(line?.value ?? '', centerX, textY);
+    textY += lineHeight;
+  }
+}
+
+function resolveValueLabelFontSize(
+  ctx: CanvasRenderingContext2D,
+  cellWidth: number,
+  cellHeight: number,
+  lineCount: number
+): number {
+  const maxTextWidth = Math.max(1, cellWidth - 5);
+  const maxTextHeight = Math.max(1, cellHeight - 5);
+  let fontSize = Math.min(20, Math.min(cellWidth, cellHeight) * 0.33);
+  ctx.font = `${fontSize}px "IBM Plex Mono", monospace`;
+
+  const sizingProbe = '-1.2e+3';
+  const probeWidth = ctx.measureText(sizingProbe).width;
+  if (probeWidth > maxTextWidth) {
+    fontSize *= maxTextWidth / probeWidth;
+  }
+
+  const maxLineHeight = maxTextHeight / Math.max(1, lineCount);
+  if (fontSize > maxLineHeight) {
+    fontSize = maxLineHeight;
+  }
+
+  return Math.floor(fontSize);
+}
 function visibleBounds(state: ViewerState, viewport: ViewportInfo): {
   left: number;
   right: number;

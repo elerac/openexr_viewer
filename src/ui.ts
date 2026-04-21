@@ -17,7 +17,14 @@ import {
 import { getListboxOptionIndexAtClientY } from './ui/render-helpers';
 import { formatOverlayValue } from './value-format';
 import type { ColormapLut } from './colormaps';
-import type { DisplaySelection, DisplayLuminanceRange, ExrMetadataEntry, PixelSample, VisualizationMode } from './types';
+import type {
+  DisplaySelection,
+  DisplayLuminanceRange,
+  ExrMetadataEntry,
+  PixelSample,
+  ViewerMode,
+  VisualizationMode
+} from './types';
 import type { ProbeColorPreview, ProbeDisplayValue } from './probe';
 
 const LOADING_OVERLAY_SUBTLE_DELAY_MS = 200;
@@ -43,6 +50,7 @@ export interface UiCallbacks {
   onDisplayCacheBudgetChange: (mb: number) => void;
   onToggleOpenedImagePin: (sessionId: string) => void;
   onExposureChange: (value: number) => void;
+  onViewerModeChange: (mode: ViewerMode) => void;
   onLayerChange: (layerIndex: number) => void;
   onRgbGroupChange: (mapping: DisplaySelection) => void;
   onVisualizationModeChange: (mode: VisualizationMode) => void;
@@ -172,6 +180,7 @@ export class ViewerUi {
   private readonly layoutSplitController: LayoutSplitController;
   private isLoading = false;
   private isRgbViewLoading = false;
+  private openedImageCount = 0;
   private topMenuTrackingMode: TopMenuTrackingMode = 'inactive';
   private hoverOpenedTopMenuButton: HTMLButtonElement | null = null;
 
@@ -234,6 +243,8 @@ export class ViewerUi {
       }
     });
     this.layoutSplitController = new LayoutSplitController(this.elements);
+    this.setViewerMode('image');
+    this.updateViewerModeMenuItemsDisabled();
     this.bindEvents();
   }
 
@@ -269,6 +280,7 @@ export class ViewerUi {
     this.layerPanel.setLoading(loading);
     this.channelPanel.setLoading(loading);
     this.colormapPanel.setLoading(loading);
+    this.updateViewerModeMenuItemsDisabled();
     this.updateLoadingOverlayVisibility();
   }
 
@@ -288,6 +300,11 @@ export class ViewerUi {
 
   setExposure(exposureEv: number): void {
     this.colormapPanel.setExposure(exposureEv);
+  }
+
+  setViewerMode(mode: ViewerMode): void {
+    this.elements.imageViewerMenuItem.setAttribute('aria-checked', mode === 'image' ? 'true' : 'false');
+    this.elements.panoramaViewerMenuItem.setAttribute('aria-checked', mode === 'panorama' ? 'true' : 'false');
   }
 
   setVisualizationMode(mode: VisualizationMode): void {
@@ -320,8 +337,13 @@ export class ViewerUi {
   }
 
   setOpenedImageOptions(items: OpenedImageOptionItem[], activeId: string | null): void {
+    this.openedImageCount = items.length;
     this.openedImagesPanel.setOpenedImageOptions(items, activeId);
     this.colormapPanel.setOpenedImageCount(this.openedImagesPanel.getOpenedImageCount());
+    this.updateViewerModeMenuItemsDisabled();
+    if (items.length === 0) {
+      this.setViewerMode('image');
+    }
   }
 
   clearImageBrowserPanels(): void {
@@ -437,9 +459,16 @@ export class ViewerUi {
   private getTopMenus(): TopMenuElements[] {
     return [
       { button: this.elements.fileMenuButton, menu: this.elements.fileMenu },
+      { button: this.elements.viewMenuButton, menu: this.elements.viewMenu },
       { button: this.elements.galleryMenuButton, menu: this.elements.galleryMenu },
       { button: this.elements.settingsMenuButton, menu: this.elements.settingsMenu }
     ];
+  }
+
+  private updateViewerModeMenuItemsDisabled(): void {
+    const disabled = this.isLoading || this.openedImageCount === 0;
+    this.elements.imageViewerMenuItem.disabled = disabled;
+    this.elements.panoramaViewerMenuItem.disabled = disabled;
   }
 
   private isTopMenuOpen(menu: TopMenuElements): boolean {
@@ -695,6 +724,24 @@ export class ViewerUi {
 
       this.closeAllTopMenus();
       this.callbacks.onCloseAllOpenedImages();
+    });
+
+    this.elements.imageViewerMenuItem.addEventListener('click', () => {
+      if (this.elements.imageViewerMenuItem.disabled) {
+        return;
+      }
+
+      this.closeAllTopMenus();
+      this.callbacks.onViewerModeChange('image');
+    });
+
+    this.elements.panoramaViewerMenuItem.addEventListener('click', () => {
+      if (this.elements.panoramaViewerMenuItem.disabled) {
+        return;
+      }
+
+      this.closeAllTopMenus();
+      this.callbacks.onViewerModeChange('panorama');
     });
 
     this.elements.fileInput.addEventListener('change', (event) => {

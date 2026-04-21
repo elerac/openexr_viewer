@@ -284,6 +284,48 @@ describe('panel split sizing', () => {
   });
 });
 
+describe('view menu', () => {
+  it('renders the top menu tabs in file-view-gallery-settings order', () => {
+    installUiFixture();
+
+    const labels = Array.from(document.querySelectorAll('.app-menu-tab')).map((item) => item.textContent?.trim());
+    expect(labels).toEqual(['File', 'View', 'Gallery', 'Settings']);
+  });
+
+  it('keeps viewer mode items disabled until an image is active', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const imageItem = document.getElementById('image-viewer-menu-item') as HTMLButtonElement;
+    const panoramaItem = document.getElementById('panorama-viewer-menu-item') as HTMLButtonElement;
+
+    expect(imageItem.disabled).toBe(true);
+    expect(panoramaItem.disabled).toBe(true);
+
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    expect(imageItem.disabled).toBe(false);
+    expect(panoramaItem.disabled).toBe(false);
+  });
+
+  it('tracks checked state and dispatches panorama mode changes', () => {
+    installUiFixture();
+
+    const onViewerModeChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerModeChange }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setViewerMode('panorama');
+
+    const imageItem = document.getElementById('image-viewer-menu-item') as HTMLButtonElement;
+    const panoramaItem = document.getElementById('panorama-viewer-menu-item') as HTMLButtonElement;
+    expect(imageItem.getAttribute('aria-checked')).toBe('false');
+    expect(panoramaItem.getAttribute('aria-checked')).toBe('true');
+
+    panoramaItem.click();
+    expect(onViewerModeChange).toHaveBeenCalledWith('panorama');
+  });
+});
+
 describe('display cache UI helpers', () => {
   it('formats pin button labels from the pinned state', () => {
     expect(getOpenedFilePinButtonLabel('beauty.exr', false)).toBe('Pin cache for beauty.exr');
@@ -373,7 +415,14 @@ function installUiFixture(): void {
   vi.stubGlobal('ResizeObserver', ResizeObserverMock);
 }
 
-function createUiCallbacks() {
+function createUiCallbacks(overrides: Partial<ReturnType<typeof createUiCallbacksBase>> = {}) {
+  return {
+    ...createUiCallbacksBase(),
+    ...overrides
+  };
+}
+
+function createUiCallbacksBase() {
   return {
     onOpenFileClick: () => {},
     onFileSelected: () => {},
@@ -388,6 +437,7 @@ function createUiCallbacks() {
     onDisplayCacheBudgetChange: () => {},
     onToggleOpenedImagePin: () => {},
     onExposureChange: () => {},
+    onViewerModeChange: () => {},
     onLayerChange: () => {},
     onRgbGroupChange: () => {},
     onVisualizationModeChange: () => {},

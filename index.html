@@ -22,6 +22,31 @@
             </div>
           </div>
           <div class="app-menu">
+            <button id="view-menu-button" class="app-menu-tab" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="view-menu">
+              View
+            </button>
+            <div id="view-menu" class="app-menu-dropdown hidden" role="menu" aria-labelledby="view-menu-button">
+              <button
+                id="image-viewer-menu-item"
+                class="app-menu-item"
+                type="button"
+                role="menuitemradio"
+                aria-checked="true"
+              >
+                Image viewer
+              </button>
+              <button
+                id="panorama-viewer-menu-item"
+                class="app-menu-item"
+                type="button"
+                role="menuitemradio"
+                aria-checked="false"
+              >
+                Panorama viewer
+              </button>
+            </div>
+          </div>
+          <div class="app-menu">
             <button id="gallery-menu-button" class="app-menu-tab" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="gallery-menu">
               Gallery
             </button>

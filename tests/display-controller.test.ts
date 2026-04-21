@@ -73,6 +73,7 @@ function createUiMock() {
     setRgbGroupOptions: vi.fn(),
     setRgbViewLoading: vi.fn(),
     setStokesDegreeModulationControl: vi.fn(),
+    setViewerMode: vi.fn(),
     setVisualizationMode: vi.fn()
   };
 }
@@ -281,5 +282,21 @@ describe('display controller', () => {
     expect(ui.clearImageBrowserPanels).toHaveBeenCalledTimes(1);
     expect(ui.setLayerOptions).not.toHaveBeenCalled();
     expect(ui.setRgbGroupOptions).not.toHaveBeenCalled();
+  });
+
+  it('switches viewer mode through the store and clears stale hover probes', async () => {
+    const session = createSession(createDecodedImage());
+    const { controller, store } = createController({ session });
+
+    await controller.initialize();
+
+    store.setState({
+      hoveredPixel: { ix: 1, iy: 0 }
+    });
+
+    controller.setViewerMode('panorama');
+
+    expect(store.getState().viewerMode).toBe('panorama');
+    expect(store.getState().hoveredPixel).toBeNull();
   });
 });

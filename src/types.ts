@@ -6,6 +6,7 @@ import type { InterleavedChannelStorage } from './channel-storage';
 
 export type VisualizationMode = 'rgb' | 'colormap';
 export type ColormapRangeMode = 'alwaysAuto' | 'oneTime';
+export type ViewerMode = 'image' | 'panorama';
 
 export type {
   ChannelMonoSelection,
@@ -55,6 +56,7 @@ export interface ExrMetadataEntry {
 
 export interface ViewerState {
   exposureEv: number;
+  viewerMode: ViewerMode;
   visualizationMode: VisualizationMode;
   activeColormapId: string;
   colormapRange: DisplayLuminanceRange | null;
@@ -64,6 +66,9 @@ export interface ViewerState {
   zoom: number;
   panX: number;
   panY: number;
+  panoramaYawDeg: number;
+  panoramaPitchDeg: number;
+  panoramaHfovDeg: number;
   activeLayer: number;
   displaySelection: DisplaySelectionModel | null;
   hoveredPixel: ImagePixel | null;

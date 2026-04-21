@@ -1,4 +1,5 @@
 import { DEFAULT_COLORMAP_ID } from './colormaps';
+import { DEFAULT_PANORAMA_HFOV_DEG } from './interaction';
 import { resolveDisplaySelectionForLayer } from './display-selection';
 import { createDefaultStokesDegreeModulation } from './stokes';
 import {
@@ -9,6 +10,7 @@ import {
 export function createInitialState(): ViewerState {
   return {
     exposureEv: 0,
+    viewerMode: 'image',
     visualizationMode: 'rgb',
     activeColormapId: DEFAULT_COLORMAP_ID,
     colormapRange: null,
@@ -18,6 +20,9 @@ export function createInitialState(): ViewerState {
     zoom: 1,
     panX: 0,
     panY: 0,
+    panoramaYawDeg: 0,
+    panoramaPitchDeg: 0,
+    panoramaHfovDeg: DEFAULT_PANORAMA_HFOV_DEG,
     activeLayer: 0,
     displaySelection: null,
     hoveredPixel: null,

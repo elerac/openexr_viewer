@@ -58,6 +58,9 @@ export async function bootstrapApp(): Promise<void> {
     onExposureChange: (value) => {
       store.setState({ exposureEv: value });
     },
+    onViewerModeChange: (mode) => {
+      displayController.setViewerMode(mode);
+    },
     onLayerChange: (layerIndex) => {
       displayController.setActiveLayer(layerIndex);
     },

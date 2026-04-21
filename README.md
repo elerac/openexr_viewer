@@ -9,10 +9,11 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
 - OpenEXR decode via a browser-safe `exrs` WASM adapter with full layer/channel extraction.
 - Built-in Gallery sample: `Gallery > cbox_rgb.exr`.
 - Local EXR load via `File > Open...` or drag/drop (drag-and-drop supports multiple files in one action).
+- `View > Image viewer` / `Panorama viewer` switches between the existing 2D image view and an equirectangular panorama projection suitable for 360-degree environment maps and HDRIs.
 - Multi-image sessions:
   - New image opens as active while previously opened images are kept in memory.
   - `Opened Images` list allows switching active image by filename.
-  - Multi-layer EXRs expose a `Layer` selector, and session state follows the implementation: selected layer is preserved per opened session, while zoom/pan, display channel mapping, and the active probe position carry across session switches when valid for the target image.
+  - Multi-layer EXRs expose a `Layer` selector, and session state follows the implementation: selected layer is preserved per opened session, while display channel mapping and the active probe position carry across session switches when valid for the target image. The active viewer mode is preserved across session switches, and each session remembers separate image-view and panorama-view camera state.
   - Reorder opened images directly by click-hold-moving a filename row in the `Opened Images` list.
   - Retained display textures use an LRU cache budget instead of an active-session-only policy. The default retained-cache cap is `256 MB`, configurable from the top-bar `Settings` menu with fixed presets (`64`, `128`, `256`, `512`, `1024` MB).
   - Per-file row `Pin cache` keeps a compare baseline resident even when the LRU budget would otherwise evict it. Active and pinned sessions may leave retained cache usage above the configured cap.
@@ -38,6 +39,12 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
 - Nearest-neighbor rendering at all zoom levels (no interpolation).
 - Zoom range: `0.125x` to `512x`, wheel zoom anchored to cursor.
 - Pan with left mouse drag.
+- Panorama viewer:
+  - Projects the current display texture onto a sphere using equirectangular sampling.
+  - Left drag orbits the camera; mouse wheel changes horizontal FOV from `1` to `120` degrees.
+  - The Inspector probe remains available through panorama ray-to-pixel lookup.
+  - Panorama mode does not draw on-canvas pixel value overlays.
+  - On-canvas probe rectangles remain hidden in panorama mode.
 - Probe:
   - Hover pixel readout in the Inspector.
   - Click to lock/unlock probe pixel.
@@ -47,6 +54,7 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - RGB values shown inside image pixels.
   - 3-channel values stacked vertically.
   - Label colors follow channel mapping (`R`, `G`, `B`).
+  - Panorama mode reuses the same value formatting, but only draws labels for source pixels with a stable, sufficiently large projected footprint.
 - Channel controls:
   - `Channel` selector for grouped channels such as `HOGE.R/G/B`, `FUGA.R/G/B`; grouped RGB remains the default display when available.
   - Alpha is applied to normal channel displays when a matching companion exists: bare `R/G/B` and bare scalar channels use bare `A`, while namespaced channels such as `beauty.R` or `depth.Z` use `beauty.A` or `depth.A`. Collapsed channel choices group alpha into labels such as `R,G,B,A`, `mask,A`, and `beauty.(R,G,B,A)` instead of showing the companion alpha separately.
@@ -128,6 +136,7 @@ npm run test:e2e
 - `Gallery > cbox_rgb.exr`: open the built-in Cornell box sample and append it as a new session.
 - `File > Open...`: open one EXR file and append it as a new session.
 - `Settings > Cache Budget`: choose the retained display-cache cap from `64`, `128`, `256`, `512`, or `1024` MB. The value persists in `localStorage`.
+- `View > Image viewer` / `Panorama viewer`: switch between planar image viewing and spherical panorama viewing.
 - Per-file row `Pin cache` action: pin/unpin that entry's retained display cache.
 - Per-file row `Reload` action: reload and re-decode that entry in `Opened Images`.
 - `File > Reload All`: reload and re-decode all opened image entries.
@@ -135,12 +144,14 @@ npm run test:e2e
 - `File > Close All`: close all opened image entries.
 - Mouse wheel: zoom around cursor.
 - Left drag: pan.
+- In `Panorama viewer`, mouse wheel changes horizontal FOV and left drag orbits yaw/pitch.
 - Hover: live probe sample.
 - Left click: lock/unlock probe.
 
 ## Implementation Notes
 
 - Display path: normal RGB uses `linear * 2^EV`, then sRGB encode for screen; colormap mode maps raw display luminance through the selected `.npy` LUT. Channel-display alpha is composited over the viewer checkerboard in both RGB and colormap modes. When `Split RGB` is enabled, separate `R`, `G`, and `B` channel choices duplicate the selected source into RGB, so display luminance equals that channel value. Split RGB Stokes entries derive the selected parameter from only the chosen component's Stokes channels before duplicating the scalar into RGB. For angle Stokes modulation, the LUT color is converted to HSV, its value component is multiplied by the clamped paired degree value, and the result is converted back to RGB.
+- Panorama path: the same display texture is reused, but the fragment shader interprets it as an equirectangular environment map, casts a view ray from yaw/pitch/HFOV, and fetches the matching source pixel with nearest-neighbor sampling before applying the normal RGB or colormap display transform.
 - Colormap authoring in Python:
   ```python
   import numpy as np

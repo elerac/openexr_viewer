@@ -6,7 +6,7 @@ import {
   readStoredDisplayCacheBudgetMb,
   saveStoredDisplayCacheBudgetMb
 } from '../display-cache';
-import { clampZoom } from '../interaction';
+import { DEFAULT_PANORAMA_HFOV_DEG, clampZoom } from '../interaction';
 import { cloneDisplayLuminanceRange } from '../colormap-range';
 import {
   buildSessionDisplayName,
@@ -211,6 +211,7 @@ export class SessionController {
   resetActiveSessionState(): void {
     const defaultColormapId = this.getDefaultColormapId();
     const activeSession = this.getActiveSession();
+    const currentState = this.getCurrentState();
 
     if (!activeSession) {
       this.setState(createClearedViewerState(defaultColormapId));
@@ -221,6 +222,7 @@ export class SessionController {
     const nextState = buildViewerStateForLayer(
       {
         ...createClearedViewerState(defaultColormapId),
+        viewerMode: currentState.viewerMode,
         zoom: fitView.zoom,
         panX: fitView.panX,
         panY: fitView.panY
@@ -539,6 +541,7 @@ async function decodeExrFromSessionSource(
 function createClearedViewerState(defaultColormapId: string): ViewerState {
   return {
     exposureEv: 0,
+    viewerMode: 'image',
     visualizationMode: 'rgb',
     activeColormapId: defaultColormapId,
     colormapRange: null,
@@ -548,6 +551,9 @@ function createClearedViewerState(defaultColormapId: string): ViewerState {
     zoom: 1,
     panX: 0,
     panY: 0,
+    panoramaYawDeg: 0,
+    panoramaPitchDeg: 0,
+    panoramaHfovDeg: DEFAULT_PANORAMA_HFOV_DEG,
     activeLayer: 0,
     displaySelection: null,
     hoveredPixel: null,
@@ -569,25 +575,32 @@ function buildReloadedSessionState(
   previousImage: DecodedExrImage,
   decoded: DecodedExrImage
 ): ViewerState {
-  const pan = remapPanToImageCenterAnchor(
-    currentState.panX,
-    currentState.panY,
-    previousImage,
-    decoded
-  );
-
   const lockedPixel = currentState.lockedPixel
     ? clampPixelToImageBounds(currentState.lockedPixel, decoded.width, decoded.height)
     : null;
   const hoveredPixel = currentState.hoveredPixel
     ? clampPixelToImageBounds(currentState.hoveredPixel, decoded.width, decoded.height)
     : null;
+  const nextImageCamera = currentState.viewerMode === 'image'
+    ? {
+        zoom: currentState.zoom,
+        ...remapPanToImageCenterAnchor(
+          currentState.panX,
+          currentState.panY,
+          previousImage,
+          decoded
+        )
+      }
+    : {
+        zoom: currentState.zoom,
+        panX: currentState.panX,
+        panY: currentState.panY
+      };
 
   return buildViewerStateForLayer(
     {
       ...currentState,
-      panX: pan.panX,
-      panY: pan.panY,
+      ...nextImageCamera,
       hoveredPixel,
       lockedPixel
     },
@@ -601,26 +614,45 @@ function buildSwitchedSessionState(
   currentState: ViewerState,
   previousImage: DecodedExrImage | null
 ): ViewerState {
-  const pan = remapPanToImageCenterAnchor(
-    currentState.panX,
-    currentState.panY,
-    previousImage,
-    nextSession.decoded
-  );
-
   const lockedPixel = currentState.lockedPixel
     ? clampPixelToImageBounds(currentState.lockedPixel, nextSession.decoded.width, nextSession.decoded.height)
     : null;
   const hoveredPixel = !lockedPixel && currentState.hoveredPixel
     ? clampPixelToImageBounds(currentState.hoveredPixel, nextSession.decoded.width, nextSession.decoded.height)
     : null;
+  const nextImageCamera = currentState.viewerMode === 'image'
+    ? {
+        zoom: currentState.zoom,
+        ...remapPanToImageCenterAnchor(
+          currentState.panX,
+          currentState.panY,
+          previousImage,
+          nextSession.decoded
+        )
+      }
+    : {
+        zoom: nextSession.state.zoom,
+        panX: nextSession.state.panX,
+        panY: nextSession.state.panY
+      };
+  const nextPanoramaCamera = currentState.viewerMode === 'panorama'
+    ? {
+        panoramaYawDeg: currentState.panoramaYawDeg,
+        panoramaPitchDeg: currentState.panoramaPitchDeg,
+        panoramaHfovDeg: currentState.panoramaHfovDeg
+      }
+    : {
+        panoramaYawDeg: nextSession.state.panoramaYawDeg,
+        panoramaPitchDeg: nextSession.state.panoramaPitchDeg,
+        panoramaHfovDeg: nextSession.state.panoramaHfovDeg
+      };
 
   const nextState = buildViewerStateForLayer(
     {
       ...nextSession.state,
-      zoom: currentState.zoom,
-      panX: pan.panX,
-      panY: pan.panY,
+      viewerMode: currentState.viewerMode,
+      ...nextImageCamera,
+      ...nextPanoramaCamera,
       exposureEv: currentState.exposureEv,
       displaySelection: cloneDisplaySelection(currentState.displaySelection),
       visualizationMode: currentState.visualizationMode,
