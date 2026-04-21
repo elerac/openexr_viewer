@@ -1,3 +1,4 @@
+import { computeRec709Luminance } from '../color';
 import {
   getSelectionAlpha,
   isChannelSelection,
@@ -33,7 +34,7 @@ export function buildOverlayValueLines(
     lines = [
       {
         color: OVERLAY_MONO_LABEL_COLOR,
-        value: formatOverlayValue(computeOverlayLuminanceValue(r, g, b))
+        value: formatOverlayValue(computeRec709Luminance(r, g, b))
       }
     ];
   } else if (isMonoSelection(selection)) {
@@ -74,10 +75,6 @@ function formatOverlayValue(value: number): string {
   }
 
   return value.toPrecision(3);
-}
-
-function computeOverlayLuminanceValue(r: number, g: number, b: number): number {
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 function overlayLabelColorForChannel(channelName: string): string {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { computeRec709Luminance } from '../src/color';
 import {
   buildZeroCenteredColormapRange,
   computeDisplayTextureLuminanceRange,
@@ -94,8 +95,8 @@ describe('colormap range', () => {
 
     const range = computeDisplayTextureLuminanceRange(texture);
 
-    expect(range?.min).toBeCloseTo(0.0722, 6);
-    expect(range?.max).toBeCloseTo(0.7152, 6);
+    expect(range?.min).toBeCloseTo(computeRec709Luminance(0, 0, 1), 6);
+    expect(range?.max).toBeCloseTo(computeRec709Luminance(0, 1, 0), 6);
   });
 
   it('keeps collapsed luminance ranges explicit and returns null for empty textures', () => {

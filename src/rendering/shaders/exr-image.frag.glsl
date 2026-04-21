@@ -17,10 +17,19 @@ uniform bool uUseStokesDegreeModulation;
 uniform bool uUseImageAlpha;
 out vec4 outColor;
 
+const float REC709_LUMINANCE_WEIGHT_R = 0.2126;
+const float REC709_LUMINANCE_WEIGHT_G = 0.7152;
+const float REC709_LUMINANCE_WEIGHT_B = 0.0722;
+const float SRGB_TRANSFER_CUTOFF = 0.0031308;
+const float SRGB_TRANSFER_LINEAR_SCALE = 12.92;
+const float SRGB_TRANSFER_ENCODED_SCALE = 1.055;
+const float SRGB_TRANSFER_ENCODED_OFFSET = 0.055;
+const float SRGB_TRANSFER_GAMMA = 2.4;
+
 vec3 linearToSrgb(vec3 linear) {
-  vec3 lo = linear * 12.92;
-  vec3 hi = 1.055 * pow(linear, vec3(1.0 / 2.4)) - 0.055;
-  bvec3 cutoff = lessThan(linear, vec3(0.0031308));
+  vec3 lo = linear * SRGB_TRANSFER_LINEAR_SCALE;
+  vec3 hi = SRGB_TRANSFER_ENCODED_SCALE * pow(linear, vec3(1.0 / SRGB_TRANSFER_GAMMA)) - SRGB_TRANSFER_ENCODED_OFFSET;
+  bvec3 cutoff = lessThanEqual(linear, vec3(SRGB_TRANSFER_CUTOFF));
   return vec3(
     cutoff.r ? lo.r : hi.r,
     cutoff.g ? lo.g : hi.g,
@@ -117,7 +126,11 @@ void main() {
   vec3 linear = texel.rgb;
   float imageAlpha = uUseImageAlpha ? clamp(texel.a, 0.0, 1.0) : 1.0;
   if (uUseColormap) {
-    float luminance = dot(linear, vec3(0.2126, 0.7152, 0.0722));
+    float luminance = dot(linear, vec3(
+      REC709_LUMINANCE_WEIGHT_R,
+      REC709_LUMINANCE_WEIGHT_G,
+      REC709_LUMINANCE_WEIGHT_B
+    ));
     vec3 color = sampleColormap(luminance, uColormapMin, uColormapMax);
     if (uUseStokesDegreeModulation) {
       vec3 hsv = rgbToHsv(color);

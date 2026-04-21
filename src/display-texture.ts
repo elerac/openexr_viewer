@@ -1,3 +1,4 @@
+import { computeRec709Luminance } from './color';
 import {
   isStokesSelection,
   serializeDisplaySelectionKey,
@@ -24,8 +25,6 @@ import {
   PixelSample,
   ViewerState
 } from './types';
-
-const LUMINANCE_WEIGHTS = { r: 0.2126, g: 0.7152, b: 0.0722 };
 
 export function buildDisplayTextureRevisionKey(state: Pick<ViewerState, 'activeLayer' | 'displaySelection'>): string {
   return [
@@ -259,31 +258,27 @@ function computeRgbStokesMonoValues(
   pixelIndex: number
 ): { s0: number; s1: number; s2: number; s3: number } {
   return {
-    s0: computeLuminance(
+    s0: computeRec709Luminance(
       readChannelValue(r.s0, pixelIndex),
       readChannelValue(g.s0, pixelIndex),
       readChannelValue(b.s0, pixelIndex)
     ),
-    s1: computeLuminance(
+    s1: computeRec709Luminance(
       readChannelValue(r.s1, pixelIndex),
       readChannelValue(g.s1, pixelIndex),
       readChannelValue(b.s1, pixelIndex)
     ),
-    s2: computeLuminance(
+    s2: computeRec709Luminance(
       readChannelValue(r.s2, pixelIndex),
       readChannelValue(g.s2, pixelIndex),
       readChannelValue(b.s2, pixelIndex)
     ),
-    s3: computeLuminance(
+    s3: computeRec709Luminance(
       readChannelValue(r.s3, pixelIndex),
       readChannelValue(g.s3, pixelIndex),
       readChannelValue(b.s3, pixelIndex)
     )
   };
-}
-
-function computeLuminance(r: number, g: number, b: number): number {
-  return LUMINANCE_WEIGHTS.r * r + LUMINANCE_WEIGHTS.g * g + LUMINANCE_WEIGHTS.b * b;
 }
 
 function fillDisplayTexture(out: Float32Array, r: number, g: number, b: number): Float32Array {

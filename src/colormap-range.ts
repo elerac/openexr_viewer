@@ -1,3 +1,4 @@
+import { computeRec709Luminance } from './color';
 import {
   getStokesColormapDefaultGroup,
   getStokesDisplayColormapDefault
@@ -81,7 +82,7 @@ export function computeDisplayTextureLuminanceRange(
     const r = displayTexture[i + 0];
     const g = displayTexture[i + 1];
     const b = displayTexture[i + 2];
-    const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const luminance = computeRec709Luminance(r, g, b);
 
     if (!Number.isFinite(luminance)) {
       continue;

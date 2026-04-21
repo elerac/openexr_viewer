@@ -1,3 +1,4 @@
+import { computeRec709Luminance, linearToSrgbByte } from './color';
 import { ColormapLut, mapValueToColormapRgbBytes, modulateRgbBytesValue } from './colormaps';
 import {
   getDisplaySelectionDegreeModulationValueLabel,
@@ -64,7 +65,7 @@ export function buildProbeColorPreview(
   const rawA = readProbeDisplayAlpha(sample, selection);
   const exposureScale = 2 ** exposureEv;
   let bytes: [number, number, number];
-  const monoValue = computeProbeLuminanceValue(rawR, rawG, rawB);
+  const monoValue = computeRec709Luminance(rawR, rawG, rawB);
   let displayValues: ProbeDisplayValue[];
   if (visualization.mode === 'colormap') {
     bytes = mapValueToColormapRgbBytes(
@@ -81,9 +82,9 @@ export function buildProbeColorPreview(
     }
   } else {
     bytes = [
-      toSrgbByte(rawR * exposureScale),
-      toSrgbByte(rawG * exposureScale),
-      toSrgbByte(rawB * exposureScale)
+      linearToSrgbByte(rawR * exposureScale),
+      linearToSrgbByte(rawG * exposureScale),
+      linearToSrgbByte(rawB * exposureScale)
     ];
     displayValues = isMonoSelection(selection)
       ? [{ label: 'Mono', value: formatProbeRgbValue(rawR) }]
@@ -107,10 +108,6 @@ export function buildProbeColorPreview(
       : `rgba(${bytes[0]}, ${bytes[1]}, ${bytes[2]}, ${formatCssAlpha(rawA)})`,
     displayValues
   };
-}
-
-function computeProbeLuminanceValue(r: number, g: number, b: number): number {
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 function readProbeDisplayValues(sample: PixelSample, selection: DisplaySelection | null): [number, number, number] {
@@ -169,16 +166,6 @@ function readProbeStokesDegreeModulationValue(sample: PixelSample, selection: Di
       getStokesDegreeModulationLabel(parameter)
     ])
   );
-}
-
-function toSrgbByte(value: number): number {
-  const linear = Math.max(0, value);
-  const srgb =
-    linear <= 0.0031308
-      ? linear * 12.92
-      : 1.055 * Math.pow(linear, 1 / 2.4) - 0.055;
-
-  return Math.max(0, Math.min(255, Math.round(srgb * 255)));
 }
 
 function clampAlpha(value: number): number {

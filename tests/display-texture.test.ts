@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { computeRec709Luminance } from '../src/color';
 import {
   buildDisplayTexture,
   buildDisplayTextureRevisionKey,
@@ -138,9 +139,9 @@ describe('display texture', () => {
 
     expect(grouped[0]).toBeCloseTo(
       Math.sqrt(
-        (0.2126 * 1 + 0.7152 * 1 + 0.0722 * 2) ** 2 +
-        (0.2126 * 0 + 0.7152 * Math.sqrt(3) + 0.0722 * 0) ** 2
-      ) / (0.2126 * 1 + 0.7152 * 2 + 0.0722 * 4),
+        computeRec709Luminance(1, 1, 2) ** 2 +
+        computeRec709Luminance(0, Math.sqrt(3), 0) ** 2
+      ) / computeRec709Luminance(1, 2, 4),
       6
     );
     expect(split[0]).toBeCloseTo(Math.PI / 6, 6);
