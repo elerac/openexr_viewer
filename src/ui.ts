@@ -114,6 +114,8 @@ export interface UiCallbacks {
   onCloseAllOpenedImages: () => void;
   onOpenedImageSelected: (sessionId: string) => void;
   onReorderOpenedImage: (draggedSessionId: string, targetSessionId: string) => void;
+  onDisplayCacheBudgetChange: (mb: number) => void;
+  onToggleOpenedImagePin: (sessionId: string) => void;
   onExposureChange: (value: number) => void;
   onLayerChange: (layerIndex: number) => void;
   onRgbGroupChange: (mapping: DisplaySelection) => void;
@@ -137,6 +139,8 @@ interface Elements {
   fileMenu: HTMLElement;
   galleryMenuButton: HTMLButtonElement;
   galleryMenu: HTMLElement;
+  settingsMenuButton: HTMLButtonElement;
+  settingsMenu: HTMLElement;
   galleryCboxRgbButton: HTMLButtonElement;
   openFileButton: HTMLButtonElement;
   fileInput: HTMLInputElement;
@@ -165,6 +169,9 @@ interface Elements {
   openedFilesToggle: HTMLButtonElement;
   openedFilesList: HTMLElement;
   openedFilesCount: HTMLElement;
+  displayCacheControl: HTMLDivElement;
+  displayCacheBudgetInput: HTMLSelectElement;
+  displayCacheUsage: HTMLElement;
   reloadAllOpenedImagesButton: HTMLButtonElement;
   closeAllOpenedImagesButton: HTMLButtonElement;
   layerControl: HTMLDivElement;
@@ -202,6 +209,7 @@ export interface OpenedImageOptionItem {
   sizeBytes?: number | null;
   sourceDetail?: string;
   thumbnailDataUrl?: string | null;
+  pinned?: boolean;
 }
 
 export interface LayerOptionItem {
@@ -283,6 +291,7 @@ export class ViewerUi {
   private hasRgbGroups = false;
   private hasRgbSplitOptions = false;
   private includeSplitRgbChannels = false;
+  private displayCacheBudgetMb = 256;
   private currentRgbChannelNames: string[] = [];
   private currentRgbSelection: DisplaySelection | null = null;
   private currentColormapRange: DisplayLuminanceRange | null = null;
@@ -307,6 +316,7 @@ export class ViewerUi {
     this.panelSplitResizeObserver.observe(this.elements.rightStack);
     this.elements.openedImagesSelect.disabled = true;
     this.elements.openedImagesSelect.title = 'Click and drag filename rows to reorder.';
+    this.elements.displayCacheBudgetInput.disabled = false;
     this.elements.reloadAllOpenedImagesButton.disabled = true;
     this.elements.closeAllOpenedImagesButton.disabled = true;
     this.elements.visualizationNoneButton.disabled = true;
@@ -358,6 +368,7 @@ export class ViewerUi {
     this.setColormapRangeControlsDisabled(loading || this.openedImageCount === 0);
     this.elements.exposureValue.disabled = loading;
     this.elements.openedImagesSelect.disabled = loading || this.openedImageCount === 0;
+    this.elements.displayCacheBudgetInput.disabled = loading;
     this.elements.reloadAllOpenedImagesButton.disabled = loading || this.openedImageCount === 0;
     this.elements.closeAllOpenedImagesButton.disabled = loading || this.openedImageCount === 0;
     this.elements.layerSelect.disabled = loading || !this.hasMultipleLayers;
@@ -392,6 +403,22 @@ export class ViewerUi {
     this.updateLoadingOverlayVisibility();
   }
 
+  setDisplayCacheBudget(mb: number): void {
+    this.displayCacheBudgetMb = Math.max(0, Math.round(mb));
+    this.elements.displayCacheBudgetInput.value = String(this.displayCacheBudgetMb);
+  }
+
+  setDisplayCacheUsage(usedBytes: number, budgetBytes: number): void {
+    const state = getDisplayCacheUsageState(usedBytes, budgetBytes);
+    this.elements.displayCacheUsage.textContent = state.text;
+    this.elements.displayCacheUsage.setAttribute(
+      'title',
+      `Retained display cache: ${formatFileSizeMb(usedBytes)} / ${formatFileSizeMb(budgetBytes)}`
+    );
+    this.elements.displayCacheControl.classList.toggle('is-over-budget', state.overBudget);
+    this.elements.displayCacheUsage.classList.toggle('is-over-budget', state.overBudget);
+  }
+
   private updateLoadingOverlayVisibility(): void {
     this.loadingOverlayDisclosure.setLoading(this.isLoading || this.isRgbViewLoading);
   }
@@ -406,7 +433,8 @@ export class ViewerUi {
   private getTopMenus(): TopMenuElements[] {
     return [
       { button: this.elements.fileMenuButton, menu: this.elements.fileMenu },
-      { button: this.elements.galleryMenuButton, menu: this.elements.galleryMenu }
+      { button: this.elements.galleryMenuButton, menu: this.elements.galleryMenu },
+      { button: this.elements.settingsMenuButton, menu: this.elements.settingsMenu }
     ];
   }
 
@@ -451,9 +479,9 @@ export class ViewerUi {
     this.openTopMenu(menu);
   }
 
-  private getEnabledTopMenuItems(menu: TopMenuElements): HTMLButtonElement[] {
-    return Array.from(menu.menu.querySelectorAll<HTMLButtonElement>('.app-menu-item')).filter(
-      (button) => !button.disabled
+  private getEnabledTopMenuItems(menu: TopMenuElements): HTMLElement[] {
+    return Array.from(menu.menu.querySelectorAll<HTMLElement>('button, input, select, textarea')).filter(
+      (element) => !('disabled' in element) || !element.disabled
     );
   }
 
@@ -469,7 +497,7 @@ export class ViewerUi {
       return;
     }
 
-    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+    const currentIndex = items.indexOf(document.activeElement as HTMLElement);
     const nextIndex =
       currentIndex === -1
         ? delta > 0
@@ -885,9 +913,13 @@ export class ViewerUi {
         sourceDetail: item.sourceDetail ?? item.label,
         sizeText,
         thumbnailDataUrl: item.thumbnailDataUrl ?? null,
+        pinned: item.pinned ?? false,
         selected: item.id === this.openedImagesActiveId,
         disabled,
         sessionId: item.id,
+        onTogglePin: () => {
+          this.callbacks.onToggleOpenedImagePin(item.id);
+        },
         onReload: () => {
           this.callbacks.onReloadSelectedOpenedImage(item.id);
         },
@@ -1279,6 +1311,13 @@ export class ViewerUi {
     });
 
     menu.menu.addEventListener('keydown', (event) => {
+      const target = event.target;
+      const shouldPreserveFieldArrowKeys =
+        (event.key === 'ArrowDown' || event.key === 'ArrowUp') &&
+        (target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement);
+
       if (event.key === 'Escape') {
         event.preventDefault();
         this.closeTopMenu(menu, true);
@@ -1290,13 +1329,13 @@ export class ViewerUi {
         return;
       }
 
-      if (event.key === 'ArrowDown') {
+      if (event.key === 'ArrowDown' && !shouldPreserveFieldArrowKeys) {
         event.preventDefault();
         this.focusNextTopMenuItem(menu, 1);
         return;
       }
 
-      if (event.key === 'ArrowUp') {
+      if (event.key === 'ArrowUp' && !shouldPreserveFieldArrowKeys) {
         event.preventDefault();
         this.focusNextTopMenuItem(menu, -1);
       }
@@ -1382,6 +1421,17 @@ export class ViewerUi {
 
       this.closeAllTopMenus();
       this.callbacks.onCloseAllOpenedImages();
+    });
+
+    this.elements.displayCacheBudgetInput.addEventListener('change', (event) => {
+      const target = event.currentTarget as HTMLSelectElement;
+      const value = Number(target.value);
+      if (!Number.isFinite(value)) {
+        this.setDisplayCacheBudget(this.displayCacheBudgetMb);
+        return;
+      }
+
+      this.callbacks.onDisplayCacheBudgetChange(value);
     });
 
     this.elements.fileInput.addEventListener('change', (event) => {
@@ -1939,6 +1989,8 @@ function resolveElements(): Elements {
     fileMenu: requireElement('file-menu', HTMLElement),
     galleryMenuButton: requireElement('gallery-menu-button', HTMLButtonElement),
     galleryMenu: requireElement('gallery-menu', HTMLElement),
+    settingsMenuButton: requireElement('settings-menu-button', HTMLButtonElement),
+    settingsMenu: requireElement('settings-menu', HTMLElement),
     galleryCboxRgbButton: requireElement('gallery-cbox-rgb-button', HTMLButtonElement),
     openFileButton: requireElement('open-file-button', HTMLButtonElement),
     fileInput: requireElement('file-input', HTMLInputElement),
@@ -1967,6 +2019,9 @@ function resolveElements(): Elements {
     openedFilesToggle: requireElement('opened-files-toggle', HTMLButtonElement),
     openedFilesList: requireElement('opened-files-list', HTMLElement),
     openedFilesCount: requireElement('opened-files-count', HTMLElement),
+    displayCacheControl: requireElement('display-cache-control', HTMLDivElement),
+    displayCacheBudgetInput: requireElement('display-cache-budget-input', HTMLSelectElement),
+    displayCacheUsage: requireElement('display-cache-usage', HTMLElement),
     reloadAllOpenedImagesButton: requireElement('reload-all-opened-images-button', HTMLButtonElement),
     closeAllOpenedImagesButton: requireElement('close-all-opened-images-button', HTMLButtonElement),
     layerControl: requireElement('layer-control', HTMLDivElement),
@@ -2181,9 +2236,11 @@ function createOpenedFileRow(options: {
   sourceDetail: string;
   sizeText: string;
   thumbnailDataUrl: string | null;
+  pinned: boolean;
   selected: boolean;
   disabled: boolean;
   sessionId: string;
+  onTogglePin: () => void;
   onReload: () => void;
   onClose: () => void;
 }): HTMLElement {
@@ -2204,27 +2261,50 @@ function createOpenedFileRow(options: {
   actions.className = 'opened-file-actions';
 
   actions.append(
-    createOpenedFileActionButton('reload', `Reload ${options.label}`, options.disabled, options.onReload),
-    createOpenedFileActionButton('close', `Close ${options.label}`, options.disabled, options.onClose)
+    createOpenedFileActionButton({
+      iconName: 'pin',
+      label: getOpenedFilePinButtonLabel(options.label, options.pinned),
+      disabled: options.disabled,
+      pressed: options.pinned,
+      onClick: options.onTogglePin
+    }),
+    createOpenedFileActionButton({
+      iconName: 'reload',
+      label: `Reload ${options.label}`,
+      disabled: options.disabled,
+      onClick: options.onReload
+    }),
+    createOpenedFileActionButton({
+      iconName: 'close',
+      label: `Close ${options.label}`,
+      disabled: options.disabled,
+      onClick: options.onClose
+    })
   );
 
   row.append(createOpenedFileThumbnail(options.thumbnailDataUrl), label, actions);
   return row;
 }
 
-function createOpenedFileActionButton(
-  iconName: 'reload' | 'close',
-  label: string,
-  disabled: boolean,
-  onClick: () => void
-): HTMLButtonElement {
+function createOpenedFileActionButton(options: {
+  iconName: 'pin' | 'reload' | 'close';
+  label: string;
+  disabled: boolean;
+  pressed?: boolean;
+  onClick: () => void;
+}): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = `opened-file-action-button opened-file-action-button--${iconName}`;
-  button.disabled = disabled;
-  button.setAttribute('aria-label', label);
-  button.title = label;
-  button.append(createOpenedFileActionIcon(iconName));
+  button.className = `opened-file-action-button opened-file-action-button--${options.iconName}`;
+  button.disabled = options.disabled;
+  button.setAttribute('aria-label', options.label);
+  button.title = options.label;
+  button.append(createOpenedFileActionIcon(options.iconName, options.pressed ?? false));
+
+  if (options.iconName === 'pin') {
+    button.setAttribute('aria-pressed', options.pressed ? 'true' : 'false');
+    button.classList.toggle('is-pressed', Boolean(options.pressed));
+  }
 
   button.addEventListener('mousedown', (event) => {
     event.stopPropagation();
@@ -2235,17 +2315,47 @@ function createOpenedFileActionButton(
     if (button.disabled) {
       return;
     }
-    onClick();
+    options.onClick();
   });
 
   return button;
 }
 
-function createOpenedFileActionIcon(iconName: 'reload' | 'close'): SVGSVGElement {
+function createOpenedFileActionIcon(
+  iconName: 'pin' | 'reload' | 'close',
+  pressed = false
+): SVGSVGElement {
   const svg = createSvgElement('svg');
   svg.setAttribute('viewBox', '0 0 20 20');
   svg.setAttribute('aria-hidden', 'true');
   svg.setAttribute('focusable', 'false');
+
+  if (iconName === 'pin') {
+    const head = createSvgElement('path');
+    head.setAttribute('d', 'M7 4.2h6.2l-.9 3.1 2.3 2.2v1H5.4v-1l2.3-2.2-.7-3.1z');
+    head.setAttribute('fill', pressed ? 'currentColor' : 'none');
+    head.setAttribute('stroke', 'currentColor');
+    head.setAttribute('stroke-linejoin', 'round');
+    head.setAttribute('stroke-width', '1.35');
+
+    const stem = createSvgElement('path');
+    stem.setAttribute('d', 'M10 10.6v4.9');
+    stem.setAttribute('fill', 'none');
+    stem.setAttribute('stroke', 'currentColor');
+    stem.setAttribute('stroke-linecap', 'round');
+    stem.setAttribute('stroke-width', '1.5');
+
+    const tip = createSvgElement('path');
+    tip.setAttribute('d', 'M8.7 15.5L10 17l1.3-1.5');
+    tip.setAttribute('fill', 'none');
+    tip.setAttribute('stroke', 'currentColor');
+    tip.setAttribute('stroke-linecap', 'round');
+    tip.setAttribute('stroke-linejoin', 'round');
+    tip.setAttribute('stroke-width', '1.5');
+
+    svg.append(head, stem, tip);
+    return svg;
+  }
 
   if (iconName === 'reload') {
     const path = createSvgElement('path');
@@ -2446,6 +2556,24 @@ function formatChannelCount(channelCount: number): string {
   return `${count}ch`;
 }
 
+export function getOpenedFilePinButtonLabel(label: string, pinned: boolean): string {
+  return `${pinned ? 'Unpin' : 'Pin'} cache for ${label}`;
+}
+
+export function formatDisplayCacheUsageText(usedBytes: number, budgetBytes: number): string {
+  return `${formatDisplayCacheMegabytes(usedBytes)} / ${formatDisplayCacheMegabytes(budgetBytes)} MB`;
+}
+
+export function getDisplayCacheUsageState(
+  usedBytes: number,
+  budgetBytes: number
+): { text: string; overBudget: boolean } {
+  return {
+    text: formatDisplayCacheUsageText(usedBytes, budgetBytes),
+    overBudget: usedBytes > budgetBytes
+  };
+}
+
 function findClosestListRow(target: EventTarget | null, datasetKey: string): HTMLElement | null {
   if (!(target instanceof Element)) {
     return null;
@@ -2617,6 +2745,14 @@ function formatColormapRangeStep(min: number, max: number): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function formatDisplayCacheMegabytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return '0';
+  }
+
+  return Math.round(bytes / (1024 * 1024)).toString();
 }
 
 function readElementSize(element: HTMLElement, axis: 'width' | 'height', fallback: number): number {

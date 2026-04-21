@@ -108,6 +108,8 @@ export interface OpenedImageSession {
   displayTexture: Float32Array | null;
   displayLuminanceRangeRevisionKey: string;
   displayLuminanceRange: DisplayLuminanceRange | null;
+  displayCachePinned: boolean;
+  displayCacheLastTouched: number;
 }
 
 export interface ViewportInfo {

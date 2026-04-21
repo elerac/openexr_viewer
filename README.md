@@ -14,6 +14,8 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - `Opened Images` list allows switching active image by filename.
   - Multi-layer EXRs expose a `Layer` selector, and session state follows the implementation: selected layer is preserved per opened session, while zoom/pan, display channel mapping, and the active probe position carry across session switches when valid for the target image.
   - Reorder opened images directly by click-hold-moving a filename row in the `Opened Images` list.
+  - Retained display textures use an LRU cache budget instead of an active-session-only policy. The default retained-cache cap is `256 MB`, configurable from the top-bar `Settings` menu with fixed presets (`64`, `128`, `256`, `512`, `1024` MB).
+  - Per-file row `Pin cache` keeps a compare baseline resident even when the LRU budget would otherwise evict it. Active and pinned sessions may leave retained cache usage above the configured cap.
   - Per-file row `Reload` action re-decodes the selected session from its original source.
   - `File > Reload All` re-decodes all opened sessions from their original sources.
   - Per-file row `Close` action closes the selected filename entry.
@@ -125,6 +127,8 @@ npm run test:e2e
 - `Opened Images` list: click-hold-move a filename row to reorder.
 - `Gallery > cbox_rgb.exr`: open the built-in Cornell box sample and append it as a new session.
 - `File > Open...`: open one EXR file and append it as a new session.
+- `Settings > Cache Budget`: choose the retained display-cache cap from `64`, `128`, `256`, `512`, or `1024` MB. The value persists in `localStorage`.
+- Per-file row `Pin cache` action: pin/unpin that entry's retained display cache.
 - Per-file row `Reload` action: reload and re-decode that entry in `Opened Images`.
 - `File > Reload All`: reload and re-decode all opened image entries.
 - Per-file row `Close` action: close that entry in `Opened Images`.
@@ -166,6 +170,7 @@ npm run test:e2e
 - EXR metadata is parsed directly from header bytes before pixel decode because the current WASM decoder only exposes dimensions, layers, channels, and pixel data. Metadata parse failures do not block image loading.
 - Performance path for large images/channel sets:
   - channel selector DOM updates are throttled to selection/image changes only,
-  - only the active session keeps a cached display texture buffer in memory,
+  - retained display textures are kept under a configurable LRU memory budget,
   - the active display texture buffer is reused across channel and layer switches,
+  - pinned compare sessions bypass LRU eviction,
   - GPU upload uses `texSubImage2D` for same-size updates.

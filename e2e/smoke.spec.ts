@@ -74,10 +74,14 @@ test('boots empty, opens the gallery demo image, and keeps core controls stable'
   const fileMenu = page.locator('#file-menu');
   const galleryMenuButton = page.getByRole('button', { name: 'Gallery', exact: true });
   const galleryMenu = page.locator('#gallery-menu');
+  const settingsMenuButton = page.getByRole('button', { name: 'Settings', exact: true });
+  const settingsMenu = page.locator('#settings-menu');
   const galleryCboxItem = page.getByRole('menuitem', { name: 'cbox_rgb.exr', exact: true });
   const openMenuItem = page.locator('#open-file-button');
   const reloadAllMenuItem = page.locator('#reload-all-opened-images-button');
   const closeAllMenuItem = page.locator('#close-all-opened-images-button');
+  const budgetInput = page.locator('#display-cache-budget-input');
+  const usageReadout = page.locator('#display-cache-usage');
   const getViewerPoint = async (xRatio: number, yRatio: number) => {
     const box = await viewer.boundingBox();
     if (!box) {
@@ -107,6 +111,10 @@ test('boots empty, opens the gallery demo image, and keeps core controls stable'
   await expect(galleryMenuButton).toHaveAttribute('aria-haspopup', 'menu');
   await expect(galleryMenuButton).toHaveAttribute('aria-expanded', 'false');
   await expect(galleryMenu).toBeHidden();
+  await expect(settingsMenuButton).toBeVisible();
+  await expect(settingsMenuButton).toHaveAttribute('aria-haspopup', 'menu');
+  await expect(settingsMenuButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(settingsMenu).toBeHidden();
   await expect(page.locator('.image-panel-actions')).toHaveCount(0);
   await expect(page.locator('.image-panel-titlebar')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Image', exact: true })).toHaveCount(0);
@@ -134,6 +142,18 @@ test('boots empty, opens the gallery demo image, and keeps core controls stable'
   await galleryCboxItem.click();
   await expect(galleryMenu).toBeHidden();
   await expect(galleryMenuButton).toHaveAttribute('aria-expanded', 'false');
+
+  await settingsMenuButton.click();
+  await expect(settingsMenu).toBeVisible();
+  await expect(settingsMenuButton).toHaveAttribute('aria-expanded', 'true');
+  await expect(budgetInput).toBeVisible();
+  await expect(budgetInput).toHaveValue('256');
+  await expect(budgetInput.locator('option')).toHaveText(['64', '128', '256', '512', '1024']);
+  await expect(usageReadout).toContainText('/ 256 MB');
+  await page.keyboard.press('Escape');
+  await expect(settingsMenu).toBeHidden();
+  await expect(settingsMenuButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(settingsMenuButton).toBeFocused();
 
   await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
   await expect(openedImages.locator('option').first()).toContainText('cbox_rgb.exr');
@@ -462,6 +482,67 @@ test('carries exposure when opening and switching files', async ({ page }) => {
   await cboxRow.locator('.opened-file-label').click();
   await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr');
   await expect(exposureValue).toHaveValue('-2.5');
+});
+
+test('persists the cache budget and toggles per-session pin actions', async ({ page }) => {
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  const settingsMenuButton = page.getByRole('button', { name: 'Settings', exact: true });
+  const settingsMenu = page.locator('#settings-menu');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  const budgetInput = page.locator('#display-cache-budget-input');
+  const usageReadout = page.locator('#display-cache-usage');
+
+  await settingsMenuButton.click();
+  await expect(settingsMenu).toBeVisible();
+  await expect(budgetInput).toHaveValue('256');
+  await expect(usageReadout).toContainText('/ 256 MB');
+
+  await openGalleryCbox(page);
+
+  const pinButton = page.getByRole('button', { name: 'Pin cache for cbox_rgb.exr', exact: true });
+  await expect(pinButton).toBeVisible();
+  await expect(pinButton).toHaveAttribute('aria-pressed', 'false');
+  await pinButton.click();
+  await expect(
+    page.getByRole('button', { name: 'Unpin cache for cbox_rgb.exr', exact: true })
+  ).toHaveAttribute('aria-pressed', 'true');
+
+  await settingsMenuButton.click();
+  await expect(settingsMenu).toBeVisible();
+  await budgetInput.selectOption('128');
+
+  await expect(budgetInput).toHaveValue('128');
+  await expect(usageReadout).toContainText('/ 128 MB');
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      return window.localStorage.getItem('openexr-viewer:display-cache-budget-mb:v1');
+    });
+  }).toBe('128');
+
+  await page.reload();
+  await page.waitForTimeout(1500);
+
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  await settingsMenuButton.click();
+  await expect(settingsMenu).toBeVisible();
+  await expect(budgetInput).toHaveValue('128');
+  await expect(usageReadout).toContainText('/ 128 MB');
+
+  await openGalleryCbox(page);
+  await expect(
+    page.getByRole('button', { name: 'Pin cache for cbox_rgb.exr', exact: true })
+  ).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('resizes desktop panel splits and persists them', async ({ page }) => {

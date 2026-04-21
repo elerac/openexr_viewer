@@ -8,6 +8,14 @@ import {
   type ColormapLut,
   type ColormapRegistry
 } from './colormaps';
+import {
+  clampDisplayCacheBudgetMb,
+  displayCacheBudgetMbToBytes,
+  getRetainedDisplayCacheBytes,
+  pruneDisplayCachesToBudget,
+  readStoredDisplayCacheBudgetMb,
+  saveStoredDisplayCacheBudgetMb
+} from './display-cache';
 import { loadExrOffMainThread } from './exr-worker-client';
 import { clampZoom, ViewerInteraction } from './interaction';
 import { buildProbeColorPreview, resolveActiveProbePixel, resolveProbeMode } from './probe';
@@ -77,6 +85,8 @@ async function bootstrap(): Promise<void> {
   let rgbViewChangeToken = 0;
   let colormapChangeToken = 0;
   let loadQueue: Promise<void> = Promise.resolve();
+  let displayCacheBudgetMb = readStoredDisplayCacheBudgetMb();
+  let displayCacheTouchCounter = 0;
 
   let renderedSessionId: string | null = null;
   let uploadedSessionId: string | null = null;
@@ -119,6 +129,24 @@ async function bootstrap(): Promise<void> {
     onReorderOpenedImage: (draggedSessionId, targetSessionId) => {
       reorderOpenedImages(draggedSessionId, targetSessionId);
     },
+    onDisplayCacheBudgetChange: (valueMb) => {
+      displayCacheBudgetMb = clampDisplayCacheBudgetMb(valueMb);
+      saveStoredDisplayCacheBudgetMb(displayCacheBudgetMb);
+      ui.setDisplayCacheBudget(displayCacheBudgetMb);
+      pruneDisplayCachesToBudget(sessions, activeSessionId, getDisplayCacheBudgetBytes());
+      syncDisplayCacheUsageUi();
+    },
+    onToggleOpenedImagePin: (sessionId) => {
+      const session = sessions.find((item) => item.id === sessionId);
+      if (!session) {
+        return;
+      }
+
+      session.displayCachePinned = !session.displayCachePinned;
+      syncOpenedImageOptions();
+      pruneDisplayCachesToBudget(sessions, activeSessionId, getDisplayCacheBudgetBytes());
+      syncDisplayCacheUsageUi();
+    },
     onExposureChange: (value) => {
       store.setState({ exposureEv: value });
     },
@@ -150,6 +178,8 @@ async function bootstrap(): Promise<void> {
       resetAllState();
     }
   });
+  ui.setDisplayCacheBudget(displayCacheBudgetMb);
+  syncDisplayCacheUsageUi();
 
   try {
     colormapRegistry = await loadColormapRegistry();
@@ -290,6 +320,12 @@ async function bootstrap(): Promise<void> {
             activeSession.displayTexture
           );
           activeSession.displayLuminanceRangeRevisionKey = textureKey;
+        }
+
+        if (activeSession.displayTexture) {
+          touchDisplayCache(activeSession);
+          pruneDisplayCachesToBudget(sessions, activeSessionId, getDisplayCacheBudgetBytes());
+          syncDisplayCacheUsageUi();
         }
 
         const activeAutoColormapRange = resolveColormapAutoRange(
@@ -612,12 +648,13 @@ async function bootstrap(): Promise<void> {
       textureRevisionKey: '',
       displayTexture: null,
       displayLuminanceRangeRevisionKey: '',
-      displayLuminanceRange: null
+      displayLuminanceRange: null,
+      displayCachePinned: false,
+      displayCacheLastTouched: 0
     };
 
     sessions = [...sessions, session];
     activeSessionId = session.id;
-    releaseInactiveSessionDisplayCaches(activeSessionId);
     syncOpenedImageOptions();
 
     store.setState(session.state);
@@ -694,7 +731,8 @@ async function bootstrap(): Promise<void> {
         textureRevisionKey: '',
         displayTexture: null,
         displayLuminanceRangeRevisionKey: '',
-        displayLuminanceRange: null
+        displayLuminanceRange: null,
+        displayCacheLastTouched: 0
       };
 
       sessions = sessions.map((current) => (current.id === sessionId ? reloadedSession : current));
@@ -705,6 +743,7 @@ async function bootstrap(): Promise<void> {
       }
 
       syncOpenedImageOptions();
+      syncDisplayCacheUsageUi();
 
       if (activeSessionId === sessionId) {
         store.setState(nextState);
@@ -990,7 +1029,6 @@ async function bootstrap(): Promise<void> {
     const nextState = buildSwitchedSessionState(nextSession, currentState, getActiveSession()?.decoded ?? null);
 
     activeSessionId = nextSession.id;
-    releaseInactiveSessionDisplayCaches(activeSessionId);
     syncOpenedImageOptions();
 
     store.setState(nextState);
@@ -1096,6 +1134,7 @@ async function bootstrap(): Promise<void> {
     if (!removingActiveSession) {
       stokesDisplayRestoreStates.delete(sessionId);
       syncOpenedImageOptions();
+      syncDisplayCacheUsageUi();
       return;
     }
 
@@ -1114,7 +1153,6 @@ async function bootstrap(): Promise<void> {
     const nextState = buildSwitchedSessionState(nextSession, currentState, removedSession?.decoded ?? null);
     stokesDisplayRestoreStates.delete(sessionId);
     activeSessionId = nextSession.id;
-    releaseInactiveSessionDisplayCaches(activeSessionId);
 
     syncOpenedImageOptions();
 
@@ -1176,6 +1214,7 @@ async function bootstrap(): Promise<void> {
       displayA: null
     });
 
+    syncDisplayCacheUsageUi();
     renderer.render(store.getState());
   }
 
@@ -1296,7 +1335,8 @@ async function bootstrap(): Promise<void> {
         label: session.displayName,
         sizeBytes: session.fileSizeBytes,
         sourceDetail: getSessionSourceDetail(session.source, session.filename),
-        thumbnailDataUrl: session.thumbnailDataUrl
+        thumbnailDataUrl: session.thumbnailDataUrl,
+        pinned: session.displayCachePinned
       })),
       activeSessionId
     );
@@ -1368,22 +1408,20 @@ async function bootstrap(): Promise<void> {
     return null;
   }
 
-  function releaseInactiveSessionDisplayCaches(activeId: string | null): void {
-    for (const session of sessions) {
-      if (session.id === activeId) {
-        continue;
-      }
+  function getDisplayCacheBudgetBytes(): number {
+    return displayCacheBudgetMbToBytes(displayCacheBudgetMb);
+  }
 
-      session.displayTexture = null;
-      session.displayLuminanceRange = null;
-      session.displayLuminanceRangeRevisionKey = '';
-      session.textureRevisionKey = '';
+  function touchDisplayCache(session: OpenedImageSession): void {
+    if (!session.displayTexture) {
+      return;
     }
 
-    if (uploadedSessionId !== activeId) {
-      uploadedSessionId = null;
-      uploadedTextureRevisionKey = '';
-    }
+    session.displayCacheLastTouched = ++displayCacheTouchCounter;
+  }
+
+  function syncDisplayCacheUsageUi(): void {
+    ui.setDisplayCacheUsage(getRetainedDisplayCacheBytes(sessions), getDisplayCacheBudgetBytes());
   }
 
   function computeFitView(width: number, height: number): { zoom: number; panX: number; panY: number } {

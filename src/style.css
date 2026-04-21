@@ -110,6 +110,10 @@ output {
   box-shadow: 0 0.75rem 2rem rgba(0, 0, 0, 0.3);
 }
 
+.app-menu-dropdown--settings {
+  min-width: 14.5rem;
+}
+
 .app-menu-item {
   width: 100%;
   border: 0;
@@ -131,6 +135,47 @@ output {
 .app-menu-item:disabled {
   color: color-mix(in srgb, var(--text-dim) 62%, transparent);
   cursor: not-allowed;
+}
+
+.app-menu-setting-group {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.16rem 0.12rem;
+}
+
+.app-menu-setting-label {
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.app-menu-setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 4.4rem) auto;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.app-menu-setting-row .app-menu-setting-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.24rem 0.35rem;
+}
+
+.app-menu-setting-unit {
+  color: var(--text-dim);
+  font-size: 0.76rem;
+}
+
+.app-menu-setting-value {
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+.app-menu-setting-group.is-over-budget .app-menu-setting-value {
+  color: #ffb0aa;
 }
 
 button,
@@ -574,6 +619,19 @@ body.is-resizing-panel-columns * {
   outline: none;
 }
 
+.opened-file-action-button.is-pressed {
+  border-color: rgba(255, 214, 122, 0.42);
+  background: rgba(255, 214, 122, 0.14);
+  color: #ffe294;
+}
+
+.opened-file-action-button.is-pressed:hover:not(:disabled),
+.opened-file-action-button.is-pressed:focus-visible {
+  border-color: rgba(255, 224, 145, 0.64);
+  background: rgba(255, 214, 122, 0.2);
+  color: #fff0bd;
+}
+
 .opened-file-action-button:disabled {
   color: var(--text-dim);
   cursor: default;
@@ -589,6 +647,12 @@ body.is-resizing-panel-columns * {
   border-color: rgba(255, 255, 255, 0.36);
   background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
+}
+
+.image-browser-row[aria-selected='true'] .opened-file-action-button.is-pressed {
+  border-color: rgba(255, 232, 170, 0.55);
+  background: rgba(255, 222, 138, 0.2);
+  color: #fff1c7;
 }
 
 .file-row-icon {

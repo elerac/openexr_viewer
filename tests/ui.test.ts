@@ -3,7 +3,10 @@ import {
   buildPartLayerItemsFromChannelNames,
   clampPanelSplitSizes,
   formatProbeCoordinates,
+  formatDisplayCacheUsageText,
+  getDisplayCacheUsageState,
   getChannelViewSwatches,
+  getOpenedFilePinButtonLabel,
   getListboxOptionIndexAtClientY,
   getPanelSplitKeyboardAction,
   parsePanelSplitStorageValue,
@@ -235,6 +238,29 @@ describe('panel split sizing', () => {
     expect(getPanelSplitKeyboardAction('Home', false)).toEqual({ type: 'snap', target: 'min' });
     expect(getPanelSplitKeyboardAction('End', false)).toEqual({ type: 'snap', target: 'max' });
     expect(getPanelSplitKeyboardAction('ArrowDown', false)).toBeNull();
+  });
+});
+
+describe('display cache UI helpers', () => {
+  it('formats pin button labels from the pinned state', () => {
+    expect(getOpenedFilePinButtonLabel('beauty.exr', false)).toBe('Pin cache for beauty.exr');
+    expect(getOpenedFilePinButtonLabel('beauty.exr', true)).toBe('Unpin cache for beauty.exr');
+  });
+
+  it('formats display cache usage readouts in MB', () => {
+    expect(formatDisplayCacheUsageText(0, 256 * 1024 * 1024)).toBe('0 / 256 MB');
+    expect(formatDisplayCacheUsageText(126 * 1024 * 1024, 256 * 1024 * 1024)).toBe('126 / 256 MB');
+  });
+
+  it('marks the usage state when retained caches exceed the budget', () => {
+    expect(getDisplayCacheUsageState(64 * 1024 * 1024, 256 * 1024 * 1024)).toEqual({
+      text: '64 / 256 MB',
+      overBudget: false
+    });
+    expect(getDisplayCacheUsageState(300 * 1024 * 1024, 256 * 1024 * 1024)).toEqual({
+      text: '300 / 256 MB',
+      overBudget: true
+    });
   });
 });
 

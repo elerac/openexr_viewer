@@ -29,6 +29,27 @@
               <button id="gallery-cbox-rgb-button" class="app-menu-item" type="button" role="menuitem" data-gallery-id="cbox-rgb">cbox_rgb.exr</button>
             </div>
           </div>
+          <div class="app-menu">
+            <button id="settings-menu-button" class="app-menu-tab" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="settings-menu">
+              Settings
+            </button>
+            <div id="settings-menu" class="app-menu-dropdown app-menu-dropdown--settings hidden" role="menu" aria-labelledby="settings-menu-button">
+              <div id="display-cache-control" class="app-menu-setting-group">
+                <label class="app-menu-setting-label" for="display-cache-budget-input">Cache Budget</label>
+                <div class="app-menu-setting-row">
+                  <select id="display-cache-budget-input" class="app-menu-setting-input" aria-describedby="display-cache-usage">
+                    <option value="64">64</option>
+                    <option value="128">128</option>
+                    <option value="256" selected>256</option>
+                    <option value="512">512</option>
+                    <option value="1024">1024</option>
+                  </select>
+                  <span class="app-menu-setting-unit">MB</span>
+                </div>
+                <span id="display-cache-usage" class="app-menu-setting-value">0 / 256 MB</span>
+              </div>
+            </div>
+          </div>
         </nav>
         <input id="file-input" type="file" accept=".exr,image/exr" hidden />
       </header>
