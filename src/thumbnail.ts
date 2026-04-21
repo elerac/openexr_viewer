@@ -27,7 +27,7 @@ export function createOpenedImageThumbnailDataUrl(
       state
     );
 
-    return renderDisplayTextureThumbnail(
+    return createOpenedImageThumbnailDataUrlFromDisplayTexture(
       displayTexture,
       decoded.width,
       decoded.height,
@@ -38,7 +38,7 @@ export function createOpenedImageThumbnailDataUrl(
   }
 }
 
-function renderDisplayTextureThumbnail(
+export function createOpenedImageThumbnailDataUrlFromDisplayTexture(
   displayTexture: Float32Array,
   width: number,
   height: number,

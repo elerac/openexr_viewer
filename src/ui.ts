@@ -626,7 +626,6 @@ export class ViewerUi {
     this.setVisualizationModeButtonsDisabled(this.isLoading || this.openedImageCount === 0);
     this.setColormapRangeControlsDisabled(this.isLoading || this.openedImageCount === 0 || !this.currentColormapRange);
     this.updateStokesDegreeModulationDisabled();
-    this.renderOpenedFileRows();
   }
 
   setLayerOptions(items: LayerOptionItem[], activeIndex: number): void {

@@ -20,7 +20,7 @@ import { loadExrOffMainThread } from './exr-worker-client';
 import { clampZoom, ViewerInteraction } from './interaction';
 import { buildProbeColorPreview, resolveActiveProbePixel, resolveProbeMode } from './probe';
 import { WebGlExrRenderer } from './renderer';
-import { createOpenedImageThumbnailDataUrl } from './thumbnail';
+import { createOpenedImageThumbnailDataUrlFromDisplayTexture } from './thumbnail';
 import {
   buildSelectedDisplayTexture,
   buildViewerStateForLayer,
@@ -58,6 +58,8 @@ import {
 
 const COLORMAP_ZERO_CENTER_MANUAL_MIN_MAGNITUDE = 1e-16;
 const MIN_RGB_VIEW_LOADING_MS = 120;
+const THUMBNAIL_IDLE_TIMEOUT_MS = 250;
+const THUMBNAIL_IDLE_FALLBACK_DELAY_MS = 64;
 const GALLERY_IMAGES = [
   {
     id: 'cbox-rgb',
@@ -70,6 +72,23 @@ type RestorableVisualizationState = Pick<
   ViewerState,
   'visualizationMode' | 'activeColormapId' | 'colormapRange' | 'colormapRangeMode' | 'colormapZeroCentered'
 >;
+
+interface ThumbnailJob {
+  sessionId: string;
+  token: number;
+}
+
+interface IdleDeadlineLike {
+  readonly didTimeout: boolean;
+  timeRemaining(): number;
+}
+
+type IdleCallbackLike = (deadline: IdleDeadlineLike) => void;
+
+interface IdleCapableWindow extends Window {
+  requestIdleCallback?: (callback: IdleCallbackLike, options?: { timeout?: number }) => number;
+  cancelIdleCallback?: (handle: number) => void;
+}
 
 void bootstrap();
 
@@ -87,6 +106,8 @@ async function bootstrap(): Promise<void> {
   let loadQueue: Promise<void> = Promise.resolve();
   let displayCacheBudgetMb = readStoredDisplayCacheBudgetMb();
   let displayCacheTouchCounter = 0;
+  let thumbnailJobs: ThumbnailJob[] = [];
+  let thumbnailQueueRunning = false;
 
   let renderedSessionId: string | null = null;
   let uploadedSessionId: string | null = null;
@@ -643,7 +664,9 @@ async function bootstrap(): Promise<void> {
       fileSizeBytes,
       source,
       decoded,
-      thumbnailDataUrl: createOpenedImageThumbnailDataUrl(decoded, sessionState),
+      thumbnailDataUrl: null,
+      thumbnailGenerationToken: 0,
+      thumbnailStateSnapshot: cloneViewerState(sessionState),
       state: sessionState,
       textureRevisionKey: '',
       displayTexture: null,
@@ -658,6 +681,7 @@ async function bootstrap(): Promise<void> {
     syncOpenedImageOptions();
 
     store.setState(session.state);
+    enqueueSessionThumbnailGeneration(session.id, session.state);
   }
 
   async function reloadSessionById(sessionId: string): Promise<void> {
@@ -726,7 +750,9 @@ async function bootstrap(): Promise<void> {
       const reloadedSession: OpenedImageSession = {
         ...session,
         decoded,
-        thumbnailDataUrl: createOpenedImageThumbnailDataUrl(decoded, nextState),
+        thumbnailDataUrl: session.thumbnailDataUrl,
+        thumbnailGenerationToken: session.thumbnailGenerationToken,
+        thumbnailStateSnapshot: cloneViewerState(nextState),
         state: nextState,
         textureRevisionKey: '',
         displayTexture: null,
@@ -748,6 +774,8 @@ async function bootstrap(): Promise<void> {
       if (activeSessionId === sessionId) {
         store.setState(nextState);
       }
+
+      enqueueSessionThumbnailGeneration(sessionId, nextState);
 
       return null;
     } catch (error) {
@@ -1125,6 +1153,7 @@ async function bootstrap(): Promise<void> {
 
     const removedSession = sessions[removeIndex] ?? null;
     sessions = sessions.filter((session) => session.id !== sessionId);
+    discardQueuedThumbnailJobs(sessionId);
 
     if (uploadedSessionId === sessionId) {
       uploadedSessionId = null;
@@ -1172,6 +1201,7 @@ async function bootstrap(): Promise<void> {
     }
 
     sessions = [];
+    thumbnailJobs = [];
     activeSessionId = null;
     uploadedSessionId = null;
     uploadedTextureRevisionKey = '';
@@ -1410,6 +1440,96 @@ async function bootstrap(): Promise<void> {
 
   function getDisplayCacheBudgetBytes(): number {
     return displayCacheBudgetMbToBytes(displayCacheBudgetMb);
+  }
+
+  function enqueueSessionThumbnailGeneration(sessionId: string, stateSnapshot: ViewerState): void {
+    const session = sessions.find((item) => item.id === sessionId);
+    if (!session) {
+      return;
+    }
+
+    session.thumbnailGenerationToken += 1;
+    session.thumbnailStateSnapshot = cloneViewerState(stateSnapshot);
+    thumbnailJobs.push({
+      sessionId,
+      token: session.thumbnailGenerationToken
+    });
+    void processThumbnailJobs();
+  }
+
+  async function processThumbnailJobs(): Promise<void> {
+    if (thumbnailQueueRunning) {
+      return;
+    }
+
+    thumbnailQueueRunning = true;
+
+    try {
+      while (thumbnailJobs.length > 0) {
+        const job = thumbnailJobs.shift();
+        if (!job) {
+          continue;
+        }
+
+        await runNonCriticalTask(async () => {
+          const thumbnailDataUrl = createThumbnailDataUrlForJob(job);
+          if (!thumbnailDataUrl) {
+            return;
+          }
+
+          const session = sessions.find((item) => item.id === job.sessionId);
+          if (!session || session.thumbnailGenerationToken !== job.token) {
+            return;
+          }
+
+          session.thumbnailDataUrl = thumbnailDataUrl;
+          syncOpenedImageOptions();
+        });
+      }
+    } finally {
+      thumbnailQueueRunning = false;
+      if (thumbnailJobs.length > 0) {
+        void processThumbnailJobs();
+      }
+    }
+  }
+
+  function createThumbnailDataUrlForJob(job: ThumbnailJob): string | null {
+    const session = sessions.find((item) => item.id === job.sessionId);
+    if (!session || session.thumbnailGenerationToken !== job.token) {
+      return null;
+    }
+
+    const stateSnapshot = session.thumbnailStateSnapshot;
+    const layer = getSelectedLayer(session.decoded, stateSnapshot.activeLayer);
+    if (!layer || session.decoded.width <= 0 || session.decoded.height <= 0) {
+      return null;
+    }
+
+    const thumbnailTextureRevisionKey = buildTextureRevisionKey(stateSnapshot);
+    try {
+      const displayTexture = session.displayTexture && session.textureRevisionKey === thumbnailTextureRevisionKey
+        ? session.displayTexture
+        : buildSelectedDisplayTexture(
+            layer,
+            session.decoded.width,
+            session.decoded.height,
+            stateSnapshot
+          );
+
+      return createOpenedImageThumbnailDataUrlFromDisplayTexture(
+        displayTexture,
+        session.decoded.width,
+        session.decoded.height,
+        stateSnapshot
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  function discardQueuedThumbnailJobs(sessionId: string): void {
+    thumbnailJobs = thumbnailJobs.filter((job) => job.sessionId !== sessionId);
   }
 
   function touchDisplayCache(session: OpenedImageSession): void {
@@ -1685,5 +1805,35 @@ async function bootstrap(): Promise<void> {
     return new Promise((resolve) => {
       window.setTimeout(resolve, Math.max(0, durationMs));
     });
+  }
+
+  async function runNonCriticalTask(task: () => void | Promise<void>): Promise<void> {
+    await waitForNextPaint();
+    await waitForIdleSlot(THUMBNAIL_IDLE_TIMEOUT_MS);
+    await task();
+  }
+
+  function waitForIdleSlot(timeoutMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      const idleWindow = window as IdleCapableWindow;
+      if (typeof idleWindow.requestIdleCallback !== 'function') {
+        window.setTimeout(resolve, Math.max(0, Math.min(timeoutMs, THUMBNAIL_IDLE_FALLBACK_DELAY_MS)));
+        return;
+      }
+
+      idleWindow.requestIdleCallback(() => {
+        resolve();
+      }, { timeout: timeoutMs });
+    });
+  }
+
+  function cloneViewerState(state: ViewerState): ViewerState {
+    return {
+      ...state,
+      colormapRange: cloneDisplayLuminanceRange(state.colormapRange),
+      stokesDegreeModulation: { ...state.stokesDegreeModulation },
+      hoveredPixel: state.hoveredPixel ? { ...state.hoveredPixel } : null,
+      lockedPixel: state.lockedPixel ? { ...state.lockedPixel } : null
+    };
   }
 }

@@ -103,6 +103,8 @@ export interface OpenedImageSession {
   source: SessionSource;
   decoded: DecodedExrImage;
   thumbnailDataUrl: string | null;
+  thumbnailGenerationToken: number;
+  thumbnailStateSnapshot: ViewerState;
   state: ViewerState;
   textureRevisionKey: string;
   displayTexture: Float32Array | null;

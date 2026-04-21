@@ -36,6 +36,93 @@ async function setExposureValue(exposureValue: Locator, value: string): Promise<
   }, value);
 }
 
+async function installIdleCallbackController(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    type IdleCallback = (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void;
+
+    const pendingIds: number[] = [];
+    const callbacks = new Map<number, IdleCallback>();
+    let nextId = 1;
+
+    const target = window as Window & {
+      __thumbnailIdleTestController?: {
+        pendingCount: () => number;
+        flush: (count?: number) => number;
+      };
+      requestIdleCallback?: (callback: IdleCallback, options?: { timeout?: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+
+    target.__thumbnailIdleTestController = {
+      pendingCount: () => pendingIds.length,
+      flush: (count?: number) => {
+        let completed = 0;
+        const maxRuns = typeof count === 'number' ? count : Number.POSITIVE_INFINITY;
+
+        while (pendingIds.length > 0 && completed < maxRuns) {
+          const id = pendingIds.shift();
+          if (id === undefined) {
+            break;
+          }
+
+          const callback = callbacks.get(id);
+          if (!callback) {
+            continue;
+          }
+
+          callbacks.delete(id);
+          callback({
+            didTimeout: false,
+            timeRemaining: () => 50
+          });
+          completed += 1;
+        }
+
+        return completed;
+      }
+    };
+
+    target.requestIdleCallback = (callback) => {
+      const id = nextId++;
+      callbacks.set(id, callback);
+      pendingIds.push(id);
+      return id;
+    };
+
+    target.cancelIdleCallback = (handle) => {
+      callbacks.delete(handle);
+      const pendingIndex = pendingIds.indexOf(handle);
+      if (pendingIndex >= 0) {
+        pendingIds.splice(pendingIndex, 1);
+      }
+    };
+  });
+}
+
+async function getPendingIdleCallbackCount(page: Page): Promise<number> {
+  return await page.evaluate(() => {
+    const target = window as Window & {
+      __thumbnailIdleTestController?: {
+        pendingCount: () => number;
+      };
+    };
+
+    return target.__thumbnailIdleTestController?.pendingCount() ?? 0;
+  });
+}
+
+async function flushIdleCallbacks(page: Page, count?: number): Promise<number> {
+  return await page.evaluate((maxRuns) => {
+    const target = window as Window & {
+      __thumbnailIdleTestController?: {
+        flush: (count?: number) => number;
+      };
+    };
+
+    return target.__thumbnailIdleTestController?.flush(maxRuns) ?? 0;
+  }, count);
+}
+
 test('boots empty, opens the gallery demo image, and keeps core controls stable', async ({ page }) => {
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
   await expect(page.locator('#inspector-panel')).toBeVisible();
@@ -361,6 +448,75 @@ test('boots empty, opens the gallery demo image, and keeps core controls stable'
   await expect(openMenuItem).toBeEnabled();
   await expect(reloadAllMenuItem).toBeDisabled();
   await expect(closeAllMenuItem).toBeDisabled();
+});
+
+test('defers opened-file thumbnails until idle time after first render', async ({ page }) => {
+  await installIdleCallbackController(page);
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  const openedImages = page.locator('#opened-images-select');
+  const openedFileRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'cbox_rgb.exr' });
+
+  await openGalleryCbox(page);
+  await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
+  await expect(openedFileRow).toHaveCount(1);
+  await expect(openedFileRow.locator('.file-row-icon')).toHaveCount(1);
+  await expect(openedFileRow.locator('.opened-file-thumbnail')).toHaveCount(0);
+  await expect.poll(async () => await getPendingIdleCallbackCount(page)).toBe(1);
+
+  await flushIdleCallbacks(page, 1);
+
+  await expect(openedFileRow.locator('.opened-file-thumbnail')).toHaveAttribute('src', /^data:image\/png;base64,/);
+  await expect(openedFileRow.locator('.file-row-icon')).toHaveCount(0);
+  await expect.poll(async () => await getPendingIdleCallbackCount(page)).toBe(0);
+});
+
+test('keeps the previous thumbnail visible until reload thumbnails are regenerated in idle time', async ({ page }) => {
+  await installIdleCallbackController(page);
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  const openedImages = page.locator('#opened-images-select');
+  const openedFileRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'cbox_rgb.exr' });
+  const reloadOpenedFileButton = page.getByRole('button', { name: 'Reload cbox_rgb.exr', exact: true });
+  const exposureValue = page.locator('#exposure-value');
+
+  await openGalleryCbox(page);
+  await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
+  await expect.poll(async () => await getPendingIdleCallbackCount(page)).toBe(1);
+  await flushIdleCallbacks(page, 1);
+
+  const thumbnail = openedFileRow.locator('.opened-file-thumbnail');
+  await expect(thumbnail).toHaveAttribute('src', /^data:image\/png;base64,/);
+  const initialThumbnailSrc = await thumbnail.getAttribute('src');
+  expect(initialThumbnailSrc).not.toBeNull();
+
+  await setExposureValue(exposureValue, '2.0');
+  await expect(exposureValue).toHaveValue('2.0');
+
+  await reloadOpenedFileButton.click();
+  await expect.poll(async () => await getPendingIdleCallbackCount(page)).toBe(1);
+  await expect(thumbnail).toHaveAttribute('src', initialThumbnailSrc ?? '');
+  await expect(openedFileRow.locator('.file-row-icon')).toHaveCount(0);
+
+  await flushIdleCallbacks(page, 1);
+
+  await expect(thumbnail).toHaveAttribute('src', /^data:image\/png;base64,/);
+  await expect.poll(async () => await thumbnail.getAttribute('src')).not.toBe(initialThumbnailSrc);
+  await expect.poll(async () => await getPendingIdleCallbackCount(page)).toBe(0);
 });
 
 test('moves open files and channel view selections with arrow keys', async ({ page }) => {
