@@ -98,7 +98,7 @@ output {
 
 .app-menu-dropdown {
   position: absolute;
-  top: calc(100% + 0.25rem);
+  top: 100%;
   left: 0;
   min-width: 9.25rem;
   display: grid;

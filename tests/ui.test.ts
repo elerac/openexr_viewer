@@ -331,6 +331,71 @@ describe('view menu', () => {
     expect(onViewerModeChange).toHaveBeenCalledWith('panorama');
   });
 
+  it('temporarily closes top menus over non-tab top-bar space and reopens on tab hover', () => {
+    installUiFixture();
+
+    new ViewerUi(createUiCallbacks());
+    const fileButton = document.getElementById('file-menu-button') as HTMLButtonElement;
+    const viewButton = document.getElementById('view-menu-button') as HTMLButtonElement;
+    const galleryButton = document.getElementById('gallery-menu-button') as HTMLButtonElement;
+    const title = document.querySelector('.app-menu-title') as HTMLElement;
+    const fileMenuRegion = fileButton.parentElement as HTMLElement;
+
+    fileButton.click();
+    expectTopMenuOpen('file-menu-button', 'file-menu');
+
+    fileMenuRegion.dispatchEvent(new Event('pointerover', { bubbles: true }));
+    expectTopMenuOpen('file-menu-button', 'file-menu');
+
+    title.dispatchEvent(new Event('pointerover', { bubbles: true }));
+    expectTopMenuClosed('file-menu-button', 'file-menu');
+
+    fileButton.dispatchEvent(new Event('pointerenter'));
+    expectTopMenuOpen('file-menu-button', 'file-menu');
+
+    viewButton.dispatchEvent(new Event('pointerenter'));
+    expectTopMenuOpen('view-menu-button', 'view-menu');
+    expectTopMenuClosed('file-menu-button', 'file-menu');
+
+    title.dispatchEvent(new Event('pointerover', { bubbles: true }));
+    expectTopMenuClosed('view-menu-button', 'view-menu');
+
+    galleryButton.dispatchEvent(new Event('pointerenter'));
+    expectTopMenuOpen('gallery-menu-button', 'gallery-menu');
+  });
+
+  it('closes sticky top menus when clicking outside the menu bar', () => {
+    installUiFixture();
+
+    new ViewerUi(createUiCallbacks());
+    const fileButton = document.getElementById('file-menu-button') as HTMLButtonElement;
+
+    fileButton.click();
+    expectTopMenuOpen('file-menu-button', 'file-menu');
+
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expectTopMenuClosed('file-menu-button', 'file-menu');
+  });
+
+  it('closes keyboard-opened menus on Escape and restores focus to the menu button', () => {
+    installUiFixture();
+
+    new ViewerUi(createUiCallbacks());
+    const fileButton = document.getElementById('file-menu-button') as HTMLButtonElement;
+    const openFileButton = document.getElementById('open-file-button') as HTMLButtonElement;
+
+    fileButton.focus();
+    fileButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+
+    expectTopMenuOpen('file-menu-button', 'file-menu');
+    expect(document.activeElement).toBe(openFileButton);
+
+    openFileButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expectTopMenuClosed('file-menu-button', 'file-menu');
+    expect(document.activeElement).toBe(fileButton);
+  });
+
   it('keeps export disabled until an image is active and blocks it during rgb-view loading', () => {
     installUiFixture();
 
@@ -580,6 +645,20 @@ function installUiFixture(): void {
   }
 
   vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+}
+
+function expectTopMenuOpen(buttonId: string, menuId: string): void {
+  const button = document.getElementById(buttonId) as HTMLButtonElement;
+  const menu = document.getElementById(menuId) as HTMLElement;
+  expect(button.getAttribute('aria-expanded')).toBe('true');
+  expect(menu.classList.contains('hidden')).toBe(false);
+}
+
+function expectTopMenuClosed(buttonId: string, menuId: string): void {
+  const button = document.getElementById(buttonId) as HTMLButtonElement;
+  const menu = document.getElementById(menuId) as HTMLElement;
+  expect(button.getAttribute('aria-expanded')).toBe('false');
+  expect(menu.classList.contains('hidden')).toBe(true);
 }
 
 function createUiCallbacks(overrides: Partial<ReturnType<typeof createUiCallbacksBase>> = {}) {

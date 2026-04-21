@@ -821,6 +821,20 @@ export class ViewerUi implements Disposable {
     }
   }
 
+  private suspendTopMenusForTopBarHover(): void {
+    for (const menu of this.getTopMenus()) {
+      if (!this.isTopMenuOpen(menu)) {
+        continue;
+      }
+      this.closeTopMenu(menu);
+    }
+    this.topMenuTrackingMode = 'pointer';
+  }
+
+  private isPointerWithinTopMenuRegion(target: Node): boolean {
+    return this.getTopMenus().some((menu) => menu.button.parentElement?.contains(target));
+  }
+
   private closeAllTopMenus(restoreFocus = false, exceptMenu: TopMenuElements | null = null): void {
     for (const menu of this.getTopMenus()) {
       if (menu.menu === exceptMenu?.menu) {
@@ -971,6 +985,22 @@ export class ViewerUi implements Disposable {
     for (const menu of this.getTopMenus()) {
       this.bindTopMenu(menu);
     }
+
+    this.disposables.addEventListener(this.elements.appMenuBar, 'pointerover', (event) => {
+      if (this.topMenuTrackingMode !== 'pointer') {
+        return;
+      }
+
+      if (
+        this.getTopMenus().every((menu) => !this.isTopMenuOpen(menu)) ||
+        !(event.target instanceof Node) ||
+        this.isPointerWithinTopMenuRegion(event.target)
+      ) {
+        return;
+      }
+
+      this.suspendTopMenusForTopBarHover();
+    });
 
     this.disposables.addEventListener(document, 'click', (event) => {
       const target = event.target;

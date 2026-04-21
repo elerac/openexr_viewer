@@ -1,4 +1,5 @@
 export interface Elements {
+  appMenuBar: HTMLElement;
   mainLayout: HTMLElement;
   rightStack: HTMLElement;
   sidePanel: HTMLElement;
@@ -129,6 +130,7 @@ export type LayoutSplitElements = Pick<
 
 export function resolveElements(): Elements {
   return {
+    appMenuBar: requireElement('app-menu-bar', HTMLElement),
     mainLayout: requireElement('main-layout', HTMLElement),
     rightStack: requireElement('right-stack', HTMLElement),
     sidePanel: requireElement('inspector-panel', HTMLElement),
