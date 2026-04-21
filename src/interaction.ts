@@ -821,15 +821,36 @@ export class ViewerInteraction {
     const viewport = this.callbacks.getViewport();
 
     if (state.viewerMode === 'panorama') {
-      this.callbacks.onViewChange(zoomPanorama(state, event.deltaY));
+      const nextView = zoomPanorama(state, event.deltaY);
+      const nextState = { ...state, ...nextView };
+      const hoverPixel = screenToPanoramaPixel(
+        point.x,
+        point.y,
+        nextState,
+        viewport,
+        imageSize.width,
+        imageSize.height
+      );
+      this.callbacks.onViewChange(nextView);
+      this.callbacks.onHoverPixel(hoverPixel);
       return;
     }
 
     const zoomFactor = Math.exp(-event.deltaY * 0.0015);
     const requestedZoom = state.zoom * zoomFactor;
-    const next = zoomAroundPoint(state, viewport, point.x, point.y, requestedZoom);
+    const nextView = zoomAroundPoint(state, viewport, point.x, point.y, requestedZoom);
+    const nextState = { ...state, ...nextView };
+    const hoverPixel = screenToImage(
+      point.x,
+      point.y,
+      nextState,
+      viewport,
+      imageSize.width,
+      imageSize.height
+    );
 
-    this.callbacks.onViewChange(next);
+    this.callbacks.onViewChange(nextView);
+    this.callbacks.onHoverPixel(hoverPixel);
   };
 
   private onPointerDown = (event: PointerEvent): void => {
@@ -858,6 +879,7 @@ export class ViewerInteraction {
 
     const state = this.callbacks.getState();
     const viewport = this.callbacks.getViewport();
+    let hoverState = state;
 
     if (this.dragging && this.previousPointer) {
       const dx = point.x - this.previousPointer.x;
@@ -868,27 +890,30 @@ export class ViewerInteraction {
       }
 
       if (state.viewerMode === 'panorama') {
-        this.callbacks.onViewChange(orbitPanorama(state, viewport, dx, dy));
+        const nextView = orbitPanorama(state, viewport, dx, dy);
+        hoverState = { ...state, ...nextView };
+        this.callbacks.onViewChange(nextView);
       } else {
-        this.callbacks.onViewChange({
+        const nextView = {
           zoom: state.zoom,
           panX: state.panX - dx / state.zoom,
           panY: state.panY - dy / state.zoom,
           panoramaYawDeg: state.panoramaYawDeg,
           panoramaPitchDeg: state.panoramaPitchDeg,
           panoramaHfovDeg: state.panoramaHfovDeg
-        });
+        };
+        hoverState = { ...state, ...nextView };
+        this.callbacks.onViewChange(nextView);
       }
 
       this.previousPointer = point;
     }
 
-    const currentState = this.callbacks.getState();
-    const hoverPixel = currentState.viewerMode === 'panorama'
+    const hoverPixel = hoverState.viewerMode === 'panorama'
       ? screenToPanoramaPixel(
           point.x,
           point.y,
-          currentState,
+          hoverState,
           viewport,
           imageSize.width,
           imageSize.height
@@ -896,7 +921,7 @@ export class ViewerInteraction {
       : screenToImage(
           point.x,
           point.y,
-          currentState,
+          hoverState,
           viewport,
           imageSize.width,
           imageSize.height

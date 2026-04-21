@@ -1,7 +1,7 @@
 import { linearToSrgbByte } from './color';
 import { isMonoSelection } from './display-model';
 import { buildSelectedDisplayTexture } from './display-texture';
-import { DecodedExrImage, ViewerState } from './types';
+import { DecodedExrImage, ViewerSessionState } from './types';
 
 const OPENED_IMAGE_THUMBNAIL_SIZE = 40;
 const THUMBNAIL_STATS_MAX_SAMPLES = 4096;
@@ -10,7 +10,7 @@ const THUMBNAIL_CHECKER_LIGHT = 31;
 
 export function createOpenedImageThumbnailDataUrl(
   decoded: DecodedExrImage,
-  state: ViewerState
+  state: ViewerSessionState
 ): string | null {
   if (typeof document === 'undefined') {
     return null;
@@ -44,7 +44,7 @@ export function createOpenedImageThumbnailDataUrlFromDisplayTexture(
   displayTexture: Float32Array,
   width: number,
   height: number,
-  state: ViewerState
+  state: ViewerSessionState
 ): string | null {
   const canvas = document.createElement('canvas');
   canvas.width = OPENED_IMAGE_THUMBNAIL_SIZE;

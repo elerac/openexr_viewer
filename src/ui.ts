@@ -117,6 +117,18 @@ interface TopMenuElements {
 type TopMenuTrackingMode = 'inactive' | 'pointer';
 type ExportDialogDimensionField = 'width' | 'height';
 
+interface ProbeValueRowElements {
+  row: HTMLDivElement;
+  key: HTMLSpanElement;
+  value: HTMLSpanElement;
+}
+
+interface ProbeColorRowElements {
+  row: HTMLDivElement;
+  channel: HTMLSpanElement;
+  value: HTMLSpanElement;
+}
+
 export class ProgressiveLoadingOverlayDisclosure implements Disposable {
   private active = false;
   private subtleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -196,6 +208,8 @@ export class ViewerUi implements Disposable {
   private lastExportDimensionEdited: ExportDialogDimensionField = 'width';
   private topMenuTrackingMode: TopMenuTrackingMode = 'inactive';
   private hoverOpenedTopMenuButton: HTMLButtonElement | null = null;
+  private readonly probeValueRows = new Map<string, ProbeValueRowElements>();
+  private readonly probeDisplayValueRows = new Map<string, ProbeColorRowElements>();
   private disposed = false;
 
   constructor(private readonly callbacks: UiCallbacks) {
@@ -276,6 +290,10 @@ export class ViewerUi implements Disposable {
 
   get overlayCanvas(): HTMLCanvasElement {
     return this.elements.overlayCanvas;
+  }
+
+  get probeOverlayCanvas(): HTMLCanvasElement {
+    return this.elements.probeOverlayCanvas;
   }
 
   dispose(): void {
@@ -498,7 +516,7 @@ export class ViewerUi implements Disposable {
       this.elements.probeColorPreview.classList.add('is-empty');
       this.elements.probeColorSwatch.style.backgroundColor = 'transparent';
       this.renderProbeDisplayValues(createEmptyProbeDisplayValues());
-      this.elements.probeValues.replaceChildren();
+      this.renderProbeValueRows([]);
       return;
     }
 
@@ -514,22 +532,11 @@ export class ViewerUi implements Disposable {
     }
 
     const channelEntries = Object.entries(sample.values).sort(([a], [b]) => a.localeCompare(b));
-    this.elements.probeValues.replaceChildren(
-      ...channelEntries.map(([channelName, channelValue]) => {
-        const row = document.createElement('div');
-        row.className = 'probe-row';
-
-        const key = document.createElement('span');
-        key.className = 'probe-key';
-        key.textContent = channelName;
-
-        const value = document.createElement('span');
-        value.className = 'probe-value';
-        value.textContent = formatOverlayValue(channelValue);
-
-        row.append(key, value);
-        return row;
-      })
+    this.renderProbeValueRows(
+      channelEntries.map(([channelName, channelValue]) => ({
+        key: channelName,
+        value: formatOverlayValue(channelValue)
+      }))
     );
   }
 
@@ -1195,23 +1202,73 @@ export class ViewerUi implements Disposable {
   }
 
   private renderProbeDisplayValues(displayValues: ProbeDisplayValue[]): void {
-    this.elements.probeColorValues.replaceChildren(
-      ...displayValues.map((item) => {
-        const row = document.createElement('div');
-        row.className = 'probe-color-row';
+    if (this.probeDisplayValueRows.size === 0 && this.elements.probeColorValues.childElementCount > 0) {
+      this.elements.probeColorValues.replaceChildren();
+    }
 
-        const channel = document.createElement('span');
-        channel.className = 'probe-color-channel';
-        channel.textContent = `${item.label}:`;
+    const orderedRows = displayValues.map((item) => {
+      const existing = this.probeDisplayValueRows.get(item.label);
+      if (existing) {
+        existing.channel.textContent = `${item.label}:`;
+        existing.value.textContent = item.value;
+        return existing.row;
+      }
 
-        const value = document.createElement('span');
-        value.className = 'probe-color-number';
-        value.textContent = item.value;
+      const row = document.createElement('div');
+      row.className = 'probe-color-row';
 
-        row.append(channel, value);
-        return row;
-      })
-    );
+      const channel = document.createElement('span');
+      channel.className = 'probe-color-channel';
+      channel.textContent = `${item.label}:`;
+
+      const value = document.createElement('span');
+      value.className = 'probe-color-number';
+      value.textContent = item.value;
+
+      row.append(channel, value);
+      this.probeDisplayValueRows.set(item.label, {
+        row,
+        channel,
+        value
+      });
+      return row;
+    });
+
+    pruneKeyedRows(this.probeDisplayValueRows, new Set(displayValues.map((item) => item.label)));
+    syncRowOrder(this.elements.probeColorValues, orderedRows);
+  }
+
+  private renderProbeValueRows(items: Array<{ key: string; value: string }>): void {
+    const orderedRows = items.map((item) => {
+      const existing = this.probeValueRows.get(item.key);
+      if (existing) {
+        existing.key.textContent = item.key;
+        existing.value.textContent = item.value;
+        return existing.row;
+      }
+
+      const row = document.createElement('div');
+      row.className = 'probe-row';
+
+      const key = document.createElement('span');
+      key.className = 'probe-key';
+      key.textContent = item.key;
+
+      const value = document.createElement('span');
+      value.className = 'probe-value';
+      value.textContent = item.value;
+
+      row.append(key, value);
+      this.probeValueRows.set(item.key, {
+        row,
+        key,
+        value
+      });
+      return row;
+    });
+
+    pruneKeyedRows(this.probeValueRows, new Set(items.map((item) => item.key)));
+    syncRowOrder(this.elements.probeValues, orderedRows);
   }
 }
 
@@ -1221,6 +1278,29 @@ function createEmptyProbeDisplayValues(): ProbeDisplayValue[] {
     { label: 'G', value: '-' },
     { label: 'B', value: '-' }
   ];
+}
+
+function pruneKeyedRows<T extends { row: HTMLElement }>(rows: Map<string, T>, nextKeys: Set<string>): void {
+  for (const [key, value] of rows.entries()) {
+    if (nextKeys.has(key)) {
+      continue;
+    }
+
+    value.row.remove();
+    rows.delete(key);
+  }
+}
+
+function syncRowOrder(container: HTMLElement, orderedRows: HTMLElement[]): void {
+  let referenceNode = container.firstChild;
+  for (const row of orderedRows) {
+    if (row === referenceNode) {
+      referenceNode = referenceNode?.nextSibling ?? null;
+      continue;
+    }
+
+    container.insertBefore(row, referenceNode);
+  }
 }
 
 export function formatProbeCoordinates(

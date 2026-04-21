@@ -79,6 +79,7 @@ export interface Elements {
   probeMetadata: HTMLElement;
   glCanvas: HTMLCanvasElement;
   overlayCanvas: HTMLCanvasElement;
+  probeOverlayCanvas: HTMLCanvasElement;
 }
 
 export type OpenedImagesPanelElements = Pick<
@@ -209,7 +210,8 @@ export function resolveElements(): Elements {
     probeValues: requireElement('probe-values', HTMLElement),
     probeMetadata: requireElement('probe-metadata', HTMLElement),
     glCanvas: requireElement('gl-canvas', HTMLCanvasElement),
-    overlayCanvas: requireElement('overlay-canvas', HTMLCanvasElement)
+    overlayCanvas: requireElement('overlay-canvas', HTMLCanvasElement),
+    probeOverlayCanvas: requireElement('probe-overlay-canvas', HTMLCanvasElement)
   };
 }
 

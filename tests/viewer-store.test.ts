@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_COLORMAP_ID } from '../src/colormaps';
-import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
+import { buildViewerStateForLayer, createInitialState, ViewerStore } from '../src/viewer-store';
 import {
   createChannelMonoSelection,
   createChannelRgbSelection,
@@ -116,5 +116,13 @@ describe('viewer store', () => {
 
     const fallback = buildViewerStateForLayer(preserved, image, 1);
     expect(fallback.displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
+  });
+
+  it('ignores transient hover fields in runtime store patches', () => {
+    const store = new ViewerStore(createInitialState());
+
+    store.setState({ hoveredPixel: { ix: 3, iy: 4 } } as never);
+
+    expect('hoveredPixel' in store.getState()).toBe(false);
   });
 });

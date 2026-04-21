@@ -18,7 +18,7 @@ import {
   ImagePixel,
   OpenedImageSession,
   SessionSource,
-  ViewerState,
+  ViewerSessionState,
   ViewportInfo
 } from '../types';
 
@@ -44,8 +44,8 @@ export interface SessionControllerDependencies {
   thumbnailService: ThumbnailService;
   renderCache: RenderCacheService;
   decodeBytes: (bytes: Uint8Array) => Promise<DecodedExrImage>;
-  getCurrentState: () => ViewerState;
-  setState: (next: Partial<ViewerState>) => void;
+  getCurrentState: () => ViewerSessionState;
+  setState: (next: Partial<ViewerSessionState>) => void;
   getViewport: () => ViewportInfo;
   getDefaultColormapId: () => string;
   clearRendererImage: () => void;
@@ -287,7 +287,7 @@ export class SessionController implements Disposable {
     this.setState(nextState);
   }
 
-  handleStoreChange(state: ViewerState): void {
+  handleStoreChange(state: ViewerSessionState): void {
     if (this.disposed) {
       return;
     }
@@ -625,7 +625,7 @@ async function decodeExrFromSessionSource(
   return await decodeBytes(bytes);
 }
 
-function createClearedViewerState(defaultColormapId: string): ViewerState {
+function createClearedViewerState(defaultColormapId: string): ViewerSessionState {
   return {
     exposureEv: 0,
     viewerMode: 'image',
@@ -643,7 +643,6 @@ function createClearedViewerState(defaultColormapId: string): ViewerState {
     panoramaHfovDeg: DEFAULT_PANORAMA_HFOV_DEG,
     activeLayer: 0,
     displaySelection: null,
-    hoveredPixel: null,
     lockedPixel: null
   };
 }
@@ -658,15 +657,12 @@ function getSessionSourceDetail(source: SessionSource, fallbackName: string): st
 }
 
 function buildReloadedSessionState(
-  currentState: ViewerState,
+  currentState: ViewerSessionState,
   previousImage: DecodedExrImage,
   decoded: DecodedExrImage
-): ViewerState {
+): ViewerSessionState {
   const lockedPixel = currentState.lockedPixel
     ? clampPixelToImageBounds(currentState.lockedPixel, decoded.width, decoded.height)
-    : null;
-  const hoveredPixel = currentState.hoveredPixel
-    ? clampPixelToImageBounds(currentState.hoveredPixel, decoded.width, decoded.height)
     : null;
   const nextImageCamera = currentState.viewerMode === 'image'
     ? {
@@ -688,7 +684,6 @@ function buildReloadedSessionState(
     {
       ...currentState,
       ...nextImageCamera,
-      hoveredPixel,
       lockedPixel
     },
     decoded,
@@ -698,14 +693,11 @@ function buildReloadedSessionState(
 
 function buildSwitchedSessionState(
   nextSession: OpenedImageSession,
-  currentState: ViewerState,
+  currentState: ViewerSessionState,
   previousImage: DecodedExrImage | null
-): ViewerState {
+): ViewerSessionState {
   const lockedPixel = currentState.lockedPixel
     ? clampPixelToImageBounds(currentState.lockedPixel, nextSession.decoded.width, nextSession.decoded.height)
-    : null;
-  const hoveredPixel = !lockedPixel && currentState.hoveredPixel
-    ? clampPixelToImageBounds(currentState.hoveredPixel, nextSession.decoded.width, nextSession.decoded.height)
     : null;
   const nextImageCamera = currentState.viewerMode === 'image'
     ? {
@@ -748,16 +740,11 @@ function buildSwitchedSessionState(
       colormapRangeMode: currentState.colormapRangeMode,
       colormapZeroCentered: currentState.colormapZeroCentered,
       stokesDegreeModulation: { ...currentState.stokesDegreeModulation },
-      hoveredPixel,
       lockedPixel
     },
     nextSession.decoded,
     nextSession.state.activeLayer
   );
-
-  if (lockedPixel) {
-    nextState.hoveredPixel = null;
-  }
 
   return nextState;
 }

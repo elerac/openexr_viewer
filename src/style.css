@@ -429,14 +429,16 @@ body.is-resizing-panel-columns * {
 }
 
 #gl-canvas,
-#overlay-canvas {
+#overlay-canvas,
+#probe-overlay-canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
 }
 
-#overlay-canvas {
+#overlay-canvas,
+#probe-overlay-canvas {
   pointer-events: none;
 }
 

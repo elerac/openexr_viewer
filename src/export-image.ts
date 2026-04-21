@@ -9,11 +9,11 @@ import { isStokesDegreeModulationEnabled } from './stokes';
 import type {
   DecodedExrImage,
   ExportImageRequest,
-  ViewerState
+  ViewerSessionState
 } from './types';
 
 type ExportVisualizationState = Pick<
-  ViewerState,
+  ViewerSessionState,
   'colormapRange' | 'displaySelection' | 'exposureEv' | 'stokesDegreeModulation' | 'visualizationMode'
 >;
 
@@ -35,7 +35,7 @@ export interface CreateExportImageBlobArgs {
   request: ExportImageRequest;
   decoded: DecodedExrImage;
   displayTexture: Float32Array;
-  state: ViewerState;
+  state: ViewerSessionState;
   colormapLut: ColormapLut | null;
 }
 

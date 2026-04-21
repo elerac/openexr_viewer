@@ -3,10 +3,8 @@ import {
   resolveDisplaySelectionEvaluator,
   type DisplaySelectionEvaluator
 } from '../display-texture';
-import { imageToScreen } from '../interaction';
 import type { Disposable } from '../lifecycle';
-import { resolveActiveProbePixel } from '../probe';
-import type { DecodedLayer, ImagePixel, ViewerState, ViewportInfo } from '../types';
+import type { DecodedLayer, ViewerState, ViewportInfo } from '../types';
 import { buildOverlayValueLines } from './overlay-value-lines';
 
 const VALUE_LABEL_MIN_SCREEN_SIZE = 28;
@@ -68,6 +66,10 @@ export class OverlayRenderer implements Disposable {
   }
 
   render(state: ViewerState): void {
+    this.renderValues(state);
+  }
+
+  renderValues(state: ViewerState): void {
     if (this.disposed) {
       return;
     }
@@ -87,11 +89,6 @@ export class OverlayRenderer implements Disposable {
 
     if (state.zoom >= VALUE_LABEL_MIN_SCREEN_SIZE) {
       this.drawPixelValues(state, imageSize.width, imageSize.height);
-    }
-
-    const probe = resolveActiveProbePixel(state.lockedPixel, state.hoveredPixel);
-    if (probe) {
-      this.drawProbeMarker(state, probe);
     }
   }
 
@@ -140,15 +137,6 @@ export class OverlayRenderer implements Disposable {
         drawValueLines(ctx, valueLines, centerX, centerY, state.zoom, state.zoom);
       }
     }
-  }
-
-  private drawProbeMarker(state: ViewerState, pixel: ImagePixel): void {
-    const ctx = this.overlayContext;
-    const topLeft = imageToScreen(pixel.ix, pixel.iy, state, this.viewport);
-
-    ctx.strokeStyle = state.lockedPixel ? 'rgba(255, 196, 0, 0.95)' : 'rgba(255, 255, 255, 0.95)';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(topLeft.x, topLeft.y, state.zoom, state.zoom);
   }
 
   dispose(): void {

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { SessionController } from '../src/controllers/session-controller';
 import { LoadQueueService } from '../src/services/load-queue';
 import { ViewerStore, createInitialState } from '../src/viewer-store';
-import { DecodedExrImage, ViewerState } from '../src/types';
+import { DecodedExrImage } from '../src/types';
 import { createChannelMonoSelection, createChannelRgbSelection, createLayerFromChannels } from './helpers/state-fixtures';
 
 function createDecodedImage(width = 4, height = 4): DecodedExrImage {
@@ -104,7 +104,7 @@ describe('session controller', () => {
     });
   });
 
-  it('switches active sessions while carrying current view and probe state', async () => {
+  it('switches active sessions while carrying current view and lock state', async () => {
     const decodeBytes = vi
       .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
       .mockResolvedValueOnce(createDecodedImage(6, 6))
@@ -121,8 +121,7 @@ describe('session controller', () => {
       panY: 5,
       exposureEv: 2,
       displaySelection: createChannelMonoSelection('R'),
-      lockedPixel: { ix: 1, iy: 1 },
-      hoveredPixel: { ix: 2, iy: 2 }
+      lockedPixel: { ix: 1, iy: 1 }
     });
     controller.handleStoreChange(store.getState());
 
@@ -140,8 +139,7 @@ describe('session controller', () => {
       panY: 5,
       exposureEv: 2,
       displaySelection: createChannelMonoSelection('R'),
-      lockedPixel: { ix: 1, iy: 1 },
-      hoveredPixel: null
+      lockedPixel: { ix: 1, iy: 1 }
     });
   });
 

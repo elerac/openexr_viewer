@@ -7,7 +7,6 @@ import {
   saveStoredDisplayCacheBudgetMb,
   type SessionResourceEntry
 } from '../display-cache';
-import { shouldRefreshDisplayLuminanceRange } from '../colormap-range';
 import {
   buildDisplaySourceBinding,
   buildDisplayTextureRevisionKey,
@@ -19,7 +18,7 @@ import type {
   DecodedLayer,
   DisplayLuminanceRange,
   OpenedImageSession,
-  ViewerState
+  ViewerSessionState
 } from '../types';
 import type { Disposable } from '../lifecycle';
 
@@ -49,7 +48,7 @@ interface RenderCacheRenderer {
     width: number,
     height: number,
     layer: DecodedLayer,
-    selection: ViewerState['displaySelection'],
+    selection: ViewerSessionState['displaySelection'],
     textureRevisionKey: string,
     binding: ReturnType<typeof buildDisplaySourceBinding>
   ) => void;
@@ -80,7 +79,7 @@ export class RenderCacheService implements Disposable {
     this.syncDisplayCacheUsageUi();
   }
 
-  prepareActiveSession(session: OpenedImageSession, state: ViewerState): PrepareActiveSessionResult {
+  prepareActiveSession(session: OpenedImageSession, state: ViewerSessionState): PrepareActiveSessionResult {
     if (this.disposed) {
       return {
         displayLuminanceRange: null,
@@ -134,12 +133,7 @@ export class RenderCacheService implements Disposable {
 
     entry.activeTextureRevisionKey = textureRevisionKey;
 
-    const luminanceRangeDirty = shouldRefreshDisplayLuminanceRange(
-      state.visualizationMode,
-      textureRevisionKey,
-      entry.luminanceRangeByRevision.has(textureRevisionKey) ? textureRevisionKey : '',
-      true
-    );
+    const luminanceRangeDirty = !entry.luminanceRangeByRevision.has(textureRevisionKey);
 
     if (luminanceRangeDirty) {
       entry.luminanceRangeByRevision.set(
@@ -165,7 +159,7 @@ export class RenderCacheService implements Disposable {
 
   getTextureForSnapshot(
     session: OpenedImageSession,
-    state: Pick<ViewerState, 'activeLayer' | 'displaySelection'>
+    state: Pick<ViewerSessionState, 'activeLayer' | 'displaySelection'>
   ): Float32Array | null {
     if (this.disposed) {
       return null;
@@ -186,7 +180,7 @@ export class RenderCacheService implements Disposable {
 
   getCachedLuminanceRange(
     sessionId: string,
-    state: Pick<ViewerState, 'activeLayer' | 'displaySelection'>
+    state: Pick<ViewerSessionState, 'activeLayer' | 'displaySelection'>
   ): DisplayLuminanceRange | null {
     if (this.disposed) {
       return null;

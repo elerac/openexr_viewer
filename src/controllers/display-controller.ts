@@ -24,12 +24,16 @@ import {
   type DisplaySelection
 } from '../display-model';
 import { createAbortError, isAbortError, throwIfAborted, type Disposable } from '../lifecycle';
-import { buildProbeColorPreview, resolveActiveProbePixel, resolveProbeMode } from '../probe';
+import {
+  buildProbeColorPreview,
+  resolveActiveProbePixel,
+  resolveProbeMode,
+  sameActiveProbeTarget
+} from '../probe';
 import { WebGlExrRenderer } from '../renderer';
 import {
   getStokesDegreeModulationLabel,
   getStokesDisplayColormapDefault,
-  isStokesDisplaySelection,
   isStokesDegreeModulationParameter
 } from '../stokes';
 import { ViewerUi } from '../ui';
@@ -38,19 +42,21 @@ import {
   DecodedExrImage,
   DecodedLayer,
   DisplayLuminanceRange,
-  ImagePixel,
   OpenedImageSession,
+  ViewerInteractionState,
+  ViewerRenderState,
+  ViewerSessionState,
   ViewerMode,
-  ViewerState,
   VisualizationMode
 } from '../types';
 import { buildViewerStateForLayer, ViewerStore } from '../viewer-store';
+import { mergeRenderState, samePixel, sameViewState } from '../view-state';
 
 const COLORMAP_ZERO_CENTER_MANUAL_MIN_MAGNITUDE = 1e-16;
 const MIN_RGB_VIEW_LOADING_MS = 120;
 
 type RestorableVisualizationState = Pick<
-  ViewerState,
+  ViewerSessionState,
   'visualizationMode' | 'activeColormapId' | 'colormapRange' | 'colormapRangeMode' | 'colormapZeroCentered'
 >;
 
@@ -79,6 +85,7 @@ export interface DisplayControllerDependencies {
   renderer: WebGlExrRenderer;
   renderCache: RenderCacheService;
   getActiveSession: () => OpenedImageSession | null;
+  getInteractionState: () => ViewerInteractionState;
 }
 
 export class DisplayController implements Disposable {
@@ -87,12 +94,14 @@ export class DisplayController implements Disposable {
   private readonly renderer: WebGlExrRenderer;
   private readonly renderCache: RenderCacheService;
   private readonly getActiveSession: DisplayControllerDependencies['getActiveSession'];
+  private readonly getInteractionState: DisplayControllerDependencies['getInteractionState'];
 
   private rgbViewChangeToken = 0;
   private colormapChangeToken = 0;
-  private renderedSessionId: string | null = null;
+  private renderedSession: OpenedImageSession | null = null;
   private uploadedColormapId: string | null = null;
   private activeColormapLut: ColormapLut | null = null;
+  private activeDisplayLuminanceRange: DisplayLuminanceRange | null = null;
   private defaultColormapId = DEFAULT_COLORMAP_ID;
   private colormapRegistry: ColormapRegistry | null = null;
   private readonly stokesDisplayRestoreStates = new Map<string, RestorableVisualizationState>();
@@ -105,6 +114,7 @@ export class DisplayController implements Disposable {
     this.renderer = dependencies.renderer;
     this.renderCache = dependencies.renderCache;
     this.getActiveSession = dependencies.getActiveSession;
+    this.getInteractionState = dependencies.getInteractionState;
   }
 
   async initialize(): Promise<void> {
@@ -123,15 +133,19 @@ export class DisplayController implements Disposable {
     }
   }
 
-  handleStoreChange(state: ViewerState, previous: ViewerState): void {
+  handleSessionStateChange(
+    state: ViewerSessionState,
+    previous: ViewerSessionState,
+    interactionChanged: boolean = false
+  ): void {
     if (this.disposed) {
       return;
     }
 
     const activeSession = this.getActiveSession();
-    const nextRenderedSessionId = activeSession?.id ?? null;
-    const sessionChanged = nextRenderedSessionId !== this.renderedSessionId;
+    const sessionChanged = activeSession !== this.renderedSession;
     const selectionChanged = !sameDisplaySelection(state.displaySelection, previous.displaySelection);
+    const activeRenderState = this.buildRenderState(state);
 
     if (sessionChanged || state.exposureEv !== previous.exposureEv) {
       this.ui.setExposure(state.exposureEv);
@@ -182,21 +196,27 @@ export class DisplayController implements Disposable {
           this.ui.setRgbGroupOptions(layer.channelNames, state.displaySelection);
         }
 
-        const {
-          displayLuminanceRange,
-          textureDirty,
-          luminanceRangeDirty
-        } = this.renderCache.prepareActiveSession(activeSession, state);
+        let luminanceRangeDirty = false;
+        if (sessionChanged || state.activeLayer !== previous.activeLayer || selectionChanged) {
+          const prepareResult = this.renderCache.prepareActiveSession(activeSession, state);
+          this.activeDisplayLuminanceRange = prepareResult.displayLuminanceRange;
+          luminanceRangeDirty = prepareResult.luminanceRangeDirty;
+        }
 
         const activeAutoColormapRange = resolveColormapAutoRange(
           state.displaySelection,
-          displayLuminanceRange,
+          this.activeDisplayLuminanceRange,
           state.colormapZeroCentered
         );
 
         if (
           state.visualizationMode === 'colormap' &&
-          (textureDirty || luminanceRangeDirty) &&
+          (
+            sessionChanged ||
+            state.activeLayer !== previous.activeLayer ||
+            selectionChanged ||
+            state.visualizationMode !== previous.visualizationMode
+          ) &&
           state.colormapRangeMode === 'alwaysAuto' &&
           !sameDisplayLuminanceRange(state.colormapRange, activeAutoColormapRange)
         ) {
@@ -215,7 +235,7 @@ export class DisplayController implements Disposable {
         ) {
           this.ui.setColormapRange(
             state.colormapRange,
-            displayLuminanceRange,
+            this.activeDisplayLuminanceRange,
             state.colormapRangeMode === 'alwaysAuto',
             state.colormapZeroCentered
           );
@@ -223,12 +243,10 @@ export class DisplayController implements Disposable {
 
         const probeDirty =
           sessionChanged ||
+          interactionChanged ||
           state.activeLayer !== previous.activeLayer ||
           state.exposureEv !== previous.exposureEv ||
           state.viewerMode !== previous.viewerMode ||
-          state.panoramaYawDeg !== previous.panoramaYawDeg ||
-          state.panoramaPitchDeg !== previous.panoramaPitchDeg ||
-          state.panoramaHfovDeg !== previous.panoramaHfovDeg ||
           selectionChanged ||
           state.visualizationMode !== previous.visualizationMode ||
           state.activeColormapId !== previous.activeColormapId ||
@@ -236,23 +254,47 @@ export class DisplayController implements Disposable {
           state.colormapRangeMode !== previous.colormapRangeMode ||
           state.colormapZeroCentered !== previous.colormapZeroCentered ||
           state.stokesDegreeModulation !== previous.stokesDegreeModulation ||
-          state.lockedPixel !== previous.lockedPixel ||
-          state.hoveredPixel !== previous.hoveredPixel;
+          !samePixel(state.lockedPixel, previous.lockedPixel);
 
         if (probeDirty) {
-          this.updateProbeReadout(
-            layer,
-            activeImage.width,
-            activeImage.height,
-            state.lockedPixel,
-            state.hoveredPixel,
-            state.displaySelection,
-            state.exposureEv,
-            state.visualizationMode,
-            state.colormapRange,
-            this.getActiveColormapLut(state.activeColormapId),
-            state.stokesDegreeModulation
-          );
+          this.updateProbeReadout(layer, activeImage.width, activeImage.height, activeRenderState);
+        }
+
+        const imageDirty =
+          sessionChanged ||
+          interactionChanged ||
+          state.viewerMode !== previous.viewerMode ||
+          state.exposureEv !== previous.exposureEv ||
+          state.activeLayer !== previous.activeLayer ||
+          selectionChanged ||
+          state.visualizationMode !== previous.visualizationMode ||
+          state.activeColormapId !== previous.activeColormapId ||
+          state.colormapRange !== previous.colormapRange ||
+          state.colormapRangeMode !== previous.colormapRangeMode ||
+          state.colormapZeroCentered !== previous.colormapZeroCentered ||
+          state.stokesDegreeModulation !== previous.stokesDegreeModulation;
+        const valueOverlayDirty =
+          sessionChanged ||
+          interactionChanged ||
+          state.viewerMode !== previous.viewerMode ||
+          state.activeLayer !== previous.activeLayer ||
+          selectionChanged ||
+          state.visualizationMode !== previous.visualizationMode;
+        const probeOverlayDirty =
+          sessionChanged ||
+          interactionChanged ||
+          state.viewerMode !== previous.viewerMode ||
+          state.activeLayer !== previous.activeLayer ||
+          !samePixel(state.lockedPixel, previous.lockedPixel);
+
+        if (imageDirty) {
+          this.renderer.renderImage(activeRenderState);
+        }
+        if (valueOverlayDirty) {
+          this.renderer.renderValueOverlay(activeRenderState);
+        }
+        if (probeOverlayDirty) {
+          this.renderer.renderProbeOverlay(activeRenderState);
         }
       } else {
         this.ui.setLayerOptions([], 0);
@@ -265,7 +307,8 @@ export class DisplayController implements Disposable {
         });
       }
     } else {
-      this.renderedSessionId = null;
+      this.renderedSession = null;
+      this.activeDisplayLuminanceRange = null;
       this.ui.setViewerMode('image');
       this.ui.setVisualizationMode('rgb');
       this.ui.clearImageBrowserPanels();
@@ -274,32 +317,43 @@ export class DisplayController implements Disposable {
       this.ui.setProbeReadout('Hover', null, null);
     }
 
-    const shouldRender =
-      sessionChanged ||
-      state.viewerMode !== previous.viewerMode ||
-      state.zoom !== previous.zoom ||
-      state.panX !== previous.panX ||
-      state.panY !== previous.panY ||
-      state.panoramaYawDeg !== previous.panoramaYawDeg ||
-      state.panoramaPitchDeg !== previous.panoramaPitchDeg ||
-      state.panoramaHfovDeg !== previous.panoramaHfovDeg ||
-      state.exposureEv !== previous.exposureEv ||
-      state.hoveredPixel !== previous.hoveredPixel ||
-      state.lockedPixel !== previous.lockedPixel ||
-      state.activeLayer !== previous.activeLayer ||
-      selectionChanged ||
-      state.visualizationMode !== previous.visualizationMode ||
-      state.activeColormapId !== previous.activeColormapId ||
-      state.colormapRange !== previous.colormapRange ||
-      state.colormapRangeMode !== previous.colormapRangeMode ||
-      state.colormapZeroCentered !== previous.colormapZeroCentered ||
-      state.stokesDegreeModulation !== previous.stokesDegreeModulation;
+    this.renderedSession = activeSession;
+  }
 
-    if (shouldRender) {
-      this.renderer.render(state);
+  handleInteractionStateChange(state: ViewerInteractionState, previous: ViewerInteractionState): void {
+    if (this.disposed) {
+      return;
     }
 
-    this.renderedSessionId = nextRenderedSessionId;
+    const sessionState = this.store.getState();
+    const activeSession = this.getActiveSession();
+    const viewChanged = !sameViewState(state.view, previous.view);
+    const probeTargetChanged = !sameActiveProbeTarget(
+      sessionState.lockedPixel,
+      previous.hoveredPixel,
+      sessionState.lockedPixel,
+      state.hoveredPixel
+    );
+
+    if (!activeSession) {
+      return;
+    }
+
+    const layer = getSelectedLayer(activeSession.decoded, sessionState.activeLayer);
+    const renderState = mergeRenderState(sessionState, state);
+
+    if (layer && probeTargetChanged) {
+      this.updateProbeReadout(layer, activeSession.decoded.width, activeSession.decoded.height, renderState);
+    }
+
+    if (viewChanged) {
+      this.renderer.renderImage(renderState);
+      this.renderer.renderValueOverlay(renderState);
+    }
+
+    if (viewChanged || probeTargetChanged) {
+      this.renderer.renderProbeOverlay(renderState);
+    }
   }
 
   async applyDisplaySelection(selection: DisplaySelection): Promise<void> {
@@ -316,7 +370,7 @@ export class DisplayController implements Disposable {
     const currentState = this.store.getState();
     const stokesDefaults = getStokesDisplayColormapDefault(selection);
     if (!stokesDefaults) {
-      const patch: Partial<ViewerState> = {
+      const patch: Partial<ViewerSessionState> = {
         displaySelection: cloneDisplaySelection(selection)
       };
       if (isChannelSelection(selection) && isStokesSelection(currentState.displaySelection)) {
@@ -348,7 +402,7 @@ export class DisplayController implements Disposable {
       }
 
       const latestState = this.store.getState();
-      const patch: Partial<ViewerState> = {
+      const patch: Partial<ViewerSessionState> = {
         displaySelection: cloneDisplaySelection(selection)
       };
       if (isChannelSelection(selection) && isStokesSelection(latestState.displaySelection)) {
@@ -495,8 +549,7 @@ export class DisplayController implements Disposable {
     }
 
     this.store.setState({
-      viewerMode: mode,
-      hoveredPixel: null
+      viewerMode: mode
     });
   }
 
@@ -649,14 +702,7 @@ export class DisplayController implements Disposable {
       layer,
       activeSession.decoded.width,
       activeSession.decoded.height,
-      state.lockedPixel,
-      state.hoveredPixel,
-      state.displaySelection,
-      state.exposureEv,
-      state.visualizationMode,
-      state.colormapRange,
-      this.getActiveColormapLut(state.activeColormapId),
-      state.stokesDegreeModulation
+      this.buildRenderState(state)
     );
   }
 
@@ -674,8 +720,8 @@ export class DisplayController implements Disposable {
     }
 
     this.stokesDisplayRestoreStates.delete(sessionId);
-    if (this.renderedSessionId === sessionId) {
-      this.renderedSessionId = null;
+    if (this.renderedSession?.id === sessionId) {
+      this.renderedSession = null;
     }
   }
 
@@ -685,7 +731,8 @@ export class DisplayController implements Disposable {
     }
 
     this.stokesDisplayRestoreStates.clear();
-    this.renderedSessionId = null;
+    this.renderedSession = null;
+    this.activeDisplayLuminanceRange = null;
   }
 
   dispose(): void {
@@ -698,7 +745,8 @@ export class DisplayController implements Disposable {
     this.colormapChangeToken += 1;
     this.abortController.abort(createAbortError('Display controller has been disposed.'));
     this.stokesDisplayRestoreStates.clear();
-    this.renderedSessionId = null;
+    this.renderedSession = null;
+    this.activeDisplayLuminanceRange = null;
     this.uploadedColormapId = null;
     this.activeColormapLut = null;
   }
@@ -752,7 +800,9 @@ export class DisplayController implements Disposable {
 
         this.uploadLoadedColormap(colormapId, lut);
         this.refreshProbeReadout();
-        this.renderer.render(this.store.getState());
+        if (this.store.getState().visualizationMode === 'colormap') {
+          this.renderer.renderImage(this.buildRenderState(this.store.getState()));
+        }
       })
       .catch((error) => {
         if (!isAbortError(error) && !this.disposed) {
@@ -765,7 +815,7 @@ export class DisplayController implements Disposable {
     return this.uploadedColormapId === colormapId ? this.activeColormapLut : null;
   }
 
-  private updateStokesDegreeModulationControl(state: ViewerState): void {
+  private updateStokesDegreeModulationControl(state: ViewerSessionState): void {
     const selection = state.displaySelection;
     if (!isStokesSelection(selection) || !isStokesDegreeModulationParameter(selection.parameter)) {
       this.ui.setStokesDegreeModulationControl(null);
@@ -782,35 +832,32 @@ export class DisplayController implements Disposable {
     layer: DecodedLayer,
     width: number,
     height: number,
-    lockedPixel: ImagePixel | null,
-    hoveredPixel: ImagePixel | null,
-    displaySelection: DisplaySelection | null,
-    exposureEv: number,
-    visualizationMode: VisualizationMode,
-    colormapRange: DisplayLuminanceRange | null,
-    colormapLut: ColormapLut | null,
-    stokesDegreeModulation: ViewerState['stokesDegreeModulation']
+    state: ViewerRenderState
   ): void {
-    const targetPixel = resolveActiveProbePixel(lockedPixel, hoveredPixel);
-    const mode = resolveProbeMode(lockedPixel);
+    const targetPixel = resolveActiveProbePixel(state.lockedPixel, state.hoveredPixel);
+    const mode = resolveProbeMode(state.lockedPixel);
 
     if (!targetPixel) {
       this.ui.setProbeReadout(mode, null, null, { width, height });
       return;
     }
 
-    const sample = samplePixelValuesForDisplay(layer, width, height, targetPixel, displaySelection);
+    const sample = samplePixelValuesForDisplay(layer, width, height, targetPixel, state.displaySelection);
     this.ui.setProbeReadout(
       mode,
       sample,
-      buildProbeColorPreview(sample, displaySelection, exposureEv, {
-        mode: visualizationMode,
-        colormapRange,
-        colormapLut,
-        stokesDegreeModulation
+      buildProbeColorPreview(sample, state.displaySelection, state.exposureEv, {
+        mode: state.visualizationMode,
+        colormapRange: state.colormapRange,
+        colormapLut: this.getActiveColormapLut(state.activeColormapId),
+        stokesDegreeModulation: state.stokesDegreeModulation
       }),
       { width, height }
     );
+  }
+
+  private buildRenderState(state: ViewerSessionState): ViewerRenderState {
+    return mergeRenderState(state, this.getInteractionState());
   }
 
   private resolveStokesDisplayRestoreState(sessionId: string): RestorableVisualizationState {
@@ -897,7 +944,7 @@ function inferDominantChannelGroupName(channelNames: string[]): string | null {
   return null;
 }
 
-function captureRestorableVisualizationState(state: ViewerState): RestorableVisualizationState {
+function captureRestorableVisualizationState(state: ViewerSessionState): RestorableVisualizationState {
   return {
     visualizationMode: state.visualizationMode,
     activeColormapId: state.activeColormapId,

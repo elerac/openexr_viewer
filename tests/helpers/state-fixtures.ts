@@ -3,6 +3,8 @@ import {
   type ChannelRgbSelection,
   type StokesSelection,
   type StokesParameter,
+  type ViewerInteractionState,
+  type ViewerSessionState,
   type ViewerState
 } from '../../src/types';
 import {
@@ -13,6 +15,7 @@ import {
 } from '../../src/stokes';
 import { createInitialState } from '../../src/viewer-store';
 import { createInterleavedChannelStorage } from '../../src/channel-storage';
+import { createInteractionState } from '../../src/view-state';
 import { DecodedExrImage, DecodedLayer } from '../../src/types';
 
 export function createLayer(): DecodedLayer {
@@ -66,10 +69,32 @@ export function createImage(layers: DecodedLayer[]): DecodedExrImage {
   };
 }
 
-export function createViewerState(overrides: Partial<ViewerState> = {}): ViewerState {
+export function createViewerSessionState(overrides: Partial<ViewerSessionState> = {}): ViewerSessionState {
   return {
     ...createInitialState(),
     ...overrides
+  };
+}
+
+export function createViewerState(overrides: Partial<ViewerState> = {}): ViewerState {
+  return {
+    ...createViewerSessionState(),
+    hoveredPixel: null,
+    ...overrides
+  };
+}
+
+export function createViewerInteractionState(
+  overrides: Partial<ViewerInteractionState> = {},
+  sessionState: ViewerSessionState = createViewerSessionState()
+): ViewerInteractionState {
+  return {
+    ...createInteractionState(sessionState),
+    ...overrides,
+    view: {
+      ...createInteractionState(sessionState).view,
+      ...overrides.view
+    }
   };
 }
 

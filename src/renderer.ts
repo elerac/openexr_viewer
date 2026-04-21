@@ -1,17 +1,24 @@
 import { GlImageRenderer } from './rendering/gl-image-renderer';
 import { OverlayRenderer } from './rendering/overlay-renderer';
+import { ProbeOverlayRenderer } from './rendering/probe-overlay-renderer';
 import type { Disposable } from './lifecycle';
 import type { DisplaySourceBinding } from './display-texture';
-import type { DecodedLayer, ViewerState, ViewportInfo } from './types';
+import type { DecodedLayer, ViewerRenderState, ViewerState, ViewportInfo } from './types';
 
 export class WebGlExrRenderer implements Disposable {
   private readonly imageRenderer: GlImageRenderer;
   private readonly overlayRenderer: OverlayRenderer;
+  private readonly probeOverlayRenderer: ProbeOverlayRenderer;
   private disposed = false;
 
-  constructor(glCanvas: HTMLCanvasElement, overlayCanvas: HTMLCanvasElement) {
+  constructor(
+    glCanvas: HTMLCanvasElement,
+    overlayCanvas: HTMLCanvasElement,
+    probeOverlayCanvas: HTMLCanvasElement
+  ) {
     this.imageRenderer = new GlImageRenderer(glCanvas);
     this.overlayRenderer = new OverlayRenderer(overlayCanvas);
+    this.probeOverlayRenderer = new ProbeOverlayRenderer(probeOverlayCanvas);
   }
 
   getViewport(): ViewportInfo {
@@ -30,6 +37,7 @@ export class WebGlExrRenderer implements Disposable {
     this.imageRenderer.resize(width, height);
     const viewport = this.imageRenderer.getViewport();
     this.overlayRenderer.resize(viewport.width, viewport.height);
+    this.probeOverlayRenderer.resize(viewport.width, viewport.height);
   }
 
   ensureLayerSourceTextures(
@@ -62,6 +70,7 @@ export class WebGlExrRenderer implements Disposable {
 
     this.imageRenderer.setDisplaySelectionBindings(sessionId, layerIndex, width, height, binding);
     this.overlayRenderer.setDisplaySelectionContext(width, height, layer, selection);
+    this.probeOverlayRenderer.setImagePresent(true);
   }
 
   setColormapTexture(entryCount: number, rgba8: Uint8Array): void {
@@ -87,15 +96,41 @@ export class WebGlExrRenderer implements Disposable {
 
     this.imageRenderer.clearImage();
     this.overlayRenderer.clearImage();
+    this.probeOverlayRenderer.clearImage();
   }
 
-  render(state: ViewerState): void {
+  render(state: ViewerRenderState): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.renderImage(state);
+    this.renderValueOverlay(state);
+    this.renderProbeOverlay(state);
+  }
+
+  renderImage(state: ViewerState): void {
     if (this.disposed) {
       return;
     }
 
     this.imageRenderer.render(state);
-    this.overlayRenderer.render(state);
+  }
+
+  renderValueOverlay(state: ViewerState): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.overlayRenderer.renderValues(state);
+  }
+
+  renderProbeOverlay(state: ViewerState): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.probeOverlayRenderer.render(state);
   }
 
   dispose(): void {
@@ -104,6 +139,7 @@ export class WebGlExrRenderer implements Disposable {
     }
 
     this.disposed = true;
+    this.probeOverlayRenderer.dispose();
     this.overlayRenderer.dispose();
     this.imageRenderer.dispose();
   }

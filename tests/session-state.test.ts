@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildSessionDisplayName,
+  cloneViewerSessionState,
   persistActiveSessionState,
   pickNextSessionIndexAfterRemoval
 } from '../src/session-state';
-import { ViewerState } from '../src/types';
-import { createChannelRgbSelection, createViewerState } from './helpers/state-fixtures';
+import { ViewerSessionState } from '../src/types';
+import { createChannelRgbSelection, createViewerSessionState } from './helpers/state-fixtures';
 
 describe('session state', () => {
   it('builds disambiguated session labels for duplicate filenames', () => {
@@ -26,7 +27,7 @@ describe('session state', () => {
   });
 
   it('persists active session state without mutating others', () => {
-    const baseState: ViewerState = createViewerState({
+    const baseState: ViewerSessionState = createViewerSessionState({
       displaySelection: createChannelRgbSelection('R', 'G', 'B')
     });
 
@@ -40,5 +41,18 @@ describe('session state', () => {
     expect(sessions[0].state.exposureEv).toBe(3);
     expect(sessions[0].state.zoom).toBe(5);
     expect(sessions[1].state.exposureEv).toBe(2);
+  });
+
+  it('drops transient hover data when cloning session state', () => {
+    const cloned = cloneViewerSessionState({
+      ...createViewerSessionState(),
+      lockedPixel: { ix: 1, iy: 2 }
+    } as ViewerSessionState & { hoveredPixel: { ix: number; iy: number } });
+
+    expect(cloned).toEqual({
+      ...createViewerSessionState(),
+      lockedPixel: { ix: 1, iy: 2 }
+    });
+    expect('hoveredPixel' in cloned).toBe(false);
   });
 });

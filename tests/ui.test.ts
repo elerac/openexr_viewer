@@ -220,6 +220,64 @@ describe('probe coordinate formatting', () => {
       { key: 'zero', value: '0.00' }
     ]);
   });
+
+  it('reuses keyed probe rows when labels stay stable', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setProbeReadout(
+      'Hover',
+      {
+        x: 1,
+        y: 2,
+        values: {
+          A: 0.1,
+          B: 0.2
+        }
+      },
+      {
+        cssColor: 'rgb(50, 60, 70)',
+        displayValues: [
+          { label: 'Mono', value: '0.100' },
+          { label: 'A', value: '1.000' }
+        ]
+      }
+    );
+
+    const initialProbeRows = Array.from(document.querySelectorAll('#probe-values .probe-row'));
+    const initialColorRows = Array.from(document.querySelectorAll('#probe-color-values .probe-color-row'));
+
+    ui.setProbeReadout(
+      'Hover',
+      {
+        x: 1,
+        y: 2,
+        values: {
+          A: 0.3,
+          B: 0.4
+        }
+      },
+      {
+        cssColor: 'rgb(80, 90, 100)',
+        displayValues: [
+          { label: 'Mono', value: '0.300' },
+          { label: 'A', value: '0.500' }
+        ]
+      }
+    );
+
+    const nextProbeRows = Array.from(document.querySelectorAll('#probe-values .probe-row'));
+    const nextColorRows = Array.from(document.querySelectorAll('#probe-color-values .probe-color-row'));
+
+    expect(nextProbeRows).toHaveLength(2);
+    expect(nextColorRows).toHaveLength(2);
+    expect(nextProbeRows[0]).toBe(initialProbeRows[0]);
+    expect(nextProbeRows[1]).toBe(initialProbeRows[1]);
+    expect(nextColorRows[0]).toBe(initialColorRows[0]);
+    expect(nextColorRows[1]).toBe(initialColorRows[1]);
+    expect(nextProbeRows.map((row) => row.querySelector('.probe-value')?.textContent)).toEqual(['0.300', '0.400']);
+    expect(nextColorRows.map((row) => row.querySelector('.probe-color-number')?.textContent)).toEqual(['0.300', '0.500']);
+  });
 });
 
 describe('panel split sizing', () => {

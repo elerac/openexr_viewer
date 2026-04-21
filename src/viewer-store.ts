@@ -4,10 +4,30 @@ import { resolveDisplaySelectionForLayer } from './display-selection';
 import { createDefaultStokesDegreeModulation } from './stokes';
 import {
   DecodedExrImage,
-  ViewerState
+  ViewerSessionState
 } from './types';
 
-export function createInitialState(): ViewerState {
+const SESSION_STATE_KEYS = [
+  'exposureEv',
+  'viewerMode',
+  'visualizationMode',
+  'activeColormapId',
+  'colormapRange',
+  'colormapRangeMode',
+  'colormapZeroCentered',
+  'stokesDegreeModulation',
+  'zoom',
+  'panX',
+  'panY',
+  'panoramaYawDeg',
+  'panoramaPitchDeg',
+  'panoramaHfovDeg',
+  'activeLayer',
+  'displaySelection',
+  'lockedPixel'
+] as const satisfies ReadonlyArray<keyof ViewerSessionState>;
+
+export function createInitialState(): ViewerSessionState {
   return {
     exposureEv: 0,
     viewerMode: 'image',
@@ -25,32 +45,36 @@ export function createInitialState(): ViewerState {
     panoramaHfovDeg: DEFAULT_PANORAMA_HFOV_DEG,
     activeLayer: 0,
     displaySelection: null,
-    hoveredPixel: null,
     lockedPixel: null
   };
 }
 
 export class ViewerStore {
-  private state: ViewerState;
-  private listeners = new Set<(state: ViewerState, previous: ViewerState) => void>();
+  private state: ViewerSessionState;
+  private listeners = new Set<(state: ViewerSessionState, previous: ViewerSessionState) => void>();
 
-  constructor(initialState: ViewerState) {
+  constructor(initialState: ViewerSessionState) {
     this.state = initialState;
   }
 
-  getState(): ViewerState {
+  getState(): ViewerSessionState {
     return this.state;
   }
 
-  setState(patch: Partial<ViewerState>): void {
+  setState(patch: Partial<ViewerSessionState>): void {
+    const normalizedPatch = pickSessionStatePatch(patch);
+    if (!hasStateChanges(this.state, normalizedPatch)) {
+      return;
+    }
+
     const previous = this.state;
-    this.state = { ...this.state, ...patch };
+    this.state = { ...this.state, ...normalizedPatch };
     for (const listener of this.listeners) {
       listener(this.state, previous);
     }
   }
 
-  subscribe(listener: (state: ViewerState, previous: ViewerState) => void): () => void {
+  subscribe(listener: (state: ViewerSessionState, previous: ViewerSessionState) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
@@ -66,10 +90,10 @@ export function pickValidLayerIndex(layerCount: number, requestedIndex: number):
 }
 
 export function buildViewerStateForLayer(
-  currentState: ViewerState,
+  currentState: ViewerSessionState,
   decoded: DecodedExrImage,
   requestedLayerIndex: number = currentState.activeLayer
-): ViewerState {
+): ViewerSessionState {
   const activeLayer = pickValidLayerIndex(decoded.layers.length, requestedLayerIndex);
   const layer = decoded.layers[activeLayer];
   if (!layer) {
@@ -85,4 +109,19 @@ export function buildViewerStateForLayer(
     activeLayer,
     displaySelection: resolveDisplaySelectionForLayer(layer.channelNames, currentState.displaySelection)
   };
+}
+
+function pickSessionStatePatch(patch: Partial<ViewerSessionState>): Partial<ViewerSessionState> {
+  const nextPatch: Partial<ViewerSessionState> = {};
+  for (const key of SESSION_STATE_KEYS) {
+    if (key in patch) {
+      nextPatch[key] = patch[key];
+    }
+  }
+  return nextPatch;
+}
+
+function hasStateChanges(state: ViewerSessionState, patch: Partial<ViewerSessionState>): boolean {
+  const entries = Object.entries(patch) as Array<[keyof ViewerSessionState, ViewerSessionState[keyof ViewerSessionState]]>;
+  return entries.some(([key, value]) => state[key] !== value);
 }

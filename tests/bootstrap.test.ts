@@ -54,6 +54,7 @@ vi.mock('../src/ui', () => ({
     });
     readonly glCanvas = document.createElement('canvas');
     readonly overlayCanvas = document.createElement('canvas');
+    readonly probeOverlayCanvas = document.createElement('canvas');
     readonly dispose = mocks.uiDispose;
     readonly setError = vi.fn();
     readonly setLoading = vi.fn();
@@ -69,6 +70,9 @@ vi.mock('../src/renderer', () => ({
     readonly dispose = mocks.rendererDispose;
     readonly resize = vi.fn();
     readonly render = vi.fn();
+    readonly renderImage = vi.fn();
+    readonly renderValueOverlay = vi.fn();
+    readonly renderProbeOverlay = vi.fn();
     readonly getViewport = vi.fn(() => ({ width: 320, height: 180 }));
     readonly clearImage = vi.fn();
     readonly setDisplayTexture = vi.fn();
@@ -99,7 +103,8 @@ vi.mock('../src/controllers/display-controller', () => ({
   DisplayController: class {
     readonly dispose = mocks.displayDispose;
     readonly initialize = vi.fn(async () => undefined);
-    readonly handleStoreChange = vi.fn();
+    readonly handleSessionStateChange = vi.fn();
+    readonly handleInteractionStateChange = vi.fn();
     readonly getDefaultColormapId = vi.fn(() => '0');
     readonly getActiveColormapLutForState = vi.fn(() => null);
     readonly handleSessionClosed = vi.fn();

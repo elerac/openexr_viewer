@@ -52,6 +52,21 @@ export function resolveProbeMode(lockedPixel: ImagePixel | null): 'Hover' | 'Loc
   return lockedPixel ? 'Locked' : 'Hover';
 }
 
+export function sameActiveProbeTarget(
+  previousLockedPixel: ImagePixel | null,
+  previousHoveredPixel: ImagePixel | null,
+  nextLockedPixel: ImagePixel | null,
+  nextHoveredPixel: ImagePixel | null
+): boolean {
+  return (
+    resolveProbeMode(previousLockedPixel) === resolveProbeMode(nextLockedPixel) &&
+    samePixel(
+      resolveActiveProbePixel(previousLockedPixel, previousHoveredPixel),
+      resolveActiveProbePixel(nextLockedPixel, nextHoveredPixel)
+    )
+  );
+}
+
 export function buildProbeColorPreview(
   sample: PixelSample | null,
   selection: DisplaySelection | null,
@@ -179,4 +194,16 @@ function clampAlpha(value: number): number {
 
 function formatCssAlpha(value: number): string {
   return Number(clampAlpha(value).toPrecision(4)).toString();
+}
+
+function samePixel(a: ImagePixel | null, b: ImagePixel | null): boolean {
+  if (!a && !b) {
+    return true;
+  }
+
+  if (!a || !b) {
+    return false;
+  }
+
+  return a.ix === b.ix && a.iy === b.iy;
 }

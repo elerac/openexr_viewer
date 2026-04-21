@@ -2,8 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DisplayController } from '../src/controllers/display-controller';
 import { RenderCacheService } from '../src/services/render-cache-service';
 import { buildViewerStateForLayer, createInitialState, ViewerStore } from '../src/viewer-store';
-import { DecodedExrImage, OpenedImageSession, ViewerState } from '../src/types';
-import { createChannelRgbSelection, createLayerFromChannels, createStokesSelection } from './helpers/state-fixtures';
+import { DecodedExrImage, OpenedImageSession, ViewerInteractionState, ViewerSessionState } from '../src/types';
+import {
+  createChannelRgbSelection,
+  createLayerFromChannels,
+  createStokesSelection,
+  createViewerInteractionState
+} from './helpers/state-fixtures';
 
 const colormapMocks = vi.hoisted(() => ({
   loadColormapRegistry: vi.fn(),
@@ -76,6 +81,9 @@ function createRendererMock() {
   return {
     getViewport: vi.fn(() => ({ width: 200, height: 100 })),
     render: vi.fn(),
+    renderImage: vi.fn(),
+    renderValueOverlay: vi.fn(),
+    renderProbeOverlay: vi.fn(),
     setColormapTexture: vi.fn(),
     ensureLayerSourceTextures: vi.fn(),
     setDisplaySelectionBindings: vi.fn(),
@@ -118,6 +126,7 @@ function createController(options: {
   const ui = createUiMock();
   const renderer = createRendererMock();
   const session = options.session ?? null;
+  let interactionState: ViewerInteractionState = createViewerInteractionState({}, store.getState());
   const renderCache = new RenderCacheService({
     ui,
     renderer: renderer as never,
@@ -129,10 +138,22 @@ function createController(options: {
     ui,
     renderer: renderer as never,
     renderCache,
-    getActiveSession: () => session
+    getActiveSession: () => session,
+    getInteractionState: () => interactionState
   });
 
-  return { controller, store, ui, renderer, session, renderCache };
+  return {
+    controller,
+    store,
+    ui,
+    renderer,
+    session,
+    renderCache,
+    getInteractionState: () => interactionState,
+    setInteractionState: (next: ViewerInteractionState) => {
+      interactionState = next;
+    }
+  };
 }
 
 beforeEach(() => {
@@ -190,8 +211,8 @@ describe('display controller', () => {
     };
     store.setState(next);
 
-    controller.handleStoreChange(store.getState(), previous);
-    controller.handleStoreChange(store.getState(), store.getState());
+    controller.handleSessionStateChange(store.getState(), previous);
+    controller.handleSessionStateChange(store.getState(), store.getState());
 
     expect(renderer.ensureLayerSourceTextures).toHaveBeenCalledTimes(1);
     expect(renderer.setDisplaySelectionBindings).toHaveBeenCalledTimes(1);
@@ -232,7 +253,7 @@ describe('display controller', () => {
     await controller.initialize();
 
     const previous = store.getState();
-    const next: ViewerState = {
+    const next: ViewerSessionState = {
       ...session.state,
       visualizationMode: 'colormap',
       colormapRange: null,
@@ -240,7 +261,7 @@ describe('display controller', () => {
     };
     store.setState(next);
 
-    controller.handleStoreChange(store.getState(), previous);
+    controller.handleSessionStateChange(store.getState(), previous);
 
     expect(store.getState().colormapRange).toEqual({ min: 0, max: 1 });
   });
@@ -272,27 +293,91 @@ describe('display controller', () => {
     vi.clearAllMocks();
 
     const previous = store.getState();
-    controller.handleStoreChange(store.getState(), previous);
+    controller.handleSessionStateChange(store.getState(), previous);
 
     expect(ui.clearImageBrowserPanels).toHaveBeenCalledTimes(1);
     expect(ui.setLayerOptions).not.toHaveBeenCalled();
     expect(ui.setRgbGroupOptions).not.toHaveBeenCalled();
   });
 
-  it('switches viewer mode through the store and clears stale hover probes', async () => {
+  it('does not prepare the render cache for interaction-only hover updates', async () => {
     const session = createSession(createDecodedImage());
-    const { controller, store } = createController({ session });
+    const { controller, store, renderCache, setInteractionState, renderer } = createController({ session });
 
     await controller.initialize();
+    controller.handleSessionStateChange(store.getState(), store.getState());
+    const prepareSpy = vi.spyOn(renderCache, 'prepareActiveSession');
+    vi.clearAllMocks();
 
-    store.setState({
+    const previousInteraction = createViewerInteractionState({
+      hoveredPixel: null
+    }, store.getState());
+    const nextInteraction = createViewerInteractionState({
       hoveredPixel: { ix: 1, iy: 0 }
-    });
+    }, store.getState());
+    setInteractionState(nextInteraction);
+    controller.handleInteractionStateChange(nextInteraction, previousInteraction);
 
-    controller.setViewerMode('panorama');
+    expect(prepareSpy).not.toHaveBeenCalled();
+    expect(renderer.renderImage).not.toHaveBeenCalled();
+    expect(renderer.renderValueOverlay).not.toHaveBeenCalled();
+    expect(renderer.renderProbeOverlay).toHaveBeenCalledTimes(1);
+  });
 
-    expect(store.getState().viewerMode).toBe('panorama');
-    expect(store.getState().hoveredPixel).toBeNull();
+  it('ignores structurally identical hover pixels in the interaction path', async () => {
+    const session = createSession(createDecodedImage());
+    const { controller, store, setInteractionState, renderer, ui } = createController({ session });
+
+    await controller.initialize();
+    controller.handleSessionStateChange(store.getState(), store.getState());
+    vi.clearAllMocks();
+
+    const previousInteraction = createViewerInteractionState({
+      hoveredPixel: { ix: 1, iy: 0 }
+    }, store.getState());
+    const nextInteraction = createViewerInteractionState({
+      hoveredPixel: { ix: 1, iy: 0 }
+    }, store.getState());
+    setInteractionState(nextInteraction);
+    controller.handleInteractionStateChange(nextInteraction, previousInteraction);
+
+    expect(ui.setProbeReadout).not.toHaveBeenCalled();
+    expect(renderer.renderImage).not.toHaveBeenCalled();
+    expect(renderer.renderValueOverlay).not.toHaveBeenCalled();
+    expect(renderer.renderProbeOverlay).not.toHaveBeenCalled();
+  });
+
+  it('refreshes panorama interaction rendering and probe sampling without cache prep', async () => {
+    const session = createSession(createDecodedImage());
+    const { controller, store, renderCache, setInteractionState, renderer, ui } = createController({ session });
+
+    await controller.initialize();
+    store.setState({ viewerMode: 'panorama' });
+    controller.handleSessionStateChange(store.getState(), createInitialState(), true);
+    const prepareSpy = vi.spyOn(renderCache, 'prepareActiveSession');
+    vi.clearAllMocks();
+
+    const previousInteraction = createViewerInteractionState({
+      hoveredPixel: { ix: 0, iy: 0 }
+    }, store.getState());
+    const nextInteraction = createViewerInteractionState({
+      view: {
+        ...store.getState(),
+        panoramaYawDeg: 20,
+        panoramaPitchDeg: 10,
+        panoramaHfovDeg: 80
+      },
+      hoveredPixel: { ix: 1, iy: 0 }
+    }, store.getState());
+
+    setInteractionState(nextInteraction);
+    controller.handleInteractionStateChange(nextInteraction, previousInteraction);
+
+    expect(prepareSpy).not.toHaveBeenCalled();
+    expect(ui.setProbeReadout).toHaveBeenCalled();
+    expect(renderer.renderImage).toHaveBeenCalledTimes(1);
+    expect(renderer.renderValueOverlay).toHaveBeenCalledTimes(1);
+    expect(renderer.renderProbeOverlay).toHaveBeenCalledTimes(1);
   });
 
   it('suppresses late colormap loads after dispose', async () => {

@@ -1,8 +1,9 @@
 import { disposeDecodeWorker, loadExrOffMainThread } from '../exr-worker-client';
+import { ViewerInteractionCoordinator } from '../interaction-coordinator';
 import { createAbortError } from '../lifecycle';
 import { ViewerStore, createInitialState } from '../viewer-store';
 import { ViewerUi } from '../ui';
-import { clampZoom, ViewerInteraction } from '../interaction';
+import { ViewerInteraction } from '../interaction';
 import { WebGlExrRenderer } from '../renderer';
 import { DisplayController } from '../controllers/display-controller';
 import { SessionController } from '../controllers/session-controller';
@@ -10,6 +11,7 @@ import { createExportImageBlob } from '../export-image';
 import { LoadQueueService } from '../services/load-queue';
 import { ThumbnailService } from '../services/thumbnail-service';
 import { RenderCacheService } from '../services/render-cache-service';
+import { mergeRenderState, samePixel } from '../view-state';
 
 export interface AppHandle {
   dispose(): void;
@@ -23,6 +25,7 @@ export async function bootstrapApp(): Promise<AppHandle> {
   let renderCache!: RenderCacheService;
   let renderer: WebGlExrRenderer | null = null;
   let thumbnailService: ThumbnailService | null = null;
+  let interactionCoordinator!: ViewerInteractionCoordinator;
   let interaction: ViewerInteraction | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let unsubscribeStore: (() => void) | null = null;
@@ -152,6 +155,7 @@ export async function bootstrapApp(): Promise<AppHandle> {
       window.removeEventListener('beforeunload', onBeforeUnload);
       unsubscribeStore?.();
       unsubscribeStore = null;
+      interactionCoordinator?.dispose();
       interaction?.destroy();
       interaction = null;
       resizeObserver?.disconnect();
@@ -168,7 +172,7 @@ export async function bootstrapApp(): Promise<AppHandle> {
   };
 
   try {
-    renderer = new WebGlExrRenderer(ui.glCanvas, ui.overlayCanvas);
+    renderer = new WebGlExrRenderer(ui.glCanvas, ui.overlayCanvas, ui.probeOverlayCanvas);
     renderCache = new RenderCacheService({
       ui,
       renderer,
@@ -207,18 +211,34 @@ export async function bootstrapApp(): Promise<AppHandle> {
       }
     });
 
+    interactionCoordinator = new ViewerInteractionCoordinator({
+      initialSessionState: store.getState(),
+      getSessionState: () => store.getState(),
+      commitViewState: (view) => {
+        store.setState(view);
+      },
+      onInteractionChange: (state, previous) => {
+        if (disposed) {
+          return;
+        }
+
+        displayController.handleInteractionStateChange(state, previous);
+      }
+    });
+
     displayController = new DisplayController({
       store,
       ui,
       renderer,
       renderCache,
-      getActiveSession: () => sessionController.getActiveSession()
+      getActiveSession: () => sessionController.getActiveSession(),
+      getInteractionState: () => interactionCoordinator.getState()
     });
 
     await displayController.initialize();
 
     interaction = new ViewerInteraction(ui.viewerContainer, {
-      getState: () => store.getState(),
+      getState: () => mergeRenderState(store.getState(), interactionCoordinator.getState()),
       getViewport: () => renderer!.getViewport(),
       getImageSize: () => {
         const activeSession = sessionController.getActiveSession();
@@ -232,10 +252,10 @@ export async function bootstrapApp(): Promise<AppHandle> {
         };
       },
       onViewChange: (next) => {
-        store.setState(next);
+        interactionCoordinator.enqueueViewPatch(next);
       },
       onHoverPixel: (pixel) => {
-        store.setState({ hoveredPixel: pixel });
+        interactionCoordinator.enqueueHoverPixel(pixel);
       },
       onToggleLockPixel: (pixel) => {
         const current = store.getState().lockedPixel;
@@ -248,13 +268,22 @@ export async function bootstrapApp(): Promise<AppHandle> {
       }
     });
 
+    let lastActiveSession = sessionController.getActiveSession();
     unsubscribeStore = store.subscribe((state, previous) => {
       if (disposed) {
         return;
       }
 
+      const activeSession = sessionController.getActiveSession();
+      const interactionSync = interactionCoordinator.syncSessionState(state, {
+        clearHover:
+          activeSession !== lastActiveSession ||
+          state.activeLayer !== previous.activeLayer ||
+          state.viewerMode !== previous.viewerMode
+      });
       sessionController.handleStoreChange(state);
-      displayController.handleStoreChange(state, previous);
+      displayController.handleSessionStateChange(state, previous, interactionSync.changed);
+      lastActiveSession = activeSession;
     });
 
     resizeObserver = new ResizeObserver(() => {
@@ -264,13 +293,13 @@ export async function bootstrapApp(): Promise<AppHandle> {
 
       const rect = ui.viewerContainer.getBoundingClientRect();
       renderer.resize(rect.width, rect.height);
-      renderer.render(store.getState());
+      renderer.render(mergeRenderState(store.getState(), interactionCoordinator.getState()));
     });
     resizeObserver.observe(ui.viewerContainer);
 
     const rect = ui.viewerContainer.getBoundingClientRect();
     renderer.resize(rect.width, rect.height);
-    renderer.render(store.getState());
+    renderer.render(mergeRenderState(store.getState(), interactionCoordinator.getState()));
     sessionController.syncOpenedImageOptions();
 
     window.addEventListener('beforeunload', onBeforeUnload);
@@ -283,18 +312,6 @@ export async function bootstrapApp(): Promise<AppHandle> {
   }
 
   return app;
-}
-
-function samePixel(a: { ix: number; iy: number } | null, b: { ix: number; iy: number } | null): boolean {
-  if (!a && !b) {
-    return true;
-  }
-
-  if (!a || !b) {
-    return false;
-  }
-
-  return a.ix === b.ix && a.iy === b.iy;
 }
 
 function triggerBrowserDownload(blob: Blob, filename: string): void {

@@ -2,7 +2,7 @@ import { cloneDisplayLuminanceRange } from '../colormap-range';
 import { cloneDisplaySelection } from '../display-model';
 import { createAbortError, isAbortError, throwIfAborted, type Disposable } from '../lifecycle';
 import { createOpenedImageThumbnailDataUrlFromDisplayTexture } from '../thumbnail';
-import { DecodedLayer, OpenedImageSession, ViewerState } from '../types';
+import { DecodedLayer, OpenedImageSession, ViewerSessionState } from '../types';
 import { RenderCacheService } from './render-cache-service';
 
 const THUMBNAIL_IDLE_TIMEOUT_MS = 250;
@@ -15,7 +15,7 @@ interface ThumbnailJob {
 
 interface ThumbnailSessionState {
   generationToken: number;
-  stateSnapshot: ViewerState;
+  stateSnapshot: ViewerSessionState;
   thumbnailDataUrl: string | null;
 }
 
@@ -43,7 +43,7 @@ export interface ThumbnailServiceDependencies {
   createThumbnailDataUrl?: (args: {
     session: OpenedImageSession;
     layer: DecodedLayer;
-    stateSnapshot: ViewerState;
+    stateSnapshot: ViewerSessionState;
     displayTexture: Float32Array;
   }) => string | null;
 }
@@ -69,7 +69,7 @@ export class ThumbnailService implements Disposable {
       dependencies.createThumbnailDataUrl ?? defaultCreateThumbnailDataUrl;
   }
 
-  enqueue(sessionId: string, stateSnapshot: ViewerState): Promise<void> {
+  enqueue(sessionId: string, stateSnapshot: ViewerSessionState): Promise<void> {
     if (this.abortController.signal.aborted) {
       return Promise.reject(this.abortController.signal.reason ?? createAbortError('Thumbnail service has been disposed.'));
     }
@@ -289,7 +289,7 @@ export class ThumbnailService implements Disposable {
     });
   }
 
-  private getOrCreateSessionState(sessionId: string, stateSnapshot: ViewerState): ThumbnailSessionState {
+  private getOrCreateSessionState(sessionId: string, stateSnapshot: ViewerSessionState): ThumbnailSessionState {
     const existing = this.sessionState.get(sessionId);
     if (existing) {
       return existing;
@@ -325,7 +325,7 @@ function defaultCreateThumbnailDataUrl({
 }: {
   session: OpenedImageSession;
   layer: DecodedLayer;
-  stateSnapshot: ViewerState;
+  stateSnapshot: ViewerSessionState;
   displayTexture: Float32Array;
 }): string | null {
   return createOpenedImageThumbnailDataUrlFromDisplayTexture(
@@ -348,13 +348,12 @@ function getSelectedLayer(session: OpenedImageSession, layerIndex: number): Deco
   return session.decoded.layers[layerIndex] ?? null;
 }
 
-function cloneViewerState(state: ViewerState): ViewerState {
+function cloneViewerState(state: ViewerSessionState): ViewerSessionState {
   return {
     ...state,
     displaySelection: cloneDisplaySelection(state.displaySelection),
     colormapRange: cloneDisplayLuminanceRange(state.colormapRange),
     stokesDegreeModulation: { ...state.stokesDegreeModulation },
-    hoveredPixel: state.hoveredPixel ? { ...state.hoveredPixel } : null,
     lockedPixel: state.lockedPixel ? { ...state.lockedPixel } : null
   };
 }

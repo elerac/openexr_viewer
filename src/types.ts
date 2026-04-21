@@ -54,7 +54,16 @@ export interface ExrMetadataEntry {
   value: string;
 }
 
-export interface ViewerState {
+export interface ViewerViewState {
+  zoom: number;
+  panX: number;
+  panY: number;
+  panoramaYawDeg: number;
+  panoramaPitchDeg: number;
+  panoramaHfovDeg: number;
+}
+
+export interface ViewerSessionState extends ViewerViewState {
   exposureEv: number;
   viewerMode: ViewerMode;
   visualizationMode: VisualizationMode;
@@ -63,17 +72,21 @@ export interface ViewerState {
   colormapRangeMode: ColormapRangeMode;
   colormapZeroCentered: boolean;
   stokesDegreeModulation: StokesDegreeModulationState;
-  zoom: number;
-  panX: number;
-  panY: number;
-  panoramaYawDeg: number;
-  panoramaPitchDeg: number;
-  panoramaHfovDeg: number;
   activeLayer: number;
   displaySelection: DisplaySelectionModel | null;
-  hoveredPixel: ImagePixel | null;
   lockedPixel: ImagePixel | null;
 }
+
+export interface ViewerInteractionState {
+  view: ViewerViewState;
+  hoveredPixel: ImagePixel | null;
+}
+
+export interface ViewerRenderState extends ViewerSessionState {
+  hoveredPixel: ImagePixel | null;
+}
+
+export type ViewerState = ViewerRenderState;
 
 export interface DisplayChannelMapping {
   displayR: string;
@@ -105,7 +118,7 @@ export interface OpenedImageSession {
   fileSizeBytes: number | null;
   source: SessionSource;
   decoded: DecodedExrImage;
-  state: ViewerState;
+  state: ViewerSessionState;
 }
 
 export interface ViewportInfo {
