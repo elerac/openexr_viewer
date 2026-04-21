@@ -323,6 +323,11 @@ export class ViewerUi {
     this.colormapPanel.setOpenedImageCount(this.openedImagesPanel.getOpenedImageCount());
   }
 
+  clearImageBrowserPanels(): void {
+    this.layerPanel.clearForNoImage();
+    this.channelPanel.clearForNoImage();
+  }
+
   setLayerOptions(items: LayerOptionItem[], activeIndex: number): void {
     this.layerPanel.setLayerOptions(items, activeIndex);
   }

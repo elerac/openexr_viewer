@@ -65,6 +65,7 @@ function createSession(decoded: DecodedExrImage): OpenedImageSession {
 function createUiMock() {
   return {
     setActiveColormap: vi.fn(),
+    clearImageBrowserPanels: vi.fn(),
     setColormapGradient: vi.fn(),
     setColormapOptions: vi.fn(),
     setColormapRange: vi.fn(),
@@ -270,5 +271,19 @@ describe('display controller', () => {
     expect(store.getState().visualizationMode).toBe('rgb');
     expect(store.getState().activeColormapId).toBe('0');
     expect(store.getState().displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
+  });
+
+  it('clears image browser panels explicitly when there is no active session', async () => {
+    const { controller, store, ui } = createController();
+
+    await controller.initialize();
+    vi.clearAllMocks();
+
+    const previous = store.getState();
+    controller.handleStoreChange(store.getState(), previous);
+
+    expect(ui.clearImageBrowserPanels).toHaveBeenCalledTimes(1);
+    expect(ui.setLayerOptions).not.toHaveBeenCalled();
+    expect(ui.setRgbGroupOptions).not.toHaveBeenCalled();
   });
 });

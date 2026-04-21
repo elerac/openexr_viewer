@@ -15,6 +15,7 @@ interface LayerPanelCallbacks {
 
 export class LayerPanel {
   private isLoading = false;
+  private hasActiveImage = false;
   private hasMultipleLayersState = false;
   private layerItems: LayerOptionItem[] = [];
   private fallbackPartLayerItems: LayerOptionItem[] | null = null;
@@ -75,6 +76,7 @@ export class LayerPanel {
   }
 
   setLayerOptions(items: LayerOptionItem[], activeIndex: number): void {
+    this.hasActiveImage = true;
     this.hasMultipleLayersState = items.length > 1;
     this.layerItems = items.map((item) => ({ ...item }));
     this.fallbackPartLayerItems = null;
@@ -100,6 +102,18 @@ export class LayerPanel {
     const resolvedIndex = Math.min(items.length - 1, Math.max(0, Math.floor(activeIndex)));
     this.elements.layerSelect.value = String(resolvedIndex);
     this.activeLayerIndex = resolvedIndex;
+    this.updateLayerSelectState();
+    this.renderLayerRows();
+  }
+
+  clearForNoImage(): void {
+    this.hasActiveImage = false;
+    this.hasMultipleLayersState = false;
+    this.layerItems = [];
+    this.fallbackPartLayerItems = null;
+    this.activeLayerIndex = 0;
+    this.elements.layerControl.classList.add('hidden');
+    syncSelectOptions(this.elements.layerSelect, []);
     this.updateLayerSelectState();
     this.renderLayerRows();
   }
@@ -139,11 +153,16 @@ export class LayerPanel {
   private renderLayerRows(): void {
     const visibleItems = this.getVisibleItems();
     const hasSelectableRows = visibleItems.some((item) => item.selectable !== false);
+    const disabled = this.isLoading || visibleItems.length === 0;
     this.elements.partsLayersCount.textContent = String(visibleItems.length);
-    this.elements.partsLayersList.classList.toggle('is-disabled', this.isLoading);
+    this.elements.partsLayersList.classList.toggle('is-disabled', disabled);
 
     if (visibleItems.length === 0) {
-      this.elements.partsLayersList.replaceChildren(createEmptyListMessage('No parts'));
+      if (this.hasActiveImage) {
+        this.elements.partsLayersList.replaceChildren(createEmptyListMessage('No parts'));
+      } else {
+        this.elements.partsLayersList.replaceChildren();
+      }
       return;
     }
 

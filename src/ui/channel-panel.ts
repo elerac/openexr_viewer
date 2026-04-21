@@ -40,6 +40,7 @@ export class ChannelPanel {
   private readonly rgbGroupMappings = new Map<string, DisplaySelection>();
   private isLoading = false;
   private isRgbViewLoading = false;
+  private hasActiveImage = false;
   private restoreRgbGroupFocusAfterLoading = false;
   private restoreChannelViewFocusAfterLoading = false;
   private hasRgbGroups = false;
@@ -168,6 +169,7 @@ export class ChannelPanel {
   }
 
   setRgbGroupOptions(channelNames: string[], selected: DisplaySelection | null): void {
+    this.hasActiveImage = true;
     const hadFocus = document.activeElement === this.elements.rgbGroupSelect;
     const nextChannelNames = [...channelNames];
     const expandedSelection = this.includeSplitRgbChannels
@@ -250,6 +252,21 @@ export class ChannelPanel {
     }
   }
 
+  clearForNoImage(): void {
+    this.hasActiveImage = false;
+    this.hasRgbGroups = false;
+    this.hasRgbSplitOptions = false;
+    this.currentRgbChannelNames = [];
+    this.currentRgbSelection = null;
+    this.channelViewItems = [];
+    this.rgbGroupMappings.clear();
+    syncSelectOptions(this.elements.rgbGroupSelect, []);
+    applyListboxRowSizing(this.elements.rgbGroupSelect, 0, CHANNEL_OPTIONS_MAX_VISIBLE_ROWS);
+    this.elements.rgbGroupSelect.disabled = true;
+    this.renderChannelViewRows();
+    this.updateRgbSplitToggleState();
+  }
+
   private renderChannelViewRows(): void {
     const disabled = this.isLoading || !this.hasRgbGroups;
     const shouldRestoreFocus = !disabled && isFocusWithinElement(this.elements.channelViewList);
@@ -257,7 +274,11 @@ export class ChannelPanel {
     this.elements.channelViewList.classList.toggle('is-disabled', disabled);
 
     if (this.channelViewItems.length === 0) {
-      this.elements.channelViewList.replaceChildren(createEmptyListMessage('No channels'));
+      if (this.hasActiveImage) {
+        this.elements.channelViewList.replaceChildren(createEmptyListMessage('No channels'));
+      } else {
+        this.elements.channelViewList.replaceChildren();
+      }
       return;
     }
 

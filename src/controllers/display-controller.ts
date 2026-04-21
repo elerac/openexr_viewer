@@ -61,6 +61,7 @@ type RestorableVisualizationState = Pick<
 type DisplayUi = Pick<
   ViewerUi,
   | 'setActiveColormap'
+  | 'clearImageBrowserPanels'
   | 'setColormapGradient'
   | 'setColormapOptions'
   | 'setColormapRange'
@@ -310,10 +311,9 @@ export class DisplayController {
       this.uploadedSessionId = null;
       this.uploadedTextureRevisionKey = '';
       this.ui.setVisualizationMode('rgb');
-      this.ui.setLayerOptions([], 0);
+      this.ui.clearImageBrowserPanels();
       this.ui.setColormapRange(null, null);
       this.ui.setProbeMetadata(null);
-      this.ui.setRgbGroupOptions([], createZeroDisplaySelection());
       this.ui.setProbeReadout('Hover', null, null);
     }
 
@@ -823,10 +823,6 @@ function inferDominantChannelGroupName(channelNames: string[]): string | null {
     return channelNames[0] ?? null;
   }
 
-  return null;
-}
-
-function createZeroDisplaySelection(): DisplaySelection | null {
   return null;
 }
 
