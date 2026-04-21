@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { SessionController } from '../src/controllers/session-controller';
 import { LoadQueueService } from '../src/services/load-queue';
 import { ViewerStore, createInitialState } from '../src/viewer-store';
-import { DecodedExrImage, OpenedImageSession, ViewerState } from '../src/types';
+import { DecodedExrImage, ViewerState } from '../src/types';
 import { createChannelMonoSelection, createChannelRgbSelection, createLayerFromChannels } from './helpers/state-fixtures';
 
 function createDecodedImage(width = 4, height = 4): DecodedExrImage {
@@ -31,8 +31,6 @@ function createFile(name: string, bytes: number[] = [1, 2, 3]): File {
 
 function createUiMock() {
   return {
-    setDisplayCacheBudget: vi.fn(),
-    setDisplayCacheUsage: vi.fn(),
     setError: vi.fn(),
     setExportTarget: vi.fn(),
     setLoading: vi.fn(),
@@ -48,13 +46,20 @@ function createController(options: {
   const thumbnailService = {
     enqueue: vi.fn(async () => undefined),
     discard: vi.fn(),
-    clear: vi.fn()
+    clear: vi.fn(),
+    getThumbnailDataUrl: vi.fn(() => null)
+  };
+  const renderCache = {
+    discard: vi.fn(),
+    clear: vi.fn(),
+    isPinned: vi.fn(() => false)
   };
 
   const controller = new SessionController({
     ui,
     loadQueue: new LoadQueueService(),
     thumbnailService: thumbnailService as never,
+    renderCache: renderCache as never,
     decodeBytes: options.decodeBytes ?? (async () => createDecodedImage()),
     getCurrentState: () => store.getState(),
     setState: (next) => {
@@ -65,13 +70,15 @@ function createController(options: {
     clearRendererImage: vi.fn()
   });
 
-  return { controller, store, ui, thumbnailService };
+  return { controller, store, ui, thumbnailService, renderCache };
 }
 
 describe('session controller', () => {
   it('applies decoded images as new active sessions and enqueues thumbnails', async () => {
     const decodeBytes = vi.fn(async () => createDecodedImage(8, 4));
-    const { controller, store, ui, thumbnailService } = createController({ decodeBytes });
+    const { controller, store, ui, thumbnailService, renderCache } = createController({ decodeBytes });
+    renderCache.isPinned.mockReturnValue(true);
+    thumbnailService.getThumbnailDataUrl.mockReturnValue('thumb-data');
 
     await controller.enqueueFiles([createFile('beauty.exr')]);
 
@@ -86,7 +93,9 @@ describe('session controller', () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: session?.id,
-          label: 'beauty.exr'
+          label: 'beauty.exr',
+          thumbnailDataUrl: 'thumb-data',
+          pinned: true
         })
       ]),
       session?.id
@@ -215,7 +224,7 @@ describe('session controller', () => {
       .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
       .mockResolvedValueOnce(createDecodedImage(4, 4))
       .mockResolvedValueOnce(createDecodedImage(8, 8));
-    const { controller, thumbnailService, ui } = createController({ decodeBytes });
+    const { controller, thumbnailService, renderCache, ui } = createController({ decodeBytes });
 
     await controller.enqueueFiles([createFile('reload.exr')]);
     const sessionId = controller.getActiveSessionId()!;
@@ -226,6 +235,8 @@ describe('session controller', () => {
     expect(reloaded?.decoded.width).toBe(8);
     expect(reloaded?.decoded.height).toBe(8);
     expect(thumbnailService.enqueue).toHaveBeenCalledTimes(2);
+    expect(thumbnailService.discard).toHaveBeenCalledWith(sessionId, { preserveDataUrl: true });
+    expect(renderCache.discard).toHaveBeenCalledWith(sessionId, { preservePinned: true });
     expect(ui.setExportTarget).toHaveBeenLastCalledWith({
       filename: 'reload.png',
       sourceWidth: 8,
@@ -233,44 +244,26 @@ describe('session controller', () => {
     });
   });
 
-  it('prunes unpinned inactive display caches and keeps pinned ones over budget', async () => {
+  it('clears external thumbnail and render cache state when sessions close', async () => {
     const decodeBytes = vi
       .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
       .mockResolvedValueOnce(createDecodedImage())
       .mockResolvedValueOnce(createDecodedImage());
-    const { controller } = createController({ decodeBytes });
+    const { controller, thumbnailService, renderCache } = createController({ decodeBytes });
 
     await controller.enqueueFiles([createFile('first.exr')]);
     await controller.enqueueFiles([createFile('second.exr')]);
 
     const [first, second] = controller.getSessions();
-    const firstTexture = new Float32Array((40 * 1024 * 1024) / 4);
-    const secondTexture = new Float32Array((40 * 1024 * 1024) / 4);
+    controller.closeSession(second!.id);
 
-    first!.displayTexture = firstTexture;
-    first!.displayLuminanceRange = { min: 0, max: 1 };
-    first!.displayLuminanceRangeRevisionKey = 'first-range';
-    first!.textureRevisionKey = 'first-texture';
-    controller.touchDisplayCache(first!);
+    expect(thumbnailService.discard).toHaveBeenCalledWith(second!.id);
+    expect(renderCache.discard).toHaveBeenCalledWith(second!.id);
 
-    second!.displayTexture = secondTexture;
-    second!.displayLuminanceRange = { min: 0, max: 1 };
-    second!.displayLuminanceRangeRevisionKey = 'second-range';
-    second!.textureRevisionKey = 'second-texture';
-    controller.touchDisplayCache(second!);
+    controller.closeAllSessions();
 
-    controller.setDisplayCacheBudget(64);
-    expect(first!.displayTexture).toBeNull();
-
-    first!.displayTexture = firstTexture;
-    first!.displayLuminanceRange = { min: 0, max: 1 };
-    first!.displayLuminanceRangeRevisionKey = 'first-range';
-    first!.textureRevisionKey = 'first-texture';
-    controller.toggleSessionPin(first!.id);
-    controller.touchDisplayCache(first!);
-
-    controller.setDisplayCacheBudget(64);
-    expect(first!.displayTexture).toBe(firstTexture);
-    expect(second!.displayTexture).toBe(secondTexture);
+    expect(thumbnailService.clear).toHaveBeenCalledTimes(1);
+    expect(renderCache.clear).toHaveBeenCalledTimes(1);
+    expect(first?.id).toBeDefined();
   });
 });

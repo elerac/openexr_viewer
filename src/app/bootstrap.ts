@@ -8,12 +8,14 @@ import { SessionController } from '../controllers/session-controller';
 import { createExportImageBlob } from '../export-image';
 import { LoadQueueService } from '../services/load-queue';
 import { ThumbnailService } from '../services/thumbnail-service';
+import { RenderCacheService } from '../services/render-cache-service';
 
 export async function bootstrapApp(): Promise<void> {
   const store = new ViewerStore(createInitialState());
 
   let sessionController!: SessionController;
   let displayController!: DisplayController;
+  let renderCache!: RenderCacheService;
   let interaction: ViewerInteraction | null = null;
   let resizeObserver: ResizeObserver | null = null;
 
@@ -33,10 +35,16 @@ export async function bootstrapApp(): Promise<void> {
 
       const state = store.getState();
       const colormapLut = displayController.getActiveColormapLutForState(state.activeColormapId);
+      const displayTexture = renderCache.getTextureForSnapshot(activeSession, state);
       try {
+        if (!displayTexture) {
+          throw new Error('No exportable image is active.');
+        }
+
         const blob = await createExportImageBlob({
           request,
-          session: activeSession,
+          decoded: activeSession.decoded,
+          displayTexture,
           state,
           colormapLut
         });
@@ -75,10 +83,11 @@ export async function bootstrapApp(): Promise<void> {
       sessionController.reorderSessions(draggedSessionId, targetSessionId);
     },
     onDisplayCacheBudgetChange: (valueMb) => {
-      sessionController.setDisplayCacheBudget(valueMb);
+      renderCache.setBudgetMb(valueMb);
     },
     onToggleOpenedImagePin: (sessionId) => {
-      sessionController.toggleSessionPin(sessionId);
+      renderCache.togglePin(sessionId);
+      sessionController.syncOpenedImageOptions();
     },
     onExposureChange: (value) => {
       store.setState({ exposureEv: value });
@@ -117,10 +126,16 @@ export async function bootstrapApp(): Promise<void> {
 
   try {
     const renderer = new WebGlExrRenderer(ui.glCanvas, ui.overlayCanvas);
+    renderCache = new RenderCacheService({
+      ui,
+      renderer,
+      getActiveSessionId: () => sessionController?.getActiveSessionId() ?? null
+    });
     const thumbnailService = new ThumbnailService({
       getSession: (sessionId) => {
         return sessionController?.getSessions().find((session) => session.id === sessionId) ?? null;
       },
+      renderCache,
       onThumbnailUpdated: () => {
         sessionController.syncOpenedImageOptions();
       }
@@ -130,6 +145,7 @@ export async function bootstrapApp(): Promise<void> {
       ui,
       loadQueue,
       thumbnailService,
+      renderCache,
       decodeBytes: loadExrOffMainThread,
       getCurrentState: () => store.getState(),
       setState: (next) => {
@@ -152,19 +168,8 @@ export async function bootstrapApp(): Promise<void> {
       store,
       ui,
       renderer,
-      getActiveSession: () => sessionController.getActiveSession(),
-      getSessions: () => sessionController.getSessions(),
-      getActiveSessionId: () => sessionController.getActiveSessionId(),
-      getDisplayCacheBudgetBytes: () => sessionController.getDisplayCacheBudgetBytes(),
-      touchDisplayCache: (session) => {
-        sessionController.touchDisplayCache(session);
-      },
-      syncOpenedImageOptions: () => {
-        sessionController.syncOpenedImageOptions();
-      },
-      syncDisplayCacheUsage: () => {
-        sessionController.syncDisplayCacheUsageUi();
-      }
+      renderCache,
+      getActiveSession: () => sessionController.getActiveSession()
     });
 
     await displayController.initialize();

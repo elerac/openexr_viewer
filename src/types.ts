@@ -105,16 +105,7 @@ export interface OpenedImageSession {
   fileSizeBytes: number | null;
   source: SessionSource;
   decoded: DecodedExrImage;
-  thumbnailDataUrl: string | null;
-  thumbnailGenerationToken: number;
-  thumbnailStateSnapshot: ViewerState;
   state: ViewerState;
-  textureRevisionKey: string;
-  displayTexture: Float32Array | null;
-  displayLuminanceRangeRevisionKey: string;
-  displayLuminanceRange: DisplayLuminanceRange | null;
-  displayCachePinned: boolean;
-  displayCacheLastTouched: number;
 }
 
 export interface ViewportInfo {

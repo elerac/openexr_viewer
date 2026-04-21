@@ -1,4 +1,4 @@
-import type { OpenedImageSession } from './types';
+import type { DisplayLuminanceRange } from './types';
 
 export const DISPLAY_CACHE_BUDGET_STORAGE_KEY = 'openexr-viewer:display-cache-budget-mb:v1';
 export const DISPLAY_CACHE_BUDGET_OPTIONS_MB = [64, 128, 256, 512, 1024] as const;
@@ -8,33 +8,44 @@ export const MAX_DISPLAY_CACHE_BUDGET_MB =
 export const DEFAULT_DISPLAY_CACHE_BUDGET_MB = 256;
 export const BYTES_PER_MEGABYTE = 1024 * 1024;
 
-type DisplayCacheSession = Pick<
-  OpenedImageSession,
-  | 'id'
-  | 'displayTexture'
-  | 'displayLuminanceRange'
-  | 'displayLuminanceRangeRevisionKey'
-  | 'textureRevisionKey'
-  | 'displayCachePinned'
-  | 'displayCacheLastTouched'
->;
+export interface DisplayCacheEntry {
+  id: string;
+  displayTexture: Float32Array | null;
+  displayLuminanceRange: DisplayLuminanceRange | null;
+  displayLuminanceRangeRevisionKey: string;
+  textureRevisionKey: string;
+  pinned: boolean;
+  lastTouched: number;
+}
 
-export function clearSessionDisplayCache(session: DisplayCacheSession): void {
+export function createDisplayCacheEntry(id: string): DisplayCacheEntry {
+  return {
+    id,
+    displayTexture: null,
+    displayLuminanceRange: null,
+    displayLuminanceRangeRevisionKey: '',
+    textureRevisionKey: '',
+    pinned: false,
+    lastTouched: 0
+  };
+}
+
+export function clearSessionDisplayCache(session: DisplayCacheEntry): void {
   session.displayTexture = null;
   session.displayLuminanceRange = null;
   session.displayLuminanceRangeRevisionKey = '';
   session.textureRevisionKey = '';
-  session.displayCacheLastTouched = 0;
+  session.lastTouched = 0;
 }
 
 export function getRetainedDisplayCacheBytes(
-  sessions: Array<Pick<OpenedImageSession, 'displayTexture'>>
+  sessions: Array<Pick<DisplayCacheEntry, 'displayTexture'>>
 ): number {
   return sessions.reduce((total, session) => total + (session.displayTexture?.byteLength ?? 0), 0);
 }
 
 export function pruneDisplayCachesToBudget(
-  sessions: DisplayCacheSession[],
+  sessions: DisplayCacheEntry[],
   activeSessionId: string | null,
   budgetBytes: number
 ): string[] {
@@ -49,12 +60,12 @@ export function pruneDisplayCachesToBudget(
     .filter(
       (session) =>
         session.id !== activeSessionId &&
-        !session.displayCachePinned &&
+        !session.pinned &&
         Boolean(session.displayTexture)
     )
     .sort((a, b) => {
-      if (a.displayCacheLastTouched !== b.displayCacheLastTouched) {
-        return a.displayCacheLastTouched - b.displayCacheLastTouched;
+      if (a.lastTouched !== b.lastTouched) {
+        return a.lastTouched - b.lastTouched;
       }
 
       return a.id.localeCompare(b.id);

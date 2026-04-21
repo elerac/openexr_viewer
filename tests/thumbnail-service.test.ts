@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { __debugGetMaterializedChannelCount } from '../src/channel-storage';
+import { buildSelectedDisplayTexture } from '../src/display-texture';
 import { serializeDisplaySelectionKey } from '../src/display-model';
 import { ThumbnailService } from '../src/services/thumbnail-service';
 import { DecodedExrImage, OpenedImageSession, ViewerState } from '../src/types';
@@ -31,25 +32,24 @@ function createSession(id = 'session-1'): OpenedImageSession {
     fileSizeBytes: 16,
     source: { kind: 'url', url: `/${id}.exr` },
     decoded,
-    thumbnailDataUrl: null,
-    thumbnailGenerationToken: 0,
-    thumbnailStateSnapshot: state,
-    state,
-    textureRevisionKey: '',
-    displayTexture: null,
-    displayLuminanceRangeRevisionKey: '',
-    displayLuminanceRange: null,
-    displayCachePinned: false,
-    displayCacheLastTouched: 0
+    state
+  };
+}
+
+function createRenderCacheStub(texture?: Float32Array | null) {
+  return {
+    getTextureForSnapshot: vi.fn(() => texture ?? new Float32Array([0, 0, 0, 1, 1, 1, 1, 1]))
   };
 }
 
 describe('thumbnail service', () => {
   it('suppresses stale thumbnail jobs when a newer token replaces them', async () => {
     const session = createSession();
+    const renderCache = createRenderCacheStub();
     const updates: string[] = [];
     const service = new ThumbnailService({
       getSession: () => session,
+      renderCache: renderCache as never,
       onThumbnailUpdated: () => {
         updates.push('updated');
       },
@@ -65,15 +65,17 @@ describe('thumbnail service', () => {
 
     await Promise.all([first, second]);
 
-    expect(session.thumbnailDataUrl).toBe('channelMono:second:');
+    expect(service.getThumbnailDataUrl(session.id)).toBe('channelMono:second:');
     expect(updates).toEqual(['updated']);
   });
 
   it('skips discarded jobs once the backing session is gone', async () => {
     const sessions = new Map<string, OpenedImageSession>([['session-1', createSession()]]);
+    const renderCache = createRenderCacheStub();
     const onThumbnailUpdated = vi.fn();
     const service = new ThumbnailService({
       getSession: (sessionId) => sessions.get(sessionId) ?? null,
+      renderCache: renderCache as never,
       onThumbnailUpdated,
       windowLike: null,
       createThumbnailDataUrl: () => 'thumb'
@@ -86,6 +88,7 @@ describe('thumbnail service', () => {
     await promise;
 
     expect(onThumbnailUpdated).not.toHaveBeenCalled();
+    expect(service.getThumbnailDataUrl('session-1')).toBeNull();
   });
 
   it('clears queued jobs that have not started yet', async () => {
@@ -95,9 +98,11 @@ describe('thumbnail service', () => {
       [firstSession.id, firstSession],
       [secondSession.id, secondSession]
     ]);
+    const renderCache = createRenderCacheStub();
     const updates: string[] = [];
     const service = new ThumbnailService({
       getSession: (sessionId) => sessions.get(sessionId) ?? null,
+      renderCache: renderCache as never,
       onThumbnailUpdated: () => {
         updates.push('updated');
       },
@@ -111,20 +116,43 @@ describe('thumbnail service', () => {
 
     await Promise.all([first, second]);
 
-    expect(firstSession.thumbnailDataUrl).toBe('first-thumb');
-    expect(secondSession.thumbnailDataUrl).toBeNull();
+    expect(service.getThumbnailDataUrl(firstSession.id)).toBe('first-thumb');
+    expect(service.getThumbnailDataUrl(secondSession.id)).toBeNull();
     expect(updates).toEqual(['updated']);
   });
 
-  it('reuses the cached display texture when the revision key matches', async () => {
+  it('preserves the previous thumbnail while reload work is queued', async () => {
+    const session = createSession();
+    const renderCache = createRenderCacheStub();
+    const service = new ThumbnailService({
+      getSession: () => session,
+      renderCache: renderCache as never,
+      onThumbnailUpdated: () => undefined,
+      windowLike: null,
+      createThumbnailDataUrl: ({ stateSnapshot }) => serializeDisplaySelectionKey(stateSnapshot.displaySelection)
+    });
+
+    await service.enqueue(session.id, session.state);
+    service.discard(session.id, { preserveDataUrl: true });
+
+    const reloadedState: ViewerState = {
+      ...session.state,
+      displaySelection: createChannelMonoSelection('reload')
+    };
+    await service.enqueue(session.id, reloadedState);
+
+    expect(service.getThumbnailDataUrl(session.id)).toBe('channelMono:reload:');
+  });
+
+  it('reuses the render cache texture when available', async () => {
     const session = createSession();
     const cachedTexture = new Float32Array([0.5, 0.5, 0.5, 1, 1, 1, 1, 1]);
-    session.displayTexture = cachedTexture;
-    session.textureRevisionKey = `0:${serializeDisplaySelectionKey(createChannelRgbSelection('R', 'G', 'B'))}`;
+    const renderCache = createRenderCacheStub(cachedTexture);
 
     let receivedTexture: Float32Array | null = null;
     const service = new ThumbnailService({
       getSession: () => session,
+      renderCache: renderCache as never,
       onThumbnailUpdated: () => undefined,
       windowLike: null,
       createThumbnailDataUrl: ({ displayTexture }) => {
@@ -135,15 +163,27 @@ describe('thumbnail service', () => {
 
     await service.enqueue(session.id, session.state);
 
+    expect(renderCache.getTextureForSnapshot).toHaveBeenCalledWith(session, session.state);
     expect(receivedTexture).toBe(cachedTexture);
-    expect(session.thumbnailDataUrl).toBe('thumb');
+    expect(service.getThumbnailDataUrl(session.id)).toBe('thumb');
   });
 
   it('does not trigger planar materialization while building thumbnail display textures', async () => {
     const session = createSession();
     const layer = session.decoded.layers[0]!;
+    const renderCache = {
+      getTextureForSnapshot: vi.fn(() =>
+        buildSelectedDisplayTexture(
+          layer,
+          session.decoded.width,
+          session.decoded.height,
+          session.state.displaySelection
+        )
+      )
+    };
     const service = new ThumbnailService({
       getSession: () => session,
+      renderCache: renderCache as never,
       onThumbnailUpdated: () => undefined,
       windowLike: null,
       createThumbnailDataUrl: () => 'thumb'
@@ -153,6 +193,6 @@ describe('thumbnail service', () => {
     await service.enqueue(session.id, session.state);
 
     expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
-    expect(session.thumbnailDataUrl).toBe('thumb');
+    expect(service.getThumbnailDataUrl(session.id)).toBe('thumb');
   });
 });

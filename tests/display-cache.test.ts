@@ -24,8 +24,8 @@ function createSession(
   displayLuminanceRange: { min: number; max: number } | null;
   displayLuminanceRangeRevisionKey: string;
   textureRevisionKey: string;
-  displayCachePinned: boolean;
-  displayCacheLastTouched: number;
+  pinned: boolean;
+  lastTouched: number;
 } {
   return {
     id,
@@ -33,8 +33,8 @@ function createSession(
     displayLuminanceRange: sizeBytes > 0 ? { min: 0, max: 1 } : null,
     displayLuminanceRangeRevisionKey: sizeBytes > 0 ? `${id}-range` : '',
     textureRevisionKey: sizeBytes > 0 ? `${id}-texture` : '',
-    displayCachePinned: options.pinned ?? false,
-    displayCacheLastTouched: options.touched ?? 0
+    pinned: options.pinned ?? false,
+    lastTouched: options.touched ?? 0
   };
 }
 
@@ -132,7 +132,7 @@ describe('display cache policy', () => {
     expect(session.displayLuminanceRange).toBeNull();
     expect(session.displayLuminanceRangeRevisionKey).toBe('');
     expect(session.textureRevisionKey).toBe('');
-    expect(session.displayCacheLastTouched).toBe(0);
+    expect(session.lastTouched).toBe(0);
   });
 });
 

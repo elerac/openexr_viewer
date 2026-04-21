@@ -5,14 +5,10 @@ import {
   type ColormapLut
 } from './colormaps';
 import { selectionUsesImageAlpha } from './display-model';
-import {
-  buildDisplayTextureRevisionKey,
-  buildSelectedDisplayTexture
-} from './display-texture';
 import { isStokesDegreeModulationEnabled } from './stokes';
 import type {
+  DecodedExrImage,
   ExportImageRequest,
-  OpenedImageSession,
   ViewerState
 } from './types';
 
@@ -37,7 +33,8 @@ export interface BuildExportImagePixelsArgs {
 
 export interface CreateExportImageBlobArgs {
   request: ExportImageRequest;
-  session: OpenedImageSession;
+  decoded: DecodedExrImage;
+  displayTexture: Float32Array;
   state: ViewerState;
   colormapLut: ColormapLut | null;
 }
@@ -99,7 +96,8 @@ export function buildExportImagePixels({
 
 export async function createExportImageBlob({
   request,
-  session,
+  decoded,
+  displayTexture,
   state,
   colormapLut
 }: CreateExportImageBlobArgs): Promise<Blob> {
@@ -112,26 +110,14 @@ export async function createExportImageBlob({
   if (state.visualizationMode === 'colormap' && !colormapLut) {
     throw new Error('The active colormap is not ready for export.');
   }
-
-  const layer = session.decoded.layers[state.activeLayer] ?? null;
-  if (!layer || session.decoded.width <= 0 || session.decoded.height <= 0) {
+  if (decoded.width <= 0 || decoded.height <= 0) {
     throw new Error('No exportable image is active.');
   }
 
-  const textureRevisionKey = buildDisplayTextureRevisionKey(state);
-  const displayTexture = session.displayTexture && session.textureRevisionKey === textureRevisionKey
-    ? session.displayTexture
-    : buildSelectedDisplayTexture(
-        layer,
-        session.decoded.width,
-        session.decoded.height,
-        state.displaySelection
-      );
-
   const pixels = buildExportImagePixels({
     displayTexture,
-    width: session.decoded.width,
-    height: session.decoded.height,
+    width: decoded.width,
+    height: decoded.height,
     state,
     colormapLut
   });

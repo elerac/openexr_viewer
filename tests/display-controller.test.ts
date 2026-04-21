@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DisplayController } from '../src/controllers/display-controller';
+import { RenderCacheService } from '../src/services/render-cache-service';
 import { buildViewerStateForLayer, createInitialState, ViewerStore } from '../src/viewer-store';
 import { DecodedExrImage, OpenedImageSession, ViewerState } from '../src/types';
 import { createChannelRgbSelection, createLayerFromChannels, createStokesSelection } from './helpers/state-fixtures';
@@ -45,16 +46,7 @@ function createSession(decoded: DecodedExrImage): OpenedImageSession {
     fileSizeBytes: 16,
     source: { kind: 'url', url: '/image.exr' },
     decoded,
-    thumbnailDataUrl: null,
-    thumbnailGenerationToken: 0,
-    thumbnailStateSnapshot: state,
-    state,
-    textureRevisionKey: '',
-    displayTexture: null,
-    displayLuminanceRangeRevisionKey: '',
-    displayLuminanceRange: null,
-    displayCachePinned: false,
-    displayCacheLastTouched: 0
+    state
   };
 }
 
@@ -62,6 +54,8 @@ function createUiMock() {
   return {
     setActiveColormap: vi.fn(),
     clearImageBrowserPanels: vi.fn(),
+    setDisplayCacheBudget: vi.fn(),
+    setDisplayCacheUsage: vi.fn(),
     setColormapGradient: vi.fn(),
     setColormapOptions: vi.fn(),
     setColormapRange: vi.fn(),
@@ -122,23 +116,21 @@ function createController(options: {
   const ui = createUiMock();
   const renderer = createRendererMock();
   const session = options.session ?? null;
+  const renderCache = new RenderCacheService({
+    ui,
+    renderer: renderer as never,
+    getActiveSessionId: () => session?.id ?? null
+  });
 
   const controller = new DisplayController({
     store,
     ui,
     renderer: renderer as never,
-    getActiveSession: () => session,
-    getSessions: () => (session ? [session] : []),
-    getActiveSessionId: () => session?.id ?? null,
-    getDisplayCacheBudgetBytes: () => 64 * 1024 * 1024,
-    touchDisplayCache: (activeSession) => {
-      activeSession.displayCacheLastTouched += 1;
-    },
-    syncOpenedImageOptions: vi.fn(),
-    syncDisplayCacheUsage: vi.fn()
+    renderCache,
+    getActiveSession: () => session
   });
 
-  return { controller, store, ui, renderer, session };
+  return { controller, store, ui, renderer, session, renderCache };
 }
 
 beforeEach(() => {

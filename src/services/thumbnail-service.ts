@@ -1,8 +1,8 @@
 import { cloneDisplayLuminanceRange } from '../colormap-range';
 import { cloneDisplaySelection } from '../display-model';
-import { buildDisplayTextureRevisionKey, buildSelectedDisplayTexture } from '../display-texture';
 import { createOpenedImageThumbnailDataUrlFromDisplayTexture } from '../thumbnail';
 import { DecodedLayer, OpenedImageSession, ViewerState } from '../types';
+import { RenderCacheService } from './render-cache-service';
 
 const THUMBNAIL_IDLE_TIMEOUT_MS = 250;
 const THUMBNAIL_IDLE_FALLBACK_DELAY_MS = 64;
@@ -10,6 +10,12 @@ const THUMBNAIL_IDLE_FALLBACK_DELAY_MS = 64;
 interface ThumbnailJob {
   sessionId: string;
   token: number;
+}
+
+interface ThumbnailSessionState {
+  generationToken: number;
+  stateSnapshot: ViewerState;
+  thumbnailDataUrl: string | null;
 }
 
 interface IdleDeadlineLike {
@@ -27,6 +33,7 @@ export interface ThumbnailWindowLike {
 
 export interface ThumbnailServiceDependencies {
   getSession: (sessionId: string) => OpenedImageSession | null;
+  renderCache: RenderCacheService;
   onThumbnailUpdated: () => void;
   windowLike?: ThumbnailWindowLike | null;
   createThumbnailDataUrl?: (args: {
@@ -39,14 +46,17 @@ export interface ThumbnailServiceDependencies {
 
 export class ThumbnailService {
   private readonly getSession: ThumbnailServiceDependencies['getSession'];
+  private readonly renderCache: RenderCacheService;
   private readonly onThumbnailUpdated: ThumbnailServiceDependencies['onThumbnailUpdated'];
   private readonly windowLike: ThumbnailWindowLike | null;
   private readonly createThumbnailDataUrl: NonNullable<ThumbnailServiceDependencies['createThumbnailDataUrl']>;
   private readonly jobs: ThumbnailJob[] = [];
+  private readonly sessionState = new Map<string, ThumbnailSessionState>();
   private processingPromise: Promise<void> | null = null;
 
   constructor(dependencies: ThumbnailServiceDependencies) {
     this.getSession = dependencies.getSession;
+    this.renderCache = dependencies.renderCache;
     this.onThumbnailUpdated = dependencies.onThumbnailUpdated;
     this.windowLike = dependencies.windowLike ?? resolveWindowLike();
     this.createThumbnailDataUrl =
@@ -59,22 +69,33 @@ export class ThumbnailService {
       return Promise.resolve();
     }
 
-    session.thumbnailGenerationToken += 1;
-    session.thumbnailStateSnapshot = cloneViewerState(stateSnapshot);
+    const entry = this.getOrCreateSessionState(sessionId, stateSnapshot);
+    entry.generationToken += 1;
+    entry.stateSnapshot = cloneViewerState(stateSnapshot);
     this.jobs.push({
       sessionId,
-      token: session.thumbnailGenerationToken
+      token: entry.generationToken
     });
 
     return this.processJobs();
   }
 
-  discard(sessionId: string): void {
+  getThumbnailDataUrl(sessionId: string): string | null {
+    return this.sessionState.get(sessionId)?.thumbnailDataUrl ?? null;
+  }
+
+  discard(sessionId: string, options: { preserveDataUrl?: boolean } = {}): void {
     for (let index = this.jobs.length - 1; index >= 0; index -= 1) {
       if (this.jobs[index]?.sessionId === sessionId) {
         this.jobs.splice(index, 1);
       }
     }
+
+    if (options.preserveDataUrl) {
+      return;
+    }
+
+    this.sessionState.delete(sessionId);
   }
 
   clear(): void {
@@ -101,11 +122,12 @@ export class ThumbnailService {
             }
 
             const session = this.getSession(job.sessionId);
-            if (!session || session.thumbnailGenerationToken !== job.token) {
+            const entry = this.sessionState.get(job.sessionId);
+            if (!session || !entry || entry.generationToken !== job.token) {
               return;
             }
 
-            session.thumbnailDataUrl = thumbnailDataUrl;
+            entry.thumbnailDataUrl = thumbnailDataUrl;
             this.onThumbnailUpdated();
           });
         }
@@ -122,26 +144,22 @@ export class ThumbnailService {
 
   private createThumbnailDataUrlForJob(job: ThumbnailJob): string | null {
     const session = this.getSession(job.sessionId);
-    if (!session || session.thumbnailGenerationToken !== job.token) {
+    const entry = this.sessionState.get(job.sessionId);
+    if (!session || !entry || entry.generationToken !== job.token) {
       return null;
     }
 
-    const stateSnapshot = session.thumbnailStateSnapshot;
+    const stateSnapshot = entry.stateSnapshot;
     const layer = getSelectedLayer(session, stateSnapshot.activeLayer);
     if (!layer || session.decoded.width <= 0 || session.decoded.height <= 0) {
       return null;
     }
 
     try {
-      const thumbnailTextureRevisionKey = buildDisplayTextureRevisionKey(stateSnapshot);
-      const displayTexture = session.displayTexture && session.textureRevisionKey === thumbnailTextureRevisionKey
-        ? session.displayTexture
-        : buildSelectedDisplayTexture(
-            layer,
-            session.decoded.width,
-            session.decoded.height,
-            stateSnapshot.displaySelection
-          );
+      const displayTexture = this.renderCache.getTextureForSnapshot(session, stateSnapshot);
+      if (!displayTexture) {
+        return null;
+      }
 
       return this.createThumbnailDataUrl({
         session,
@@ -191,6 +209,21 @@ export class ThumbnailService {
         resolve();
       }, { timeout: timeoutMs });
     });
+  }
+
+  private getOrCreateSessionState(sessionId: string, stateSnapshot: ViewerState): ThumbnailSessionState {
+    const existing = this.sessionState.get(sessionId);
+    if (existing) {
+      return existing;
+    }
+
+    const entry: ThumbnailSessionState = {
+      generationToken: 0,
+      stateSnapshot: cloneViewerState(stateSnapshot),
+      thumbnailDataUrl: null
+    };
+    this.sessionState.set(sessionId, entry);
+    return entry;
   }
 }
 

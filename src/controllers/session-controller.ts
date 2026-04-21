@@ -1,11 +1,3 @@
-import {
-  clampDisplayCacheBudgetMb,
-  displayCacheBudgetMbToBytes,
-  getRetainedDisplayCacheBytes,
-  pruneDisplayCachesToBudget,
-  readStoredDisplayCacheBudgetMb,
-  saveStoredDisplayCacheBudgetMb
-} from '../display-cache';
 import { DEFAULT_PANORAMA_HFOV_DEG, clampZoom } from '../interaction';
 import { cloneDisplayLuminanceRange } from '../colormap-range';
 import {
@@ -19,6 +11,7 @@ import { buildDefaultExportFilename, ViewerUi } from '../ui';
 import { buildViewerStateForLayer } from '../viewer-store';
 import { LoadQueueService } from '../services/load-queue';
 import { ThumbnailService } from '../services/thumbnail-service';
+import { RenderCacheService } from '../services/render-cache-service';
 import {
   DecodedExrImage,
   ImagePixel,
@@ -38,8 +31,6 @@ const GALLERY_IMAGES = [
 
 type SessionUi = Pick<
   ViewerUi,
-  | 'setDisplayCacheBudget'
-  | 'setDisplayCacheUsage'
   | 'setError'
   | 'setExportTarget'
   | 'setLoading'
@@ -50,6 +41,7 @@ export interface SessionControllerDependencies {
   ui: SessionUi;
   loadQueue: LoadQueueService;
   thumbnailService: ThumbnailService;
+  renderCache: RenderCacheService;
   decodeBytes: (bytes: Uint8Array) => Promise<DecodedExrImage>;
   getCurrentState: () => ViewerState;
   setState: (next: Partial<ViewerState>) => void;
@@ -64,6 +56,7 @@ export class SessionController {
   private readonly ui: SessionUi;
   private readonly loadQueue: LoadQueueService;
   private readonly thumbnailService: ThumbnailService;
+  private readonly renderCache: RenderCacheService;
   private readonly decodeBytes: SessionControllerDependencies['decodeBytes'];
   private readonly getCurrentState: SessionControllerDependencies['getCurrentState'];
   private readonly setState: SessionControllerDependencies['setState'];
@@ -76,13 +69,12 @@ export class SessionController {
   private sessions: OpenedImageSession[] = [];
   private activeSessionId: string | null = null;
   private sessionCounter = 0;
-  private displayCacheBudgetMb = readStoredDisplayCacheBudgetMb();
-  private displayCacheTouchCounter = 0;
 
   constructor(dependencies: SessionControllerDependencies) {
     this.ui = dependencies.ui;
     this.loadQueue = dependencies.loadQueue;
     this.thumbnailService = dependencies.thumbnailService;
+    this.renderCache = dependencies.renderCache;
     this.decodeBytes = dependencies.decodeBytes;
     this.getCurrentState = dependencies.getCurrentState;
     this.setState = dependencies.setState;
@@ -91,9 +83,6 @@ export class SessionController {
     this.clearRendererImage = dependencies.clearRendererImage;
     this.onSessionClosed = dependencies.onSessionClosed;
     this.onAllSessionsClosed = dependencies.onAllSessionsClosed;
-
-    this.ui.setDisplayCacheBudget(this.displayCacheBudgetMb);
-    this.syncDisplayCacheUsageUi();
   }
 
   enqueueFiles(files: File[]): Promise<void> {
@@ -178,12 +167,12 @@ export class SessionController {
     const removedSession = this.sessions[removeIndex] ?? null;
     this.sessions = this.sessions.filter((session) => session.id !== sessionId);
     this.thumbnailService.discard(sessionId);
+    this.renderCache.discard(sessionId);
     this.onSessionClosed?.(sessionId);
 
     if (!removingActiveSession) {
       this.syncOpenedImageOptions();
       this.syncActiveSessionExportTarget();
-      this.syncDisplayCacheUsageUi();
       return;
     }
 
@@ -204,7 +193,6 @@ export class SessionController {
 
     this.syncOpenedImageOptions();
     this.syncActiveSessionExportTarget();
-    this.syncDisplayCacheUsageUi();
     this.setState(nextState);
   }
 
@@ -240,31 +228,8 @@ export class SessionController {
     );
 
     activeSession.state = nextState;
-    activeSession.textureRevisionKey = '';
-    activeSession.displayLuminanceRangeRevisionKey = '';
-    activeSession.displayLuminanceRange = null;
 
     this.setState(nextState);
-  }
-
-  setDisplayCacheBudget(valueMb: number): void {
-    this.displayCacheBudgetMb = clampDisplayCacheBudgetMb(valueMb);
-    saveStoredDisplayCacheBudgetMb(this.displayCacheBudgetMb);
-    this.ui.setDisplayCacheBudget(this.displayCacheBudgetMb);
-    pruneDisplayCachesToBudget(this.sessions, this.activeSessionId, this.getDisplayCacheBudgetBytes());
-    this.syncDisplayCacheUsageUi();
-  }
-
-  toggleSessionPin(sessionId: string): void {
-    const session = this.sessions.find((item) => item.id === sessionId);
-    if (!session) {
-      return;
-    }
-
-    session.displayCachePinned = !session.displayCachePinned;
-    this.syncOpenedImageOptions();
-    pruneDisplayCachesToBudget(this.sessions, this.activeSessionId, this.getDisplayCacheBudgetBytes());
-    this.syncDisplayCacheUsageUi();
   }
 
   handleStoreChange(state: ViewerState): void {
@@ -287,18 +252,6 @@ export class SessionController {
     return this.activeSessionId;
   }
 
-  getDisplayCacheBudgetBytes(): number {
-    return displayCacheBudgetMbToBytes(this.displayCacheBudgetMb);
-  }
-
-  touchDisplayCache(session: OpenedImageSession): void {
-    if (!session.displayTexture) {
-      return;
-    }
-
-    session.displayCacheLastTouched = ++this.displayCacheTouchCounter;
-  }
-
   syncOpenedImageOptions(): void {
     this.ui.setOpenedImageOptions(
       this.sessions.map((session) => ({
@@ -306,8 +259,8 @@ export class SessionController {
         label: session.displayName,
         sizeBytes: session.fileSizeBytes,
         sourceDetail: getSessionSourceDetail(session.source, session.filename),
-        thumbnailDataUrl: session.thumbnailDataUrl,
-        pinned: session.displayCachePinned
+        thumbnailDataUrl: this.thumbnailService.getThumbnailDataUrl(session.id),
+        pinned: this.renderCache.isPinned(session.id)
       })),
       this.activeSessionId
     );
@@ -325,10 +278,6 @@ export class SessionController {
       sourceWidth: activeSession.decoded.width,
       sourceHeight: activeSession.decoded.height
     });
-  }
-
-  syncDisplayCacheUsageUi(): void {
-    this.ui.setDisplayCacheUsage(getRetainedDisplayCacheBytes(this.sessions), this.getDisplayCacheBudgetBytes());
   }
 
   private async loadGalleryImage(galleryId: string): Promise<void> {
@@ -413,16 +362,7 @@ export class SessionController {
       fileSizeBytes,
       source,
       decoded,
-      thumbnailDataUrl: null,
-      thumbnailGenerationToken: 0,
-      thumbnailStateSnapshot: cloneViewerState(sessionState),
-      state: sessionState,
-      textureRevisionKey: '',
-      displayTexture: null,
-      displayLuminanceRangeRevisionKey: '',
-      displayLuminanceRange: null,
-      displayCachePinned: false,
-      displayCacheLastTouched: 0
+      state: sessionState
     };
 
     this.sessions = [...this.sessions, session];
@@ -489,24 +429,17 @@ export class SessionController {
       const decoded = await decodeExrFromSessionSource(session.source, this.decodeBytes);
       const baseState = this.activeSessionId === sessionId ? this.getCurrentState() : session.state;
       const nextState = buildReloadedSessionState(baseState, session.decoded, decoded);
+      this.renderCache.discard(sessionId, { preservePinned: true });
+      this.thumbnailService.discard(sessionId, { preserveDataUrl: true });
       const reloadedSession: OpenedImageSession = {
         ...session,
         decoded,
-        thumbnailDataUrl: session.thumbnailDataUrl,
-        thumbnailGenerationToken: session.thumbnailGenerationToken,
-        thumbnailStateSnapshot: cloneViewerState(nextState),
-        state: nextState,
-        textureRevisionKey: '',
-        displayTexture: null,
-        displayLuminanceRangeRevisionKey: '',
-        displayLuminanceRange: null,
-        displayCacheLastTouched: 0
+        state: nextState
       };
 
       this.sessions = this.sessions.map((current) => (current.id === sessionId ? reloadedSession : current));
       this.syncOpenedImageOptions();
       this.syncActiveSessionExportTarget();
-      this.syncDisplayCacheUsageUi();
 
       if (this.activeSessionId === sessionId) {
         this.setState(nextState);
@@ -520,8 +453,12 @@ export class SessionController {
   }
 
   private clearAllSessionsState(): void {
+    for (const session of this.sessions) {
+      this.thumbnailService.discard(session.id);
+    }
     this.sessions = [];
     this.thumbnailService.clear();
+    this.renderCache.clear();
     this.activeSessionId = null;
 
     this.onAllSessionsClosed?.();
@@ -530,7 +467,6 @@ export class SessionController {
 
     this.syncOpenedImageOptions();
     this.syncActiveSessionExportTarget();
-    this.syncDisplayCacheUsageUi();
   }
 
   private computeFitView(width: number, height: number): { zoom: number; panX: number; panY: number } {
@@ -729,16 +665,5 @@ function clampPixelToImageBounds(pixel: ImagePixel, width: number, height: numbe
   return {
     ix: pixel.ix,
     iy: pixel.iy
-  };
-}
-
-function cloneViewerState(state: ViewerState): ViewerState {
-  return {
-    ...state,
-    displaySelection: cloneDisplaySelection(state.displaySelection),
-    colormapRange: cloneDisplayLuminanceRange(state.colormapRange),
-    stokesDegreeModulation: { ...state.stokesDegreeModulation },
-    hoveredPixel: state.hoveredPixel ? { ...state.hoveredPixel } : null,
-    lockedPixel: state.lockedPixel ? { ...state.lockedPixel } : null
   };
 }

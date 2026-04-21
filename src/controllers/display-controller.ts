@@ -11,18 +11,11 @@ import {
 import {
   buildZeroCenteredColormapRange,
   cloneDisplayLuminanceRange,
-  computeDisplayTextureLuminanceRange,
   resolveColormapAutoRange,
   sameDisplayLuminanceRange,
-  shouldPreserveStokesColormapState,
-  shouldRefreshDisplayLuminanceRange
+  shouldPreserveStokesColormapState
 } from '../colormap-range';
-import { pruneDisplayCachesToBudget } from '../display-cache';
-import {
-  buildDisplayTextureRevisionKey,
-  buildSelectedDisplayTexture,
-  samplePixelValuesForDisplay
-} from '../display-texture';
+import { samplePixelValuesForDisplay } from '../display-texture';
 import {
   cloneDisplaySelection,
   isChannelSelection,
@@ -39,6 +32,7 @@ import {
   isStokesDegreeModulationParameter
 } from '../stokes';
 import { ViewerUi } from '../ui';
+import { RenderCacheService } from '../services/render-cache-service';
 import {
   DecodedExrImage,
   DecodedLayer,
@@ -82,32 +76,20 @@ export interface DisplayControllerDependencies {
   store: ViewerStore;
   ui: DisplayUi;
   renderer: WebGlExrRenderer;
+  renderCache: RenderCacheService;
   getActiveSession: () => OpenedImageSession | null;
-  getSessions: () => OpenedImageSession[];
-  getActiveSessionId: () => string | null;
-  getDisplayCacheBudgetBytes: () => number;
-  touchDisplayCache: (session: OpenedImageSession) => void;
-  syncOpenedImageOptions: () => void;
-  syncDisplayCacheUsage: () => void;
 }
 
 export class DisplayController {
   private readonly store: ViewerStore;
   private readonly ui: DisplayUi;
   private readonly renderer: WebGlExrRenderer;
+  private readonly renderCache: RenderCacheService;
   private readonly getActiveSession: DisplayControllerDependencies['getActiveSession'];
-  private readonly getSessions: DisplayControllerDependencies['getSessions'];
-  private readonly getActiveSessionId: DisplayControllerDependencies['getActiveSessionId'];
-  private readonly getDisplayCacheBudgetBytes: DisplayControllerDependencies['getDisplayCacheBudgetBytes'];
-  private readonly touchDisplayCache: DisplayControllerDependencies['touchDisplayCache'];
-  private readonly syncOpenedImageOptions: DisplayControllerDependencies['syncOpenedImageOptions'];
-  private readonly syncDisplayCacheUsage: DisplayControllerDependencies['syncDisplayCacheUsage'];
 
   private rgbViewChangeToken = 0;
   private colormapChangeToken = 0;
   private renderedSessionId: string | null = null;
-  private uploadedSessionId: string | null = null;
-  private uploadedTextureRevisionKey = '';
   private uploadedColormapId: string | null = null;
   private activeColormapLut: ColormapLut | null = null;
   private defaultColormapId = DEFAULT_COLORMAP_ID;
@@ -118,13 +100,8 @@ export class DisplayController {
     this.store = dependencies.store;
     this.ui = dependencies.ui;
     this.renderer = dependencies.renderer;
+    this.renderCache = dependencies.renderCache;
     this.getActiveSession = dependencies.getActiveSession;
-    this.getSessions = dependencies.getSessions;
-    this.getActiveSessionId = dependencies.getActiveSessionId;
-    this.getDisplayCacheBudgetBytes = dependencies.getDisplayCacheBudgetBytes;
-    this.touchDisplayCache = dependencies.touchDisplayCache;
-    this.syncOpenedImageOptions = dependencies.syncOpenedImageOptions;
-    this.syncDisplayCacheUsage = dependencies.syncDisplayCacheUsage;
   }
 
   async initialize(): Promise<void> {
@@ -174,8 +151,7 @@ export class DisplayController {
       if (layer) {
         const layerSelectionDirty =
           sessionChanged ||
-          state.activeLayer !== previous.activeLayer ||
-          !activeSession.displayTexture;
+          state.activeLayer !== previous.activeLayer;
 
         if (layerSelectionDirty) {
           this.ui.setLayerOptions(buildLayerOptions(activeImage), state.activeLayer);
@@ -191,44 +167,15 @@ export class DisplayController {
           this.ui.setRgbGroupOptions(layer.channelNames, state.displaySelection);
         }
 
-        const textureKey = buildDisplayTextureRevisionKey(state);
-        const textureDirty = textureKey !== activeSession.textureRevisionKey || !activeSession.displayTexture;
-        if (textureDirty) {
-          activeSession.displayTexture = buildSelectedDisplayTexture(
-            layer,
-            activeImage.width,
-            activeImage.height,
-            state.displaySelection,
-            activeSession.displayTexture ?? undefined
-          );
-          activeSession.textureRevisionKey = textureKey;
-        }
-
-        const luminanceRangeDirty = shouldRefreshDisplayLuminanceRange(
-          state.visualizationMode,
-          textureKey,
-          activeSession.displayLuminanceRangeRevisionKey,
-          Boolean(activeSession.displayTexture)
-        );
-
-        if (luminanceRangeDirty && activeSession.displayTexture) {
-          activeSession.displayLuminanceRange = computeDisplayTextureLuminanceRange(activeSession.displayTexture);
-          activeSession.displayLuminanceRangeRevisionKey = textureKey;
-        }
-
-        if (activeSession.displayTexture) {
-          this.touchDisplayCache(activeSession);
-          pruneDisplayCachesToBudget(
-            this.getSessions(),
-            this.getActiveSessionId(),
-            this.getDisplayCacheBudgetBytes()
-          );
-          this.syncDisplayCacheUsage();
-        }
+        const {
+          displayLuminanceRange,
+          textureDirty,
+          luminanceRangeDirty
+        } = this.renderCache.prepareActiveSession(activeSession, state);
 
         const activeAutoColormapRange = resolveColormapAutoRange(
           state.displaySelection,
-          activeSession.displayLuminanceRange,
+          displayLuminanceRange,
           state.colormapZeroCentered
         );
 
@@ -253,24 +200,10 @@ export class DisplayController {
         ) {
           this.ui.setColormapRange(
             state.colormapRange,
-            activeSession.displayLuminanceRange,
+            displayLuminanceRange,
             state.colormapRangeMode === 'alwaysAuto',
             state.colormapZeroCentered
           );
-        }
-
-        const needsUpload =
-          this.uploadedSessionId !== activeSession.id ||
-          this.uploadedTextureRevisionKey !== activeSession.textureRevisionKey;
-
-        if (needsUpload && activeSession.displayTexture) {
-          this.renderer.setDisplayTexture(
-            activeImage.width,
-            activeImage.height,
-            activeSession.displayTexture
-          );
-          this.uploadedSessionId = activeSession.id;
-          this.uploadedTextureRevisionKey = activeSession.textureRevisionKey;
         }
 
         const probeDirty =
@@ -318,8 +251,6 @@ export class DisplayController {
       }
     } else {
       this.renderedSessionId = null;
-      this.uploadedSessionId = null;
-      this.uploadedTextureRevisionKey = '';
       this.ui.setViewerMode('image');
       this.ui.setVisualizationMode('rgb');
       this.ui.clearImageBrowserPanels();
@@ -564,7 +495,7 @@ export class DisplayController {
     const currentState = this.store.getState();
     const nextRange = resolveColormapAutoRange(
       currentState.displaySelection,
-      activeSession.displayLuminanceRange,
+      this.renderCache.getCachedLuminanceRange(activeSession.id),
       currentState.colormapZeroCentered
     );
     const currentMode = currentState.colormapRangeMode;
@@ -583,10 +514,11 @@ export class DisplayController {
 
     const currentState = this.store.getState();
     const nextZeroCentered = !currentState.colormapZeroCentered;
+    const cachedRange = this.renderCache.getCachedLuminanceRange(activeSession.id);
     const nextRange = currentState.colormapRangeMode === 'alwaysAuto'
-      ? resolveColormapAutoRange(currentState.displaySelection, activeSession.displayLuminanceRange, nextZeroCentered)
+      ? resolveColormapAutoRange(currentState.displaySelection, cachedRange, nextZeroCentered)
       : nextZeroCentered
-        ? buildZeroCenteredColormapRange(currentState.colormapRange ?? activeSession.displayLuminanceRange)
+        ? buildZeroCenteredColormapRange(currentState.colormapRange ?? cachedRange)
         : cloneDisplayLuminanceRange(currentState.colormapRange);
 
     this.store.setState({
@@ -674,10 +606,6 @@ export class DisplayController {
 
   handleSessionClosed(sessionId: string): void {
     this.stokesDisplayRestoreStates.delete(sessionId);
-    if (this.uploadedSessionId === sessionId) {
-      this.uploadedSessionId = null;
-      this.uploadedTextureRevisionKey = '';
-    }
     if (this.renderedSessionId === sessionId) {
       this.renderedSessionId = null;
     }
@@ -686,8 +614,6 @@ export class DisplayController {
   handleAllSessionsClosed(): void {
     this.stokesDisplayRestoreStates.clear();
     this.renderedSessionId = null;
-    this.uploadedSessionId = null;
-    this.uploadedTextureRevisionKey = '';
   }
 
   private async uploadColormapToRenderer(colormapId: string): Promise<void> {
