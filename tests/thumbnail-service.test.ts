@@ -1,20 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
+import { __debugGetMaterializedChannelCount } from '../src/channel-storage';
 import { serializeDisplaySelectionKey } from '../src/display-model';
 import { ThumbnailService } from '../src/services/thumbnail-service';
-import { DecodedExrImage, DecodedLayer, OpenedImageSession, ViewerState } from '../src/types';
+import { DecodedExrImage, OpenedImageSession, ViewerState } from '../src/types';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
-import { createChannelMonoSelection, createChannelRgbSelection } from './helpers/state-fixtures';
+import { createChannelMonoSelection, createChannelRgbSelection, createLayerFromChannels } from './helpers/state-fixtures';
 
 function createDecodedImage(): DecodedExrImage {
-  const layer: DecodedLayer = {
-    name: 'beauty',
-    channelNames: ['R', 'G', 'B'],
-    channelData: new Map([
-      ['R', new Float32Array([0, 1])],
-      ['G', new Float32Array([0, 1])],
-      ['B', new Float32Array([0, 1])]
-    ])
-  };
+  const layer = createLayerFromChannels({
+    R: [0, 1],
+    G: [0, 1],
+    B: [0, 1]
+  }, 'beauty');
 
   return {
     width: 2,
@@ -139,6 +136,23 @@ describe('thumbnail service', () => {
     await service.enqueue(session.id, session.state);
 
     expect(receivedTexture).toBe(cachedTexture);
+    expect(session.thumbnailDataUrl).toBe('thumb');
+  });
+
+  it('does not trigger planar materialization while building thumbnail display textures', async () => {
+    const session = createSession();
+    const layer = session.decoded.layers[0]!;
+    const service = new ThumbnailService({
+      getSession: () => session,
+      onThumbnailUpdated: () => undefined,
+      windowLike: null,
+      createThumbnailDataUrl: () => 'thumb'
+    });
+
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
+    await service.enqueue(session.id, session.state);
+
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
     expect(session.thumbnailDataUrl).toBe('thumb');
   });
 });

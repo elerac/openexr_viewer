@@ -12,6 +12,7 @@ import { DisplaySelection } from '../src/types';
 import {
   createChannelRgbSelection,
   createLayer,
+  createLayerFromChannels,
   createStokesSelection
 } from './helpers/state-fixtures';
 
@@ -119,14 +120,11 @@ describe('colormap range', () => {
   });
 
   it('computes colormap luminance range from a repeated single-channel mapping', () => {
-    const layer = {
-      ...createLayer(),
-      channelData: new Map([
-        ['R', new Float32Array([10, 20])],
-        ['G', new Float32Array([0.25, 0.75])],
-        ['B', new Float32Array([100, 200])]
-      ])
-    };
+    const layer = createLayerFromChannels({
+      R: [10, 20],
+      G: [0.25, 0.75],
+      B: [100, 200]
+    });
 
     const texture = buildDisplayTexture(layer, 2, 1, 'G', 'G', 'G');
     const range = computeDisplayTextureLuminanceRange(texture);

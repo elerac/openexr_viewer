@@ -2,20 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { SessionController } from '../src/controllers/session-controller';
 import { LoadQueueService } from '../src/services/load-queue';
 import { ViewerStore, createInitialState } from '../src/viewer-store';
-import { DecodedExrImage, DecodedLayer, OpenedImageSession, ViewerState } from '../src/types';
-import { createChannelMonoSelection, createChannelRgbSelection } from './helpers/state-fixtures';
+import { DecodedExrImage, OpenedImageSession, ViewerState } from '../src/types';
+import { createChannelMonoSelection, createChannelRgbSelection, createLayerFromChannels } from './helpers/state-fixtures';
 
 function createDecodedImage(width = 4, height = 4): DecodedExrImage {
   const pixelCount = width * height;
-  const layer: DecodedLayer = {
-    name: 'beauty',
-    channelNames: ['R', 'G', 'B'],
-    channelData: new Map([
-      ['R', new Float32Array(pixelCount).fill(1)],
-      ['G', new Float32Array(pixelCount).fill(2)],
-      ['B', new Float32Array(pixelCount).fill(3)]
-    ])
-  };
+  const layer = createLayerFromChannels({
+    R: new Float32Array(pixelCount).fill(1),
+    G: new Float32Array(pixelCount).fill(2),
+    B: new Float32Array(pixelCount).fill(3)
+  }, 'beauty');
 
   return {
     width,

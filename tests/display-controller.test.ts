@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DisplayController } from '../src/controllers/display-controller';
 import { buildViewerStateForLayer, createInitialState, ViewerStore } from '../src/viewer-store';
-import { DecodedExrImage, DecodedLayer, OpenedImageSession, ViewerState } from '../src/types';
-import { createChannelRgbSelection, createStokesSelection } from './helpers/state-fixtures';
+import { DecodedExrImage, OpenedImageSession, ViewerState } from '../src/types';
+import { createChannelRgbSelection, createLayerFromChannels, createStokesSelection } from './helpers/state-fixtures';
 
 const colormapMocks = vi.hoisted(() => ({
   loadColormapRegistry: vi.fn(),
@@ -22,16 +22,12 @@ vi.mock('../src/colormaps', () => ({
 }));
 
 function createDecodedImage(channelNames: string[] = ['R', 'G', 'B']): DecodedExrImage {
-  const channelData = new Map<string, Float32Array>();
+  const channelValues: Record<string, Float32Array> = {};
   for (const channelName of channelNames) {
-    channelData.set(channelName, new Float32Array([channelName.startsWith('S') ? 0.5 : 1, 0]));
+    channelValues[channelName] = new Float32Array([channelName.startsWith('S') ? 0.5 : 1, 0]);
   }
 
-  const layer: DecodedLayer = {
-    name: 'beauty',
-    channelNames,
-    channelData
-  };
+  const layer = createLayerFromChannels(channelValues, 'beauty');
 
   return {
     width: 2,

@@ -1,5 +1,6 @@
 import { decodeRawExr } from './exr-runtime';
 import { parseExrMetadata } from './exr-metadata';
+import { createInterleavedChannelStorage } from './channel-storage';
 import { DecodedExrImage, DecodedLayer } from './types';
 
 export async function loadExr(bytes: Uint8Array): Promise<DecodedExrImage> {
@@ -17,13 +18,17 @@ export async function loadExr(bytes: Uint8Array): Promise<DecodedExrImage> {
       if (!interleaved) {
         throw new Error(`Decoded EXR layer ${layerIndex} is missing pixel data.`);
       }
-
-      const channelData = splitInterleavedChannels(interleaved, width, height, channelNames);
+      const expectedLength = width * height * channelNames.length;
+      if (interleaved.length !== expectedLength) {
+        throw new Error(
+          `Invalid interleaved channel length for layer ${layerIndex}: expected ${expectedLength}, got ${interleaved.length}`
+        );
+      }
 
       layers.push({
         name: decoded.getLayerName(layerIndex) ?? null,
         channelNames,
-        channelData,
+        channelStorage: createInterleavedChannelStorage(interleaved, channelNames),
         metadata: metadataByLayer[layerIndex] ?? []
       });
     }
@@ -40,40 +45,4 @@ export async function loadExr(bytes: Uint8Array): Promise<DecodedExrImage> {
     height,
     layers
   };
-}
-
-export function splitInterleavedChannels(
-  interleaved: Float32Array,
-  width: number,
-  height: number,
-  channelNames: string[]
-): Map<string, Float32Array> {
-  const pixelCount = width * height;
-  const channelCount = channelNames.length;
-
-  if (interleaved.length !== pixelCount * channelCount) {
-    throw new Error(
-      `Invalid interleaved channel length: expected ${pixelCount * channelCount}, got ${interleaved.length}`
-    );
-  }
-
-  const result = new Map<string, Float32Array>();
-  for (const channelName of channelNames) {
-    result.set(channelName, new Float32Array(pixelCount));
-  }
-
-  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
-    const baseIndex = pixelIndex * channelCount;
-
-    for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
-      const channelName = channelNames[channelIndex];
-      const values = result.get(channelName);
-      if (!values) {
-        continue;
-      }
-      values[pixelIndex] = interleaved[baseIndex + channelIndex];
-    }
-  }
-
-  return result;
 }

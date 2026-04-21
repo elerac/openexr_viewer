@@ -1,5 +1,10 @@
 import { computeRec709Luminance } from './color';
 import {
+  getChannelReadView,
+  readChannelValue,
+  type ChannelReadView
+} from './channel-storage';
+import {
   isStokesSelection,
   serializeDisplaySelectionKey,
   type DisplaySelection,
@@ -51,10 +56,10 @@ export function buildDisplayTexture(
     ? outputBuffer
     : new Float32Array(requiredLength);
 
-  const channelR = getChannel(layer, displayR);
-  const channelG = getChannel(layer, displayG);
-  const channelB = getChannel(layer, displayB);
-  const channelA = displayA ? getChannel(layer, displayA) : null;
+  const channelR = getChannelReadView(layer, displayR);
+  const channelG = getChannelReadView(layer, displayG);
+  const channelB = getChannelReadView(layer, displayB);
+  const channelA = displayA ? getChannelReadView(layer, displayA) : null;
 
   for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
     const outIndex = pixelIndex * 4;
@@ -186,13 +191,15 @@ export function samplePixelValues(
 
   const flatIndex = pixel.iy * width + pixel.ix;
   const values: Record<string, number> = {};
+  const { pixels, channelCount } = layer.channelStorage;
+  const pixelBaseIndex = flatIndex * channelCount;
 
-  for (const channelName of layer.channelNames) {
-    const channel = layer.channelData.get(channelName);
-    if (!channel) {
+  for (let channelIndex = 0; channelIndex < layer.channelNames.length; channelIndex += 1) {
+    const channelName = layer.channelNames[channelIndex];
+    if (!channelName) {
       continue;
     }
-    values[channelName] = channel[flatIndex];
+    values[channelName] = pixels[pixelBaseIndex + channelIndex] ?? 0;
   }
 
   return {
@@ -219,28 +226,20 @@ export function samplePixelValuesForDisplay(
   return sample;
 }
 
-function getChannel(layer: DecodedLayer, channelName: string): Float32Array | null {
-  return layer.channelData.get(channelName) ?? null;
-}
-
 function resolveStokesChannelArrays(
   layer: DecodedLayer,
   channels: ScalarStokesChannels
-): { s0: Float32Array | null; s1: Float32Array | null; s2: Float32Array | null; s3: Float32Array | null } {
+): { s0: ChannelReadView | null; s1: ChannelReadView | null; s2: ChannelReadView | null; s3: ChannelReadView | null } {
   return {
-    s0: getChannel(layer, channels.s0),
-    s1: getChannel(layer, channels.s1),
-    s2: getChannel(layer, channels.s2),
-    s3: getChannel(layer, channels.s3)
+    s0: getChannelReadView(layer, channels.s0),
+    s1: getChannelReadView(layer, channels.s1),
+    s2: getChannelReadView(layer, channels.s2),
+    s3: getChannelReadView(layer, channels.s3)
   };
 }
 
-function readChannelValue(channel: Float32Array | null, pixelIndex: number): number {
-  return channel ? channel[pixelIndex] ?? 0 : 0;
-}
-
 function readScalarStokesSample(
-  channels: { s0: Float32Array | null; s1: Float32Array | null; s2: Float32Array | null; s3: Float32Array | null },
+  channels: { s0: ChannelReadView | null; s1: ChannelReadView | null; s2: ChannelReadView | null; s3: ChannelReadView | null },
   pixelIndex: number
 ): { s0: number; s1: number; s2: number; s3: number } {
   return {
@@ -252,9 +251,9 @@ function readScalarStokesSample(
 }
 
 function computeRgbStokesMonoValues(
-  r: { s0: Float32Array | null; s1: Float32Array | null; s2: Float32Array | null; s3: Float32Array | null },
-  g: { s0: Float32Array | null; s1: Float32Array | null; s2: Float32Array | null; s3: Float32Array | null },
-  b: { s0: Float32Array | null; s1: Float32Array | null; s2: Float32Array | null; s3: Float32Array | null },
+  r: { s0: ChannelReadView | null; s1: ChannelReadView | null; s2: ChannelReadView | null; s3: ChannelReadView | null },
+  g: { s0: ChannelReadView | null; s1: ChannelReadView | null; s2: ChannelReadView | null; s3: ChannelReadView | null },
+  b: { s0: ChannelReadView | null; s1: ChannelReadView | null; s2: ChannelReadView | null; s3: ChannelReadView | null },
   pixelIndex: number
 ): { s0: number; s1: number; s2: number; s3: number } {
   return {

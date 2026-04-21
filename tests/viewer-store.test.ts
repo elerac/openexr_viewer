@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_COLORMAP_ID } from '../src/colormaps';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
-import { DecodedLayer } from '../src/types';
 import {
   createChannelMonoSelection,
   createChannelRgbSelection,
   createImage,
   createLayer,
+  createLayerFromChannels,
   createStokesSelection,
   createViewerState
 } from './helpers/state-fixtures';
@@ -27,15 +27,11 @@ describe('viewer store', () => {
   });
 
   it('re-resolves display channels when switching to a layer without the current mapping', () => {
-    const altLayer: DecodedLayer = {
-      name: 'alt',
-      channelNames: ['X', 'Y', 'Z'],
-      channelData: new Map([
-        ['X', new Float32Array([4, 4, 4, 4])],
-        ['Y', new Float32Array([5, 5, 5, 5])],
-        ['Z', new Float32Array([6, 6, 6, 6])]
-      ])
-    };
+    const altLayer = createLayerFromChannels({
+      X: [4, 4, 4, 4],
+      Y: [5, 5, 5, 5],
+      Z: [6, 6, 6, 6]
+    }, 'alt');
     const image = createImage([createLayer(), altLayer]);
 
     const nextState = buildViewerStateForLayer(
@@ -51,16 +47,12 @@ describe('viewer store', () => {
   });
 
   it('does not preserve arbitrary mixed channel mappings as display defaults', () => {
-    const spectralLayer: DecodedLayer = {
-      name: 'spectral',
-      channelNames: ['400nm', '500nm', '600nm', '700nm'],
-      channelData: new Map([
-        ['400nm', new Float32Array([4, 4, 4, 4])],
-        ['500nm', new Float32Array([5, 5, 5, 5])],
-        ['600nm', new Float32Array([6, 6, 6, 6])],
-        ['700nm', new Float32Array([7, 7, 7, 7])]
-      ])
-    };
+    const spectralLayer = createLayerFromChannels({
+      '400nm': [4, 4, 4, 4],
+      '500nm': [5, 5, 5, 5],
+      '600nm': [6, 6, 6, 6],
+      '700nm': [7, 7, 7, 7]
+    }, 'spectral');
     const image = createImage([spectralLayer]);
 
     const nextState = buildViewerStateForLayer(
@@ -105,16 +97,12 @@ describe('viewer store', () => {
   });
 
   it('preserves available Stokes selections and falls back when unavailable', () => {
-    const stokesLayer: DecodedLayer = {
-      name: 'stokes',
-      channelNames: ['S0', 'S1', 'S2', 'S3'],
-      channelData: new Map([
-        ['S0', new Float32Array([1, 1, 1, 1])],
-        ['S1', new Float32Array([1, 1, 1, 1])],
-        ['S2', new Float32Array([0, 0, 0, 0])],
-        ['S3', new Float32Array([0, 0, 0, 0])]
-      ])
-    };
+    const stokesLayer = createLayerFromChannels({
+      S0: [1, 1, 1, 1],
+      S1: [1, 1, 1, 1],
+      S2: [0, 0, 0, 0],
+      S3: [0, 0, 0, 0]
+    }, 'stokes');
     const image = createImage([stokesLayer, createLayer()]);
 
     const preserved = buildViewerStateForLayer(

@@ -1,4 +1,5 @@
 import { loadExr } from './exr';
+import { collectDecodedImageTransferables } from './decode-transferables';
 import type { DecodedExrImage } from './types';
 
 interface DecodeWorkerRequest {
@@ -47,16 +48,4 @@ async function decodeAndReply(request: DecodeWorkerRequest): Promise<void> {
       error: error instanceof Error ? error.message : 'Failed to decode EXR.'
     } satisfies DecodeWorkerResponse);
   }
-}
-
-function collectDecodedImageTransferables(image: DecodedExrImage): Transferable[] {
-  const transferables: Transferable[] = [];
-  for (const layer of image.layers) {
-    for (const channelValues of layer.channelData.values()) {
-      if (channelValues.buffer instanceof ArrayBuffer) {
-        transferables.push(channelValues.buffer);
-      }
-    }
-  }
-  return transferables;
 }

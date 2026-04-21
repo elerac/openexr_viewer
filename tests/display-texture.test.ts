@@ -8,11 +8,13 @@ import {
   samplePixelValues,
   samplePixelValuesForDisplay
 } from '../src/display-texture';
-import { DecodedLayer, ImagePixel } from '../src/types';
+import { __debugGetMaterializedChannelCount } from '../src/channel-storage';
+import { ImagePixel } from '../src/types';
 import {
   createChannelMonoSelection,
   createChannelRgbSelection,
   createLayer,
+  createLayerFromChannels,
   createStokesSelection,
   createViewerState
 } from './helpers/state-fixtures';
@@ -28,29 +30,21 @@ describe('display texture', () => {
   });
 
   it('writes selected display alpha into RGBA display textures', () => {
-    const layer: DecodedLayer = {
-      name: 'rgba',
-      channelNames: ['R', 'G', 'B', 'A'],
-      channelData: new Map([
-        ['R', new Float32Array([1, 1, 1, 1])],
-        ['G', new Float32Array([0, 0, 0, 0])],
-        ['B', new Float32Array([0, 0, 0, 0])],
-        ['A', new Float32Array([0.25, 2, -1, Number.NaN])]
-      ])
-    };
+    const layer = createLayerFromChannels({
+      R: [1, 1, 1, 1],
+      G: [0, 0, 0, 0],
+      B: [0, 0, 0, 0],
+      A: [0.25, 2, -1, Number.NaN]
+    }, 'rgba');
 
     const texture = buildDisplayTexture(layer, 2, 2, 'R', 'G', 'B', 'A');
     expect(Array.from(texture.filter((_, index) => index % 4 === 3))).toEqual([0.25, 1, 0, 0]);
   });
 
   it('builds grayscale display textures for mono selections', () => {
-    const layer: DecodedLayer = {
-      name: 'gray',
-      channelNames: ['Y'],
-      channelData: new Map([
-        ['Y', new Float32Array([0.25, 0.5, 0.75, 1])]
-      ])
-    };
+    const layer = createLayerFromChannels({
+      Y: [0.25, 0.5, 0.75, 1]
+    }, 'gray');
 
     const texture = buildSelectedDisplayTexture(layer, 2, 2, createChannelMonoSelection('Y'));
     expect(Array.from(texture.slice(0, 4))).toEqual([0.25, 0.25, 0.25, 1]);
@@ -70,16 +64,12 @@ describe('display texture', () => {
   });
 
   it('builds scalar Stokes AoLP display textures with values duplicated across RGB', () => {
-    const layer: DecodedLayer = {
-      name: 'stokes',
-      channelNames: ['S0', 'S1', 'S2', 'S3'],
-      channelData: new Map([
-        ['S0', new Float32Array([1, 1, 1, 1])],
-        ['S1', new Float32Array([1, 0, -1, 0])],
-        ['S2', new Float32Array([0, 1, 0, -1])],
-        ['S3', new Float32Array([0, 0, 0, 0])]
-      ])
-    };
+    const layer = createLayerFromChannels({
+      S0: [1, 1, 1, 1],
+      S1: [1, 0, -1, 0],
+      S2: [0, 1, 0, -1],
+      S3: [0, 0, 0, 0]
+    }, 'stokes');
 
     const texture = buildStokesDisplayTexture(layer, 2, 2, createStokesSelection('aolp'));
 
@@ -91,16 +81,12 @@ describe('display texture', () => {
   });
 
   it('builds scalar Stokes DoLP display textures and stabilizes invalid samples', () => {
-    const layer: DecodedLayer = {
-      name: 'stokes',
-      channelNames: ['S0', 'S1', 'S2', 'S3'],
-      channelData: new Map([
-        ['S0', new Float32Array([1, 2, 0, 1])],
-        ['S1', new Float32Array([1, 1, 1, Number.NaN])],
-        ['S2', new Float32Array([0, Math.sqrt(3), 1, 0])],
-        ['S3', new Float32Array([0, 0, 0, 0])]
-      ])
-    };
+    const layer = createLayerFromChannels({
+      S0: [1, 2, 0, 1],
+      S1: [1, 1, 1, Number.NaN],
+      S2: [0, Math.sqrt(3), 1, 0],
+      S3: [0, 0, 0, 0]
+    }, 'stokes');
 
     const texture = buildSelectedDisplayTexture(layer, 2, 2, createStokesSelection('dolp'));
     expect(texture[0]).toBeCloseTo(1, 6);
@@ -110,29 +96,20 @@ describe('display texture', () => {
   });
 
   it('builds grouped and split RGB Stokes display textures', () => {
-    const layer: DecodedLayer = {
-      name: 'stokes-rgb',
-      channelNames: [
-        'S0.R', 'S0.G', 'S0.B',
-        'S1.R', 'S1.G', 'S1.B',
-        'S2.R', 'S2.G', 'S2.B',
-        'S3.R', 'S3.G', 'S3.B'
-      ],
-      channelData: new Map([
-        ['S0.R', new Float32Array([1])],
-        ['S0.G', new Float32Array([2])],
-        ['S0.B', new Float32Array([4])],
-        ['S1.R', new Float32Array([1])],
-        ['S1.G', new Float32Array([1])],
-        ['S1.B', new Float32Array([2])],
-        ['S2.R', new Float32Array([0])],
-        ['S2.G', new Float32Array([Math.sqrt(3)])],
-        ['S2.B', new Float32Array([0])],
-        ['S3.R', new Float32Array([0])],
-        ['S3.G', new Float32Array([0])],
-        ['S3.B', new Float32Array([0])]
-      ])
-    };
+    const layer = createLayerFromChannels({
+      'S0.R': [1],
+      'S0.G': [2],
+      'S0.B': [4],
+      'S1.R': [1],
+      'S1.G': [1],
+      'S1.B': [2],
+      'S2.R': [0],
+      'S2.G': [Math.sqrt(3)],
+      'S2.B': [0],
+      'S3.R': [0],
+      'S3.G': [0],
+      'S3.B': [0]
+    }, 'stokes-rgb');
 
     const grouped = buildSelectedDisplayTexture(layer, 1, 1, createStokesSelection('dolp', 'stokesRgb'));
     const split = buildSelectedDisplayTexture(layer, 1, 1, createStokesSelection('aolp', 'stokesRgb', 'G'));
@@ -159,40 +136,27 @@ describe('display texture', () => {
   });
 
   it('appends semantic Stokes sample values for scalar, grouped RGB, and split RGB selections', () => {
-    const scalarLayer: DecodedLayer = {
-      name: 'scalar-stokes',
-      channelNames: ['S0', 'S1', 'S2', 'S3'],
-      channelData: new Map([
-        ['S0', new Float32Array([1])],
-        ['S1', new Float32Array([0])],
-        ['S2', new Float32Array([1])],
-        ['S3', new Float32Array([0])]
-      ])
-    };
+    const scalarLayer = createLayerFromChannels({
+      S0: [1],
+      S1: [0],
+      S2: [1],
+      S3: [0]
+    }, 'scalar-stokes');
 
-    const rgbLayer: DecodedLayer = {
-      name: 'rgb-stokes',
-      channelNames: [
-        'S0.R', 'S0.G', 'S0.B',
-        'S1.R', 'S1.G', 'S1.B',
-        'S2.R', 'S2.G', 'S2.B',
-        'S3.R', 'S3.G', 'S3.B'
-      ],
-      channelData: new Map([
-        ['S0.R', new Float32Array([1])],
-        ['S0.G', new Float32Array([1])],
-        ['S0.B', new Float32Array([1])],
-        ['S1.R', new Float32Array([0])],
-        ['S1.G', new Float32Array([0])],
-        ['S1.B', new Float32Array([0])],
-        ['S2.R', new Float32Array([1])],
-        ['S2.G', new Float32Array([1])],
-        ['S2.B', new Float32Array([1])],
-        ['S3.R', new Float32Array([0])],
-        ['S3.G', new Float32Array([0])],
-        ['S3.B', new Float32Array([0])]
-      ])
-    };
+    const rgbLayer = createLayerFromChannels({
+      'S0.R': [1],
+      'S0.G': [1],
+      'S0.B': [1],
+      'S1.R': [0],
+      'S1.G': [0],
+      'S1.B': [0],
+      'S2.R': [1],
+      'S2.G': [1],
+      'S2.B': [1],
+      'S3.R': [0],
+      'S3.G': [0],
+      'S3.B': [0]
+    }, 'rgb-stokes');
 
     expect(
       samplePixelValuesForDisplay(scalarLayer, 1, 1, { ix: 0, iy: 0 }, createStokesSelection('aolp'))?.values.AoLP
@@ -209,6 +173,16 @@ describe('display texture', () => {
     const layer = createLayer();
     const texture = buildSelectedDisplayTexture(layer, 2, 2, null);
     expect(Array.from(texture)).toEqual(new Array(16).fill(0).map((value, index) => index % 4 === 3 ? 1 : 0));
+  });
+
+  it('does not trigger planar materialization during normal display reads', () => {
+    const layer = createLayer();
+
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
+    buildSelectedDisplayTexture(layer, 2, 2, createChannelRgbSelection('R', 'G', 'B'));
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
+    samplePixelValuesForDisplay(layer, 2, 2, { ix: 0, iy: 0 }, createChannelRgbSelection('R', 'G', 'B'));
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
   });
 
   it('matches revision keys used by viewer state', () => {

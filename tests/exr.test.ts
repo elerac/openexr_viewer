@@ -2,25 +2,10 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { loadExr, splitInterleavedChannels } from '../src/exr';
+import { getChannelReadView, readChannelValue } from '../src/channel-storage';
+import { loadExr } from '../src/exr';
 
 describe('exr decode', () => {
-  it('splits interleaved channels with stable indexing', () => {
-    const map = splitInterleavedChannels(
-      new Float32Array([
-        1, 10, 100,
-        2, 20, 200
-      ]),
-      2,
-      1,
-      ['R', 'G', 'B']
-    );
-
-    expect(Array.from(map.get('R') ?? [])).toEqual([1, 2]);
-    expect(Array.from(map.get('G') ?? [])).toEqual([10, 20]);
-    expect(Array.from(map.get('B') ?? [])).toEqual([100, 200]);
-  });
-
   it('decodes cbox_rgb.exr with RGB channels', async () => {
     const testDir = path.dirname(fileURLToPath(import.meta.url));
     const exrPath = path.resolve(testDir, '../public/cbox_rgb.exr');
@@ -35,9 +20,12 @@ describe('exr decode', () => {
     expect(first.channelNames).toContain('R');
     expect(first.channelNames).toContain('G');
     expect(first.channelNames).toContain('B');
-    expect(first.channelData.get('R')?.length).toBe(image.width * image.height);
+    expect(first.channelStorage.kind).toBe('interleaved-f32');
+    expect(first.channelStorage.channelCount).toBe(first.channelNames.length);
+    expect(first.channelStorage.pixels.length).toBe(image.width * image.height * first.channelNames.length);
+    const red = getChannelReadView(first, 'R');
+    expect(readChannelValue(red, 0)).toBeTypeOf('number');
     expect(first.metadata?.some((entry) => entry.key === 'compression' && entry.value === 'PIZ')).toBe(true);
     expect(first.metadata?.some((entry) => entry.key === 'channels' && entry.value === '3 (R, G, B)')).toBe(true);
   }, 60000);
-
 });
