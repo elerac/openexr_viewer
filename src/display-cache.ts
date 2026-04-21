@@ -79,7 +79,7 @@ export function clampDisplayCacheBudgetMb(value: number): number {
   }
 
   const roundedValue = Math.round(value);
-  let nearestBudget = DISPLAY_CACHE_BUDGET_OPTIONS_MB[0];
+  let nearestBudget: number = DISPLAY_CACHE_BUDGET_OPTIONS_MB[0];
   let nearestDistance = Math.abs(roundedValue - nearestBudget);
 
   for (const budget of DISPLAY_CACHE_BUDGET_OPTIONS_MB.slice(1)) {

@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_COLORMAP_ID } from '../src/colormaps';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
 import { DecodedLayer } from '../src/types';
-import { createImage, createLayer, createViewerState } from './helpers/state-fixtures';
+import {
+  createChannelMonoSelection,
+  createChannelRgbSelection,
+  createImage,
+  createLayer,
+  createStokesSelection,
+  createViewerState
+} from './helpers/state-fixtures';
 
 describe('viewer store', () => {
   it('defaults to normal RGB visualization mode', () => {
@@ -11,8 +18,7 @@ describe('viewer store', () => {
     expect(createInitialState().colormapRange).toBeNull();
     expect(createInitialState().colormapRangeMode).toBe('alwaysAuto');
     expect(createInitialState().colormapZeroCentered).toBe(false);
-    expect(createInitialState().displaySource).toBe('channels');
-    expect(createInitialState().stokesParameter).toBeNull();
+    expect(createInitialState().displaySelection).toBeNull();
     expect(createInitialState().stokesDegreeModulation).toEqual({
       aolp: false,
       cop: true,
@@ -34,18 +40,14 @@ describe('viewer store', () => {
 
     const nextState = buildViewerStateForLayer(
       createViewerState({
-        displayR: 'R',
-        displayG: 'G',
-        displayB: 'B'
+        displaySelection: createChannelRgbSelection('R', 'G', 'B')
       }),
       image,
       1
     );
 
     expect(nextState.activeLayer).toBe(1);
-    expect(nextState.displayR).toBe('X');
-    expect(nextState.displayG).toBe('X');
-    expect(nextState.displayB).toBe('X');
+    expect(nextState.displaySelection).toEqual(createChannelMonoSelection('X'));
   });
 
   it('does not preserve arbitrary mixed channel mappings as display defaults', () => {
@@ -63,35 +65,27 @@ describe('viewer store', () => {
 
     const nextState = buildViewerStateForLayer(
       createViewerState({
-        displayR: '400nm',
-        displayG: '500nm',
-        displayB: '600nm'
+        displaySelection: createChannelRgbSelection('400nm', '500nm', '600nm')
       }),
       image,
       0
     );
 
-    expect(nextState.displayR).toBe('400nm');
-    expect(nextState.displayG).toBe('400nm');
-    expect(nextState.displayB).toBe('400nm');
+    expect(nextState.displaySelection).toEqual(createChannelMonoSelection('400nm'));
   });
 
-  it('resolves a real default mapping when the current selection is all zero channels', () => {
+  it('resolves a real default mapping when there is no current selection', () => {
     const image = createImage([createLayer()]);
 
     const nextState = buildViewerStateForLayer(
       createViewerState({
-        displayR: '__ZERO__',
-        displayG: '__ZERO__',
-        displayB: '__ZERO__'
+        displaySelection: null
       }),
       image,
       0
     );
 
-    expect(nextState.displayR).toBe('R');
-    expect(nextState.displayG).toBe('G');
-    expect(nextState.displayB).toBe('B');
+    expect(nextState.displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
   });
 
   it('clamps an out-of-range layer selection and restores a valid mapping', () => {
@@ -100,18 +94,14 @@ describe('viewer store', () => {
     const nextState = buildViewerStateForLayer(
       createViewerState({
         activeLayer: 3,
-        displayR: 'X',
-        displayG: 'Y',
-        displayB: 'Z'
+        displaySelection: createChannelRgbSelection('X', 'Y', 'Z')
       }),
       image,
       3
     );
 
     expect(nextState.activeLayer).toBe(0);
-    expect(nextState.displayR).toBe('R');
-    expect(nextState.displayG).toBe('G');
-    expect(nextState.displayB).toBe('B');
+    expect(nextState.displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
   });
 
   it('preserves available Stokes selections and falls back when unavailable', () => {
@@ -129,23 +119,14 @@ describe('viewer store', () => {
 
     const preserved = buildViewerStateForLayer(
       createViewerState({
-        displaySource: 'stokesScalar',
-        stokesParameter: 'aolp',
-        displayR: 'S0',
-        displayG: 'S1',
-        displayB: 'S2'
+        displaySelection: createStokesSelection('aolp')
       }),
       image,
       0
     );
-    expect(preserved.displaySource).toBe('stokesScalar');
-    expect(preserved.stokesParameter).toBe('aolp');
+    expect(preserved.displaySelection).toEqual(createStokesSelection('aolp'));
 
     const fallback = buildViewerStateForLayer(preserved, image, 1);
-    expect(fallback.displaySource).toBe('channels');
-    expect(fallback.stokesParameter).toBeNull();
-    expect(fallback.displayR).toBe('R');
-    expect(fallback.displayG).toBe('G');
-    expect(fallback.displayB).toBe('B');
+    expect(fallback.displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
   });
 });

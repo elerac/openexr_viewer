@@ -1,15 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { buildOverlayValueLines } from '../src/renderer';
+import { createChannelMonoSelection, createChannelRgbSelection } from './helpers/state-fixtures';
 
 describe('renderer overlay value helpers', () => {
   it('uses one mono line for colormap RGB displays', () => {
     const lines = buildOverlayValueLines(
       {
         visualizationMode: 'colormap',
-        displayR: 'R',
-        displayG: 'G',
-        displayB: 'B',
-        displayA: null
+        displaySelection: createChannelRgbSelection('R', 'G', 'B')
       },
       1,
       0.5,
@@ -28,10 +26,7 @@ describe('renderer overlay value helpers', () => {
     const lines = buildOverlayValueLines(
       {
         visualizationMode: 'rgb',
-        displayR: 'R',
-        displayG: 'G',
-        displayB: 'B',
-        displayA: null
+        displaySelection: createChannelRgbSelection('R', 'G', 'B')
       },
       1,
       0.5,
@@ -46,10 +41,7 @@ describe('renderer overlay value helpers', () => {
     const lines = buildOverlayValueLines(
       {
         visualizationMode: 'rgb',
-        displayR: 'R',
-        displayG: 'R',
-        displayB: 'R',
-        displayA: null
+        displaySelection: createChannelMonoSelection('R')
       },
       0.25,
       0.25,
@@ -68,10 +60,7 @@ describe('renderer overlay value helpers', () => {
     const lines = buildOverlayValueLines(
       {
         visualizationMode: 'rgb',
-        displayR: 'R',
-        displayG: 'G',
-        displayB: 'B',
-        displayA: 'A'
+        displaySelection: createChannelRgbSelection('R', 'G', 'B', 'A')
       },
       1,
       0.5,
@@ -87,10 +76,7 @@ describe('renderer overlay value helpers', () => {
     const lines = buildOverlayValueLines(
       {
         visualizationMode: 'rgb',
-        displayR: 'mask',
-        displayG: 'mask',
-        displayB: 'mask',
-        displayA: 'A'
+        displaySelection: createChannelMonoSelection('mask', 'A')
       },
       0.25,
       0.25,
@@ -114,10 +100,7 @@ describe('renderer overlay value helpers', () => {
     const lines = buildOverlayValueLines(
       {
         visualizationMode: 'colormap',
-        displayR: 'R',
-        displayG: 'G',
-        displayB: 'B',
-        displayA: 'A'
+        displaySelection: createChannelRgbSelection('R', 'G', 'B', 'A')
       },
       1,
       0.5,

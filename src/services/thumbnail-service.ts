@@ -1,4 +1,5 @@
 import { cloneDisplayLuminanceRange } from '../colormap-range';
+import { cloneDisplaySelection } from '../display-model';
 import { buildDisplayTextureRevisionKey, buildSelectedDisplayTexture } from '../display-texture';
 import { createOpenedImageThumbnailDataUrlFromDisplayTexture } from '../thumbnail';
 import { DecodedLayer, OpenedImageSession, ViewerState } from '../types';
@@ -139,7 +140,7 @@ export class ThumbnailService {
             layer,
             session.decoded.width,
             session.decoded.height,
-            stateSnapshot
+            stateSnapshot.displaySelection
           );
 
       return this.createThumbnailDataUrl({
@@ -226,6 +227,7 @@ function getSelectedLayer(session: OpenedImageSession, layerIndex: number): Deco
 function cloneViewerState(state: ViewerState): ViewerState {
   return {
     ...state,
+    displaySelection: cloneDisplaySelection(state.displaySelection),
     colormapRange: cloneDisplayLuminanceRange(state.colormapRange),
     stokesDegreeModulation: { ...state.stokesDegreeModulation },
     hoveredPixel: state.hoveredPixel ? { ...state.hoveredPixel } : null,

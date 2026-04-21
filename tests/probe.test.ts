@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { ColormapLut } from '../src/colormaps';
 import { buildProbeColorPreview, resolveActiveProbePixel, resolveProbeMode } from '../src/probe';
-import { ZERO_CHANNEL } from '../src/types';
+import {
+  createChannelMonoSelection,
+  createChannelRgbSelection,
+  createStokesSelection
+} from './helpers/state-fixtures';
 
 const redBlackGreenLut: ColormapLut = {
   id: '0',
@@ -30,7 +34,7 @@ describe('probe helpers', () => {
     expect(resolveProbeMode(null)).toBe('Hover');
   });
 
-  it('builds an sRGB probe color preview from the selected channels', () => {
+  it('builds an sRGB probe color preview from the selected RGB channels', () => {
     const preview = buildProbeColorPreview(
       {
         x: 4,
@@ -41,13 +45,7 @@ describe('probe helpers', () => {
           B: 0.25
         }
       },
-      {
-        displaySource: 'channels',
-        stokesParameter: null,
-        displayR: 'R',
-        displayG: 'G',
-        displayB: 'B'
-      },
+      createChannelRgbSelection('R', 'G', 'B'),
       0
     );
 
@@ -73,14 +71,7 @@ describe('probe helpers', () => {
           A: 0.25
         }
       },
-      {
-        displaySource: 'channels',
-        stokesParameter: null,
-        displayR: 'R',
-        displayG: 'G',
-        displayB: 'B',
-        displayA: 'A'
-      },
+      createChannelRgbSelection('R', 'G', 'B', 'A'),
       0
     );
 
@@ -95,45 +86,10 @@ describe('probe helpers', () => {
     });
   });
 
-  it('applies exposure and clamps missing channels when building the preview swatch', () => {
-    const preview = buildProbeColorPreview(
-      {
-        x: 4,
-        y: 7,
-        values: {
-          A: 0.25
-        }
-      },
-      {
-        displaySource: 'channels',
-        stokesParameter: null,
-        displayR: 'A',
-        displayG: ZERO_CHANNEL,
-        displayB: ZERO_CHANNEL
-      },
-      2
-    );
-
-    expect(preview).toEqual({
-      cssColor: 'rgb(255, 0, 0)',
-      displayValues: [
-        { label: 'R', value: '0.25' },
-        { label: 'G', value: '0' },
-        { label: 'B', value: '0' }
-      ]
-    });
-  });
-
-  it('shows one mono display value for single-channel RGB previews', () => {
+  it('shows one mono display value for mono channel previews', () => {
     const preview = buildProbeColorPreview(
       { x: 0, y: 0, values: { Y: 0.25 } },
-      {
-        displaySource: 'channels',
-        stokesParameter: null,
-        displayR: 'Y',
-        displayG: 'Y',
-        displayB: 'Y'
-      },
+      createChannelMonoSelection('Y'),
       0
     );
 
@@ -143,33 +99,21 @@ describe('probe helpers', () => {
     });
   });
 
-  it('shows one mono display value for split RGB channel previews', () => {
+  it('applies exposure to mono probe previews', () => {
     const preview = buildProbeColorPreview(
-      { x: 0, y: 0, values: { R: 0.25 } },
-      {
-        displaySource: 'channels',
-        stokesParameter: null,
-        displayR: 'R',
-        displayG: 'R',
-        displayB: 'R'
-      },
-      0
+      { x: 0, y: 0, values: { A: 0.25 } },
+      createChannelMonoSelection('A'),
+      2
     );
 
     expect(preview).toEqual({
-      cssColor: 'rgb(137, 137, 137)',
+      cssColor: 'rgb(255, 255, 255)',
       displayValues: [{ label: 'Mono', value: '0.25' }]
     });
   });
 
   it('maps probe swatch colors through the selected colormap LUT', () => {
-    const selection = {
-      displaySource: 'channels' as const,
-      stokesParameter: null,
-      displayR: 'Y',
-      displayG: 'Y',
-      displayB: 'Y'
-    };
+    const selection = createChannelMonoSelection('Y');
     const visualization = {
       mode: 'colormap' as const,
       colormapRange: { min: 0, max: 2 },
@@ -193,13 +137,7 @@ describe('probe helpers', () => {
   it('shows one luma-weighted display value for RGB colormap probe previews', () => {
     const preview = buildProbeColorPreview(
       { x: 0, y: 0, values: { R: 1, G: 0.5, B: 0.25 } },
-      {
-        displaySource: 'channels',
-        stokesParameter: null,
-        displayR: 'R',
-        displayG: 'G',
-        displayB: 'B'
-      },
+      createChannelRgbSelection('R', 'G', 'B'),
       0,
       {
         mode: 'colormap',
@@ -214,13 +152,7 @@ describe('probe helpers', () => {
   it('renders collapsed colormap probe ranges as black', () => {
     const preview = buildProbeColorPreview(
       { x: 0, y: 0, values: { Y: 1 } },
-      {
-        displaySource: 'channels',
-        stokesParameter: null,
-        displayR: 'Y',
-        displayG: 'Y',
-        displayB: 'Y'
-      },
+      createChannelMonoSelection('Y'),
       0,
       {
         mode: 'colormap',
@@ -235,13 +167,7 @@ describe('probe helpers', () => {
   it('uses scalar Stokes derived values for colormap probe preview', () => {
     const preview = buildProbeColorPreview(
       { x: 0, y: 0, values: { S0: 1, S1: 0, S2: 1, S3: 0, AoLP: Math.PI / 4 } },
-      {
-        displaySource: 'stokesScalar',
-        stokesParameter: 'aolp',
-        displayR: 'S0',
-        displayG: 'S1',
-        displayB: 'S2'
-      },
+      createStokesSelection('aolp'),
       0,
       {
         mode: 'colormap',
@@ -257,13 +183,7 @@ describe('probe helpers', () => {
   });
 
   it('modulates Stokes angle colormap preview values through paired degree values', () => {
-    const selection = {
-      displaySource: 'stokesScalar' as const,
-      stokesParameter: 'aolp' as const,
-      displayR: 'S0',
-      displayG: 'S1',
-      displayB: 'S2'
-    };
+    const selection = createStokesSelection('aolp');
     const visualization = {
       mode: 'colormap' as const,
       colormapRange: { min: 0, max: 2 },
@@ -293,16 +213,10 @@ describe('probe helpers', () => {
     expect(unmodulated?.cssColor).toBe('rgb(255, 0, 0)');
   });
 
-  it('uses RGB Stokes derived values for probe preview', () => {
+  it('uses grouped RGB Stokes derived values for probe preview', () => {
     const preview = buildProbeColorPreview(
       { x: 0, y: 0, values: { DoLP: 0.5 } },
-      {
-        displaySource: 'stokesRgb',
-        stokesParameter: 'dolp',
-        displayR: 'S0.R',
-        displayG: 'S0.G',
-        displayB: 'S0.B'
-      },
+      createStokesSelection('dolp', 'stokesRgb'),
       0
     );
 
@@ -316,13 +230,7 @@ describe('probe helpers', () => {
   it('uses one mono display value for split RGB Stokes probe preview', () => {
     const preview = buildProbeColorPreview(
       { x: 0, y: 0, values: { 'DoLP.G': 0.75 } },
-      {
-        displaySource: 'stokesRgb',
-        stokesParameter: 'dolp',
-        displayR: 'S0.G',
-        displayG: 'S0.G',
-        displayB: 'S0.G'
-      },
+      createStokesSelection('dolp', 'stokesRgb', 'G'),
       0
     );
 
@@ -332,13 +240,7 @@ describe('probe helpers', () => {
   it('modulates split RGB Stokes angle previews with split degree labels', () => {
     const preview = buildProbeColorPreview(
       { x: 0, y: 0, values: { 'AoLP.B': 0, 'DoLP.B': 0.25 } },
-      {
-        displaySource: 'stokesRgb',
-        stokesParameter: 'aolp',
-        displayR: 'S0.B',
-        displayG: 'S0.B',
-        displayB: 'S0.B'
-      },
+      createStokesSelection('aolp', 'stokesRgb', 'B'),
       0,
       {
         mode: 'colormap',
@@ -355,13 +257,7 @@ describe('probe helpers', () => {
   it('uses additional Stokes labels for probe preview', () => {
     const preview = buildProbeColorPreview(
       { x: 0, y: 0, values: { DoCP: 0.25 } },
-      {
-        displaySource: 'stokesScalar',
-        stokesParameter: 'docp',
-        displayR: 'S0',
-        displayG: 'S1',
-        displayB: 'S2'
-      },
+      createStokesSelection('docp'),
       0
     );
 
@@ -373,13 +269,7 @@ describe('probe helpers', () => {
 
     const copPreview = buildProbeColorPreview(
       { x: 0, y: 0, values: { CoP: -Math.PI / 4 } },
-      {
-        displaySource: 'stokesScalar',
-        stokesParameter: 'cop',
-        displayR: 'S0',
-        displayG: 'S1',
-        displayB: 'S2'
-      },
+      createStokesSelection('cop'),
       0
     );
 
@@ -391,13 +281,7 @@ describe('probe helpers', () => {
 
     const topPreview = buildProbeColorPreview(
       { x: 0, y: 0, values: { ToP: Math.PI / 4 } },
-      {
-        displaySource: 'stokesRgb',
-        stokesParameter: 'top',
-        displayR: 'S0.R',
-        displayG: 'S0.G',
-        displayB: 'S0.B'
-      },
+      createStokesSelection('top', 'stokesRgb'),
       0
     );
 
@@ -409,13 +293,7 @@ describe('probe helpers', () => {
 
     const normalizedPreview = buildProbeColorPreview(
       { x: 0, y: 0, values: { 'S3/S0.B': -0.5 } },
-      {
-        displaySource: 'stokesRgb',
-        stokesParameter: 's3_over_s0',
-        displayR: 'S0.B',
-        displayG: 'S0.B',
-        displayB: 'S0.B'
-      },
+      createStokesSelection('s3_over_s0', 'stokesRgb', 'B'),
       0
     );
 

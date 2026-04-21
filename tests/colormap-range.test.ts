@@ -8,18 +8,16 @@ import {
 } from '../src/colormap-range';
 import { buildDisplayTexture } from '../src/display-texture';
 import { DisplaySelection } from '../src/types';
-import { createLayer, createStokesSelection } from './helpers/state-fixtures';
+import {
+  createChannelRgbSelection,
+  createLayer,
+  createStokesSelection
+} from './helpers/state-fixtures';
 
 describe('colormap range', () => {
   it('uses predefined Stokes ranges for auto colormap ranges', () => {
     const imageRange = { min: 0.2, max: 0.4 };
-    const channelSelection: DisplaySelection = {
-      displaySource: 'channels',
-      stokesParameter: null,
-      displayR: 'R',
-      displayG: 'G',
-      displayB: 'B'
-    };
+    const channelSelection: DisplaySelection = createChannelRgbSelection('R', 'G', 'B');
 
     expect(resolveColormapAutoRange(channelSelection, imageRange, false)).toEqual(imageRange);
     expect(resolveColormapAutoRange(channelSelection, imageRange, true)).toEqual({ min: -0.4, max: 0.4 });
@@ -69,13 +67,7 @@ describe('colormap range', () => {
   });
 
   it('does not preserve Stokes colormap state across different groups or channel selections', () => {
-    const channelSelection: DisplaySelection = {
-      displaySource: 'channels',
-      stokesParameter: null,
-      displayR: 'R',
-      displayG: 'G',
-      displayB: 'B'
-    };
+    const channelSelection: DisplaySelection = createChannelRgbSelection('R', 'G', 'B');
 
     expect(shouldPreserveStokesColormapState(
       createStokesSelection('dolp'),

@@ -1,15 +1,22 @@
 import {
-  DisplayChannelMapping,
-  DisplayLuminanceRange,
-  DisplaySelection,
-  DisplaySourceKind,
-  StokesDegreeModulationParameter,
-  StokesDegreeModulationState,
-  StokesParameter
-} from './types';
+  getDisplaySelectionDegreeModulationValueLabel,
+  getDisplaySelectionValueLabel,
+  getDisplaySelectionOptionLabel,
+  getStokesDegreeModulationLabel,
+  getStokesParameterLabel,
+  isStokesAngleParameter,
+  isStokesAngleSelection,
+  isStokesDegreeModulationParameter,
+  isStokesSelection,
+  sameDisplaySelection,
+  type DisplaySelection,
+  type StokesDegreeModulationState,
+  type StokesParameter,
+  type StokesSelection
+} from './display-model';
+import { DisplayChannelMapping, DisplayLuminanceRange } from './types';
 
 export type StokesColormapDefaultGroup = 'aolp' | 'degree' | 'cop' | 'top' | 'normalized';
-type RgbSuffix = 'R' | 'G' | 'B' | 'A';
 export type RgbStokesComponent = 'R' | 'G' | 'B';
 
 export interface StokesColormapDefault {
@@ -38,24 +45,12 @@ export interface RgbStokesChannels {
 
 export interface StokesDisplayOption {
   key: string;
-  displaySource: Exclude<DisplaySourceKind, 'channels'>;
-  stokesParameter: StokesParameter;
   label: string;
+  selection: StokesSelection;
   mapping: DisplayChannelMapping;
   component: RgbStokesComponent | null;
 }
 
-const STOKES_PARAMETER_LABELS: Record<StokesParameter, string> = {
-  aolp: 'AoLP',
-  dolp: 'DoLP',
-  dop: 'DoP',
-  docp: 'DoCP',
-  cop: 'CoP',
-  top: 'ToP',
-  s1_over_s0: 'S1/S0',
-  s2_over_s0: 'S2/S0',
-  s3_over_s0: 'S3/S0'
-};
 const STOKES_PARAMETER_ORDER: StokesParameter[] = [
   's1_over_s0',
   's2_over_s0',
@@ -67,11 +62,6 @@ const STOKES_PARAMETER_ORDER: StokesParameter[] = [
   'cop',
   'top'
 ];
-const STOKES_DEGREE_MODULATION_LABELS: Record<StokesDegreeModulationParameter, string> = {
-  aolp: 'DoLP',
-  cop: 'DoCP',
-  top: 'DoP'
-};
 
 export const DEFAULT_STOKES_DEGREE_MODULATION: StokesDegreeModulationState = {
   aolp: false,
@@ -92,7 +82,7 @@ export function detectScalarStokesChannels(channelNames: string[]): ScalarStokes
 
 export function detectRgbStokesChannels(channelNames: string[]): RgbStokesChannels | null {
   const channels = new Set(channelNames);
-  const build = (suffix: 'R' | 'G' | 'B'): ScalarStokesChannels | null => {
+  const build = (suffix: RgbStokesComponent): ScalarStokesChannels | null => {
     const s0 = `S0.${suffix}`;
     const s1 = `S1.${suffix}`;
     const s2 = `S2.${suffix}`;
@@ -108,7 +98,37 @@ export function detectRgbStokesChannels(channelNames: string[]): RgbStokesChanne
   return r && g && b ? { r, g, b } : null;
 }
 
-export function buildRgbStokesGroupMapping(channels: RgbStokesChannels): DisplayChannelMapping {
+export function buildScalarStokesSelection(parameter: StokesParameter): StokesSelection {
+  return isStokesAngleParameter(parameter)
+    ? { kind: 'stokesAngle', parameter, source: { kind: 'scalar' } }
+    : { kind: 'stokesScalar', parameter, source: { kind: 'scalar' } };
+}
+
+export function buildRgbStokesLuminanceSelection(parameter: StokesParameter): StokesSelection {
+  return isStokesAngleParameter(parameter)
+    ? { kind: 'stokesAngle', parameter, source: { kind: 'rgbLuminance' } }
+    : { kind: 'stokesScalar', parameter, source: { kind: 'rgbLuminance' } };
+}
+
+export function buildRgbStokesSplitSelection(
+  parameter: StokesParameter,
+  component: RgbStokesComponent
+): StokesSelection {
+  return isStokesAngleParameter(parameter)
+    ? { kind: 'stokesAngle', parameter, source: { kind: 'rgbComponent', component } }
+    : { kind: 'stokesScalar', parameter, source: { kind: 'rgbComponent', component } };
+}
+
+export function buildScalarStokesMapping(channels: ScalarStokesChannels): DisplayChannelMapping {
+  return {
+    displayR: channels.s0,
+    displayG: channels.s1,
+    displayB: channels.s2,
+    displayA: null
+  };
+}
+
+export function buildRgbStokesLuminanceMapping(channels: RgbStokesChannels): DisplayChannelMapping {
   return {
     displayR: channels.r.s0,
     displayG: channels.g.s0,
@@ -117,35 +137,13 @@ export function buildRgbStokesGroupMapping(channels: RgbStokesChannels): Display
   };
 }
 
-export function buildRgbStokesSplitMapping(channels: ScalarStokesChannels): DisplayChannelMapping {
+export function buildRgbStokesComponentMapping(channels: ScalarStokesChannels): DisplayChannelMapping {
   return {
     displayR: channels.s0,
     displayG: channels.s0,
     displayB: channels.s0,
     displayA: null
   };
-}
-
-export function resolveRgbStokesSplitComponent(
-  channels: RgbStokesChannels,
-  selection: DisplayChannelMapping
-): { component: RgbStokesComponent; channels: ScalarStokesChannels } | null {
-  if (selection.displayR !== selection.displayG || selection.displayR !== selection.displayB) {
-    return null;
-  }
-
-  const selectedChannel = selection.displayR;
-  if (isScalarStokesChannelName(channels.r, selectedChannel)) {
-    return { component: 'R', channels: channels.r };
-  }
-  if (isScalarStokesChannelName(channels.g, selectedChannel)) {
-    return { component: 'G', channels: channels.g };
-  }
-  if (isScalarStokesChannelName(channels.b, selectedChannel)) {
-    return { component: 'B', channels: channels.b };
-  }
-
-  return null;
 }
 
 export function getStokesDisplayOptions(
@@ -184,36 +182,17 @@ export function getStokesDisplayOptions(
 
 export function findSelectedStokesDisplayOption(
   options: StokesDisplayOption[],
-  selected: DisplaySelection
+  selected: DisplaySelection | null
 ): StokesDisplayOption | null {
-  const matchingOptions = options.filter((option) => {
-    return (
-      selected.displaySource === option.displaySource &&
-      selected.stokesParameter === option.stokesParameter
-    );
-  });
-
-  if (matchingOptions.length === 0) {
+  if (!isStokesSelection(selected)) {
     return null;
   }
 
-  const exactMatch = matchingOptions.find((option) => {
-    return areDisplayMappingsEqual(option.mapping, selected);
-  });
-  if (exactMatch) {
-    return exactMatch;
-  }
-
-  return matchingOptions.find((option) => option.component === null) ?? matchingOptions[0] ?? null;
+  return options.find((option) => sameDisplaySelection(option.selection, selected)) ?? null;
 }
 
-export function isStokesDisplaySelection(
-  selection: Pick<DisplaySelection, 'displaySource' | 'stokesParameter'>
-): selection is DisplaySelection & {
-  displaySource: Exclude<DisplaySourceKind, 'channels'>;
-  stokesParameter: StokesParameter;
-} {
-  return selection.displaySource !== 'channels' && selection.stokesParameter !== null;
+export function isStokesDisplaySelection(selection: DisplaySelection | null): selection is StokesSelection {
+  return isStokesSelection(selection);
 }
 
 export function getStokesColormapDefaultGroup(
@@ -267,81 +246,39 @@ export function getStokesColormapDefault(parameter: StokesParameter | null): Sto
 }
 
 export function getStokesDisplayColormapDefault(
-  selection: Pick<DisplaySelection, 'displaySource' | 'stokesParameter'>
+  selection: DisplaySelection | null
 ): StokesColormapDefault | null {
-  return isStokesDisplaySelection(selection)
-    ? getStokesColormapDefault(selection.stokesParameter)
+  return isStokesSelection(selection)
+    ? getStokesColormapDefault(selection.parameter)
     : null;
 }
 
 export function isStokesDisplayAvailable(
   channelNames: string[],
-  selection: Pick<DisplaySelection, 'displaySource' | 'stokesParameter'>
+  selection: DisplaySelection | null
 ): boolean {
-  if (!isStokesDisplaySelection(selection)) {
+  if (!isStokesSelection(selection)) {
     return true;
   }
 
-  return selection.displaySource === 'stokesScalar'
+  return selection.source.kind === 'scalar'
     ? Boolean(detectScalarStokesChannels(channelNames))
     : Boolean(detectRgbStokesChannels(channelNames));
 }
 
-export function getStokesParameterLabel(parameter: StokesParameter): string {
-  return STOKES_PARAMETER_LABELS[parameter];
-}
-
-export function getStokesDisplayValueLabel(selection: DisplaySelection): string | null {
-  if (selection.displaySource === 'channels' || !selection.stokesParameter) {
-    return null;
-  }
-
-  const label = getStokesParameterLabel(selection.stokesParameter);
-  const component = selection.displaySource === 'stokesRgb'
-    ? inferRepeatedRgbComponentFromMapping(selection)
-    : null;
-  return component ? `${label}.${component}` : label;
-}
-
-export function isStokesDegreeModulationParameter(
-  parameter: StokesParameter | null
-): parameter is StokesDegreeModulationParameter {
-  return parameter === 'aolp' || parameter === 'cop' || parameter === 'top';
-}
-
-export function getStokesDegreeModulationLabel(
-  parameter: StokesParameter | null
-): string | null {
-  return isStokesDegreeModulationParameter(parameter)
-    ? STOKES_DEGREE_MODULATION_LABELS[parameter]
-    : null;
-}
-
-export function getStokesDegreeModulationDisplayValueLabel(selection: DisplaySelection): string | null {
-  if (selection.displaySource === 'channels') {
-    return null;
-  }
-
-  const label = getStokesDegreeModulationLabel(selection.stokesParameter);
-  if (!label) {
-    return null;
-  }
-
-  const component = selection.displaySource === 'stokesRgb'
-    ? inferRepeatedRgbComponentFromMapping(selection)
-    : null;
-  return component ? `${label}.${component}` : label;
-}
+export {
+  getDisplaySelectionDegreeModulationValueLabel as getStokesDegreeModulationDisplayValueLabel,
+  getDisplaySelectionValueLabel as getStokesDisplayValueLabel,
+  getStokesDegreeModulationLabel,
+  getStokesParameterLabel,
+  isStokesDegreeModulationParameter
+};
 
 export function isStokesDegreeModulationEnabled(
-  selection: Pick<DisplaySelection, 'displaySource' | 'stokesParameter'>,
+  selection: DisplaySelection | null,
   modulation: StokesDegreeModulationState
 ): boolean {
-  return (
-    selection.displaySource !== 'channels' &&
-    isStokesDegreeModulationParameter(selection.stokesParameter) &&
-    modulation[selection.stokesParameter]
-  );
+  return isStokesAngleSelection(selection) && modulation[selection.parameter];
 }
 
 export function clampStokesDegreeModulationValue(value: number): number {
@@ -474,33 +411,16 @@ export function computeStokesDegreeModulationDisplayValue(
   return value === null ? null : clampStokesDegreeModulationValue(value);
 }
 
-function areDisplayMappingsEqual(
-  a: DisplayChannelMapping,
-  b: DisplayChannelMapping
-): boolean {
-  return (
-    a.displayR === b.displayR &&
-    a.displayG === b.displayG &&
-    a.displayB === b.displayB &&
-    (a.displayA ?? null) === (b.displayA ?? null)
-  );
-}
-
 function buildScalarStokesDisplayOption(
   parameter: StokesParameter,
   channels: ScalarStokesChannels
 ): StokesDisplayOption {
+  const selection = buildScalarStokesSelection(parameter);
   return {
     key: `stokesScalar:${parameter}`,
-    displaySource: 'stokesScalar',
-    stokesParameter: parameter,
-    label: `Stokes ${getStokesParameterLabel(parameter)}`,
-    mapping: {
-      displayR: channels.s0,
-      displayG: channels.s1,
-      displayB: channels.s2,
-      displayA: null
-    },
+    label: getDisplaySelectionOptionLabel(selection),
+    selection,
+    mapping: buildScalarStokesMapping(channels),
     component: null
   };
 }
@@ -509,13 +429,12 @@ function buildRgbStokesGroupDisplayOption(
   parameter: StokesParameter,
   channels: RgbStokesChannels
 ): StokesDisplayOption {
-  const label = getStokesParameterLabel(parameter);
+  const selection = buildRgbStokesLuminanceSelection(parameter);
   return {
     key: `stokesRgb:${parameter}:group`,
-    displaySource: 'stokesRgb',
-    stokesParameter: parameter,
-    label: `${label}.(R,G,B)`,
-    mapping: buildRgbStokesGroupMapping(channels),
+    label: getDisplaySelectionOptionLabel(selection),
+    selection,
+    mapping: buildRgbStokesLuminanceMapping(channels),
     component: null
   };
 }
@@ -525,59 +444,12 @@ function buildRgbStokesSplitDisplayOption(
   component: RgbStokesComponent,
   channels: ScalarStokesChannels
 ): StokesDisplayOption {
-  const label = getStokesParameterLabel(parameter);
+  const selection = buildRgbStokesSplitSelection(parameter, component);
   return {
     key: `stokesRgb:${parameter}:${component}`,
-    displaySource: 'stokesRgb',
-    stokesParameter: parameter,
-    label: `${label}.${component}`,
-    mapping: buildRgbStokesSplitMapping(channels),
+    label: getDisplaySelectionOptionLabel(selection),
+    selection,
+    mapping: buildRgbStokesComponentMapping(channels),
     component
-  };
-}
-
-function isScalarStokesChannelName(channels: ScalarStokesChannels, channelName: string): boolean {
-  return (
-    channelName === channels.s0 ||
-    channelName === channels.s1 ||
-    channelName === channels.s2 ||
-    channelName === channels.s3
-  );
-}
-
-function inferRepeatedRgbComponentFromMapping(selection: DisplayChannelMapping): RgbStokesComponent | null {
-  if (selection.displayR !== selection.displayG || selection.displayR !== selection.displayB) {
-    return null;
-  }
-
-  const parsed = parseRgbChannel(selection.displayR);
-  if (!parsed || parsed.suffix === 'A') {
-    return null;
-  }
-
-  return parsed.suffix;
-}
-
-function parseRgbChannel(channelName: string): { base: string; suffix: RgbSuffix } | null {
-  if (channelName === 'R' || channelName === 'G' || channelName === 'B' || channelName === 'A') {
-    return {
-      base: '',
-      suffix: channelName
-    };
-  }
-
-  const dotIndex = channelName.lastIndexOf('.');
-  if (dotIndex <= 0 || dotIndex >= channelName.length - 1) {
-    return null;
-  }
-
-  const suffix = channelName.slice(dotIndex + 1);
-  if (suffix !== 'R' && suffix !== 'G' && suffix !== 'B' && suffix !== 'A') {
-    return null;
-  }
-
-  return {
-    base: channelName.slice(0, dotIndex),
-    suffix
   };
 }

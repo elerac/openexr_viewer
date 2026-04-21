@@ -1,7 +1,7 @@
 import { buildZeroCenteredColormapRange } from './colormap-range';
 import { ColormapLut, sampleColormapRgbBytes } from './colormaps';
+import { cloneDisplaySelection } from './display-model';
 import {
-  areDisplayChannelsAvailable,
   buildChannelDisplayOptions,
   extractRgbChannelGroups,
   findMergedSelectionForSplitDisplay,
@@ -305,6 +305,7 @@ export class ViewerUi {
   private panelSplitSizes: PanelSplitSizes = { ...DEFAULT_PANEL_SPLIT_SIZES };
   private activePanelResize: PanelResizeDragState | null = null;
   private topMenuTrackingMode: TopMenuTrackingMode = 'inactive';
+  private hoverOpenedTopMenuButton: HTMLButtonElement | null = null;
 
   constructor(private readonly callbacks: UiCallbacks) {
     this.elements = resolveElements();
@@ -464,6 +465,9 @@ export class ViewerUi {
   private closeTopMenu(menu: TopMenuElements, restoreFocus = false): void {
     menu.menu.classList.add('hidden');
     menu.button.setAttribute('aria-expanded', 'false');
+    if (this.hoverOpenedTopMenuButton === menu.button) {
+      this.hoverOpenedTopMenuButton = null;
+    }
     if (!this.getTopMenus().some((item) => item.menu !== menu.menu && this.isTopMenuOpen(item))) {
       this.topMenuTrackingMode = 'inactive';
     }
@@ -673,7 +677,7 @@ export class ViewerUi {
 
   setRgbGroupOptions(
     channelNames: string[],
-    selected: DisplaySelection
+    selected: DisplaySelection | null
   ): void {
     const hadFocus = document.activeElement === this.elements.rgbGroupSelect;
     const nextChannelNames = [...channelNames];
@@ -699,23 +703,12 @@ export class ViewerUi {
       includeRgbGroups: !this.includeSplitRgbChannels,
       includeSplitChannels: this.includeSplitRgbChannels
     });
-    const selectedChannelOption = findSelectedChannelDisplayOption(
-      channelOptions,
-      effectiveSelected.displayR,
-      effectiveSelected.displayG,
-      effectiveSelected.displayB,
-      effectiveSelected.displayA ?? null
-    );
+    const selectedChannelOption = findSelectedChannelDisplayOption(channelOptions, effectiveSelected);
     const selectedStokesOption = findSelectedStokesDisplayOption(stokesOptions, effectiveSelected);
-    const showCurrentChannelOption =
-      effectiveSelected.displaySource === 'channels' &&
-      !selectedChannelOption &&
-      nextChannelNames.length > 0 &&
-      areDisplayChannelsAvailable(nextChannelNames, effectiveSelected);
-    const optionCount = channelOptions.length + stokesOptions.length + (showCurrentChannelOption ? 1 : 0);
+    const optionCount = channelOptions.length + stokesOptions.length;
 
     this.currentRgbChannelNames = nextChannelNames;
-    this.currentRgbSelection = { ...effectiveSelected };
+    this.currentRgbSelection = cloneDisplaySelection(effectiveSelected);
     this.hasRgbGroups = optionCount > 0;
     this.hasRgbSplitOptions = rgbGroups.length > 0;
     this.updateRgbSplitToggleState();
@@ -724,68 +717,42 @@ export class ViewerUi {
     this.channelViewItems = [];
     this.applyListboxRowSizing(this.elements.rgbGroupSelect, optionCount, CHANNEL_OPTIONS_MAX_VISIBLE_ROWS);
 
-    let selectedValue = optionCount > 0 ? 'channels-0' : '';
-
-    if (showCurrentChannelOption) {
-      const value = 'channels-current';
-      this.rgbGroupMappings.set(value, {
-        ...effectiveSelected,
-        displaySource: 'channels',
-        stokesParameter: null
-      });
-
-      const option = document.createElement('option');
-      option.value = value;
-      option.textContent = formatCurrentChannelOptionLabel(selected);
-      this.elements.rgbGroupSelect.append(option);
-      this.channelViewItems.push(createChannelViewRowItem(value, option.textContent, effectiveSelected));
-      selectedValue = value;
-    }
+    let selectedValue = '';
 
     channelOptions.forEach((channelOption, index) => {
       const value = `channels-${index}`;
-      this.rgbGroupMappings.set(value, {
-        displaySource: 'channels',
-        stokesParameter: null,
-        ...channelOption.mapping
-      });
+      this.rgbGroupMappings.set(value, channelOption.selection);
 
       const option = document.createElement('option');
       option.value = value;
       option.textContent = channelOption.label;
       this.elements.rgbGroupSelect.append(option);
-      this.channelViewItems.push(createChannelViewRowItem(value, channelOption.label, {
-        displaySource: 'channels',
-        stokesParameter: null,
-        ...channelOption.mapping
-      }));
+      this.channelViewItems.push(createChannelViewRowItem(value, channelOption.label, channelOption.mapping));
 
       if (selectedChannelOption && selectedChannelOption.key === channelOption.key) {
+        selectedValue = value;
+      }
+      if (!selectedValue) {
         selectedValue = value;
       }
     });
 
     stokesOptions.forEach((stokesOption, index) => {
       const value = `stokes-${index}`;
-      this.rgbGroupMappings.set(value, {
-        displaySource: stokesOption.displaySource,
-        stokesParameter: stokesOption.stokesParameter,
-        ...stokesOption.mapping
-      });
+      this.rgbGroupMappings.set(value, stokesOption.selection);
 
       const option = document.createElement('option');
       option.value = value;
       option.textContent = stokesOption.label;
       this.elements.rgbGroupSelect.append(option);
-      this.channelViewItems.push(createChannelViewRowItem(value, stokesOption.label, {
-        displaySource: stokesOption.displaySource,
-        stokesParameter: stokesOption.stokesParameter,
-        ...stokesOption.mapping
-      }));
+      this.channelViewItems.push(createChannelViewRowItem(value, stokesOption.label, stokesOption.mapping));
 
       if (
         selectedStokesOption && selectedStokesOption.key === stokesOption.key
       ) {
+        selectedValue = value;
+      }
+      if (!selectedValue) {
         selectedValue = value;
       }
     });
@@ -1039,7 +1006,7 @@ export class ViewerUi {
     }
 
     this.elements.rgbGroupSelect.value = value;
-    this.currentRgbSelection = { ...mapping };
+    this.currentRgbSelection = cloneDisplaySelection(mapping);
     this.renderChannelViewRows();
     this.callbacks.onRgbGroupChange(mapping);
   }
@@ -1288,6 +1255,12 @@ export class ViewerUi {
 
   private bindTopMenu(menu: TopMenuElements): void {
     menu.button.addEventListener('click', () => {
+      if (this.hoverOpenedTopMenuButton === menu.button && this.isTopMenuOpen(menu)) {
+        this.hoverOpenedTopMenuButton = null;
+        return;
+      }
+
+      this.hoverOpenedTopMenuButton = null;
       this.toggleTopMenu(menu);
     });
 
@@ -1298,6 +1271,7 @@ export class ViewerUi {
 
       menu.button.focus();
       this.openTopMenu(menu, null, 'pointer');
+      this.hoverOpenedTopMenuButton = menu.button;
     });
 
     menu.button.addEventListener('keydown', (event) => {
@@ -1725,7 +1699,7 @@ export class ViewerUi {
       if (!mapping) {
         return;
       }
-      this.currentRgbSelection = { ...mapping };
+      this.currentRgbSelection = cloneDisplaySelection(mapping);
       this.renderChannelViewRows();
       this.callbacks.onRgbGroupChange(mapping);
     });
@@ -2072,18 +2046,6 @@ function createEmptyProbeDisplayValues(): ProbeDisplayValue[] {
     { label: 'G', value: '-' },
     { label: 'B', value: '-' }
   ];
-}
-
-function formatCurrentChannelOptionLabel(selected: DisplaySelection): string {
-  const channels = [
-    selected.displayR,
-    selected.displayG,
-    selected.displayB,
-    ...(selected.displayA ? [selected.displayA] : [])
-  ];
-  return channels.every((channel) => channel === channels[0])
-    ? channels[0] ?? 'Current'
-    : channels.join(',');
 }
 
 export function buildPartLayerItemsFromChannelNames(channelNames: string[]): LayerOptionItem[] {
@@ -2473,7 +2435,7 @@ function createChannelViewIcon(swatches: string[]): HTMLElement {
   return icon;
 }
 
-function createChannelViewRowItem(value: string, label: string, mapping: DisplaySelection): ChannelViewRowItem {
+function createChannelViewRowItem(value: string, label: string, mapping: DisplayChannelMapping): ChannelViewRowItem {
   const precisionCount = getDisplayMappingChannelCount(mapping);
   return {
     value,

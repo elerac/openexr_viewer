@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
+import { serializeDisplaySelectionKey } from '../src/display-model';
 import { ThumbnailService } from '../src/services/thumbnail-service';
 import { DecodedExrImage, DecodedLayer, OpenedImageSession, ViewerState } from '../src/types';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
+import { createChannelMonoSelection, createChannelRgbSelection } from './helpers/state-fixtures';
 
 function createDecodedImage(): DecodedExrImage {
   const layer: DecodedLayer = {
@@ -55,18 +57,18 @@ describe('thumbnail service', () => {
         updates.push('updated');
       },
       windowLike: null,
-      createThumbnailDataUrl: ({ stateSnapshot }) => stateSnapshot.displayR
+      createThumbnailDataUrl: ({ stateSnapshot }) => serializeDisplaySelectionKey(stateSnapshot.displaySelection)
     });
 
-    const firstState: ViewerState = { ...session.state, displayR: 'first' };
-    const secondState: ViewerState = { ...session.state, displayR: 'second' };
+    const firstState: ViewerState = { ...session.state, displaySelection: createChannelMonoSelection('first') };
+    const secondState: ViewerState = { ...session.state, displaySelection: createChannelMonoSelection('second') };
 
     const first = service.enqueue(session.id, firstState);
     const second = service.enqueue(session.id, secondState);
 
     await Promise.all([first, second]);
 
-    expect(session.thumbnailDataUrl).toBe('second');
+    expect(session.thumbnailDataUrl).toBe('channelMono:second:');
     expect(updates).toEqual(['updated']);
   });
 
@@ -121,7 +123,7 @@ describe('thumbnail service', () => {
     const session = createSession();
     const cachedTexture = new Float32Array([0.5, 0.5, 0.5, 1, 1, 1, 1, 1]);
     session.displayTexture = cachedTexture;
-    session.textureRevisionKey = '0:channels::R:G:B:';
+    session.textureRevisionKey = `0:${serializeDisplaySelectionKey(createChannelRgbSelection('R', 'G', 'B'))}`;
 
     let receivedTexture: Float32Array | null = null;
     const service = new ThumbnailService({

@@ -3,8 +3,7 @@ import { resolveDisplaySelectionForLayer } from './display-selection';
 import { createDefaultStokesDegreeModulation } from './stokes';
 import {
   DecodedExrImage,
-  ViewerState,
-  ZERO_CHANNEL
+  ViewerState
 } from './types';
 
 export function createInitialState(): ViewerState {
@@ -20,12 +19,7 @@ export function createInitialState(): ViewerState {
     panX: 0,
     panY: 0,
     activeLayer: 0,
-    displaySource: 'channels',
-    stokesParameter: null,
-    displayR: ZERO_CHANNEL,
-    displayG: ZERO_CHANNEL,
-    displayB: ZERO_CHANNEL,
-    displayA: null,
+    displaySelection: null,
     hoveredPixel: null,
     lockedPixel: null
   };
@@ -77,18 +71,13 @@ export function buildViewerStateForLayer(
     return {
       ...currentState,
       activeLayer: 0,
-      displaySource: 'channels',
-      stokesParameter: null,
-      displayR: ZERO_CHANNEL,
-      displayG: ZERO_CHANNEL,
-      displayB: ZERO_CHANNEL,
-      displayA: null
+      displaySelection: null
     };
   }
 
   return {
     ...currentState,
     activeLayer,
-    ...resolveDisplaySelectionForLayer(layer.channelNames, currentState)
+    displaySelection: resolveDisplaySelectionForLayer(layer.channelNames, currentState.displaySelection)
   };
 }

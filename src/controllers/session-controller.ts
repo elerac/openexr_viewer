@@ -13,6 +13,7 @@ import {
   pickNextSessionIndexAfterRemoval,
   persistActiveSessionState
 } from '../session-state';
+import { cloneDisplaySelection } from '../display-model';
 import { createDefaultStokesDegreeModulation } from '../stokes';
 import { ViewerUi } from '../ui';
 import { buildViewerStateForLayer } from '../viewer-store';
@@ -24,8 +25,7 @@ import {
   OpenedImageSession,
   SessionSource,
   ViewerState,
-  ViewportInfo,
-  ZERO_CHANNEL
+  ViewportInfo
 } from '../types';
 
 const GALLERY_IMAGES = [
@@ -549,12 +549,7 @@ function createClearedViewerState(defaultColormapId: string): ViewerState {
     panX: 0,
     panY: 0,
     activeLayer: 0,
-    displaySource: 'channels',
-    stokesParameter: null,
-    displayR: ZERO_CHANNEL,
-    displayG: ZERO_CHANNEL,
-    displayB: ZERO_CHANNEL,
-    displayA: null,
+    displaySelection: null,
     hoveredPixel: null,
     lockedPixel: null
   };
@@ -627,12 +622,7 @@ function buildSwitchedSessionState(
       panX: pan.panX,
       panY: pan.panY,
       exposureEv: currentState.exposureEv,
-      displaySource: currentState.displaySource,
-      stokesParameter: currentState.stokesParameter,
-      displayR: currentState.displayR,
-      displayG: currentState.displayG,
-      displayB: currentState.displayB,
-      displayA: currentState.displayA,
+      displaySelection: cloneDisplaySelection(currentState.displaySelection),
       visualizationMode: currentState.visualizationMode,
       activeColormapId: currentState.activeColormapId,
       colormapRange: cloneDisplayLuminanceRange(currentState.colormapRange),
@@ -688,6 +678,7 @@ function clampPixelToImageBounds(pixel: ImagePixel, width: number, height: numbe
 function cloneViewerState(state: ViewerState): ViewerState {
   return {
     ...state,
+    displaySelection: cloneDisplaySelection(state.displaySelection),
     colormapRange: cloneDisplayLuminanceRange(state.colormapRange),
     stokesDegreeModulation: { ...state.stokesDegreeModulation },
     hoveredPixel: state.hoveredPixel ? { ...state.hoveredPixel } : null,

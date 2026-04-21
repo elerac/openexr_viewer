@@ -1,11 +1,18 @@
-import { createInitialState } from '../../src/viewer-store';
 import {
-  DecodedExrImage,
-  DecodedLayer,
-  DisplaySelection,
-  StokesParameter,
-  ViewerState
+  type ChannelMonoSelection,
+  type ChannelRgbSelection,
+  type StokesSelection,
+  type StokesParameter,
+  type ViewerState
 } from '../../src/types';
+import {
+  buildRgbStokesLuminanceSelection,
+  buildRgbStokesSplitSelection,
+  buildScalarStokesSelection,
+  type RgbStokesComponent
+} from '../../src/stokes';
+import { createInitialState } from '../../src/viewer-store';
+import { DecodedExrImage, DecodedLayer } from '../../src/types';
 
 export function createLayer(): DecodedLayer {
   const channelData = new Map<string, Float32Array>();
@@ -37,13 +44,40 @@ export function createViewerState(overrides: Partial<ViewerState> = {}): ViewerS
 
 export function createStokesSelection(
   stokesParameter: StokesParameter,
-  displaySource: Exclude<DisplaySelection['displaySource'], 'channels'> = 'stokesScalar'
-): DisplaySelection {
+  displaySource: 'stokesScalar' | 'stokesRgb' = 'stokesScalar',
+  component: RgbStokesComponent | null = null
+): StokesSelection {
+  if (displaySource === 'stokesScalar') {
+    return buildScalarStokesSelection(stokesParameter);
+  }
+
+  return component
+    ? buildRgbStokesSplitSelection(stokesParameter, component)
+    : buildRgbStokesLuminanceSelection(stokesParameter);
+}
+
+export function createChannelRgbSelection(
+  r = 'R',
+  g = 'G',
+  b = 'B',
+  alpha: string | null = null
+): ChannelRgbSelection {
   return {
-    displaySource,
-    stokesParameter,
-    displayR: 'S0',
-    displayG: 'S1',
-    displayB: 'S2'
+    kind: 'channelRgb',
+    r,
+    g,
+    b,
+    alpha
+  };
+}
+
+export function createChannelMonoSelection(
+  channel = 'Y',
+  alpha: string | null = null
+): ChannelMonoSelection {
+  return {
+    kind: 'channelMono',
+    channel,
+    alpha
   };
 }

@@ -23,6 +23,13 @@ import {
   buildSelectedDisplayTexture,
   samplePixelValuesForDisplay
 } from '../display-texture';
+import {
+  cloneDisplaySelection,
+  isChannelSelection,
+  isStokesSelection,
+  sameDisplaySelection,
+  type DisplaySelection
+} from '../display-model';
 import { buildProbeColorPreview, resolveActiveProbePixel, resolveProbeMode } from '../probe';
 import { WebGlExrRenderer } from '../renderer';
 import {
@@ -36,12 +43,10 @@ import {
   DecodedExrImage,
   DecodedLayer,
   DisplayLuminanceRange,
-  DisplaySelection,
   ImagePixel,
   OpenedImageSession,
   ViewerState,
-  VisualizationMode,
-  ZERO_CHANNEL
+  VisualizationMode
 } from '../types';
 import { buildViewerStateForLayer, ViewerStore } from '../viewer-store';
 
@@ -131,6 +136,7 @@ export class DisplayController {
     const activeSession = this.getActiveSession();
     const nextRenderedSessionId = activeSession?.id ?? null;
     const sessionChanged = nextRenderedSessionId !== this.renderedSessionId;
+    const selectionChanged = !sameDisplaySelection(state.displaySelection, previous.displaySelection);
 
     if (sessionChanged || state.exposureEv !== previous.exposureEv) {
       this.ui.setExposure(state.exposureEv);
@@ -143,8 +149,7 @@ export class DisplayController {
     if (
       sessionChanged ||
       state.visualizationMode !== previous.visualizationMode ||
-      state.displaySource !== previous.displaySource ||
-      state.stokesParameter !== previous.stokesParameter ||
+      selectionChanged ||
       state.stokesDegreeModulation !== previous.stokesDegreeModulation
     ) {
       this.updateStokesDegreeModulationControl(state);
@@ -173,22 +178,10 @@ export class DisplayController {
         const uiSelectionDirty =
           layerSelectionDirty ||
           sessionChanged ||
-          state.displaySource !== previous.displaySource ||
-          state.stokesParameter !== previous.stokesParameter ||
-          state.displayR !== previous.displayR ||
-          state.displayG !== previous.displayG ||
-          state.displayB !== previous.displayB ||
-          state.displayA !== previous.displayA;
+          selectionChanged;
 
         if (uiSelectionDirty) {
-          this.ui.setRgbGroupOptions(layer.channelNames, {
-            displaySource: state.displaySource,
-            stokesParameter: state.stokesParameter,
-            displayR: state.displayR,
-            displayG: state.displayG,
-            displayB: state.displayB,
-            displayA: state.displayA
-          });
+          this.ui.setRgbGroupOptions(layer.channelNames, state.displaySelection);
         }
 
         const textureKey = buildDisplayTextureRevisionKey(state);
@@ -198,7 +191,7 @@ export class DisplayController {
             layer,
             activeImage.width,
             activeImage.height,
-            state,
+            state.displaySelection,
             activeSession.displayTexture ?? undefined
           );
           activeSession.textureRevisionKey = textureKey;
@@ -227,7 +220,7 @@ export class DisplayController {
         }
 
         const activeAutoColormapRange = resolveColormapAutoRange(
-          state,
+          state.displaySelection,
           activeSession.displayLuminanceRange,
           state.colormapZeroCentered
         );
@@ -277,12 +270,7 @@ export class DisplayController {
           sessionChanged ||
           state.activeLayer !== previous.activeLayer ||
           state.exposureEv !== previous.exposureEv ||
-          state.displaySource !== previous.displaySource ||
-          state.stokesParameter !== previous.stokesParameter ||
-          state.displayR !== previous.displayR ||
-          state.displayG !== previous.displayG ||
-          state.displayB !== previous.displayB ||
-          state.displayA !== previous.displayA ||
+          selectionChanged ||
           state.visualizationMode !== previous.visualizationMode ||
           state.activeColormapId !== previous.activeColormapId ||
           state.colormapRange !== previous.colormapRange ||
@@ -299,14 +287,7 @@ export class DisplayController {
             activeImage.height,
             state.lockedPixel,
             state.hoveredPixel,
-            {
-              displaySource: state.displaySource,
-              stokesParameter: state.stokesParameter,
-              displayR: state.displayR,
-              displayG: state.displayG,
-              displayB: state.displayB,
-              displayA: state.displayA
-            },
+            state.displaySelection,
             state.exposureEv,
             state.visualizationMode,
             state.colormapRange,
@@ -345,12 +326,7 @@ export class DisplayController {
       state.hoveredPixel !== previous.hoveredPixel ||
       state.lockedPixel !== previous.lockedPixel ||
       state.activeLayer !== previous.activeLayer ||
-      state.displaySource !== previous.displaySource ||
-      state.stokesParameter !== previous.stokesParameter ||
-      state.displayR !== previous.displayR ||
-      state.displayG !== previous.displayG ||
-      state.displayB !== previous.displayB ||
-      state.displayA !== previous.displayA ||
+      selectionChanged ||
       state.visualizationMode !== previous.visualizationMode ||
       state.activeColormapId !== previous.activeColormapId ||
       state.colormapRange !== previous.colormapRange ||
@@ -368,15 +344,17 @@ export class DisplayController {
   async applyDisplaySelection(selection: DisplaySelection): Promise<void> {
     const activeSession = this.getActiveSession();
     if (!activeSession) {
-      this.store.setState({ ...selection });
+      this.store.setState({ displaySelection: cloneDisplaySelection(selection) });
       return;
     }
 
     const currentState = this.store.getState();
     const stokesDefaults = getStokesDisplayColormapDefault(selection);
     if (!stokesDefaults) {
-      const patch: Partial<ViewerState> = { ...selection };
-      if (selection.displaySource === 'channels' && isStokesDisplaySelection(currentState)) {
+      const patch: Partial<ViewerState> = {
+        displaySelection: cloneDisplaySelection(selection)
+      };
+      if (isChannelSelection(selection) && isStokesSelection(currentState.displaySelection)) {
         Object.assign(patch, this.resolveStokesDisplayRestoreState(activeSession.id));
       }
 
@@ -404,16 +382,18 @@ export class DisplayController {
       }
 
       const latestState = this.store.getState();
-      const patch: Partial<ViewerState> = { ...selection };
-      if (selection.displaySource === 'channels' && isStokesDisplaySelection(latestState)) {
+      const patch: Partial<ViewerState> = {
+        displaySelection: cloneDisplaySelection(selection)
+      };
+      if (isChannelSelection(selection) && isStokesSelection(latestState.displaySelection)) {
         Object.assign(patch, this.resolveStokesDisplayRestoreState(activeSession.id));
       }
 
-      if (!isStokesDisplaySelection(latestState)) {
+      if (!isStokesSelection(latestState.displaySelection)) {
         this.stokesDisplayRestoreStates.set(activeSession.id, captureRestorableVisualizationState(latestState));
       }
 
-      if (shouldPreserveStokesColormapState(latestState, selection)) {
+      if (shouldPreserveStokesColormapState(latestState.displaySelection, selection)) {
         patch.visualizationMode = 'colormap';
         this.store.setState({ ...patch });
 
@@ -552,7 +532,7 @@ export class DisplayController {
 
     const currentState = this.store.getState();
     const nextRange = resolveColormapAutoRange(
-      currentState,
+      currentState.displaySelection,
       activeSession.displayLuminanceRange,
       currentState.colormapZeroCentered
     );
@@ -573,7 +553,7 @@ export class DisplayController {
     const currentState = this.store.getState();
     const nextZeroCentered = !currentState.colormapZeroCentered;
     const nextRange = currentState.colormapRangeMode === 'alwaysAuto'
-      ? resolveColormapAutoRange(currentState, activeSession.displayLuminanceRange, nextZeroCentered)
+      ? resolveColormapAutoRange(currentState.displaySelection, activeSession.displayLuminanceRange, nextZeroCentered)
       : nextZeroCentered
         ? buildZeroCenteredColormapRange(currentState.colormapRange ?? activeSession.displayLuminanceRange)
         : cloneDisplayLuminanceRange(currentState.colormapRange);
@@ -590,14 +570,11 @@ export class DisplayController {
     }
 
     const currentState = this.store.getState();
-    if (
-      currentState.displaySource === 'channels' ||
-      !isStokesDegreeModulationParameter(currentState.stokesParameter)
-    ) {
+    if (!isStokesSelection(currentState.displaySelection) || !isStokesDegreeModulationParameter(currentState.displaySelection.parameter)) {
       return;
     }
 
-    const parameter = currentState.stokesParameter;
+    const parameter = currentState.displaySelection.parameter;
     this.store.setState({
       stokesDegreeModulation: {
         ...currentState.stokesDegreeModulation,
@@ -614,15 +591,7 @@ export class DisplayController {
 
     const currentState = this.store.getState();
     const nextState = buildViewerStateForLayer(currentState, activeSession.decoded, layerIndex);
-    if (
-      nextState.activeLayer === currentState.activeLayer &&
-      nextState.displaySource === currentState.displaySource &&
-      nextState.stokesParameter === currentState.stokesParameter &&
-      nextState.displayR === currentState.displayR &&
-      nextState.displayG === currentState.displayG &&
-      nextState.displayB === currentState.displayB &&
-      nextState.displayA === currentState.displayA
-    ) {
+    if (nextState.activeLayer === currentState.activeLayer && sameDisplaySelection(nextState.displaySelection, currentState.displaySelection)) {
       return;
     }
 
@@ -655,14 +624,7 @@ export class DisplayController {
       activeSession.decoded.height,
       state.lockedPixel,
       state.hoveredPixel,
-      {
-        displaySource: state.displaySource,
-        stokesParameter: state.stokesParameter,
-        displayR: state.displayR,
-        displayG: state.displayG,
-        displayB: state.displayB,
-        displayA: state.displayA
-      },
+      state.displaySelection,
       state.exposureEv,
       state.visualizationMode,
       state.colormapRange,
@@ -741,14 +703,15 @@ export class DisplayController {
   }
 
   private updateStokesDegreeModulationControl(state: ViewerState): void {
-    if (state.displaySource === 'channels' || !isStokesDegreeModulationParameter(state.stokesParameter)) {
+    const selection = state.displaySelection;
+    if (!isStokesSelection(selection) || !isStokesDegreeModulationParameter(selection.parameter)) {
       this.ui.setStokesDegreeModulationControl(null);
       return;
     }
 
     this.ui.setStokesDegreeModulationControl(
-      getStokesDegreeModulationLabel(state.stokesParameter),
-      state.stokesDegreeModulation[state.stokesParameter]
+      getStokesDegreeModulationLabel(selection.parameter),
+      state.stokesDegreeModulation[selection.parameter]
     );
   }
 
@@ -758,7 +721,7 @@ export class DisplayController {
     height: number,
     lockedPixel: ImagePixel | null,
     hoveredPixel: ImagePixel | null,
-    displayMapping: DisplaySelection,
+    displaySelection: DisplaySelection | null,
     exposureEv: number,
     visualizationMode: VisualizationMode,
     colormapRange: DisplayLuminanceRange | null,
@@ -773,11 +736,11 @@ export class DisplayController {
       return;
     }
 
-    const sample = samplePixelValuesForDisplay(layer, width, height, targetPixel, displayMapping);
+    const sample = samplePixelValuesForDisplay(layer, width, height, targetPixel, displaySelection);
     this.ui.setProbeReadout(
       mode,
       sample,
-      buildProbeColorPreview(sample, displayMapping, exposureEv, {
+      buildProbeColorPreview(sample, displaySelection, exposureEv, {
         mode: visualizationMode,
         colormapRange,
         colormapLut,
@@ -863,15 +826,8 @@ function inferDominantChannelGroupName(channelNames: string[]): string | null {
   return null;
 }
 
-function createZeroDisplaySelection(): DisplaySelection {
-  return {
-    displaySource: 'channels',
-    stokesParameter: null,
-    displayR: ZERO_CHANNEL,
-    displayG: ZERO_CHANNEL,
-    displayB: ZERO_CHANNEL,
-    displayA: null
-  };
+function createZeroDisplaySelection(): DisplaySelection | null {
+  return null;
 }
 
 function captureRestorableVisualizationState(state: ViewerState): RestorableVisualizationState {

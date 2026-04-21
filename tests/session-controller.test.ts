@@ -3,6 +3,7 @@ import { SessionController } from '../src/controllers/session-controller';
 import { LoadQueueService } from '../src/services/load-queue';
 import { ViewerStore, createInitialState } from '../src/viewer-store';
 import { DecodedExrImage, DecodedLayer, OpenedImageSession, ViewerState } from '../src/types';
+import { createChannelMonoSelection, createChannelRgbSelection } from './helpers/state-fixtures';
 
 function createDecodedImage(width = 4, height = 4): DecodedExrImage {
   const pixelCount = width * height;
@@ -82,7 +83,7 @@ describe('session controller', () => {
     expect(session?.filename).toBe('beauty.exr');
     expect(session?.displayName).toBe('beauty.exr');
     expect(store.getState().activeColormapId).toBe('cm-default');
-    expect(store.getState().displayR).toBe('R');
+    expect(store.getState().displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
     expect(thumbnailService.enqueue).toHaveBeenCalledTimes(1);
     expect(ui.setOpenedImageOptions).toHaveBeenLastCalledWith(
       expect.arrayContaining([
@@ -111,9 +112,7 @@ describe('session controller', () => {
       panX: 4,
       panY: 5,
       exposureEv: 2,
-      displayR: 'R',
-      displayG: 'R',
-      displayB: 'R',
+      displaySelection: createChannelMonoSelection('R'),
       lockedPixel: { ix: 1, iy: 1 },
       hoveredPixel: { ix: 2, iy: 2 }
     });
@@ -127,9 +126,7 @@ describe('session controller', () => {
       panX: 4,
       panY: 5,
       exposureEv: 2,
-      displayR: 'R',
-      displayG: 'R',
-      displayB: 'R',
+      displaySelection: createChannelMonoSelection('R'),
       lockedPixel: { ix: 1, iy: 1 },
       hoveredPixel: null
     });

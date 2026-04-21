@@ -18,7 +18,12 @@ type DecodeWorkerResponse =
       error: string;
     };
 
-const worker = self as DedicatedWorkerGlobalScope;
+type DecodeWorkerScope = {
+  addEventListener: (type: 'message', listener: (event: MessageEvent<DecodeWorkerRequest>) => void) => void;
+  postMessage: (message: DecodeWorkerResponse, transfer?: Transferable[]) => void;
+};
+
+const worker = self as unknown as DecodeWorkerScope;
 
 worker.addEventListener('message', (event: MessageEvent<DecodeWorkerRequest>) => {
   void decodeAndReply(event.data);

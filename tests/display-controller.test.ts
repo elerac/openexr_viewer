@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DisplayController } from '../src/controllers/display-controller';
 import { buildViewerStateForLayer, createInitialState, ViewerStore } from '../src/viewer-store';
 import { DecodedExrImage, DecodedLayer, OpenedImageSession, ViewerState } from '../src/types';
+import { createChannelRgbSelection, createStokesSelection } from './helpers/state-fixtures';
 
 const colormapMocks = vi.hoisted(() => ({
   loadColormapRegistry: vi.fn(),
@@ -259,30 +260,15 @@ describe('display controller', () => {
     await controller.initialize();
 
     await controller.applyDisplaySelection({
-      displaySource: 'stokesScalar',
-      stokesParameter: 'aolp',
-      displayR: 'S0',
-      displayG: 'S1',
-      displayB: 'S2',
-      displayA: null
+      ...createStokesSelection('aolp')
     });
     await controller.applyDisplaySelection({
-      displaySource: 'channels',
-      stokesParameter: null,
-      displayR: 'R',
-      displayG: 'G',
-      displayB: 'B',
-      displayA: null
+      ...createChannelRgbSelection('R', 'G', 'B')
     });
     await Promise.resolve();
 
-    expect(store.getState()).toMatchObject({
-      visualizationMode: 'rgb',
-      activeColormapId: '0',
-      displaySource: 'channels',
-      displayR: 'R',
-      displayG: 'G',
-      displayB: 'B'
-    });
+    expect(store.getState().visualizationMode).toBe('rgb');
+    expect(store.getState().activeColormapId).toBe('0');
+    expect(store.getState().displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
   });
 });

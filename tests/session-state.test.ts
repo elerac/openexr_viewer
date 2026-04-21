@@ -5,7 +5,7 @@ import {
   pickNextSessionIndexAfterRemoval
 } from '../src/session-state';
 import { ViewerState } from '../src/types';
-import { createViewerState } from './helpers/state-fixtures';
+import { createChannelRgbSelection, createViewerState } from './helpers/state-fixtures';
 
 describe('session state', () => {
   it('builds disambiguated session labels for duplicate filenames', () => {
@@ -27,9 +27,7 @@ describe('session state', () => {
 
   it('persists active session state without mutating others', () => {
     const baseState: ViewerState = createViewerState({
-      displayR: 'R',
-      displayG: 'G',
-      displayB: 'B'
+      displaySelection: createChannelRgbSelection('R', 'G', 'B')
     });
 
     const sessions = [

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_COLORMAP_ID } from '../src/colormaps';
 import { clampZoom, exposureToScale, screenToImage, zoomAroundPoint } from '../src/interaction';
 import { ViewerState } from '../src/types';
+import { createChannelRgbSelection } from './helpers/state-fixtures';
 
 const state: ViewerState = {
   exposureEv: 0,
@@ -15,12 +16,7 @@ const state: ViewerState = {
   panX: 100,
   panY: 200,
   activeLayer: 0,
-  displaySource: 'channels',
-  stokesParameter: null,
-  displayR: 'R',
-  displayG: 'G',
-  displayB: 'B',
-  displayA: null,
+  displaySelection: createChannelRgbSelection('R', 'G', 'B'),
   hoveredPixel: null,
   lockedPixel: null
 };

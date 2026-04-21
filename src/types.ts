@@ -1,20 +1,27 @@
-export const ZERO_CHANNEL = '__ZERO__';
+import type {
+  DisplaySelection as DisplaySelectionModel,
+  StokesDegreeModulationState
+} from './display-model';
 
 export type VisualizationMode = 'rgb' | 'colormap';
 export type ColormapRangeMode = 'alwaysAuto' | 'oneTime';
-export type DisplaySourceKind = 'channels' | 'stokesScalar' | 'stokesRgb';
-export type StokesParameter =
-  | 'aolp'
-  | 'dolp'
-  | 'dop'
-  | 'docp'
-  | 'cop'
-  | 'top'
-  | 's1_over_s0'
-  | 's2_over_s0'
-  | 's3_over_s0';
-export type StokesDegreeModulationParameter = 'aolp' | 'cop' | 'top';
-export type StokesDegreeModulationState = Record<StokesDegreeModulationParameter, boolean>;
+
+export type {
+  ChannelMonoSelection,
+  ChannelRgbSelection,
+  ChannelSelection,
+  DisplaySelection,
+  RgbSuffix,
+  StokesAngleParameter,
+  StokesAngleSelection,
+  StokesDegreeModulationParameter,
+  StokesDegreeModulationState,
+  StokesParameter,
+  StokesScalarParameter,
+  StokesScalarSelection,
+  StokesSelection,
+  StokesSource
+} from './display-model';
 
 export interface DisplayLuminanceRange {
   min: number;
@@ -57,12 +64,7 @@ export interface ViewerState {
   panX: number;
   panY: number;
   activeLayer: number;
-  displaySource: DisplaySourceKind;
-  stokesParameter: StokesParameter | null;
-  displayR: string;
-  displayG: string;
-  displayB: string;
-  displayA: string | null;
+  displaySelection: DisplaySelectionModel | null;
   hoveredPixel: ImagePixel | null;
   lockedPixel: ImagePixel | null;
 }
@@ -72,11 +74,6 @@ export interface DisplayChannelMapping {
   displayG: string;
   displayB: string;
   displayA?: string | null;
-}
-
-export interface DisplaySelection extends DisplayChannelMapping {
-  displaySource: DisplaySourceKind;
-  stokesParameter: StokesParameter | null;
 }
 
 export interface PixelSample {

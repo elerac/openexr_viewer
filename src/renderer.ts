@@ -1,5 +1,10 @@
 import { imageToScreen } from './interaction';
 import { resolveActiveProbePixel } from './probe';
+import {
+  getSelectionAlpha,
+  isChannelSelection,
+  isMonoSelection
+} from './display-model';
 import { isStokesDegreeModulationEnabled } from './stokes';
 import { ImagePixel, ViewerState, ViewportInfo } from './types';
 
@@ -448,9 +453,9 @@ export class WebGlExrRenderer {
     gl.uniform1i(this.uniforms.colormapEntryCount, this.colormapEntryCount);
     gl.uniform1i(
       this.uniforms.useStokesDegreeModulation,
-      isStokesDegreeModulationEnabled(state, state.stokesDegreeModulation) ? 1 : 0
+      isStokesDegreeModulationEnabled(state.displaySelection, state.stokesDegreeModulation) ? 1 : 0
     );
-    gl.uniform1i(this.uniforms.useImageAlpha, state.displaySource === 'channels' ? 1 : 0);
+    gl.uniform1i(this.uniforms.useImageAlpha, isChannelSelection(state.displaySelection) ? 1 : 0);
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
@@ -605,12 +610,14 @@ export interface OverlayValueLine {
 }
 
 export function buildOverlayValueLines(
-  state: Pick<ViewerState, 'visualizationMode' | 'displayR' | 'displayG' | 'displayB' | 'displayA'>,
+  state: Pick<ViewerState, 'visualizationMode' | 'displaySelection'>,
   r: number,
   g: number,
   b: number,
   a: number = 1
 ): OverlayValueLine[] {
+  const selection = state.displaySelection;
+  const alphaChannel = isChannelSelection(selection) ? getSelectionAlpha(selection) : null;
   let lines: OverlayValueLine[];
   if (state.visualizationMode === 'colormap') {
     lines = [
@@ -619,10 +626,10 @@ export function buildOverlayValueLines(
         value: formatOverlayValue(computeOverlayLuminanceValue(r, g, b))
       }
     ];
-  } else if (isSingleChannelDisplay(state)) {
+  } else if (isMonoSelection(selection)) {
     lines = [
       {
-        color: overlayLabelColorForChannel(state.displayR),
+        color: overlayLabelColorForSelection(selection),
         value: formatOverlayValue(r)
       }
     ];
@@ -634,7 +641,7 @@ export function buildOverlayValueLines(
     ];
   }
 
-  if (state.displayA) {
+  if (alphaChannel) {
     lines.push({ color: OVERLAY_MONO_LABEL_COLOR, value: formatOverlayValue(a) });
   }
 
@@ -642,14 +649,10 @@ export function buildOverlayValueLines(
 }
 
 function getOverlayValueLineCount(
-  state: Pick<ViewerState, 'visualizationMode' | 'displayR' | 'displayG' | 'displayB' | 'displayA'>
+  state: Pick<ViewerState, 'visualizationMode' | 'displaySelection'>
 ): number {
-  const colorLineCount = state.visualizationMode === 'colormap' || isSingleChannelDisplay(state) ? 1 : 3;
-  return state.displayA ? colorLineCount + 1 : colorLineCount;
-}
-
-function isSingleChannelDisplay(state: Pick<ViewerState, 'displayR' | 'displayG' | 'displayB'>): boolean {
-  return state.displayR === state.displayG && state.displayG === state.displayB;
+  const colorLineCount = state.visualizationMode === 'colormap' || isMonoSelection(state.displaySelection) ? 1 : 3;
+  return selectionUsesOverlayAlpha(state.displaySelection) ? colorLineCount + 1 : colorLineCount;
 }
 
 function computeOverlayLuminanceValue(r: number, g: number, b: number): number {
@@ -667,6 +670,28 @@ function overlayLabelColorForChannel(channelName: string): string {
     return 'rgba(120, 170, 255, 0.96)';
   }
   return OVERLAY_MONO_LABEL_COLOR;
+}
+
+function overlayLabelColorForSelection(selection: ViewerState['displaySelection']): string {
+  if (!selection) {
+    return OVERLAY_MONO_LABEL_COLOR;
+  }
+
+  if (selection.kind === 'channelMono') {
+    return overlayLabelColorForChannel(selection.channel);
+  }
+
+  if (selection.kind === 'stokesScalar' || selection.kind === 'stokesAngle') {
+    return selection.source.kind === 'rgbComponent'
+      ? overlayLabelColorForChannel(selection.source.component)
+      : OVERLAY_MONO_LABEL_COLOR;
+  }
+
+  return OVERLAY_MONO_LABEL_COLOR;
+}
+
+function selectionUsesOverlayAlpha(selection: ViewerState['displaySelection']): boolean {
+  return Boolean(isChannelSelection(selection) && getSelectionAlpha(selection));
 }
 
 function createProgram(gl: WebGL2RenderingContext, vertexSource: string, fragmentSource: string): WebGLProgram {

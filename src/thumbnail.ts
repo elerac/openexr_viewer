@@ -1,3 +1,4 @@
+import { isMonoSelection } from './display-model';
 import { buildSelectedDisplayTexture } from './display-texture';
 import { DecodedExrImage, ViewerState } from './types';
 
@@ -24,7 +25,7 @@ export function createOpenedImageThumbnailDataUrl(
       layer,
       decoded.width,
       decoded.height,
-      state
+      state.displaySelection
     );
 
     return createOpenedImageThumbnailDataUrlFromDisplayTexture(
@@ -60,7 +61,7 @@ export function createOpenedImageThumbnailDataUrlFromDisplayTexture(
   const fittedHeight = Math.max(1, Math.round(height * fitScale));
   const offsetX = Math.floor((thumbnailSize - fittedWidth) / 2);
   const offsetY = Math.floor((thumbnailSize - fittedHeight) / 2);
-  const scalarThumbnail = state.displayR === state.displayG && state.displayG === state.displayB;
+  const scalarThumbnail = isMonoSelection(state.displaySelection);
   const stats = computeThumbnailStats(displayTexture, scalarThumbnail);
   const exposureScale = Math.pow(2, state.exposureEv);
 

@@ -1,7 +1,6 @@
 import {
   getStokesColormapDefaultGroup,
-  getStokesDisplayColormapDefault,
-  isStokesDisplaySelection
+  getStokesDisplayColormapDefault
 } from './stokes';
 import {
   DisplayLuminanceRange,
@@ -43,7 +42,7 @@ export function buildZeroCenteredColormapRange(
 }
 
 export function resolveColormapAutoRange(
-  selection: Pick<DisplaySelection, 'displaySource' | 'stokesParameter'>,
+  selection: DisplaySelection | null,
   imageRange: DisplayLuminanceRange | null,
   zeroCentered: boolean
 ): DisplayLuminanceRange | null {
@@ -56,15 +55,19 @@ export function resolveColormapAutoRange(
 }
 
 export function shouldPreserveStokesColormapState(
-  previous: Pick<DisplaySelection, 'displaySource' | 'stokesParameter'>,
-  next: Pick<DisplaySelection, 'displaySource' | 'stokesParameter'>
+  previous: DisplaySelection | null,
+  next: DisplaySelection | null
 ): boolean {
-  if (!isStokesDisplaySelection(previous) || !isStokesDisplaySelection(next)) {
+  if (!previous || !next || previous.kind === 'channelRgb' || previous.kind === 'channelMono') {
     return false;
   }
 
-  return getStokesColormapDefaultGroup(previous.stokesParameter) ===
-    getStokesColormapDefaultGroup(next.stokesParameter);
+  if (next.kind === 'channelRgb' || next.kind === 'channelMono') {
+    return false;
+  }
+
+  return getStokesColormapDefaultGroup(previous.parameter) ===
+    getStokesColormapDefaultGroup(next.parameter);
 }
 
 export function computeDisplayTextureLuminanceRange(

@@ -1,21 +1,25 @@
 import { ColormapLut, mapValueToColormapRgbBytes, modulateRgbBytesValue } from './colormaps';
 import {
+  getDisplaySelectionDegreeModulationValueLabel,
+  getDisplaySelectionValueLabel,
+  getSelectionAlpha,
+  isMonoSelection,
+  isStokesSelection,
+  type DisplaySelection,
+  type StokesDegreeModulationState
+} from './display-model';
+import {
   clampStokesDegreeModulationValue,
   createDefaultStokesDegreeModulation,
-  getStokesDegreeModulationDisplayValueLabel,
   getStokesDegreeModulationLabel,
-  getStokesDisplayValueLabel,
   getStokesParameterLabel,
   isStokesDegreeModulationEnabled
 } from './stokes';
 import {
-  DisplaySelection,
   DisplayLuminanceRange,
   ImagePixel,
   PixelSample,
-  StokesDegreeModulationState,
-  VisualizationMode,
-  ZERO_CHANNEL
+  VisualizationMode
 } from './types';
 
 export interface ProbeColorPreview {
@@ -48,7 +52,7 @@ export function resolveProbeMode(lockedPixel: ImagePixel | null): 'Hover' | 'Loc
 
 export function buildProbeColorPreview(
   sample: PixelSample | null,
-  selection: DisplaySelection,
+  selection: DisplaySelection | null,
   exposureEv: number,
   visualization: ProbeVisualizationOptions = { mode: 'rgb', colormapRange: null }
 ): ProbeColorPreview | null {
@@ -81,7 +85,7 @@ export function buildProbeColorPreview(
       toSrgbByte(rawG * exposureScale),
       toSrgbByte(rawB * exposureScale)
     ];
-    displayValues = isSingleChannelDisplay(selection)
+    displayValues = isMonoSelection(selection)
       ? [{ label: 'Mono', value: formatProbeRgbValue(rawR) }]
       : [
           { label: 'R', value: formatProbeRgbValue(rawR) },
@@ -109,32 +113,36 @@ function computeProbeLuminanceValue(r: number, g: number, b: number): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-function isSingleChannelDisplay(selection: DisplaySelection): boolean {
-  return selection.displayR === selection.displayG && selection.displayG === selection.displayB;
-}
+function readProbeDisplayValues(sample: PixelSample, selection: DisplaySelection | null): [number, number, number] {
+  if (!selection) {
+    return [0, 0, 0];
+  }
 
-function readProbeDisplayValues(sample: PixelSample, selection: DisplaySelection): [number, number, number] {
-  if (selection.displaySource !== 'channels' && selection.stokesParameter) {
+  if (isStokesSelection(selection)) {
     const value = readFirstProbeChannel(sample, [
-      getStokesDisplayValueLabel(selection),
-      getStokesParameterLabel(selection.stokesParameter)
+      getDisplaySelectionValueLabel(selection),
+      getStokesParameterLabel(selection.parameter)
     ]);
     return [value, value, value];
   }
 
-  return [
-    readProbeChannel(sample, selection.displayR),
-    readProbeChannel(sample, selection.displayG),
-    readProbeChannel(sample, selection.displayB)
-  ];
+  if (selection.kind === 'channelMono') {
+    const value = readProbeChannel(sample, selection.channel);
+    return [value, value, value];
+  }
+
+  return [readProbeChannel(sample, selection.r), readProbeChannel(sample, selection.g), readProbeChannel(sample, selection.b)];
 }
 
-function readProbeDisplayAlpha(sample: PixelSample, selection: DisplaySelection): number | null {
-  if (selection.displaySource !== 'channels' || !selection.displayA) {
+function readProbeDisplayAlpha(sample: PixelSample, selection: DisplaySelection | null): number | null {
+  const alphaChannel = selection && selection.kind !== 'stokesScalar' && selection.kind !== 'stokesAngle'
+    ? getSelectionAlpha(selection)
+    : null;
+  if (!alphaChannel) {
     return null;
   }
 
-  return clampAlpha(readProbeChannel(sample, selection.displayA));
+  return clampAlpha(readProbeChannel(sample, alphaChannel));
 }
 
 function readFirstProbeChannel(sample: PixelSample, channelNames: Array<string | null>): number {
@@ -149,19 +157,16 @@ function readFirstProbeChannel(sample: PixelSample, channelNames: Array<string |
 }
 
 function readProbeChannel(sample: PixelSample, channelName: string): number {
-  if (channelName === ZERO_CHANNEL) {
-    return 0;
-  }
-
   const value = sample.values[channelName];
   return Number.isFinite(value) ? value : 0;
 }
 
-function readProbeStokesDegreeModulationValue(sample: PixelSample, selection: DisplaySelection): number {
+function readProbeStokesDegreeModulationValue(sample: PixelSample, selection: DisplaySelection | null): number {
+  const parameter = isStokesSelection(selection) ? selection.parameter : null;
   return clampStokesDegreeModulationValue(
     readFirstProbeChannel(sample, [
-      getStokesDegreeModulationDisplayValueLabel(selection),
-      getStokesDegreeModulationLabel(selection.stokesParameter)
+      getDisplaySelectionDegreeModulationValueLabel(selection),
+      getStokesDegreeModulationLabel(parameter)
     ])
   );
 }
