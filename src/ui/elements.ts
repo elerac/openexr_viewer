@@ -17,7 +17,18 @@ export interface Elements {
   panoramaViewerMenuItem: HTMLButtonElement;
   galleryCboxRgbButton: HTMLButtonElement;
   openFileButton: HTMLButtonElement;
+  exportImageButton: HTMLButtonElement;
   fileInput: HTMLInputElement;
+  exportDialogBackdrop: HTMLDivElement;
+  exportDialogForm: HTMLFormElement;
+  exportFilenameInput: HTMLInputElement;
+  exportFormatSelect: HTMLSelectElement;
+  exportWidthInput: HTMLInputElement;
+  exportHeightInput: HTMLInputElement;
+  exportAspectLockInput: HTMLInputElement;
+  exportDialogError: HTMLElement;
+  exportDialogCancelButton: HTMLButtonElement;
+  exportDialogSubmitButton: HTMLButtonElement;
   resetViewButton: HTMLButtonElement;
   visualizationNoneButton: HTMLButtonElement;
   colormapToggleButton: HTMLButtonElement;
@@ -136,7 +147,18 @@ export function resolveElements(): Elements {
     panoramaViewerMenuItem: requireElement('panorama-viewer-menu-item', HTMLButtonElement),
     galleryCboxRgbButton: requireElement('gallery-cbox-rgb-button', HTMLButtonElement),
     openFileButton: requireElement('open-file-button', HTMLButtonElement),
+    exportImageButton: requireElement('export-image-button', HTMLButtonElement),
     fileInput: requireElement('file-input', HTMLInputElement),
+    exportDialogBackdrop: requireElement('export-dialog-backdrop', HTMLDivElement),
+    exportDialogForm: requireElement('export-dialog-form', HTMLFormElement),
+    exportFilenameInput: requireElement('export-filename-input', HTMLInputElement),
+    exportFormatSelect: requireElement('export-format-select', HTMLSelectElement),
+    exportWidthInput: requireElement('export-width-input', HTMLInputElement),
+    exportHeightInput: requireElement('export-height-input', HTMLInputElement),
+    exportAspectLockInput: requireElement('export-aspect-lock-input', HTMLInputElement),
+    exportDialogError: requireElement('export-dialog-error', HTMLElement),
+    exportDialogCancelButton: requireElement('export-dialog-cancel-button', HTMLButtonElement),
+    exportDialogSubmitButton: requireElement('export-dialog-submit-button', HTMLButtonElement),
     resetViewButton: requireElement('reset-view-button', HTMLButtonElement),
     visualizationNoneButton: requireElement('visualization-none-button', HTMLButtonElement),
     colormapToggleButton: requireElement('colormap-toggle-button', HTMLButtonElement),

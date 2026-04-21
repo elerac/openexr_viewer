@@ -285,6 +285,13 @@ describe('panel split sizing', () => {
 });
 
 describe('view menu', () => {
+  it('renders file menu items in open-export-reload-close order', () => {
+    installUiFixture();
+
+    const labels = Array.from(document.querySelectorAll('#file-menu .app-menu-item')).map((item) => item.textContent?.trim());
+    expect(labels).toEqual(['Open...', 'Export...', 'Reload All', 'Close All']);
+  });
+
   it('renders the top menu tabs in file-view-gallery-settings order', () => {
     installUiFixture();
 
@@ -323,6 +330,102 @@ describe('view menu', () => {
 
     panoramaItem.click();
     expect(onViewerModeChange).toHaveBeenCalledWith('panorama');
+  });
+
+  it('keeps export disabled until an image is active and blocks it during rgb-view loading', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const exportButton = document.getElementById('export-image-button') as HTMLButtonElement;
+
+    expect(exportButton.disabled).toBe(true);
+
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png', sourceWidth: 640, sourceHeight: 320 });
+    expect(exportButton.disabled).toBe(false);
+
+    ui.setRgbViewLoading(true);
+    expect(exportButton.disabled).toBe(true);
+  });
+
+  it('opens export dialog with defaults, syncs aspect ratio, and normalizes the filename', async () => {
+    installUiFixture();
+
+    const onExportImage = vi.fn(async () => undefined);
+    const ui = new ViewerUi(createUiCallbacks({ onExportImage }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png', sourceWidth: 640, sourceHeight: 320 });
+
+    const exportButton = document.getElementById('export-image-button') as HTMLButtonElement;
+    const dialogBackdrop = document.getElementById('export-dialog-backdrop') as HTMLDivElement;
+    const filenameInput = document.getElementById('export-filename-input') as HTMLInputElement;
+    const widthInput = document.getElementById('export-width-input') as HTMLInputElement;
+    const heightInput = document.getElementById('export-height-input') as HTMLInputElement;
+    const submitButton = document.getElementById('export-dialog-submit-button') as HTMLButtonElement;
+
+    exportButton.click();
+
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
+    expect(filenameInput.value).toBe('image.png');
+    expect(widthInput.value).toBe('640');
+    expect(heightInput.value).toBe('320');
+
+    widthInput.value = '320';
+    widthInput.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(heightInput.value).toBe('160');
+
+    filenameInput.value = 'graded-output';
+    submitButton.click();
+    await flushMicrotasks();
+
+    expect(onExportImage).toHaveBeenCalledWith({
+      filename: 'graded-output.png',
+      format: 'png',
+      width: 320,
+      height: 160
+    });
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
+  });
+
+  it('keeps the export dialog open while the export callback is pending and shows failures inline', async () => {
+    installUiFixture();
+
+    const deferred = createDeferred<void>();
+    const onExportImage = vi
+      .fn<(_: { filename: string; format: 'png'; width: number; height: number }) => Promise<void>>()
+      .mockReturnValueOnce(deferred.promise)
+      .mockRejectedValueOnce(new Error('Encode failed'));
+    const ui = new ViewerUi(createUiCallbacks({ onExportImage }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png', sourceWidth: 640, sourceHeight: 320 });
+
+    const exportButton = document.getElementById('export-image-button') as HTMLButtonElement;
+    const dialogBackdrop = document.getElementById('export-dialog-backdrop') as HTMLDivElement;
+    const submitButton = document.getElementById('export-dialog-submit-button') as HTMLButtonElement;
+    const cancelButton = document.getElementById('export-dialog-cancel-button') as HTMLButtonElement;
+    const error = document.getElementById('export-dialog-error') as HTMLElement;
+
+    exportButton.click();
+    submitButton.click();
+    await flushMicrotasks();
+
+    expect(submitButton.disabled).toBe(true);
+    expect(cancelButton.disabled).toBe(true);
+    expect(submitButton.textContent).toBe('Exporting...');
+
+    deferred.resolve();
+    await flushMicrotasks();
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
+
+    exportButton.click();
+    submitButton.click();
+    await flushMicrotasks();
+
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
+    expect(error.textContent).toBe('Encode failed');
+    expect(error.classList.contains('hidden')).toBe(false);
+    expect(submitButton.disabled).toBe(false);
+    expect(cancelButton.disabled).toBe(false);
   });
 });
 
@@ -425,6 +528,7 @@ function createUiCallbacks(overrides: Partial<ReturnType<typeof createUiCallback
 function createUiCallbacksBase() {
   return {
     onOpenFileClick: () => {},
+    onExportImage: async () => {},
     onFileSelected: () => {},
     onFilesDropped: () => {},
     onGalleryImageSelected: () => {},
@@ -448,4 +552,17 @@ function createUiCallbacksBase() {
     onStokesDegreeModulationToggle: () => {},
     onResetView: () => {}
   };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
+}
+
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
 }

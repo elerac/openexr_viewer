@@ -668,6 +668,10 @@ export class DisplayController {
     return this.defaultColormapId;
   }
 
+  getActiveColormapLutForState(colormapId: string): ColormapLut | null {
+    return this.getActiveColormapLut(colormapId);
+  }
+
   handleSessionClosed(sessionId: string): void {
     this.stokesDisplayRestoreStates.delete(sessionId);
     if (this.uploadedSessionId === sessionId) {

@@ -5,6 +5,7 @@ import { clampZoom, ViewerInteraction } from '../interaction';
 import { WebGlExrRenderer } from '../renderer';
 import { DisplayController } from '../controllers/display-controller';
 import { SessionController } from '../controllers/session-controller';
+import { createExportImageBlob } from '../export-image';
 import { LoadQueueService } from '../services/load-queue';
 import { ThumbnailService } from '../services/thumbnail-service';
 
@@ -21,6 +22,30 @@ export async function bootstrapApp(): Promise<void> {
     onOpenFileClick: () => {
       const input = document.getElementById('file-input') as HTMLInputElement;
       input.click();
+    },
+    onExportImage: async (request) => {
+      const activeSession = sessionController.getActiveSession();
+      if (!activeSession) {
+        const error = new Error('No image is active.');
+        ui.setError(error.message);
+        throw error;
+      }
+
+      const state = store.getState();
+      const colormapLut = displayController.getActiveColormapLutForState(state.activeColormapId);
+      try {
+        const blob = await createExportImageBlob({
+          request,
+          session: activeSession,
+          state,
+          colormapLut
+        });
+        triggerBrowserDownload(blob, request.filename);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Export failed.';
+        ui.setError(message);
+        throw new Error(message);
+      }
     },
     onFileSelected: (file) => {
       void sessionController.enqueueFiles([file]);
@@ -213,4 +238,18 @@ function samePixel(a: { ix: number; iy: number } | null, b: { ix: number; iy: nu
   }
 
   return a.ix === b.ix && a.iy === b.iy;
+}
+
+function triggerBrowserDownload(blob: Blob, filename: string): void {
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  anchor.hidden = true;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => {
+    URL.revokeObjectURL(objectUrl);
+  }, 1000);
 }

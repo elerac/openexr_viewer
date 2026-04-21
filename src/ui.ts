@@ -21,6 +21,8 @@ import type {
   DisplaySelection,
   DisplayLuminanceRange,
   ExrMetadataEntry,
+  ExportImageRequest,
+  ExportImageTarget,
   PixelSample,
   ViewerMode,
   VisualizationMode
@@ -38,6 +40,7 @@ export type LoadingOverlayPhase = 'hidden' | 'subtle' | 'darkening' | 'message';
 
 export interface UiCallbacks {
   onOpenFileClick: () => void;
+  onExportImage: (request: ExportImageRequest) => Promise<void>;
   onFileSelected: (file: File) => void;
   onFilesDropped: (files: File[]) => void;
   onGalleryImageSelected: (galleryId: string) => void;
@@ -114,6 +117,7 @@ interface TopMenuElements {
 }
 
 type TopMenuTrackingMode = 'inactive' | 'pointer';
+type ExportDialogDimensionField = 'width' | 'height';
 
 export class ProgressiveLoadingOverlayDisclosure {
   private active = false;
@@ -181,6 +185,11 @@ export class ViewerUi {
   private isLoading = false;
   private isRgbViewLoading = false;
   private openedImageCount = 0;
+  private exportTarget: ExportImageTarget | null = null;
+  private exportDialogOpen = false;
+  private exportDialogBusy = false;
+  private exportDialogRestoreFocusTarget: HTMLElement | null = null;
+  private lastExportDimensionEdited: ExportDialogDimensionField = 'width';
   private topMenuTrackingMode: TopMenuTrackingMode = 'inactive';
   private hoverOpenedTopMenuButton: HTMLButtonElement | null = null;
 
@@ -245,6 +254,7 @@ export class ViewerUi {
     this.layoutSplitController = new LayoutSplitController(this.elements);
     this.setViewerMode('image');
     this.updateViewerModeMenuItemsDisabled();
+    this.updateFileMenuItemsDisabled();
     this.bindEvents();
   }
 
@@ -280,13 +290,18 @@ export class ViewerUi {
     this.layerPanel.setLoading(loading);
     this.channelPanel.setLoading(loading);
     this.colormapPanel.setLoading(loading);
+    this.updateFileMenuItemsDisabled();
     this.updateViewerModeMenuItemsDisabled();
     this.updateLoadingOverlayVisibility();
+    if (loading) {
+      this.closeExportDialog(false);
+    }
   }
 
   setRgbViewLoading(loading: boolean): void {
     this.isRgbViewLoading = loading;
     this.channelPanel.setRgbViewLoading(loading);
+    this.updateFileMenuItemsDisabled();
     this.updateLoadingOverlayVisibility();
   }
 
@@ -341,9 +356,21 @@ export class ViewerUi {
     this.openedImagesPanel.setOpenedImageOptions(items, activeId);
     this.colormapPanel.setOpenedImageCount(this.openedImagesPanel.getOpenedImageCount());
     this.updateViewerModeMenuItemsDisabled();
+    this.updateFileMenuItemsDisabled();
     if (items.length === 0) {
       this.setViewerMode('image');
     }
+  }
+
+  setExportTarget(target: ExportImageTarget | null): void {
+    this.exportTarget = target ? { ...target } : null;
+    if (!this.exportTarget) {
+      this.closeExportDialog(false);
+      this.resetExportDialogInputs();
+    } else if (!this.exportDialogOpen) {
+      this.applyExportTargetToDialog(this.exportTarget);
+    }
+    this.updateFileMenuItemsDisabled();
   }
 
   clearImageBrowserPanels(): void {
@@ -456,6 +483,10 @@ export class ViewerUi {
     this.elements.loadingOverlay.classList.toggle(LOADING_OVERLAY_MESSAGE_CLASS, phase === 'message');
   }
 
+  private updateFileMenuItemsDisabled(): void {
+    this.elements.exportImageButton.disabled = this.isLoading || this.isRgbViewLoading || !this.exportTarget;
+  }
+
   private getTopMenus(): TopMenuElements[] {
     return [
       { button: this.elements.fileMenuButton, menu: this.elements.fileMenu },
@@ -469,6 +500,147 @@ export class ViewerUi {
     const disabled = this.isLoading || this.openedImageCount === 0;
     this.elements.imageViewerMenuItem.disabled = disabled;
     this.elements.panoramaViewerMenuItem.disabled = disabled;
+  }
+
+  private openExportDialog(): void {
+    if (!this.exportTarget || this.elements.exportImageButton.disabled) {
+      return;
+    }
+
+    this.closeAllTopMenus();
+    this.exportDialogRestoreFocusTarget = this.elements.fileMenuButton;
+    this.applyExportTargetToDialog(this.exportTarget);
+    this.setExportDialogError(null);
+    this.setExportDialogBusy(false);
+    this.exportDialogOpen = true;
+    this.elements.exportDialogBackdrop.classList.remove('hidden');
+    this.elements.exportFilenameInput.focus();
+    this.elements.exportFilenameInput.select();
+  }
+
+  private closeExportDialog(restoreFocus = true): void {
+    if (!this.exportDialogOpen && this.elements.exportDialogBackdrop.classList.contains('hidden')) {
+      return;
+    }
+
+    this.exportDialogOpen = false;
+    this.setExportDialogBusy(false);
+    this.setExportDialogError(null);
+    this.elements.exportDialogBackdrop.classList.add('hidden');
+
+    if (restoreFocus) {
+      (this.exportDialogRestoreFocusTarget ?? this.elements.exportImageButton).focus();
+    }
+    this.exportDialogRestoreFocusTarget = null;
+  }
+
+  private applyExportTargetToDialog(target: ExportImageTarget): void {
+    this.elements.exportFilenameInput.value = target.filename;
+    this.elements.exportWidthInput.max = String(target.sourceWidth);
+    this.elements.exportHeightInput.max = String(target.sourceHeight);
+    this.elements.exportWidthInput.value = String(target.sourceWidth);
+    this.elements.exportHeightInput.value = String(target.sourceHeight);
+    this.elements.exportAspectLockInput.checked = true;
+    this.lastExportDimensionEdited = 'width';
+  }
+
+  private resetExportDialogInputs(): void {
+    this.elements.exportFilenameInput.value = '';
+    this.elements.exportWidthInput.value = '';
+    this.elements.exportHeightInput.value = '';
+    this.elements.exportWidthInput.max = '';
+    this.elements.exportHeightInput.max = '';
+    this.elements.exportAspectLockInput.checked = true;
+    this.lastExportDimensionEdited = 'width';
+  }
+
+  private setExportDialogBusy(busy: boolean): void {
+    this.exportDialogBusy = busy;
+    this.elements.exportFilenameInput.disabled = busy;
+    this.elements.exportWidthInput.disabled = busy;
+    this.elements.exportHeightInput.disabled = busy;
+    this.elements.exportAspectLockInput.disabled = busy;
+    this.elements.exportDialogCancelButton.disabled = busy;
+    this.elements.exportDialogSubmitButton.disabled = busy;
+    this.elements.exportDialogSubmitButton.textContent = busy ? 'Exporting...' : 'Export';
+    this.elements.exportFormatSelect.disabled = true;
+  }
+
+  private setExportDialogError(message: string | null): void {
+    if (!message) {
+      this.elements.exportDialogError.classList.add('hidden');
+      this.elements.exportDialogError.textContent = '';
+      return;
+    }
+
+    this.elements.exportDialogError.classList.remove('hidden');
+    this.elements.exportDialogError.textContent = message;
+  }
+
+  private syncExportDialogDimensions(changedField: ExportDialogDimensionField): void {
+    const target = this.exportTarget;
+    if (!target) {
+      return;
+    }
+
+    this.lastExportDimensionEdited = changedField;
+    if (!this.elements.exportAspectLockInput.checked) {
+      return;
+    }
+
+    const normalized = normalizeExportDimensions(
+      this.elements.exportWidthInput.value,
+      this.elements.exportHeightInput.value,
+      target,
+      changedField
+    );
+    this.elements.exportWidthInput.value = String(normalized.width);
+    this.elements.exportHeightInput.value = String(normalized.height);
+  }
+
+  private async handleExportDialogSubmit(): Promise<void> {
+    const target = this.exportTarget;
+    if (!target || this.exportDialogBusy) {
+      return;
+    }
+
+    const filename = normalizeExportFilename(this.elements.exportFilenameInput.value);
+    if (!filename) {
+      this.setExportDialogError('Enter a filename.');
+      this.elements.exportFilenameInput.focus();
+      return;
+    }
+
+    const request = parseExportImageRequest({
+      filename,
+      widthValue: this.elements.exportWidthInput.value,
+      heightValue: this.elements.exportHeightInput.value,
+      format: this.elements.exportFormatSelect.value,
+      target,
+      lockAspect: this.elements.exportAspectLockInput.checked,
+      preferredDimension: this.lastExportDimensionEdited
+    });
+    if (!request) {
+      this.setExportDialogError('Enter valid export dimensions.');
+      return;
+    }
+
+    this.elements.exportFilenameInput.value = request.filename;
+    this.elements.exportWidthInput.value = String(request.width);
+    this.elements.exportHeightInput.value = String(request.height);
+    this.setExportDialogError(null);
+    this.setExportDialogBusy(true);
+
+    try {
+      await this.callbacks.onExportImage(request);
+      this.closeExportDialog(true);
+    } catch (error) {
+      this.setExportDialogError(error instanceof Error ? error.message : 'Export failed.');
+    } finally {
+      if (this.exportDialogOpen) {
+        this.setExportDialogBusy(false);
+      }
+    }
   }
 
   private isTopMenuOpen(menu: TopMenuElements): boolean {
@@ -699,6 +871,14 @@ export class ViewerUi {
       this.callbacks.onOpenFileClick();
     });
 
+    this.elements.exportImageButton.addEventListener('click', () => {
+      if (this.elements.exportImageButton.disabled) {
+        return;
+      }
+
+      this.openExportDialog();
+    });
+
     this.elements.galleryCboxRgbButton.addEventListener('click', () => {
       if (this.elements.galleryCboxRgbButton.disabled) {
         return;
@@ -756,6 +936,49 @@ export class ViewerUi {
 
     this.elements.resetViewButton.addEventListener('click', () => {
       this.callbacks.onResetView();
+    });
+
+    this.elements.exportDialogBackdrop.addEventListener('click', (event) => {
+      if (event.target === this.elements.exportDialogBackdrop && !this.exportDialogBusy) {
+        this.closeExportDialog(true);
+      }
+    });
+
+    this.elements.exportDialogCancelButton.addEventListener('click', () => {
+      if (this.exportDialogBusy) {
+        return;
+      }
+      this.closeExportDialog(true);
+    });
+
+    this.elements.exportDialogForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      void this.handleExportDialogSubmit();
+    });
+
+    this.elements.exportWidthInput.addEventListener('input', () => {
+      this.syncExportDialogDimensions('width');
+    });
+    this.elements.exportWidthInput.addEventListener('change', () => {
+      this.syncExportDialogDimensions('width');
+    });
+    this.elements.exportHeightInput.addEventListener('input', () => {
+      this.syncExportDialogDimensions('height');
+    });
+    this.elements.exportHeightInput.addEventListener('change', () => {
+      this.syncExportDialogDimensions('height');
+    });
+    this.elements.exportAspectLockInput.addEventListener('change', () => {
+      if (this.elements.exportAspectLockInput.checked) {
+        this.syncExportDialogDimensions(this.lastExportDimensionEdited);
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && this.exportDialogOpen && !this.exportDialogBusy) {
+        event.preventDefault();
+        this.closeExportDialog(true);
+      }
     });
 
     this.elements.viewerContainer.addEventListener('dragover', (event) => {
@@ -869,8 +1092,102 @@ function toFiles(files: FileList | null | undefined): File[] {
   return Array.from(files);
 }
 
+function buildDefaultExportFilename(displayName: string): string {
+  const trimmed = displayName.trim();
+  if (!trimmed) {
+    return 'image.png';
+  }
+
+  const duplicateSuffixMatch = trimmed.match(/ \(\d+\)$/);
+  const duplicateSuffix = duplicateSuffixMatch?.[0] ?? '';
+  const baseName = duplicateSuffix ? trimmed.slice(0, -duplicateSuffix.length) : trimmed;
+  const pathSeparatorIndex = Math.max(baseName.lastIndexOf('/'), baseName.lastIndexOf('\\'));
+  const extensionIndex = baseName.lastIndexOf('.');
+  const withoutExtension = extensionIndex > pathSeparatorIndex ? baseName.slice(0, extensionIndex) : baseName;
+
+  return `${withoutExtension}${duplicateSuffix}.png`;
+}
+
+function normalizeExportFilename(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  return trimmed.toLocaleLowerCase().endsWith('.png') ? trimmed : `${trimmed}.png`;
+}
+
+function normalizeExportDimensions(
+  widthValue: string,
+  heightValue: string,
+  target: ExportImageTarget,
+  preferredDimension: ExportDialogDimensionField
+): { width: number; height: number } {
+  const width = clampExportDimension(widthValue, target.sourceWidth);
+  const height = clampExportDimension(heightValue, target.sourceHeight);
+  if (preferredDimension === 'height') {
+    return {
+      width: clampExportDimension(
+        Math.round((height / Math.max(target.sourceHeight, 1)) * target.sourceWidth),
+        target.sourceWidth
+      ),
+      height
+    };
+  }
+
+  return {
+    width,
+    height: clampExportDimension(
+      Math.round((width / Math.max(target.sourceWidth, 1)) * target.sourceHeight),
+      target.sourceHeight
+    )
+  };
+}
+
+function clampExportDimension(value: string | number, max: number): number {
+  const numericValue = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return 1;
+  }
+
+  return Math.min(Math.max(1, Math.round(numericValue)), Math.max(1, Math.floor(max)));
+}
+
+function parseExportImageRequest(args: {
+  filename: string;
+  widthValue: string;
+  heightValue: string;
+  format: string;
+  target: ExportImageTarget;
+  lockAspect: boolean;
+  preferredDimension: ExportDialogDimensionField;
+}): ExportImageRequest | null {
+  if (args.format !== 'png') {
+    return null;
+  }
+
+  const dimensions = args.lockAspect
+    ? normalizeExportDimensions(args.widthValue, args.heightValue, args.target, args.preferredDimension)
+    : {
+        width: clampExportDimension(args.widthValue, args.target.sourceWidth),
+        height: clampExportDimension(args.heightValue, args.target.sourceHeight)
+      };
+
+  if (!Number.isInteger(dimensions.width) || !Number.isInteger(dimensions.height)) {
+    return null;
+  }
+
+  return {
+    filename: args.filename,
+    format: 'png',
+    width: dimensions.width,
+    height: dimensions.height
+  };
+}
+
 export {
   buildPartLayerItemsFromChannelNames,
+  buildDefaultExportFilename,
   clampPanelSplitSizes,
   formatDisplayCacheUsageText,
   getChannelViewSwatches,

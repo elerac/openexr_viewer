@@ -239,6 +239,109 @@ input[type='range'] {
   color: #ffd1d6;
 }
 
+.app-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 24;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(8, 12, 19, 0.68);
+  backdrop-filter: blur(8px);
+}
+
+.app-dialog {
+  width: min(100%, 26rem);
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--panel) 94%, #000);
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.38);
+}
+
+.app-dialog-header,
+.app-dialog-body {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.app-dialog-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.app-dialog-subtitle {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.88rem;
+}
+
+.app-dialog-field {
+  display: grid;
+  gap: 0.36rem;
+}
+
+.app-dialog-field-label {
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.app-dialog-field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.app-dialog-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--text);
+}
+
+.app-dialog-checkbox input {
+  margin: 0;
+}
+
+.app-dialog-error {
+  margin: 0;
+  color: #ffd1d6;
+  font-size: 0.82rem;
+}
+
+.app-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.app-dialog-actions button {
+  min-width: 5.5rem;
+}
+
+@media (max-width: 520px) {
+  .app-dialog {
+    width: min(100%, 22rem);
+  }
+
+  .app-dialog-field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .app-dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .app-dialog-actions button {
+    width: 100%;
+  }
+}
+
 .hidden {
   display: none !important;
 }

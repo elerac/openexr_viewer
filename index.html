@@ -17,6 +17,7 @@
             </button>
             <div id="file-menu" class="app-menu-dropdown hidden" role="menu" aria-labelledby="file-menu-button">
               <button id="open-file-button" class="app-menu-item" type="button" role="menuitem">Open...</button>
+              <button id="export-image-button" class="app-menu-item" type="button" role="menuitem">Export...</button>
               <button id="reload-all-opened-images-button" class="app-menu-item" type="button" role="menuitem">Reload All</button>
               <button id="close-all-opened-images-button" class="app-menu-item" type="button" role="menuitem">Close All</button>
             </div>
@@ -80,6 +81,51 @@
       </header>
 
       <div id="error-banner" class="error-banner hidden"></div>
+      <div id="export-dialog-backdrop" class="app-dialog-backdrop hidden">
+        <form
+          id="export-dialog-form"
+          class="app-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="export-dialog-title"
+        >
+          <div class="app-dialog-header">
+            <h2 id="export-dialog-title" class="app-dialog-title">Export Image</h2>
+            <p class="app-dialog-subtitle">Export the current display as a PNG.</p>
+          </div>
+          <div class="app-dialog-body">
+            <label class="app-dialog-field" for="export-filename-input">
+              <span class="app-dialog-field-label">Filename</span>
+              <input id="export-filename-input" type="text" autocomplete="off" spellcheck="false" />
+            </label>
+            <label class="app-dialog-field" for="export-format-select">
+              <span class="app-dialog-field-label">Format</span>
+              <select id="export-format-select" disabled>
+                <option value="png">PNG</option>
+              </select>
+            </label>
+            <div class="app-dialog-field-row">
+              <label class="app-dialog-field" for="export-width-input">
+                <span class="app-dialog-field-label">Width</span>
+                <input id="export-width-input" type="number" min="1" step="1" inputmode="numeric" />
+              </label>
+              <label class="app-dialog-field" for="export-height-input">
+                <span class="app-dialog-field-label">Height</span>
+                <input id="export-height-input" type="number" min="1" step="1" inputmode="numeric" />
+              </label>
+            </div>
+            <label class="app-dialog-checkbox" for="export-aspect-lock-input">
+              <input id="export-aspect-lock-input" type="checkbox" checked />
+              <span>Lock aspect ratio</span>
+            </label>
+            <p id="export-dialog-error" class="app-dialog-error hidden" role="alert"></p>
+          </div>
+          <div class="app-dialog-actions">
+            <button id="export-dialog-cancel-button" type="button">Cancel</button>
+            <button id="export-dialog-submit-button" type="submit">Export</button>
+          </div>
+        </form>
+      </div>
 
       <main id="main-layout" class="main-layout">
         <div id="right-stack" class="right-stack">

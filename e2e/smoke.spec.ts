@@ -165,6 +165,7 @@ test('boots empty, opens the gallery demo image, and keeps core controls stable'
   const settingsMenu = page.locator('#settings-menu');
   const galleryCboxItem = page.getByRole('menuitem', { name: 'cbox_rgb.exr', exact: true });
   const openMenuItem = page.locator('#open-file-button');
+  const exportMenuItem = page.locator('#export-image-button');
   const reloadAllMenuItem = page.locator('#reload-all-opened-images-button');
   const closeAllMenuItem = page.locator('#close-all-opened-images-button');
   const budgetInput = page.locator('#display-cache-budget-input');
@@ -214,6 +215,7 @@ test('boots empty, opens the gallery demo image, and keeps core controls stable'
   await fileMenuButton.click();
   await expect(fileMenu).toBeVisible();
   await expect(openMenuItem).toBeEnabled();
+  await expect(exportMenuItem).toBeDisabled();
   await expect(reloadAllMenuItem).toBeDisabled();
   await expect(closeAllMenuItem).toBeDisabled();
   await page.keyboard.press('Escape');
@@ -291,9 +293,12 @@ test('boots empty, opens the gallery demo image, and keeps core controls stable'
   await expect(fileMenuButton).toHaveAttribute('aria-expanded', 'true');
   await expect(openMenuItem).toBeVisible();
   await expect(openMenuItem).toHaveText('Open...');
+  await expect(exportMenuItem).toBeVisible();
+  await expect(exportMenuItem).toHaveText('Export...');
   await expect(reloadAllMenuItem).toBeVisible();
   await expect(closeAllMenuItem).toBeVisible();
   await expect(openMenuItem).toBeEnabled();
+  await expect(exportMenuItem).toBeEnabled();
   await expect(reloadAllMenuItem).toBeEnabled();
   await expect(closeAllMenuItem).toBeEnabled();
   await page.keyboard.press('Escape');
@@ -473,6 +478,53 @@ test('boots empty, opens the gallery demo image, and keeps core controls stable'
   await expect(openMenuItem).toBeEnabled();
   await expect(reloadAllMenuItem).toBeDisabled();
   await expect(closeAllMenuItem).toBeDisabled();
+});
+
+test('exports the active image as a png download from the file menu', async ({ page }) => {
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  await openGalleryCbox(page);
+
+  const fileMenuButton = page.getByRole('button', { name: 'File', exact: true });
+  const exportMenuItem = page.locator('#export-image-button');
+  const exportDialog = page.locator('#export-dialog-form');
+  const exportFilenameInput = page.locator('#export-filename-input');
+  const exportWidthInput = page.locator('#export-width-input');
+  const exportHeightInput = page.locator('#export-height-input');
+  const exportSubmitButton = page.locator('#export-dialog-submit-button');
+
+  await fileMenuButton.click();
+  await exportMenuItem.click();
+
+  await expect(exportDialog).toBeVisible();
+  await expect(exportFilenameInput).toHaveValue('cbox_rgb.png');
+  await expect(exportWidthInput).toHaveValue('256');
+  await expect(exportHeightInput).toHaveValue('256');
+
+  const downloadPromise = page.waitForEvent('download');
+  await exportSubmitButton.click();
+  const download = await downloadPromise;
+
+  await expect(exportDialog).toBeHidden();
+  expect(download.suggestedFilename()).toBe('cbox_rgb.png');
+
+  const stream = await download.createReadStream();
+  expect(stream).not.toBeNull();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream!) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  const pngBytes = Buffer.concat(chunks);
+  expect(pngBytes.subarray(0, 8)).toEqual(
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  );
 });
 
 test('defers opened-file thumbnails until idle time after first render', async ({ page }) => {

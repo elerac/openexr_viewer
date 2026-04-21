@@ -34,6 +34,7 @@ function createUiMock() {
     setDisplayCacheBudget: vi.fn(),
     setDisplayCacheUsage: vi.fn(),
     setError: vi.fn(),
+    setExportTarget: vi.fn(),
     setLoading: vi.fn(),
     setOpenedImageOptions: vi.fn()
   };
@@ -90,6 +91,11 @@ describe('session controller', () => {
       ]),
       session?.id
     );
+    expect(ui.setExportTarget).toHaveBeenLastCalledWith({
+      filename: 'beauty.png',
+      sourceWidth: 8,
+      sourceHeight: 4
+    });
   });
 
   it('switches active sessions while carrying current view and probe state', async () => {
@@ -97,7 +103,7 @@ describe('session controller', () => {
       .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
       .mockResolvedValueOnce(createDecodedImage(6, 6))
       .mockResolvedValueOnce(createDecodedImage(6, 6));
-    const { controller, store } = createController({ decodeBytes });
+    const { controller, store, ui } = createController({ decodeBytes });
 
     await controller.enqueueFiles([createFile('first.exr')]);
     await controller.enqueueFiles([createFile('second.exr')]);
@@ -117,6 +123,11 @@ describe('session controller', () => {
     controller.switchActiveSession(firstSession!.id);
 
     expect(controller.getActiveSessionId()).toBe(firstSession!.id);
+    expect(ui.setExportTarget).toHaveBeenLastCalledWith({
+      filename: 'first.png',
+      sourceWidth: 6,
+      sourceHeight: 6
+    });
     expect(store.getState()).toMatchObject({
       zoom: 3,
       panX: 4,
@@ -204,7 +215,7 @@ describe('session controller', () => {
       .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
       .mockResolvedValueOnce(createDecodedImage(4, 4))
       .mockResolvedValueOnce(createDecodedImage(8, 8));
-    const { controller, thumbnailService } = createController({ decodeBytes });
+    const { controller, thumbnailService, ui } = createController({ decodeBytes });
 
     await controller.enqueueFiles([createFile('reload.exr')]);
     const sessionId = controller.getActiveSessionId()!;
@@ -215,6 +226,11 @@ describe('session controller', () => {
     expect(reloaded?.decoded.width).toBe(8);
     expect(reloaded?.decoded.height).toBe(8);
     expect(thumbnailService.enqueue).toHaveBeenCalledTimes(2);
+    expect(ui.setExportTarget).toHaveBeenLastCalledWith({
+      filename: 'reload.png',
+      sourceWidth: 8,
+      sourceHeight: 8
+    });
   });
 
   it('prunes unpinned inactive display caches and keeps pinned ones over budget', async () => {

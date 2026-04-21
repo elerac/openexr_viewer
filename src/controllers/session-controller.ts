@@ -15,7 +15,7 @@ import {
 } from '../session-state';
 import { cloneDisplaySelection } from '../display-model';
 import { createDefaultStokesDegreeModulation } from '../stokes';
-import { ViewerUi } from '../ui';
+import { buildDefaultExportFilename, ViewerUi } from '../ui';
 import { buildViewerStateForLayer } from '../viewer-store';
 import { LoadQueueService } from '../services/load-queue';
 import { ThumbnailService } from '../services/thumbnail-service';
@@ -38,7 +38,12 @@ const GALLERY_IMAGES = [
 
 type SessionUi = Pick<
   ViewerUi,
-  'setDisplayCacheBudget' | 'setDisplayCacheUsage' | 'setError' | 'setLoading' | 'setOpenedImageOptions'
+  | 'setDisplayCacheBudget'
+  | 'setDisplayCacheUsage'
+  | 'setError'
+  | 'setExportTarget'
+  | 'setLoading'
+  | 'setOpenedImageOptions'
 >;
 
 export interface SessionControllerDependencies {
@@ -136,6 +141,7 @@ export class SessionController {
 
     this.activeSessionId = nextSession.id;
     this.syncOpenedImageOptions();
+    this.syncActiveSessionExportTarget();
 
     this.setState(nextState);
   }
@@ -176,6 +182,7 @@ export class SessionController {
 
     if (!removingActiveSession) {
       this.syncOpenedImageOptions();
+      this.syncActiveSessionExportTarget();
       this.syncDisplayCacheUsageUi();
       return;
     }
@@ -196,6 +203,7 @@ export class SessionController {
     this.activeSessionId = nextSession.id;
 
     this.syncOpenedImageOptions();
+    this.syncActiveSessionExportTarget();
     this.syncDisplayCacheUsageUi();
     this.setState(nextState);
   }
@@ -305,6 +313,20 @@ export class SessionController {
     );
   }
 
+  syncActiveSessionExportTarget(): void {
+    const activeSession = this.getActiveSession();
+    if (!activeSession) {
+      this.ui.setExportTarget(null);
+      return;
+    }
+
+    this.ui.setExportTarget({
+      filename: buildDefaultExportFilename(activeSession.displayName),
+      sourceWidth: activeSession.decoded.width,
+      sourceHeight: activeSession.decoded.height
+    });
+  }
+
   syncDisplayCacheUsageUi(): void {
     this.ui.setDisplayCacheUsage(getRetainedDisplayCacheBytes(this.sessions), this.getDisplayCacheBudgetBytes());
   }
@@ -406,6 +428,7 @@ export class SessionController {
     this.sessions = [...this.sessions, session];
     this.activeSessionId = session.id;
     this.syncOpenedImageOptions();
+    this.syncActiveSessionExportTarget();
 
     this.setState(session.state);
     await this.thumbnailService.enqueue(session.id, session.state);
@@ -482,6 +505,7 @@ export class SessionController {
 
       this.sessions = this.sessions.map((current) => (current.id === sessionId ? reloadedSession : current));
       this.syncOpenedImageOptions();
+      this.syncActiveSessionExportTarget();
       this.syncDisplayCacheUsageUi();
 
       if (this.activeSessionId === sessionId) {
@@ -505,6 +529,7 @@ export class SessionController {
     this.setState(createClearedViewerState(this.getDefaultColormapId()));
 
     this.syncOpenedImageOptions();
+    this.syncActiveSessionExportTarget();
     this.syncDisplayCacheUsageUi();
   }
 
