@@ -47,7 +47,7 @@ function createController(options: {
     enqueue: vi.fn(async () => undefined),
     discard: vi.fn(),
     clear: vi.fn(),
-    getThumbnailDataUrl: vi.fn(() => null)
+    getThumbnailDataUrl: vi.fn<(_: string) => string | null>(() => null)
   };
   const renderCache = {
     discard: vi.fn(),

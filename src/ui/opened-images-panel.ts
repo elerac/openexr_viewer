@@ -211,7 +211,7 @@ export class OpenedImagesPanel implements Disposable {
     this.elements.displayCacheUsage.textContent = state.text;
     this.elements.displayCacheUsage.setAttribute(
       'title',
-      `Retained display cache: ${formatFileSizeMb(usedBytes)} / ${formatFileSizeMb(budgetBytes)}`
+      `Open image CPU memory: ${formatFileSizeMb(usedBytes)} / ${formatFileSizeMb(budgetBytes)}`
     );
     this.elements.displayCacheControl.classList.toggle('is-over-budget', state.overBudget);
     this.elements.displayCacheUsage.classList.toggle('is-over-budget', state.overBudget);

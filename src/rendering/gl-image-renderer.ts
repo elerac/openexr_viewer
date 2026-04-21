@@ -1,10 +1,19 @@
-import { isChannelSelection } from '../display-model';
-import type { Disposable } from '../lifecycle';
+import { copyChannelToDenseArray } from '../channel-storage';
+import {
+  DISPLAY_SOURCE_SLOT_COUNT,
+  createEmptyDisplaySourceBinding,
+  type DisplaySourceBinding,
+  type DisplaySourceMode
+} from '../display-texture';
 import { isStokesDegreeModulationEnabled } from '../stokes';
-import type { ViewerState, ViewportInfo } from '../types';
+import type { DecodedLayer, ViewerState, ViewportInfo } from '../types';
+import type { Disposable } from '../lifecycle';
 import imageFragmentSource from './shaders/exr-image.frag.glsl?raw';
 import panoramaFragmentSource from './shaders/panorama-image.frag.glsl?raw';
 import vertexSource from './shaders/fullscreen-triangle.vert.glsl?raw';
+
+const COLORMAP_TEXTURE_UNIT = DISPLAY_SOURCE_SLOT_COUNT;
+const REQUIRED_TEXTURE_UNITS = DISPLAY_SOURCE_SLOT_COUNT + 1;
 
 interface CommonUniforms {
   viewport: WebGLUniformLocation;
@@ -15,6 +24,8 @@ interface CommonUniforms {
   colormapMax: WebGLUniformLocation;
   colormapTextureSize: WebGLUniformLocation;
   colormapEntryCount: WebGLUniformLocation;
+  displayMode: WebGLUniformLocation;
+  stokesParameter: WebGLUniformLocation;
   useStokesDegreeModulation: WebGLUniformLocation;
   useImageAlpha: WebGLUniformLocation;
 }
@@ -35,24 +46,37 @@ interface ProgramBundle<TUniforms extends CommonUniforms> {
   uniforms: TUniforms;
 }
 
+interface LayerSourceTextures {
+  width: number;
+  height: number;
+  textureByChannel: Map<string, WebGLTexture>;
+}
+
 export class GlImageRenderer implements Disposable {
   private readonly glCanvas: HTMLCanvasElement;
   private readonly gl: WebGL2RenderingContext;
   private readonly vao: WebGLVertexArrayObject;
-  private readonly texture: WebGLTexture;
+  private readonly zeroTexture: WebGLTexture;
   private readonly colormapTexture: WebGLTexture;
   private readonly imageProgram: ProgramBundle<ImageUniforms>;
   private readonly panoramaProgram: ProgramBundle<PanoramaUniforms>;
+  private readonly layerTexturesBySession = new Map<string, Map<number, LayerSourceTextures>>();
   private viewport: ViewportInfo = { width: 1, height: 1 };
   private imageSize: { width: number; height: number } | null = null;
   private colormapTextureSize = { width: 1, height: 1 };
   private colormapEntryCount = 0;
+  private activeBinding: DisplaySourceBinding = createEmptyDisplaySourceBinding();
   private disposed = false;
 
   constructor(glCanvas: HTMLCanvasElement) {
     const gl = glCanvas.getContext('webgl2', { antialias: false });
     if (!gl) {
       throw new Error('WebGL2 is required for this viewer.');
+    }
+
+    const maxTextureUnits = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) as number;
+    if (maxTextureUnits < REQUIRED_TEXTURE_UNITS) {
+      throw new Error(`WebGL2 must expose at least ${REQUIRED_TEXTURE_UNITS} texture units.`);
     }
 
     this.glCanvas = glCanvas;
@@ -64,11 +88,11 @@ export class GlImageRenderer implements Disposable {
     }
     this.vao = vao;
 
-    const texture = gl.createTexture();
-    if (!texture) {
-      throw new Error('Failed to create texture.');
+    const zeroTexture = gl.createTexture();
+    if (!zeroTexture) {
+      throw new Error('Failed to create zero texture.');
     }
-    this.texture = texture;
+    this.zeroTexture = zeroTexture;
 
     const colormapTexture = gl.createTexture();
     if (!colormapTexture) {
@@ -80,15 +104,24 @@ export class GlImageRenderer implements Disposable {
     this.panoramaProgram = this.createPanoramaProgram();
 
     gl.bindVertexArray(this.vao);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
-    gl.activeTexture(gl.TEXTURE1);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.zeroTexture);
+    this.configureSourceTexture();
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.R32F,
+      1,
+      1,
+      0,
+      gl.RED,
+      gl.FLOAT,
+      new Float32Array([0])
+    );
+
+    gl.activeTexture(gl.TEXTURE0 + COLORMAP_TEXTURE_UNIT);
     gl.bindTexture(gl.TEXTURE_2D, this.colormapTexture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -133,39 +166,91 @@ export class GlImageRenderer implements Disposable {
     this.gl.viewport(0, 0, this.viewport.width, this.viewport.height);
   }
 
-  setDisplayTexture(width: number, height: number, rgbaTexture: Float32Array): void {
+  ensureLayerSourceTextures(
+    sessionId: string,
+    layerIndex: number,
+    width: number,
+    height: number,
+    layer: DecodedLayer
+  ): void {
     if (this.disposed) {
       return;
     }
 
-    const sameSize = this.imageSize?.width === width && this.imageSize?.height === height;
-    this.imageSize = { width, height };
-    this.gl.activeTexture(this.gl.TEXTURE0);
-    this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture);
-    if (sameSize) {
-      this.gl.texSubImage2D(
-        this.gl.TEXTURE_2D,
-        0,
-        0,
-        0,
-        width,
-        height,
-        this.gl.RGBA,
-        this.gl.FLOAT,
-        rgbaTexture
-      );
-    } else {
+    let sessionLayers = this.layerTexturesBySession.get(sessionId);
+    if (!sessionLayers) {
+      sessionLayers = new Map<number, LayerSourceTextures>();
+      this.layerTexturesBySession.set(sessionId, sessionLayers);
+    }
+
+    if (sessionLayers.has(layerIndex)) {
+      return;
+    }
+
+    const textureByChannel = new Map<string, WebGLTexture>();
+    let uploadBuffer: Float32Array | undefined;
+
+    for (const channelName of layer.channelNames) {
+      if (!channelName) {
+        continue;
+      }
+
+      const denseChannel = copyChannelToDenseArray(layer, channelName, uploadBuffer);
+      if (!denseChannel) {
+        continue;
+      }
+      uploadBuffer = denseChannel;
+
+      const texture = this.gl.createTexture();
+      if (!texture) {
+        throw new Error('Failed to create source texture.');
+      }
+
+      this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+      this.configureSourceTexture();
       this.gl.texImage2D(
         this.gl.TEXTURE_2D,
         0,
-        this.gl.RGBA32F,
+        this.gl.R32F,
         width,
         height,
         0,
-        this.gl.RGBA,
+        this.gl.RED,
         this.gl.FLOAT,
-        rgbaTexture
+        denseChannel
       );
+      textureByChannel.set(channelName, texture);
+    }
+
+    sessionLayers.set(layerIndex, {
+      width,
+      height,
+      textureByChannel
+    });
+  }
+
+  setDisplaySelectionBindings(
+    sessionId: string,
+    layerIndex: number,
+    width: number,
+    height: number,
+    binding: DisplaySourceBinding
+  ): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.imageSize = { width, height };
+    this.activeBinding = binding;
+
+    const layerTextures = this.layerTexturesBySession.get(sessionId)?.get(layerIndex) ?? null;
+    for (let slotIndex = 0; slotIndex < DISPLAY_SOURCE_SLOT_COUNT; slotIndex += 1) {
+      const channelName = binding.slots[slotIndex];
+      const texture = channelName
+        ? layerTextures?.textureByChannel.get(channelName) ?? this.zeroTexture
+        : this.zeroTexture;
+      this.gl.activeTexture(this.gl.TEXTURE0 + slotIndex);
+      this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
     }
   }
 
@@ -206,7 +291,7 @@ export class GlImageRenderer implements Disposable {
 
     this.colormapTextureSize = { width, height };
     this.colormapEntryCount = entryCount;
-    this.gl.activeTexture(this.gl.TEXTURE1);
+    this.gl.activeTexture(this.gl.TEXTURE0 + COLORMAP_TEXTURE_UNIT);
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.colormapTexture);
     this.gl.texImage2D(
       this.gl.TEXTURE_2D,
@@ -221,12 +306,32 @@ export class GlImageRenderer implements Disposable {
     );
   }
 
+  discardSessionTextures(sessionId: string): void {
+    if (this.disposed) {
+      return;
+    }
+
+    const sessionLayers = this.layerTexturesBySession.get(sessionId);
+    if (!sessionLayers) {
+      return;
+    }
+
+    for (const layerTextures of sessionLayers.values()) {
+      for (const texture of layerTextures.textureByChannel.values()) {
+        this.gl.deleteTexture(texture);
+      }
+    }
+
+    this.layerTexturesBySession.delete(sessionId);
+  }
+
   clearImage(): void {
     if (this.disposed) {
       return;
     }
 
     this.imageSize = null;
+    this.activeBinding = createEmptyDisplaySourceBinding();
   }
 
   render(state: ViewerState): void {
@@ -235,25 +340,30 @@ export class GlImageRenderer implements Disposable {
     }
 
     const gl = this.gl;
-    const program = state.viewerMode === 'panorama' ? this.panoramaProgram : this.imageProgram;
-
-    gl.useProgram(program.program);
-    gl.bindVertexArray(this.vao);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.texture);
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, this.colormapTexture);
-
-    this.setCommonUniforms(program.uniforms, state);
-
     if (state.viewerMode === 'panorama') {
+      const program = this.panoramaProgram;
+      gl.useProgram(program.program);
+      gl.bindVertexArray(this.vao);
+      gl.activeTexture(gl.TEXTURE0 + COLORMAP_TEXTURE_UNIT);
+      gl.bindTexture(gl.TEXTURE_2D, this.colormapTexture);
+
+      this.setCommonUniforms(program.uniforms, state);
       gl.uniform1f(program.uniforms.panoramaYawDeg, state.panoramaYawDeg);
       gl.uniform1f(program.uniforms.panoramaPitchDeg, state.panoramaPitchDeg);
       gl.uniform1f(program.uniforms.panoramaHfovDeg, state.panoramaHfovDeg);
-    } else {
-      gl.uniform2f(program.uniforms.pan, state.panX, state.panY);
-      gl.uniform1f(program.uniforms.zoom, state.zoom);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      return;
     }
+
+    const program = this.imageProgram;
+    gl.useProgram(program.program);
+    gl.bindVertexArray(this.vao);
+    gl.activeTexture(gl.TEXTURE0 + COLORMAP_TEXTURE_UNIT);
+    gl.bindTexture(gl.TEXTURE_2D, this.colormapTexture);
+
+    this.setCommonUniforms(program.uniforms, state);
+    gl.uniform2f(program.uniforms.pan, state.panX, state.panY);
+    gl.uniform1f(program.uniforms.zoom, state.zoom);
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
@@ -264,15 +374,20 @@ export class GlImageRenderer implements Disposable {
     }
 
     this.disposed = true;
+    for (const sessionId of this.layerTexturesBySession.keys()) {
+      this.discardSessionTextures(sessionId);
+    }
+    this.layerTexturesBySession.clear();
     this.imageSize = null;
     this.colormapEntryCount = 0;
+    this.activeBinding = createEmptyDisplaySourceBinding();
     this.gl.bindVertexArray(null);
     this.gl.useProgram(null);
-    this.gl.activeTexture(this.gl.TEXTURE0);
-    this.gl.bindTexture(this.gl.TEXTURE_2D, null);
-    this.gl.activeTexture(this.gl.TEXTURE1);
-    this.gl.bindTexture(this.gl.TEXTURE_2D, null);
-    this.gl.deleteTexture(this.texture);
+    for (let slotIndex = 0; slotIndex < REQUIRED_TEXTURE_UNITS; slotIndex += 1) {
+      this.gl.activeTexture(this.gl.TEXTURE0 + slotIndex);
+      this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+    }
+    this.gl.deleteTexture(this.zeroTexture);
     this.gl.deleteTexture(this.colormapTexture);
     this.gl.deleteVertexArray(this.vao);
     this.gl.deleteProgram(this.imageProgram.program);
@@ -314,15 +429,30 @@ export class GlImageRenderer implements Disposable {
       colormapMax: getRequiredUniformLocation(this.gl, program, 'uColormapMax'),
       colormapTextureSize: getRequiredUniformLocation(this.gl, program, 'uColormapTextureSize'),
       colormapEntryCount: getRequiredUniformLocation(this.gl, program, 'uColormapEntryCount'),
+      displayMode: getRequiredUniformLocation(this.gl, program, 'uDisplayMode'),
+      stokesParameter: getRequiredUniformLocation(this.gl, program, 'uStokesParameter'),
       useStokesDegreeModulation: getRequiredUniformLocation(this.gl, program, 'uUseStokesDegreeModulation'),
       useImageAlpha: getRequiredUniformLocation(this.gl, program, 'uUseImageAlpha')
     };
   }
 
+  private configureSourceTexture(): void {
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+  }
+
   private configureProgramSamplers(program: WebGLProgram): void {
     this.gl.useProgram(program);
-    this.gl.uniform1i(this.gl.getUniformLocation(program, 'uTexture'), 0);
-    this.gl.uniform1i(this.gl.getUniformLocation(program, 'uColormapTexture'), 1);
+    this.gl.uniform1iv(
+      getRequiredUniformLocation(this.gl, program, 'uSourceTextures[0]'),
+      Int32Array.from({ length: DISPLAY_SOURCE_SLOT_COUNT }, (_, index) => index)
+    );
+    this.gl.uniform1i(
+      getRequiredUniformLocation(this.gl, program, 'uColormapTexture'),
+      COLORMAP_TEXTURE_UNIT
+    );
   }
 
   private setCommonUniforms(
@@ -345,11 +475,53 @@ export class GlImageRenderer implements Disposable {
       this.colormapTextureSize.height
     );
     gl.uniform1i(uniforms.colormapEntryCount, this.colormapEntryCount);
+    gl.uniform1i(uniforms.displayMode, resolveDisplaySourceModeUniformValue(this.activeBinding.mode));
+    gl.uniform1i(uniforms.stokesParameter, resolveStokesParameterUniformValue(this.activeBinding.stokesParameter));
     gl.uniform1i(
       uniforms.useStokesDegreeModulation,
       isStokesDegreeModulationEnabled(state.displaySelection, state.stokesDegreeModulation) ? 1 : 0
     );
-    gl.uniform1i(uniforms.useImageAlpha, isChannelSelection(state.displaySelection) ? 1 : 0);
+    gl.uniform1i(uniforms.useImageAlpha, this.activeBinding.usesImageAlpha ? 1 : 0);
+  }
+}
+
+function resolveDisplaySourceModeUniformValue(mode: DisplaySourceMode): number {
+  switch (mode) {
+    case 'empty':
+      return 0;
+    case 'channelRgb':
+      return 1;
+    case 'channelMono':
+      return 2;
+    case 'stokesDirect':
+      return 3;
+    case 'stokesRgbLuminance':
+      return 4;
+  }
+}
+
+function resolveStokesParameterUniformValue(parameter: DisplaySourceBinding['stokesParameter']): number {
+  switch (parameter) {
+    case 'aolp':
+      return 0;
+    case 'dolp':
+      return 1;
+    case 'dop':
+      return 2;
+    case 'docp':
+      return 3;
+    case 'cop':
+      return 4;
+    case 'top':
+      return 5;
+    case 's1_over_s0':
+      return 6;
+    case 's2_over_s0':
+      return 7;
+    case 's3_over_s0':
+      return 8;
+    case null:
+      return -1;
   }
 }
 

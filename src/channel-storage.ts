@@ -76,6 +76,30 @@ export function readPixelChannelValue(
   return layer.channelStorage.pixels[pixelIndex * layer.channelStorage.channelCount + channelIndex] ?? 0;
 }
 
+export function copyChannelToDenseArray(
+  layer: ChannelStorageBackedLayer,
+  channelName: string,
+  output?: Float32Array
+): Float32Array | null {
+  const view = getChannelReadView(layer, channelName);
+  if (!view) {
+    return null;
+  }
+
+  const pixelCount = layer.channelStorage.channelCount > 0
+    ? Math.floor(layer.channelStorage.pixels.length / layer.channelStorage.channelCount)
+    : 0;
+  const dense = output && output.length === pixelCount
+    ? output
+    : new Float32Array(pixelCount);
+
+  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
+    dense[pixelIndex] = readChannelValue(view, pixelIndex);
+  }
+
+  return dense;
+}
+
 function materializeChannel(
   layer: ChannelStorageBackedLayer,
   channelName: string

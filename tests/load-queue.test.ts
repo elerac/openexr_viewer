@@ -81,6 +81,7 @@ describe('load queue service', () => {
 
     await expect(first).resolves.toBeUndefined();
     await expect(second).rejects.toMatchObject({ name: 'AbortError' });
-    expect(activeSignal?.aborted).toBe(true);
+    expect(activeSignal).not.toBeNull();
+    expect(activeSignal!.aborted).toBe(true);
   });
 });

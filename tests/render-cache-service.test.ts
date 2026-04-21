@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { serializeDisplaySelectionKey } from '../src/display-model';
 import { RenderCacheService } from '../src/services/render-cache-service';
 import { DecodedExrImage, OpenedImageSession } from '../src/types';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
@@ -41,16 +40,17 @@ function createUiMock() {
 
 function createRendererMock() {
   return {
-    setDisplayTexture: vi.fn()
+    ensureLayerSourceTextures: vi.fn(),
+    setDisplaySelectionBindings: vi.fn(),
+    discardSessionTextures: vi.fn()
   };
 }
 
 function getEntries(service: RenderCacheService): Map<string, {
-  displayTexture: Float32Array | null;
-  displayLuminanceRange: { min: number; max: number } | null;
-  displayLuminanceRangeRevisionKey: string;
-  textureRevisionKey: string;
-  lastTouched: number;
+  decodedBytes: number;
+  layerUploads: Set<number>;
+  luminanceRangeByRevision: Map<string, { min: number; max: number } | null>;
+  activeTextureRevisionKey: string;
 }> {
   return (service as unknown as { entries: Map<string, never> }).entries as never;
 }
@@ -70,35 +70,42 @@ describe('render cache service', () => {
     vi.clearAllMocks();
   });
 
-  it('reuses retained textures by revision key and uploads once per retained revision', () => {
+  it('uploads each session layer once and only rebinds when the active revision changes', () => {
     const session = createSession('session-1');
+    const secondSession = createSession('session-2');
     const ui = createUiMock();
     const renderer = createRendererMock();
     const service = new RenderCacheService({
       ui,
-      renderer,
-      getActiveSessionId: () => session.id
+      renderer
     });
 
     const first = service.prepareActiveSession(session, session.state);
     const second = service.prepareActiveSession(session, session.state);
+    const monoState = {
+      ...session.state,
+      displaySelection: createChannelMonoSelection('R')
+    };
+    const third = service.prepareActiveSession(session, monoState);
+    const fourth = service.prepareActiveSession(secondSession, secondSession.state);
 
-    expect(second.displayTexture).toBe(first.displayTexture);
+    expect(first.textureDirty).toBe(true);
     expect(second.textureDirty).toBe(false);
-    expect(renderer.setDisplayTexture).toHaveBeenCalledTimes(1);
+    expect(third.textureDirty).toBe(true);
+    expect(fourth.textureDirty).toBe(true);
+    expect(renderer.ensureLayerSourceTextures).toHaveBeenCalledTimes(2);
+    expect(renderer.setDisplaySelectionBindings).toHaveBeenCalledTimes(3);
   });
 
-  it('refreshes luminance range lazily only for stale colormap textures', () => {
+  it('caches luminance ranges by selection revision for colormap mode', () => {
     const session = createSession('session-1');
     const ui = createUiMock();
     const renderer = createRendererMock();
     const service = new RenderCacheService({
       ui,
-      renderer,
-      getActiveSessionId: () => session.id
+      renderer
     });
 
-    const rgbResult = service.prepareActiveSession(session, session.state);
     const firstColormap = service.prepareActiveSession(session, {
       ...session.state,
       visualizationMode: 'colormap'
@@ -107,129 +114,74 @@ describe('render cache service', () => {
       ...session.state,
       visualizationMode: 'colormap'
     });
+    const monoState = {
+      ...session.state,
+      visualizationMode: 'colormap' as const,
+      displaySelection: createChannelMonoSelection('R')
+    };
+    const monoColormap = service.prepareActiveSession(session, monoState);
 
-    expect(rgbResult.displayLuminanceRange).toBeNull();
     expect(firstColormap.luminanceRangeDirty).toBe(true);
     expect(firstColormap.displayLuminanceRange).toEqual({ min: 0.5702, max: 0.5702 });
     expect(secondColormap.luminanceRangeDirty).toBe(false);
+    expect(monoColormap.luminanceRangeDirty).toBe(true);
+    expect(service.getCachedLuminanceRange(session.id, monoState)).toEqual({ min: 1, max: 1 });
   });
 
-  it('evicts inactive entries by LRU while keeping the active session retained', () => {
-    let activeSessionId = 'c';
-    const ui = createUiMock();
-    const renderer = createRendererMock();
-    const service = new RenderCacheService({
-      ui,
-      renderer,
-      getActiveSessionId: () => activeSessionId
-    });
-    const entries = getEntries(service);
-    entries.set('a', {
-      displayTexture: new Float32Array((40 * 1024 * 1024) / 4),
-      displayLuminanceRange: { min: 0, max: 1 },
-      displayLuminanceRangeRevisionKey: 'a-range',
-      textureRevisionKey: 'a-texture',
-      lastTouched: 1
-    } as never);
-    entries.set('b', {
-      displayTexture: new Float32Array((40 * 1024 * 1024) / 4),
-      displayLuminanceRange: { min: 0, max: 1 },
-      displayLuminanceRangeRevisionKey: 'b-range',
-      textureRevisionKey: 'b-texture',
-      lastTouched: 2
-    } as never);
-    entries.set('c', {
-      displayTexture: new Float32Array((40 * 1024 * 1024) / 4),
-      displayLuminanceRange: { min: 0, max: 1 },
-      displayLuminanceRangeRevisionKey: 'c-range',
-      textureRevisionKey: 'c-texture',
-      lastTouched: 3
-    } as never);
-
-    service.setBudgetMb(64);
-
-    expect(entries.has('a')).toBe(false);
-    expect(entries.has('b')).toBe(false);
-    expect(entries.get('c')?.displayTexture).not.toBeNull();
-
-    activeSessionId = 'a';
-    entries.set('a', {
-      displayTexture: new Float32Array((40 * 1024 * 1024) / 4),
-      displayLuminanceRange: { min: 0, max: 1 },
-      displayLuminanceRangeRevisionKey: 'a-range',
-      textureRevisionKey: 'a-texture',
-      lastTouched: 4
-    } as never);
-    entries.set('b', {
-      displayTexture: new Float32Array((40 * 1024 * 1024) / 4),
-      displayLuminanceRange: { min: 0, max: 1 },
-      displayLuminanceRangeRevisionKey: 'b-range',
-      textureRevisionKey: 'b-texture',
-      lastTouched: 1
-    } as never);
-
-    service.setBudgetMb(64);
-
-    expect(entries.get('a')?.displayTexture).not.toBeNull();
-    expect(entries.has('b')).toBe(false);
-  });
-
-  it('persists budget updates and resets upload tracking on discard and clear', () => {
+  it('tracks decoded session bytes in the usage UI and tears down session resources on discard and clear', () => {
     const localStorage = {
       getItem: vi.fn(() => null),
       setItem: vi.fn()
     };
     vi.stubGlobal('window', { localStorage });
 
-    const session = createSession('session-1');
+    const first = createSession('first', createDecodedImage(2, 1));
+    const second = createSession('second', createDecodedImage(4, 1));
     const ui = createUiMock();
     const renderer = createRendererMock();
     const service = new RenderCacheService({
       ui,
-      renderer,
-      getActiveSessionId: () => session.id
+      renderer
     });
 
-    service.prepareActiveSession(session, session.state);
+    service.prepareActiveSession(first, first.state);
+    service.prepareActiveSession(second, second.state);
     service.setBudgetMb(128);
-    service.discard(session.id);
-    service.prepareActiveSession(session, session.state);
+
+    expect(ui.setDisplayCacheUsage).toHaveBeenLastCalledWith(
+      first.decoded.layers[0]!.channelStorage.pixels.byteLength +
+        second.decoded.layers[0]!.channelStorage.pixels.byteLength,
+      128 * 1024 * 1024
+    );
+    expect(localStorage.setItem).toHaveBeenCalledWith('openexr-viewer:display-cache-budget-mb:v1', '128');
+
+    service.discard(first.id);
     service.clear();
 
-    expect(localStorage.setItem).toHaveBeenCalledWith('openexr-viewer:display-cache-budget-mb:v1', '128');
-    expect(renderer.setDisplayTexture).toHaveBeenCalledTimes(2);
+    expect(renderer.discardSessionTextures).toHaveBeenNthCalledWith(1, first.id);
+    expect(renderer.discardSessionTextures).toHaveBeenNthCalledWith(2, second.id);
     expect(getEntries(service).size).toBe(0);
   });
 
-  it('returns snapshot textures without touching retained LRU state or pruning the budget', () => {
+  it('returns snapshot textures without retaining CPU display buffers', () => {
     const session = createSession('session-1');
     const ui = createUiMock();
     const renderer = createRendererMock();
     const service = new RenderCacheService({
       ui,
-      renderer,
-      getActiveSessionId: () => session.id
+      renderer
     });
-    const entries = getEntries(service);
-    const retainedTexture = new Float32Array([1, 1, 1, 1, 0, 0, 0, 1]);
-    entries.set(session.id, {
-      displayTexture: retainedTexture,
-      displayLuminanceRange: null,
-      displayLuminanceRangeRevisionKey: '',
-      textureRevisionKey: `0:${serializeDisplaySelectionKey(session.state.displaySelection)}`,
-      lastTouched: 7
-    } as never);
 
-    const retainedResult = service.getTextureForSnapshot(session, session.state);
-    const ephemeralResult = service.getTextureForSnapshot(session, {
+    const rgbSnapshot = service.getTextureForSnapshot(session, session.state);
+    const monoSnapshot = service.getTextureForSnapshot(session, {
       ...session.state,
       displaySelection: createChannelMonoSelection('R')
     });
 
-    expect(retainedResult).toBe(retainedTexture);
-    expect(entries.get(session.id)?.lastTouched).toBe(7);
-    expect(ephemeralResult).not.toBe(retainedTexture);
-    expect(getEntries(service).size).toBe(1);
+    expect(rgbSnapshot).not.toBeNull();
+    expect(monoSnapshot).not.toBeNull();
+    expect(rgbSnapshot).not.toBe(monoSnapshot);
+    expect(getEntries(service).size).toBe(0);
     expect(ui.setDisplayCacheUsage).toHaveBeenCalledTimes(1);
   });
 });

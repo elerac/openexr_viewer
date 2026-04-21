@@ -7,7 +7,7 @@ import {
   shouldPreserveStokesColormapState,
   shouldRefreshDisplayLuminanceRange
 } from '../src/colormap-range';
-import { buildDisplayTexture } from '../src/display-texture';
+import { buildDisplayTexture, computeDisplaySelectionLuminanceRange } from '../src/display-texture';
 import { DisplaySelection } from '../src/types';
 import {
   createChannelRgbSelection,
@@ -131,6 +131,19 @@ describe('colormap range', () => {
 
     expect(range?.min).toBeCloseTo(0.25, 6);
     expect(range?.max).toBeCloseTo(0.75, 6);
+  });
+
+  it('matches direct-from-source luminance reduction against the snapshot texture path', () => {
+    const layer = createLayerFromChannels({
+      R: [0.1, 0.4],
+      G: [0.2, 0.5],
+      B: [0.3, 0.6]
+    });
+    const selection: DisplaySelection = createChannelRgbSelection('R', 'G', 'B');
+
+    expect(computeDisplaySelectionLuminanceRange(layer, 2, 1, selection)).toEqual(
+      computeDisplayTextureLuminanceRange(buildDisplayTexture(layer, 2, 1, 'R', 'G', 'B'))
+    );
   });
 
   it('does not include display alpha in luminance range computation', () => {

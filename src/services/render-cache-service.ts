@@ -1,22 +1,22 @@
 import {
   clampDisplayCacheBudgetMb,
-  createDisplayCacheEntry,
+  createSessionResourceEntry,
   displayCacheBudgetMbToBytes,
-  getRetainedDisplayCacheBytes,
-  pruneDisplayCachesToBudget,
+  getTrackedSessionCpuBytes,
   readStoredDisplayCacheBudgetMb,
   saveStoredDisplayCacheBudgetMb,
-  type DisplayCacheEntry
+  type SessionResourceEntry
 } from '../display-cache';
+import { shouldRefreshDisplayLuminanceRange } from '../colormap-range';
 import {
-  computeDisplayTextureLuminanceRange,
-  shouldRefreshDisplayLuminanceRange
-} from '../colormap-range';
-import {
+  buildDisplaySourceBinding,
   buildDisplayTextureRevisionKey,
-  buildSelectedDisplayTexture
+  buildSelectedDisplayTexture,
+  computeDisplaySelectionLuminanceRange
 } from '../display-texture';
 import type {
+  DecodedExrImage,
+  DecodedLayer,
   DisplayLuminanceRange,
   OpenedImageSession,
   ViewerState
@@ -24,7 +24,6 @@ import type {
 import type { Disposable } from '../lifecycle';
 
 export interface PrepareActiveSessionResult {
-  displayTexture: Float32Array | null;
   displayLuminanceRange: DisplayLuminanceRange | null;
   textureRevisionKey: string;
   textureDirty: boolean;
@@ -37,31 +36,45 @@ interface RenderCacheUi {
 }
 
 interface RenderCacheRenderer {
-  setDisplayTexture: (width: number, height: number, rgbaTexture: Float32Array) => void;
+  ensureLayerSourceTextures: (
+    sessionId: string,
+    layerIndex: number,
+    width: number,
+    height: number,
+    layer: DecodedLayer
+  ) => void;
+  setDisplaySelectionBindings: (
+    sessionId: string,
+    layerIndex: number,
+    width: number,
+    height: number,
+    layer: DecodedLayer,
+    selection: ViewerState['displaySelection'],
+    textureRevisionKey: string,
+    binding: ReturnType<typeof buildDisplaySourceBinding>
+  ) => void;
+  discardSessionTextures: (sessionId: string) => void;
 }
 
 export interface RenderCacheServiceDependencies {
   ui: RenderCacheUi;
   renderer: RenderCacheRenderer;
-  getActiveSessionId: () => string | null;
+  getActiveSessionId?: () => string | null;
 }
 
 export class RenderCacheService implements Disposable {
   private readonly ui: RenderCacheUi;
   private readonly renderer: RenderCacheRenderer;
-  private readonly getActiveSessionId: RenderCacheServiceDependencies['getActiveSessionId'];
 
-  private readonly entries = new Map<string, DisplayCacheEntry>();
+  private readonly entries = new Map<string, SessionResourceEntry>();
   private budgetMb = readStoredDisplayCacheBudgetMb();
-  private touchCounter = 0;
-  private uploadedSessionId: string | null = null;
-  private uploadedTextureRevisionKey = '';
+  private boundSessionId: string | null = null;
+  private boundTextureRevisionKey = '';
   private disposed = false;
 
   constructor(dependencies: RenderCacheServiceDependencies) {
     this.ui = dependencies.ui;
     this.renderer = dependencies.renderer;
-    this.getActiveSessionId = dependencies.getActiveSessionId;
 
     this.ui.setDisplayCacheBudget(this.budgetMb);
     this.syncDisplayCacheUsageUi();
@@ -70,7 +83,6 @@ export class RenderCacheService implements Disposable {
   prepareActiveSession(session: OpenedImageSession, state: ViewerState): PrepareActiveSessionResult {
     if (this.disposed) {
       return {
-        displayTexture: null,
         displayLuminanceRange: null,
         textureRevisionKey: '',
         textureDirty: false,
@@ -81,7 +93,6 @@ export class RenderCacheService implements Disposable {
     const layer = session.decoded.layers[state.activeLayer] ?? null;
     if (!layer || session.decoded.width <= 0 || session.decoded.height <= 0) {
       return {
-        displayTexture: null,
         displayLuminanceRange: null,
         textureRevisionKey: '',
         textureDirty: false,
@@ -89,57 +100,75 @@ export class RenderCacheService implements Disposable {
       };
     }
 
-    const entry = this.getOrCreateEntry(session.id);
+    const entry = this.getOrCreateEntry(session);
     const textureRevisionKey = buildDisplayTextureRevisionKey(state);
-    const textureDirty = textureRevisionKey !== entry.textureRevisionKey || !entry.displayTexture;
-    if (textureDirty) {
-      entry.displayTexture = buildSelectedDisplayTexture(
-        layer,
+    const textureDirty =
+      this.boundSessionId !== session.id ||
+      this.boundTextureRevisionKey !== textureRevisionKey;
+
+    if (!entry.layerUploads.has(state.activeLayer)) {
+      this.renderer.ensureLayerSourceTextures(
+        session.id,
+        state.activeLayer,
         session.decoded.width,
         session.decoded.height,
-        state.displaySelection,
-        entry.displayTexture ?? undefined
+        layer
       );
-      entry.textureRevisionKey = textureRevisionKey;
+      entry.layerUploads.add(state.activeLayer);
     }
+
+    if (textureDirty) {
+      this.renderer.setDisplaySelectionBindings(
+        session.id,
+        state.activeLayer,
+        session.decoded.width,
+        session.decoded.height,
+        layer,
+        state.displaySelection,
+        textureRevisionKey,
+        buildDisplaySourceBinding(layer, state.displaySelection)
+      );
+      this.boundSessionId = session.id;
+      this.boundTextureRevisionKey = textureRevisionKey;
+    }
+
+    entry.activeTextureRevisionKey = textureRevisionKey;
 
     const luminanceRangeDirty = shouldRefreshDisplayLuminanceRange(
       state.visualizationMode,
       textureRevisionKey,
-      entry.displayLuminanceRangeRevisionKey,
-      Boolean(entry.displayTexture)
+      entry.luminanceRangeByRevision.has(textureRevisionKey) ? textureRevisionKey : '',
+      true
     );
 
-    if (luminanceRangeDirty && entry.displayTexture) {
-      entry.displayLuminanceRange = computeDisplayTextureLuminanceRange(entry.displayTexture);
-      entry.displayLuminanceRangeRevisionKey = textureRevisionKey;
+    if (luminanceRangeDirty) {
+      entry.luminanceRangeByRevision.set(
+        textureRevisionKey,
+        computeDisplaySelectionLuminanceRange(
+          layer,
+          session.decoded.width,
+          session.decoded.height,
+          state.displaySelection
+        )
+      );
     }
 
-    if (entry.displayTexture) {
-      entry.lastTouched = ++this.touchCounter;
-      this.pruneToBudget();
-      this.syncDisplayCacheUsageUi();
-      this.uploadRetainedTexture(session, entry);
-    }
+    this.syncDisplayCacheUsageUi();
 
     return {
-      displayTexture: entry.displayTexture,
-      displayLuminanceRange: entry.displayLuminanceRange,
-      textureRevisionKey: entry.textureRevisionKey,
+      displayLuminanceRange: entry.luminanceRangeByRevision.get(textureRevisionKey) ?? null,
+      textureRevisionKey,
       textureDirty,
       luminanceRangeDirty
     };
   }
 
-  getTextureForSnapshot(session: OpenedImageSession, state: Pick<ViewerState, 'activeLayer' | 'displaySelection'>): Float32Array | null {
+  getTextureForSnapshot(
+    session: OpenedImageSession,
+    state: Pick<ViewerState, 'activeLayer' | 'displaySelection'>
+  ): Float32Array | null {
     if (this.disposed) {
       return null;
-    }
-
-    const textureRevisionKey = buildDisplayTextureRevisionKey(state);
-    const retained = this.entries.get(session.id);
-    if (retained?.displayTexture && retained.textureRevisionKey === textureRevisionKey) {
-      return retained.displayTexture;
     }
 
     const layer = session.decoded.layers[state.activeLayer] ?? null;
@@ -155,12 +184,20 @@ export class RenderCacheService implements Disposable {
     );
   }
 
-  getCachedLuminanceRange(sessionId: string): DisplayLuminanceRange | null {
+  getCachedLuminanceRange(
+    sessionId: string,
+    state: Pick<ViewerState, 'activeLayer' | 'displaySelection'>
+  ): DisplayLuminanceRange | null {
     if (this.disposed) {
       return null;
     }
 
-    return this.entries.get(sessionId)?.displayLuminanceRange ?? null;
+    const entry = this.entries.get(sessionId);
+    if (!entry) {
+      return null;
+    }
+
+    return entry.luminanceRangeByRevision.get(buildDisplayTextureRevisionKey(state)) ?? null;
   }
 
   setBudgetMb(valueMb: number): void {
@@ -171,7 +208,6 @@ export class RenderCacheService implements Disposable {
     this.budgetMb = clampDisplayCacheBudgetMb(valueMb);
     saveStoredDisplayCacheBudgetMb(this.budgetMb);
     this.ui.setDisplayCacheBudget(this.budgetMb);
-    this.pruneToBudget();
     this.syncDisplayCacheUsageUi();
   }
 
@@ -180,14 +216,13 @@ export class RenderCacheService implements Disposable {
       return;
     }
 
-    const entry = this.entries.get(sessionId);
-    if (!entry) {
+    if (!this.entries.has(sessionId)) {
       return;
     }
 
-    this.clearUploadTracking(sessionId);
     this.entries.delete(sessionId);
-
+    this.renderer.discardSessionTextures(sessionId);
+    this.clearBoundTextureTracking(sessionId);
     this.syncDisplayCacheUsageUi();
   }
 
@@ -196,9 +231,12 @@ export class RenderCacheService implements Disposable {
       return;
     }
 
+    for (const sessionId of this.entries.keys()) {
+      this.renderer.discardSessionTextures(sessionId);
+    }
     this.entries.clear();
-    this.uploadedSessionId = null;
-    this.uploadedTextureRevisionKey = '';
+    this.boundSessionId = null;
+    this.boundTextureRevisionKey = '';
     this.syncDisplayCacheUsageUi();
   }
 
@@ -208,67 +246,40 @@ export class RenderCacheService implements Disposable {
     }
 
     this.disposed = true;
+    for (const sessionId of this.entries.keys()) {
+      this.renderer.discardSessionTextures(sessionId);
+    }
     this.entries.clear();
-    this.uploadedSessionId = null;
-    this.uploadedTextureRevisionKey = '';
+    this.boundSessionId = null;
+    this.boundTextureRevisionKey = '';
   }
 
-  private getOrCreateEntry(sessionId: string): DisplayCacheEntry {
-    const existing = this.entries.get(sessionId);
+  private getOrCreateEntry(session: OpenedImageSession): SessionResourceEntry {
+    const existing = this.entries.get(session.id);
     if (existing) {
       return existing;
     }
 
-    const entry = createDisplayCacheEntry(sessionId);
-    this.entries.set(sessionId, entry);
+    const entry = createSessionResourceEntry(session.id, getDecodedImageByteSize(session.decoded));
+    this.entries.set(session.id, entry);
     return entry;
-  }
-
-  private pruneToBudget(): void {
-    pruneDisplayCachesToBudget(
-      [...this.entries.values()],
-      this.getActiveSessionId(),
-      displayCacheBudgetMbToBytes(this.budgetMb)
-    );
-
-    for (const [sessionId, entry] of this.entries) {
-      if (entry.displayTexture) {
-        continue;
-      }
-
-      this.entries.delete(sessionId);
-    }
-  }
-
-  private uploadRetainedTexture(session: OpenedImageSession, entry: DisplayCacheEntry): void {
-    const needsUpload =
-      this.uploadedSessionId !== session.id ||
-      this.uploadedTextureRevisionKey !== entry.textureRevisionKey;
-
-    if (!needsUpload || !entry.displayTexture) {
-      return;
-    }
-
-    this.renderer.setDisplayTexture(
-      session.decoded.width,
-      session.decoded.height,
-      entry.displayTexture
-    );
-    this.uploadedSessionId = session.id;
-    this.uploadedTextureRevisionKey = entry.textureRevisionKey;
   }
 
   private syncDisplayCacheUsageUi(): void {
     this.ui.setDisplayCacheUsage(
-      getRetainedDisplayCacheBytes([...this.entries.values()]),
+      getTrackedSessionCpuBytes([...this.entries.values()]),
       displayCacheBudgetMbToBytes(this.budgetMb)
     );
   }
 
-  private clearUploadTracking(sessionId: string): void {
-    if (this.uploadedSessionId === sessionId) {
-      this.uploadedSessionId = null;
-      this.uploadedTextureRevisionKey = '';
+  private clearBoundTextureTracking(sessionId: string): void {
+    if (this.boundSessionId === sessionId) {
+      this.boundSessionId = null;
+      this.boundTextureRevisionKey = '';
     }
   }
+}
+
+function getDecodedImageByteSize(decoded: DecodedExrImage): number {
+  return decoded.layers.reduce((total, layer) => total + layer.channelStorage.pixels.byteLength, 0);
 }

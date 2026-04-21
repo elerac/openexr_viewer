@@ -1,7 +1,12 @@
+import {
+  readDisplaySelectionPixelValuesAtIndex,
+  resolveDisplaySelectionEvaluator,
+  type DisplaySelectionEvaluator
+} from '../display-texture';
 import { imageToScreen } from '../interaction';
 import type { Disposable } from '../lifecycle';
 import { resolveActiveProbePixel } from '../probe';
-import type { ImagePixel, ViewerState, ViewportInfo } from '../types';
+import type { DecodedLayer, ImagePixel, ViewerState, ViewportInfo } from '../types';
 import { buildOverlayValueLines } from './overlay-value-lines';
 
 const VALUE_LABEL_MIN_SCREEN_SIZE = 28;
@@ -12,7 +17,7 @@ export class OverlayRenderer implements Disposable {
   private readonly overlayContext: CanvasRenderingContext2D;
   private viewport: ViewportInfo = { width: 1, height: 1 };
   private imageSize: { width: number; height: number } | null = null;
-  private displayTextureData: Float32Array | null = null;
+  private displayEvaluator: DisplaySelectionEvaluator | null = null;
   private disposed = false;
 
   constructor(overlayCanvas: HTMLCanvasElement) {
@@ -39,13 +44,18 @@ export class OverlayRenderer implements Disposable {
     this.overlayCanvas.height = this.viewport.height;
   }
 
-  setDisplayTexture(width: number, height: number, rgbaTexture: Float32Array): void {
+  setDisplaySelectionContext(
+    width: number,
+    height: number,
+    layer: DecodedLayer,
+    selection: ViewerState['displaySelection']
+  ): void {
     if (this.disposed) {
       return;
     }
 
     this.imageSize = { width, height };
-    this.displayTextureData = rgbaTexture;
+    this.displayEvaluator = resolveDisplaySelectionEvaluator(layer, selection);
   }
 
   clearImage(): void {
@@ -54,7 +64,7 @@ export class OverlayRenderer implements Disposable {
     }
 
     this.imageSize = null;
-    this.displayTextureData = null;
+    this.displayEvaluator = null;
   }
 
   render(state: ViewerState): void {
@@ -86,8 +96,8 @@ export class OverlayRenderer implements Disposable {
   }
 
   private drawPixelValues(state: ViewerState, imageWidth: number, imageHeight: number): void {
-    const data = this.displayTextureData;
-    if (!data) {
+    const evaluator = this.displayEvaluator;
+    if (!evaluator) {
       return;
     }
 
@@ -111,17 +121,18 @@ export class OverlayRenderer implements Disposable {
 
     const halfViewWidth = this.viewport.width * 0.5;
     const halfViewHeight = this.viewport.height * 0.5;
+    const values = { r: 0, g: 0, b: 0, a: 1 };
 
     for (let y = startY; y <= endY; y += 1) {
       for (let x = startX; x <= endX; x += 1) {
         const pixelIndex = y * imageWidth + x;
-        const dataIndex = pixelIndex * 4;
+        readDisplaySelectionPixelValuesAtIndex(evaluator, pixelIndex, values);
         const valueLines = buildOverlayValueLines(
           state,
-          data[dataIndex + 0],
-          data[dataIndex + 1],
-          data[dataIndex + 2],
-          data[dataIndex + 3]
+          values.r,
+          values.g,
+          values.b,
+          values.a
         );
 
         const centerX = (x + 0.5 - state.panX) * state.zoom + halfViewWidth;
@@ -147,7 +158,7 @@ export class OverlayRenderer implements Disposable {
 
     this.disposed = true;
     this.imageSize = null;
-    this.displayTextureData = null;
+    this.displayEvaluator = null;
     this.overlayContext.clearRect(0, 0, this.viewport.width, this.viewport.height);
   }
 }
@@ -211,6 +222,7 @@ function resolveValueLabelFontSize(
 
   return Math.floor(fontSize);
 }
+
 function visibleBounds(state: ViewerState, viewport: ViewportInfo): {
   left: number;
   right: number;

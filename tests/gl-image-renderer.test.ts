@@ -1,13 +1,52 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildDisplaySourceBinding } from '../src/display-texture';
 import { GlImageRenderer } from '../src/rendering/gl-image-renderer';
+import {
+  createChannelMonoSelection,
+  createChannelRgbSelection,
+  createLayerFromChannels
+} from './helpers/state-fixtures';
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('gl image renderer disposal', () => {
+describe('gl image renderer', () => {
+  it('uploads source textures once per session layer and rebinds selections without re-uploading', () => {
+    const { renderer, gl } = createHarness();
+    const layer = createLayerFromChannels({
+      R: [1, 2],
+      G: [3, 4],
+      B: [5, 6]
+    });
+
+    renderer.ensureLayerSourceTextures('session-1', 0, 2, 1, layer);
+    renderer.setDisplaySelectionBindings(
+      'session-1',
+      0,
+      2,
+      1,
+      buildDisplaySourceBinding(layer, createChannelRgbSelection('R', 'G', 'B'))
+    );
+
+    const texImageCallsAfterFirstUpload = gl.texImage2D.mock.calls.length;
+
+    renderer.ensureLayerSourceTextures('session-1', 0, 2, 1, layer);
+    renderer.setDisplaySelectionBindings(
+      'session-1',
+      0,
+      2,
+      1,
+      buildDisplaySourceBinding(layer, createChannelMonoSelection('G'))
+    );
+
+    expect(texImageCallsAfterFirstUpload).toBe(5);
+    expect(gl.texImage2D).toHaveBeenCalledTimes(5);
+    expect(gl.createTexture).toHaveBeenCalledTimes(5);
+  });
+
   it('deletes owned GL resources exactly once', () => {
     const { renderer, gl } = createHarness();
 
@@ -23,6 +62,8 @@ describe('gl image renderer disposal', () => {
 function createHarness(): {
   renderer: GlImageRenderer;
   gl: WebGL2RenderingContext & {
+    texImage2D: ReturnType<typeof vi.fn>;
+    createTexture: ReturnType<typeof vi.fn>;
     deleteTexture: ReturnType<typeof vi.fn>;
     deleteProgram: ReturnType<typeof vi.fn>;
     deleteVertexArray: ReturnType<typeof vi.fn>;
@@ -44,13 +85,21 @@ function createHarness(): {
 }
 
 function createWebGlContextMock(): WebGL2RenderingContext & {
+  texImage2D: ReturnType<typeof vi.fn>;
+  createTexture: ReturnType<typeof vi.fn>;
   deleteTexture: ReturnType<typeof vi.fn>;
   deleteProgram: ReturnType<typeof vi.fn>;
   deleteVertexArray: ReturnType<typeof vi.fn>;
 } {
   const programs = [{ id: 'program-1' }, { id: 'program-2' }];
   const shaders = [{ id: 'shader-1' }, { id: 'shader-2' }, { id: 'shader-3' }, { id: 'shader-4' }];
-  const textures = [{ id: 'texture-1' }, { id: 'texture-2' }];
+  const textures = [
+    { id: 'texture-1' },
+    { id: 'texture-2' },
+    { id: 'texture-3' },
+    { id: 'texture-4' },
+    { id: 'texture-5' }
+  ];
   const vaos = [{ id: 'vao-1' }];
 
   return {
@@ -59,7 +108,6 @@ function createWebGlContextMock(): WebGL2RenderingContext & {
     COMPILE_STATUS: 0x8b81,
     LINK_STATUS: 0x8b82,
     TEXTURE0: 0x84c0,
-    TEXTURE1: 0x84c1,
     TEXTURE_2D: 0x0de1,
     UNPACK_ALIGNMENT: 0x0cf5,
     TEXTURE_MIN_FILTER: 0x2801,
@@ -71,10 +119,12 @@ function createWebGlContextMock(): WebGL2RenderingContext & {
     RGBA8: 0x8058,
     RGBA: 0x1908,
     UNSIGNED_BYTE: 0x1401,
-    RGBA32F: 0x8814,
+    R32F: 0x822e,
+    RED: 0x1903,
     FLOAT: 0x1406,
     TRIANGLES: 0x0004,
     MAX_TEXTURE_SIZE: 4096,
+    MAX_TEXTURE_IMAGE_UNITS: 16,
     createVertexArray: vi.fn(() => vaos.shift() ?? { id: 'vao-extra' }),
     createTexture: vi.fn(() => textures.shift() ?? { id: 'texture-extra' }),
     createProgram: vi.fn(() => programs.shift() ?? { id: 'program-extra' }),
@@ -95,19 +145,26 @@ function createWebGlContextMock(): WebGL2RenderingContext & {
     pixelStorei: vi.fn(),
     texParameteri: vi.fn(),
     texImage2D: vi.fn(),
-    texSubImage2D: vi.fn(),
     useProgram: vi.fn(),
     uniform1i: vi.fn(),
+    uniform1iv: vi.fn(),
     uniform1f: vi.fn(),
     uniform2f: vi.fn(),
     uniform2i: vi.fn(),
     drawArrays: vi.fn(),
     viewport: vi.fn(),
     getUniformLocation: vi.fn(() => ({ id: 'uniform' })),
-    getParameter: vi.fn(() => 4096),
+    getParameter: vi.fn((parameter) => {
+      if (parameter === 16) {
+        return 16;
+      }
+      return 4096;
+    }),
     deleteTexture: vi.fn(),
     deleteVertexArray: vi.fn()
   } as unknown as WebGL2RenderingContext & {
+    texImage2D: ReturnType<typeof vi.fn>;
+    createTexture: ReturnType<typeof vi.fn>;
     deleteTexture: ReturnType<typeof vi.fn>;
     deleteProgram: ReturnType<typeof vi.fn>;
     deleteVertexArray: ReturnType<typeof vi.fn>;

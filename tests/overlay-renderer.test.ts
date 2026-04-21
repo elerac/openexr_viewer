@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OverlayRenderer } from '../src/rendering/overlay-renderer';
-import { createChannelRgbSelection, createViewerState } from './helpers/state-fixtures';
+import { createChannelRgbSelection, createLayerFromChannels, createViewerState } from './helpers/state-fixtures';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -11,9 +11,10 @@ afterEach(() => {
 describe('overlay renderer', () => {
   it('does not render value labels in panorama mode', () => {
     const { renderer, context } = createOverlayHarness();
+    const layer = createDisplayLayer(1);
 
     renderer.resize(800, 400);
-    renderer.setDisplayTexture(1000, 500, createDisplayTexture(1000 * 500));
+    renderer.setDisplaySelectionContext(1000, 500, layer, createChannelRgbSelection('R', 'G', 'B'));
     renderer.render(createViewerState({
       viewerMode: 'panorama',
       panoramaHfovDeg: 2,
@@ -25,9 +26,10 @@ describe('overlay renderer', () => {
 
   it('keeps image-viewer value labels working unchanged', () => {
     const { renderer, context } = createOverlayHarness();
+    const layer = createDisplayLayer(2);
 
     renderer.resize(128, 64);
-    renderer.setDisplayTexture(2, 1, createDisplayTexture(2));
+    renderer.setDisplaySelectionContext(2, 1, layer, createChannelRgbSelection('R', 'G', 'B'));
     renderer.render(createViewerState({
       viewerMode: 'image',
       zoom: 32,
@@ -85,14 +87,10 @@ function createOverlayHarness(): {
   };
 }
 
-function createDisplayTexture(pixelCount: number): Float32Array {
-  const texture = new Float32Array(pixelCount * 4);
-  for (let index = 0; index < pixelCount; index += 1) {
-    const offset = index * 4;
-    texture[offset + 0] = 1;
-    texture[offset + 1] = 0.5;
-    texture[offset + 2] = 0.25;
-    texture[offset + 3] = 1;
-  }
-  return texture;
+function createDisplayLayer(pixelCount: number) {
+  return createLayerFromChannels({
+    R: new Float32Array(pixelCount).fill(1),
+    G: new Float32Array(pixelCount).fill(0.5),
+    B: new Float32Array(pixelCount).fill(0.25)
+  });
 }

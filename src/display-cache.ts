@@ -8,77 +8,35 @@ export const MAX_DISPLAY_CACHE_BUDGET_MB =
 export const DEFAULT_DISPLAY_CACHE_BUDGET_MB = 256;
 export const BYTES_PER_MEGABYTE = 1024 * 1024;
 
-export interface DisplayCacheEntry {
+export interface SessionResourceEntry {
   id: string;
-  displayTexture: Float32Array | null;
-  displayLuminanceRange: DisplayLuminanceRange | null;
-  displayLuminanceRangeRevisionKey: string;
-  textureRevisionKey: string;
-  lastTouched: number;
+  decodedBytes: number;
+  layerUploads: Set<number>;
+  luminanceRangeByRevision: Map<string, DisplayLuminanceRange | null>;
+  activeTextureRevisionKey: string;
 }
 
-export function createDisplayCacheEntry(id: string): DisplayCacheEntry {
+export function createSessionResourceEntry(id: string, decodedBytes = 0): SessionResourceEntry {
   return {
     id,
-    displayTexture: null,
-    displayLuminanceRange: null,
-    displayLuminanceRangeRevisionKey: '',
-    textureRevisionKey: '',
-    lastTouched: 0
+    decodedBytes: Math.max(0, Math.floor(decodedBytes)),
+    layerUploads: new Set<number>(),
+    luminanceRangeByRevision: new Map<string, DisplayLuminanceRange | null>(),
+    activeTextureRevisionKey: ''
   };
 }
 
-export function clearSessionDisplayCache(session: DisplayCacheEntry): void {
-  session.displayTexture = null;
-  session.displayLuminanceRange = null;
-  session.displayLuminanceRangeRevisionKey = '';
-  session.textureRevisionKey = '';
-  session.lastTouched = 0;
+export function clearSessionResources(entry: SessionResourceEntry): void {
+  entry.decodedBytes = 0;
+  entry.layerUploads.clear();
+  entry.luminanceRangeByRevision.clear();
+  entry.activeTextureRevisionKey = '';
 }
 
-export function getRetainedDisplayCacheBytes(
-  sessions: Array<Pick<DisplayCacheEntry, 'displayTexture'>>
+export function getTrackedSessionCpuBytes(
+  sessions: Array<Pick<SessionResourceEntry, 'decodedBytes'>>
 ): number {
-  return sessions.reduce((total, session) => total + (session.displayTexture?.byteLength ?? 0), 0);
-}
-
-export function pruneDisplayCachesToBudget(
-  sessions: DisplayCacheEntry[],
-  activeSessionId: string | null,
-  budgetBytes: number
-): string[] {
-  const normalizedBudgetBytes = Math.max(0, Math.floor(budgetBytes));
-  let retainedBytes = getRetainedDisplayCacheBytes(sessions);
-  if (retainedBytes <= normalizedBudgetBytes) {
-    return [];
-  }
-
-  const evictedSessionIds: string[] = [];
-  const evictionCandidates = sessions
-    .filter(
-      (session) =>
-        session.id !== activeSessionId &&
-        Boolean(session.displayTexture)
-    )
-    .sort((a, b) => {
-      if (a.lastTouched !== b.lastTouched) {
-        return a.lastTouched - b.lastTouched;
-      }
-
-      return a.id.localeCompare(b.id);
-    });
-
-  for (const session of evictionCandidates) {
-    if (retainedBytes <= normalizedBudgetBytes) {
-      break;
-    }
-
-    retainedBytes -= session.displayTexture?.byteLength ?? 0;
-    clearSessionDisplayCache(session);
-    evictedSessionIds.push(session.id);
-  }
-
-  return evictedSessionIds;
+  return sessions.reduce((total, session) => total + Math.max(0, session.decodedBytes), 0);
 }
 
 export function clampDisplayCacheBudgetMb(value: number): number {

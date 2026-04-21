@@ -257,7 +257,7 @@ export class DisplayController implements Disposable {
       } else {
         this.ui.setLayerOptions([], 0);
         this.ui.setProbeMetadata(null);
-        this.ui.setRgbGroupOptions([], createZeroDisplaySelection());
+        this.ui.setRgbGroupOptions([], null);
         this.ui.setColormapRange(null, null);
         this.ui.setProbeReadout('Hover', null, null, {
           width: activeImage.width,
@@ -543,7 +543,7 @@ export class DisplayController implements Disposable {
     const currentState = this.store.getState();
     const nextRange = resolveColormapAutoRange(
       currentState.displaySelection,
-      this.renderCache.getCachedLuminanceRange(activeSession.id),
+      this.renderCache.getCachedLuminanceRange(activeSession.id, currentState),
       currentState.colormapZeroCentered
     );
     const currentMode = currentState.colormapRangeMode;
@@ -566,7 +566,7 @@ export class DisplayController implements Disposable {
 
     const currentState = this.store.getState();
     const nextZeroCentered = !currentState.colormapZeroCentered;
-    const cachedRange = this.renderCache.getCachedLuminanceRange(activeSession.id);
+    const cachedRange = this.renderCache.getCachedLuminanceRange(activeSession.id, currentState);
     const nextRange = currentState.colormapRangeMode === 'alwaysAuto'
       ? resolveColormapAutoRange(currentState.displaySelection, cachedRange, nextZeroCentered)
       : nextZeroCentered

@@ -25,17 +25,146 @@ import {
   type ScalarStokesChannels
 } from './stokes';
 import {
-  DecodedLayer,
-  ImagePixel,
-  PixelSample,
-  ViewerState
+  type DecodedLayer,
+  type DisplayLuminanceRange,
+  type ImagePixel,
+  type PixelSample,
+  type ViewerState
 } from './types';
+
+export const DISPLAY_SOURCE_SLOT_COUNT = 12;
+
+export type DisplaySourceMode =
+  | 'empty'
+  | 'channelRgb'
+  | 'channelMono'
+  | 'stokesDirect'
+  | 'stokesRgbLuminance';
+
+export interface DisplaySourceBinding {
+  mode: DisplaySourceMode;
+  slots: Array<string | null>;
+  usesImageAlpha: boolean;
+  stokesParameter: StokesParameter | null;
+}
+
+export interface DisplayPixelValues {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+
+interface ResolvedScalarStokesChannels {
+  s0: ChannelReadView | null;
+  s1: ChannelReadView | null;
+  s2: ChannelReadView | null;
+  s3: ChannelReadView | null;
+}
+
+export type DisplaySelectionEvaluator =
+  | {
+      kind: 'empty';
+      binding: DisplaySourceBinding;
+    }
+  | {
+      kind: 'channelRgb';
+      binding: DisplaySourceBinding;
+      r: ChannelReadView | null;
+      g: ChannelReadView | null;
+      b: ChannelReadView | null;
+      a: ChannelReadView | null;
+    }
+  | {
+      kind: 'channelMono';
+      binding: DisplaySourceBinding;
+      channel: ChannelReadView | null;
+      a: ChannelReadView | null;
+    }
+  | {
+      kind: 'stokesDirect';
+      binding: DisplaySourceBinding;
+      parameter: StokesParameter;
+      stokes: ResolvedScalarStokesChannels;
+    }
+  | {
+      kind: 'stokesRgbLuminance';
+      binding: DisplaySourceBinding;
+      parameter: StokesParameter;
+      r: ResolvedScalarStokesChannels;
+      g: ResolvedScalarStokesChannels;
+      b: ResolvedScalarStokesChannels;
+    };
+
+const EMPTY_DISPLAY_SLOTS = Object.freeze(
+  Array.from({ length: DISPLAY_SOURCE_SLOT_COUNT }, () => null as string | null)
+);
 
 export function buildDisplayTextureRevisionKey(state: Pick<ViewerState, 'activeLayer' | 'displaySelection'>): string {
   return [
     state.activeLayer,
     serializeDisplaySelectionKey(state.displaySelection)
   ].join(':');
+}
+
+export function createEmptyDisplaySourceBinding(): DisplaySourceBinding {
+  return {
+    mode: 'empty',
+    slots: [...EMPTY_DISPLAY_SLOTS],
+    usesImageAlpha: false,
+    stokesParameter: null
+  };
+}
+
+export function resolveDisplaySelectionEvaluator(
+  layer: DecodedLayer,
+  selection: DisplaySelection | null
+): DisplaySelectionEvaluator {
+  if (!selection) {
+    return {
+      kind: 'empty',
+      binding: createEmptyDisplaySourceBinding()
+    };
+  }
+
+  switch (selection.kind) {
+    case 'channelRgb':
+      return {
+        kind: 'channelRgb',
+        binding: createDisplaySourceBinding(
+          'channelRgb',
+          [selection.r, selection.g, selection.b, selection.alpha],
+          selection.alpha !== null,
+          null
+        ),
+        r: getChannelReadView(layer, selection.r),
+        g: getChannelReadView(layer, selection.g),
+        b: getChannelReadView(layer, selection.b),
+        a: selection.alpha ? getChannelReadView(layer, selection.alpha) : null
+      };
+    case 'channelMono':
+      return {
+        kind: 'channelMono',
+        binding: createDisplaySourceBinding(
+          'channelMono',
+          [selection.channel, null, null, selection.alpha],
+          selection.alpha !== null,
+          null
+        ),
+        channel: getChannelReadView(layer, selection.channel),
+        a: selection.alpha ? getChannelReadView(layer, selection.alpha) : null
+      };
+    case 'stokesScalar':
+    case 'stokesAngle':
+      return resolveStokesDisplaySelectionEvaluator(layer, selection);
+  }
+}
+
+export function buildDisplaySourceBinding(
+  layer: DecodedLayer,
+  selection: DisplaySelection | null
+): DisplaySourceBinding {
+  return resolveDisplaySelectionEvaluator(layer, selection).binding;
 }
 
 export function buildDisplayTexture(
@@ -79,42 +208,13 @@ export function buildSelectedDisplayTexture(
   selection: DisplaySelection | null,
   output?: Float32Array
 ): Float32Array {
-  if (!selection) {
-    const out = output && output.length === width * height * 4 ? output : new Float32Array(width * height * 4);
-    return fillDisplayTexture(out, 0, 0, 0);
-  }
+  const pixelCount = width * height;
+  const requiredLength = pixelCount * 4;
+  const out = output && output.length === requiredLength
+    ? output
+    : new Float32Array(requiredLength);
 
-  switch (selection.kind) {
-    case 'channelRgb':
-      return buildDisplayTexture(
-        layer,
-        width,
-        height,
-        selection.r,
-        selection.g,
-        selection.b,
-        selection.alpha,
-        output
-      );
-    case 'channelMono':
-      return buildDisplayTexture(
-        layer,
-        width,
-        height,
-        selection.channel,
-        selection.channel,
-        selection.channel,
-        selection.alpha,
-        output
-      );
-    case 'stokesScalar':
-    case 'stokesAngle':
-      if (!isStokesDisplayAvailable(layer.channelNames, selection)) {
-        const out = output && output.length === width * height * 4 ? output : new Float32Array(width * height * 4);
-        return fillDisplayTexture(out, 0, 0, 0);
-      }
-      return buildStokesDisplayTexture(layer, width, height, selection, output);
-  }
+  return fillDisplayTextureFromEvaluator(resolveDisplaySelectionEvaluator(layer, selection), pixelCount, out);
 }
 
 export function buildStokesDisplayTexture(
@@ -130,41 +230,105 @@ export function buildStokesDisplayTexture(
     ? output
     : new Float32Array(requiredLength);
 
-  if (selection.source.kind === 'scalar') {
-    const channels = detectScalarStokesChannels(layer.channelNames);
-    if (!channels) {
-      return fillDisplayTexture(out, 0, 0, 0);
-    }
+  return fillDisplayTextureFromEvaluator(resolveDisplaySelectionEvaluator(layer, selection), pixelCount, out);
+}
 
-    const samples = resolveStokesChannelArrays(layer, channels);
-    for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
-      writeStokesPixel(out, pixelIndex, selection.parameter, readScalarStokesSample(samples, pixelIndex));
-    }
-    return out;
-  }
-
-  const channels = detectRgbStokesChannels(layer.channelNames);
-  if (!channels) {
-    return fillDisplayTexture(out, 0, 0, 0);
-  }
-
-  if (selection.source.kind === 'rgbComponent') {
-    const componentChannels = resolveStokesChannelArrays(layer, getRgbComponentChannels(channels, selection.source.component));
-    for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
-      writeStokesPixel(out, pixelIndex, selection.parameter, readScalarStokesSample(componentChannels, pixelIndex));
-    }
-    return out;
-  }
-
-  const r = resolveStokesChannelArrays(layer, channels.r);
-  const g = resolveStokesChannelArrays(layer, channels.g);
-  const b = resolveStokesChannelArrays(layer, channels.b);
+export function computeDisplaySelectionLuminanceRange(
+  layer: DecodedLayer,
+  width: number,
+  height: number,
+  selection: DisplaySelection | null
+): DisplayLuminanceRange | null {
+  const pixelCount = width * height;
+  const evaluator = resolveDisplaySelectionEvaluator(layer, selection);
+  const values = createDisplayPixelValues();
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  let finiteCount = 0;
 
   for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
-    writeStokesPixel(out, pixelIndex, selection.parameter, computeRgbStokesMonoValues(r, g, b, pixelIndex));
+    readDisplaySelectionPixelValuesAtIndex(evaluator, pixelIndex, values);
+    const luminance = computeRec709Luminance(values.r, values.g, values.b);
+    if (!Number.isFinite(luminance)) {
+      continue;
+    }
+
+    finiteCount += 1;
+    if (luminance < min) {
+      min = luminance;
+    }
+    if (luminance > max) {
+      max = luminance;
+    }
   }
 
-  return out;
+  if (finiteCount === 0) {
+    return null;
+  }
+
+  return { min, max };
+}
+
+export function readDisplaySelectionPixelValues(
+  layer: DecodedLayer,
+  width: number,
+  height: number,
+  pixel: ImagePixel,
+  selection: DisplaySelection | null,
+  output?: DisplayPixelValues
+): DisplayPixelValues | null {
+  if (pixel.ix < 0 || pixel.iy < 0 || pixel.ix >= width || pixel.iy >= height) {
+    return null;
+  }
+
+  return readDisplaySelectionPixelValuesAtIndex(
+    resolveDisplaySelectionEvaluator(layer, selection),
+    pixel.iy * width + pixel.ix,
+    output
+  );
+}
+
+export function readDisplaySelectionPixelValuesAtIndex(
+  evaluator: DisplaySelectionEvaluator,
+  pixelIndex: number,
+  output?: DisplayPixelValues
+): DisplayPixelValues {
+  const out = output ?? createDisplayPixelValues();
+
+  switch (evaluator.kind) {
+    case 'empty':
+      return setDisplayPixelValues(out, 0, 0, 0, 1);
+    case 'channelRgb':
+      return setDisplayPixelValues(
+        out,
+        sanitizeDisplayValue(readChannelValue(evaluator.r, pixelIndex)),
+        sanitizeDisplayValue(readChannelValue(evaluator.g, pixelIndex)),
+        sanitizeDisplayValue(readChannelValue(evaluator.b, pixelIndex)),
+        evaluator.a ? sanitizeAlphaValue(readChannelValue(evaluator.a, pixelIndex)) : 1
+      );
+    case 'channelMono': {
+      const value = sanitizeDisplayValue(readChannelValue(evaluator.channel, pixelIndex));
+      return setDisplayPixelValues(
+        out,
+        value,
+        value,
+        value,
+        evaluator.a ? sanitizeAlphaValue(readChannelValue(evaluator.a, pixelIndex)) : 1
+      );
+    }
+    case 'stokesDirect':
+      return writeStokesDisplayPixel(
+        out,
+        evaluator.parameter,
+        readScalarStokesSample(evaluator.stokes, pixelIndex)
+      );
+    case 'stokesRgbLuminance':
+      return writeStokesDisplayPixel(
+        out,
+        evaluator.parameter,
+        computeRgbStokesMonoValues(evaluator.r, evaluator.g, evaluator.b, pixelIndex)
+      );
+  }
 }
 
 export function sanitizeDisplayValue(value: number): number {
@@ -226,10 +390,189 @@ export function samplePixelValuesForDisplay(
   return sample;
 }
 
+function resolveStokesDisplaySelectionEvaluator(
+  layer: DecodedLayer,
+  selection: StokesSelection
+): DisplaySelectionEvaluator {
+  if (!isStokesDisplayAvailable(layer.channelNames, selection)) {
+    return {
+      kind: 'empty',
+      binding: createEmptyDisplaySourceBinding()
+    };
+  }
+
+  if (selection.source.kind === 'scalar') {
+    const channels = detectScalarStokesChannels(layer.channelNames);
+    if (!channels) {
+      return {
+        kind: 'empty',
+        binding: createEmptyDisplaySourceBinding()
+      };
+    }
+
+    return {
+      kind: 'stokesDirect',
+      binding: createDisplaySourceBinding(
+        'stokesDirect',
+        [channels.s0, channels.s1, channels.s2, channels.s3],
+        false,
+        selection.parameter
+      ),
+      parameter: selection.parameter,
+      stokes: resolveStokesChannelArrays(layer, channels)
+    };
+  }
+
+  const channels = detectRgbStokesChannels(layer.channelNames);
+  if (!channels) {
+    return {
+      kind: 'empty',
+      binding: createEmptyDisplaySourceBinding()
+    };
+  }
+
+  if (selection.source.kind === 'rgbComponent') {
+    const componentChannels = getRgbComponentChannels(channels, selection.source.component);
+    return {
+      kind: 'stokesDirect',
+      binding: createDisplaySourceBinding(
+        'stokesDirect',
+        [componentChannels.s0, componentChannels.s1, componentChannels.s2, componentChannels.s3],
+        false,
+        selection.parameter
+      ),
+      parameter: selection.parameter,
+      stokes: resolveStokesChannelArrays(layer, componentChannels)
+    };
+  }
+
+  return {
+    kind: 'stokesRgbLuminance',
+    binding: createDisplaySourceBinding(
+      'stokesRgbLuminance',
+      [
+        channels.r.s0, channels.r.s1, channels.r.s2, channels.r.s3,
+        channels.g.s0, channels.g.s1, channels.g.s2, channels.g.s3,
+        channels.b.s0, channels.b.s1, channels.b.s2, channels.b.s3
+      ],
+      false,
+      selection.parameter
+    ),
+    parameter: selection.parameter,
+    r: resolveStokesChannelArrays(layer, channels.r),
+    g: resolveStokesChannelArrays(layer, channels.g),
+    b: resolveStokesChannelArrays(layer, channels.b)
+  };
+}
+
+function createDisplaySourceBinding(
+  mode: DisplaySourceMode,
+  slots: Array<string | null>,
+  usesImageAlpha: boolean,
+  stokesParameter: StokesParameter | null
+): DisplaySourceBinding {
+  const paddedSlots = [...EMPTY_DISPLAY_SLOTS];
+  for (let slotIndex = 0; slotIndex < Math.min(paddedSlots.length, slots.length); slotIndex += 1) {
+    paddedSlots[slotIndex] = slots[slotIndex] ?? null;
+  }
+
+  return {
+    mode,
+    slots: paddedSlots,
+    usesImageAlpha,
+    stokesParameter
+  };
+}
+
+function fillDisplayTextureFromEvaluator(
+  evaluator: DisplaySelectionEvaluator,
+  pixelCount: number,
+  output: Float32Array
+): Float32Array {
+  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
+    const outIndex = pixelIndex * 4;
+    switch (evaluator.kind) {
+      case 'empty':
+        output[outIndex + 0] = 0;
+        output[outIndex + 1] = 0;
+        output[outIndex + 2] = 0;
+        output[outIndex + 3] = 1;
+        break;
+      case 'channelRgb':
+        output[outIndex + 0] = sanitizeDisplayValue(readChannelValue(evaluator.r, pixelIndex));
+        output[outIndex + 1] = sanitizeDisplayValue(readChannelValue(evaluator.g, pixelIndex));
+        output[outIndex + 2] = sanitizeDisplayValue(readChannelValue(evaluator.b, pixelIndex));
+        output[outIndex + 3] = evaluator.a ? sanitizeAlphaValue(readChannelValue(evaluator.a, pixelIndex)) : 1;
+        break;
+      case 'channelMono': {
+        const value = sanitizeDisplayValue(readChannelValue(evaluator.channel, pixelIndex));
+        output[outIndex + 0] = value;
+        output[outIndex + 1] = value;
+        output[outIndex + 2] = value;
+        output[outIndex + 3] = evaluator.a ? sanitizeAlphaValue(readChannelValue(evaluator.a, pixelIndex)) : 1;
+        break;
+      }
+      case 'stokesDirect': {
+        const sample = readScalarStokesSample(evaluator.stokes, pixelIndex);
+        writeStokesSnapshotPixel(output, outIndex, evaluator.parameter, sample);
+        break;
+      }
+      case 'stokesRgbLuminance': {
+        const sample = computeRgbStokesMonoValues(evaluator.r, evaluator.g, evaluator.b, pixelIndex);
+        writeStokesSnapshotPixel(output, outIndex, evaluator.parameter, sample);
+        break;
+      }
+    }
+  }
+
+  return output;
+}
+
+function createDisplayPixelValues(): DisplayPixelValues {
+  return { r: 0, g: 0, b: 0, a: 1 };
+}
+
+function setDisplayPixelValues(
+  output: DisplayPixelValues,
+  r: number,
+  g: number,
+  b: number,
+  a: number
+): DisplayPixelValues {
+  output.r = r;
+  output.g = g;
+  output.b = b;
+  output.a = a;
+  return output;
+}
+
+function writeStokesDisplayPixel(
+  output: DisplayPixelValues,
+  parameter: StokesParameter,
+  sample: { s0: number; s1: number; s2: number; s3: number }
+): DisplayPixelValues {
+  const value = computeStokesDisplayValue(parameter, sample.s0, sample.s1, sample.s2, sample.s3);
+  return setDisplayPixelValues(output, value, value, value, 1);
+}
+
+function writeStokesSnapshotPixel(
+  output: Float32Array,
+  outIndex: number,
+  parameter: StokesParameter,
+  sample: { s0: number; s1: number; s2: number; s3: number }
+): void {
+  const value = computeStokesDisplayValue(parameter, sample.s0, sample.s1, sample.s2, sample.s3);
+  const modulation = computeStokesDegreeModulationDisplayValue(parameter, sample.s0, sample.s1, sample.s2, sample.s3);
+  output[outIndex + 0] = value;
+  output[outIndex + 1] = value;
+  output[outIndex + 2] = value;
+  output[outIndex + 3] = modulation ?? 1;
+}
+
 function resolveStokesChannelArrays(
   layer: DecodedLayer,
   channels: ScalarStokesChannels
-): { s0: ChannelReadView | null; s1: ChannelReadView | null; s2: ChannelReadView | null; s3: ChannelReadView | null } {
+): ResolvedScalarStokesChannels {
   return {
     s0: getChannelReadView(layer, channels.s0),
     s1: getChannelReadView(layer, channels.s1),
@@ -239,7 +582,7 @@ function resolveStokesChannelArrays(
 }
 
 function readScalarStokesSample(
-  channels: { s0: ChannelReadView | null; s1: ChannelReadView | null; s2: ChannelReadView | null; s3: ChannelReadView | null },
+  channels: ResolvedScalarStokesChannels,
   pixelIndex: number
 ): { s0: number; s1: number; s2: number; s3: number } {
   return {
@@ -251,9 +594,9 @@ function readScalarStokesSample(
 }
 
 function computeRgbStokesMonoValues(
-  r: { s0: ChannelReadView | null; s1: ChannelReadView | null; s2: ChannelReadView | null; s3: ChannelReadView | null },
-  g: { s0: ChannelReadView | null; s1: ChannelReadView | null; s2: ChannelReadView | null; s3: ChannelReadView | null },
-  b: { s0: ChannelReadView | null; s1: ChannelReadView | null; s2: ChannelReadView | null; s3: ChannelReadView | null },
+  r: ResolvedScalarStokesChannels,
+  g: ResolvedScalarStokesChannels,
+  b: ResolvedScalarStokesChannels,
   pixelIndex: number
 ): { s0: number; s1: number; s2: number; s3: number } {
   return {
@@ -278,32 +621,6 @@ function computeRgbStokesMonoValues(
       readChannelValue(b.s3, pixelIndex)
     )
   };
-}
-
-function fillDisplayTexture(out: Float32Array, r: number, g: number, b: number): Float32Array {
-  for (let i = 0; i < out.length; i += 4) {
-    out[i + 0] = r;
-    out[i + 1] = g;
-    out[i + 2] = b;
-    out[i + 3] = 1;
-  }
-
-  return out;
-}
-
-function writeStokesPixel(
-  out: Float32Array,
-  pixelIndex: number,
-  parameter: StokesParameter,
-  sample: { s0: number; s1: number; s2: number; s3: number }
-): void {
-  const value = computeStokesDisplayValue(parameter, sample.s0, sample.s1, sample.s2, sample.s3);
-  const modulation = computeStokesDegreeModulationDisplayValue(parameter, sample.s0, sample.s1, sample.s2, sample.s3);
-  const outIndex = pixelIndex * 4;
-  out[outIndex + 0] = value;
-  out[outIndex + 1] = value;
-  out[outIndex + 2] = value;
-  out[outIndex + 3] = modulation ?? 1;
 }
 
 function appendStokesSampleValues(

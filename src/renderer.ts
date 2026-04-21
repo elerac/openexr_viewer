@@ -1,7 +1,8 @@
 import { GlImageRenderer } from './rendering/gl-image-renderer';
-import type { Disposable } from './lifecycle';
 import { OverlayRenderer } from './rendering/overlay-renderer';
-import type { ViewerState, ViewportInfo } from './types';
+import type { Disposable } from './lifecycle';
+import type { DisplaySourceBinding } from './display-texture';
+import type { DecodedLayer, ViewerState, ViewportInfo } from './types';
 
 export class WebGlExrRenderer implements Disposable {
   private readonly imageRenderer: GlImageRenderer;
@@ -31,13 +32,36 @@ export class WebGlExrRenderer implements Disposable {
     this.overlayRenderer.resize(viewport.width, viewport.height);
   }
 
-  setDisplayTexture(width: number, height: number, rgbaTexture: Float32Array): void {
+  ensureLayerSourceTextures(
+    sessionId: string,
+    layerIndex: number,
+    width: number,
+    height: number,
+    layer: DecodedLayer
+  ): void {
     if (this.disposed) {
       return;
     }
 
-    this.imageRenderer.setDisplayTexture(width, height, rgbaTexture);
-    this.overlayRenderer.setDisplayTexture(width, height, rgbaTexture);
+    this.imageRenderer.ensureLayerSourceTextures(sessionId, layerIndex, width, height, layer);
+  }
+
+  setDisplaySelectionBindings(
+    sessionId: string,
+    layerIndex: number,
+    width: number,
+    height: number,
+    layer: DecodedLayer,
+    selection: ViewerState['displaySelection'],
+    _textureRevisionKey: string,
+    binding: DisplaySourceBinding
+  ): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.imageRenderer.setDisplaySelectionBindings(sessionId, layerIndex, width, height, binding);
+    this.overlayRenderer.setDisplaySelectionContext(width, height, layer, selection);
   }
 
   setColormapTexture(entryCount: number, rgba8: Uint8Array): void {
@@ -46,6 +70,14 @@ export class WebGlExrRenderer implements Disposable {
     }
 
     this.imageRenderer.setColormapTexture(entryCount, rgba8);
+  }
+
+  discardSessionTextures(sessionId: string): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.imageRenderer.discardSessionTextures(sessionId);
   }
 
   clearImage(): void {

@@ -671,7 +671,7 @@ function createUiCallbacks(overrides: Partial<ReturnType<typeof createUiCallback
 function createUiCallbacksBase() {
   return {
     onOpenFileClick: () => {},
-    onExportImage: async () => {},
+    onExportImage: async (_request: { filename: string; format: 'png'; width: number; height: number }) => {},
     onFileSelected: () => {},
     onFilesDropped: () => {},
     onGalleryImageSelected: () => {},

@@ -77,7 +77,9 @@ function createRendererMock() {
     getViewport: vi.fn(() => ({ width: 200, height: 100 })),
     render: vi.fn(),
     setColormapTexture: vi.fn(),
-    setDisplayTexture: vi.fn()
+    ensureLayerSourceTextures: vi.fn(),
+    setDisplaySelectionBindings: vi.fn(),
+    discardSessionTextures: vi.fn()
   };
 }
 
@@ -175,7 +177,7 @@ describe('display controller', () => {
     expect(renderer.setColormapTexture).toHaveBeenCalledWith(luts['0'].entryCount, luts['0'].rgba8);
   });
 
-  it('uploads the active display texture once per revision key', async () => {
+  it('uploads the active source textures once per layer and only rebinds the active revision once', async () => {
     const session = createSession(createDecodedImage());
     const { controller, store, renderer } = createController({ session });
 
@@ -191,7 +193,8 @@ describe('display controller', () => {
     controller.handleStoreChange(store.getState(), previous);
     controller.handleStoreChange(store.getState(), store.getState());
 
-    expect(renderer.setDisplayTexture).toHaveBeenCalledTimes(1);
+    expect(renderer.ensureLayerSourceTextures).toHaveBeenCalledTimes(1);
+    expect(renderer.setDisplaySelectionBindings).toHaveBeenCalledTimes(1);
   });
 
   it('ignores stale async colormap loads when a newer selection wins', async () => {

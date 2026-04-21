@@ -194,10 +194,10 @@ export async function bootstrapApp(): Promise<AppHandle> {
       setState: (next) => {
         store.setState(next);
       },
-      getViewport: () => renderer.getViewport(),
+      getViewport: () => renderer!.getViewport(),
       getDefaultColormapId: () => displayController.getDefaultColormapId(),
       clearRendererImage: () => {
-        renderer.clearImage();
+        renderer!.clearImage();
       },
       onSessionClosed: (sessionId) => {
         displayController.handleSessionClosed(sessionId);
@@ -219,7 +219,7 @@ export async function bootstrapApp(): Promise<AppHandle> {
 
     interaction = new ViewerInteraction(ui.viewerContainer, {
       getState: () => store.getState(),
-      getViewport: () => renderer.getViewport(),
+      getViewport: () => renderer!.getViewport(),
       getImageSize: () => {
         const activeSession = sessionController.getActiveSession();
         if (!activeSession) {

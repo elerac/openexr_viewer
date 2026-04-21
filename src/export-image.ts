@@ -131,7 +131,11 @@ export async function createExportImageBlob({
     throw new Error('Unable to create a 2D canvas context for export.');
   }
 
-  sourceContext.putImageData(new ImageData(pixels.data, pixels.width, pixels.height), 0, 0);
+  sourceContext.putImageData(
+    new ImageData(new Uint8ClampedArray(Array.from(pixels.data)), pixels.width, pixels.height),
+    0,
+    0
+  );
 
   const targetWidth = clampRequestedDimension(request.width, pixels.width);
   const targetHeight = clampRequestedDimension(request.height, pixels.height);

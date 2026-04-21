@@ -43,36 +43,6 @@ export class DisposableBag implements Disposable {
     listener: (event: HTMLElementEventMap[K]) => void,
     options?: boolean | AddEventListenerOptions
   ): void;
-  addEventListener<K extends keyof HTMLCanvasElementEventMap>(
-    target: HTMLCanvasElement,
-    type: K,
-    listener: (event: HTMLCanvasElementEventMap[K]) => void,
-    options?: boolean | AddEventListenerOptions
-  ): void;
-  addEventListener<K extends keyof HTMLInputElementEventMap>(
-    target: HTMLInputElement,
-    type: K,
-    listener: (event: HTMLInputElementEventMap[K]) => void,
-    options?: boolean | AddEventListenerOptions
-  ): void;
-  addEventListener<K extends keyof HTMLButtonElementEventMap>(
-    target: HTMLButtonElement,
-    type: K,
-    listener: (event: HTMLButtonElementEventMap[K]) => void,
-    options?: boolean | AddEventListenerOptions
-  ): void;
-  addEventListener<K extends keyof HTMLSelectElementEventMap>(
-    target: HTMLSelectElement,
-    type: K,
-    listener: (event: HTMLSelectElementEventMap[K]) => void,
-    options?: boolean | AddEventListenerOptions
-  ): void;
-  addEventListener<K extends keyof HTMLFormElementEventMap>(
-    target: HTMLFormElement,
-    type: K,
-    listener: (event: HTMLFormElementEventMap[K]) => void,
-    options?: boolean | AddEventListenerOptions
-  ): void;
   addEventListener(
     target: EventTarget,
     type: string,
