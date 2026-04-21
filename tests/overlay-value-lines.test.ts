@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildOverlayValueLines } from '../src/renderer';
+import { buildOverlayValueLines } from '../src/rendering/overlay-value-lines';
 import { createChannelMonoSelection, createChannelRgbSelection } from './helpers/state-fixtures';
 
 describe('renderer overlay value helpers', () => {
