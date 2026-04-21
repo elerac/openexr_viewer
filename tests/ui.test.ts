@@ -1,3 +1,7 @@
+// @vitest-environment jsdom
+
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildPartLayerItemsFromChannelNames,
@@ -11,12 +15,16 @@ import {
   getPanelSplitKeyboardAction,
   parsePanelSplitStorageValue,
   ProgressiveLoadingOverlayDisclosure,
+  ViewerUi,
   type LoadingOverlayPhase,
   type PanelSplitMetrics
 } from '../src/ui';
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
+  document.body.innerHTML = '';
+  window.localStorage.clear();
 });
 
 describe('progressive loading overlay disclosure', () => {
@@ -178,6 +186,41 @@ describe('probe coordinate formatting', () => {
   it('uses the same widths for empty probe coordinates', () => {
     expect(formatProbeCoordinates(null, { width: 1024, height: 100 })).toBe('x    -   y  -');
   });
+
+  it('renders lower probe raw-value rows with the shared overlay formatter', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setProbeReadout(
+      'Hover',
+      {
+        x: 4,
+        y: 7,
+        values: {
+          big: 1234,
+          normal: 0.25,
+          tiny: 0.0005,
+          zero: 0
+        }
+      },
+      {
+        cssColor: 'rgb(137, 137, 137)',
+        displayValues: [{ label: 'Mono', value: '0.250' }]
+      }
+    );
+
+    const rows = Array.from(document.querySelectorAll('#probe-values .probe-row')).map((row) => ({
+      key: row.querySelector('.probe-key')?.textContent,
+      value: row.querySelector('.probe-value')?.textContent
+    }));
+
+    expect(rows).toEqual([
+      { key: 'big', value: '1.2e+3' },
+      { key: 'normal', value: '0.250' },
+      { key: 'tiny', value: '5.0e-4' },
+      { key: 'zero', value: '0.00' }
+    ]);
+  });
 });
 
 describe('panel split sizing', () => {
@@ -315,3 +358,44 @@ describe('channel view icons', () => {
     })).toEqual(['#6bd66f']);
   });
 });
+
+function installUiFixture(): void {
+  const html = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
+  const bodyMarkup = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1] ?? html;
+  document.body.innerHTML = bodyMarkup;
+
+  class ResizeObserverMock {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+
+  vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+}
+
+function createUiCallbacks() {
+  return {
+    onOpenFileClick: () => {},
+    onFileSelected: () => {},
+    onFilesDropped: () => {},
+    onGalleryImageSelected: () => {},
+    onReloadAllOpenedImages: () => {},
+    onReloadSelectedOpenedImage: () => {},
+    onCloseSelectedOpenedImage: () => {},
+    onCloseAllOpenedImages: () => {},
+    onOpenedImageSelected: () => {},
+    onReorderOpenedImage: () => {},
+    onDisplayCacheBudgetChange: () => {},
+    onToggleOpenedImagePin: () => {},
+    onExposureChange: () => {},
+    onLayerChange: () => {},
+    onRgbGroupChange: () => {},
+    onVisualizationModeChange: () => {},
+    onColormapChange: () => {},
+    onColormapRangeChange: () => {},
+    onColormapAutoRange: () => {},
+    onColormapZeroCenterToggle: () => {},
+    onStokesDegreeModulationToggle: () => {},
+    onResetView: () => {}
+  };
+}

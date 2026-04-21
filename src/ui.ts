@@ -15,6 +15,7 @@ import {
   OpenedImagesPanel
 } from './ui/opened-images-panel';
 import { getListboxOptionIndexAtClientY } from './ui/render-helpers';
+import { formatOverlayValue } from './value-format';
 import type { ColormapLut } from './colormaps';
 import type { DisplaySelection, DisplayLuminanceRange, ExrMetadataEntry, PixelSample, VisualizationMode } from './types';
 import type { ProbeColorPreview, ProbeDisplayValue } from './probe';
@@ -379,7 +380,7 @@ export class ViewerUi {
 
         const value = document.createElement('span');
         value.className = 'probe-value';
-        value.textContent = formatScientific(channelValue);
+        value.textContent = formatOverlayValue(channelValue);
 
         row.append(key, value);
         return row;
@@ -804,14 +805,6 @@ function formatProbeCoordinateValue(value: number | null, width: number): string
   }
 
   return String(Math.trunc(value)).padStart(width, ' ');
-}
-
-function formatScientific(value: number): string {
-  if (!Number.isFinite(value)) {
-    return String(value);
-  }
-
-  return value.toExponential(5);
 }
 
 function hasDroppedFiles(event: DragEvent): boolean {

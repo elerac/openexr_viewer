@@ -52,9 +52,9 @@ describe('probe helpers', () => {
     expect(preview).toEqual({
       cssColor: 'rgb(255, 188, 137)',
       displayValues: [
-        { label: 'R', value: '1' },
-        { label: 'G', value: '0.5' },
-        { label: 'B', value: '0.25' }
+        { label: 'R', value: '1.00' },
+        { label: 'G', value: '0.500' },
+        { label: 'B', value: '0.250' }
       ]
     });
   });
@@ -78,10 +78,10 @@ describe('probe helpers', () => {
     expect(preview).toEqual({
       cssColor: 'rgba(255, 188, 137, 0.25)',
       displayValues: [
-        { label: 'R', value: '1' },
-        { label: 'G', value: '0.5' },
-        { label: 'B', value: '0.25' },
-        { label: 'A', value: '0.25' }
+        { label: 'R', value: '1.00' },
+        { label: 'G', value: '0.500' },
+        { label: 'B', value: '0.250' },
+        { label: 'A', value: '0.250' }
       ]
     });
   });
@@ -95,7 +95,7 @@ describe('probe helpers', () => {
 
     expect(preview).toEqual({
       cssColor: 'rgb(137, 137, 137)',
-      displayValues: [{ label: 'Mono', value: '0.25' }]
+      displayValues: [{ label: 'Mono', value: '0.250' }]
     });
   });
 
@@ -108,7 +108,7 @@ describe('probe helpers', () => {
 
     expect(preview).toEqual({
       cssColor: 'rgb(255, 255, 255)',
-      displayValues: [{ label: 'Mono', value: '0.25' }]
+      displayValues: [{ label: 'Mono', value: '0.250' }]
     });
   });
 
@@ -131,7 +131,7 @@ describe('probe helpers', () => {
     ).toBe('rgb(0, 255, 0)');
     expect(
       buildProbeColorPreview({ x: 0, y: 0, values: { Y: 1 } }, selection, 0, visualization)?.displayValues
-    ).toEqual([{ label: 'Mono', value: '1' }]);
+    ).toEqual([{ label: 'Mono', value: '1.00' }]);
   });
 
   it('shows one luma-weighted display value for RGB colormap probe previews', () => {
@@ -146,7 +146,7 @@ describe('probe helpers', () => {
       }
     );
 
-    expect(preview?.displayValues).toEqual([{ label: 'Mono', value: '0.5883' }]);
+    expect(preview?.displayValues).toEqual([{ label: 'Mono', value: '0.588' }]);
   });
 
   it('renders collapsed colormap probe ranges as black', () => {
@@ -178,7 +178,7 @@ describe('probe helpers', () => {
 
     expect(preview).toEqual({
       cssColor: 'rgb(0, 0, 0)',
-      displayValues: [{ label: 'Mono', value: '0.7854' }]
+      displayValues: [{ label: 'Mono', value: '0.785' }]
     });
   });
 
@@ -221,9 +221,9 @@ describe('probe helpers', () => {
     );
 
     expect(preview?.displayValues).toEqual([
-      { label: 'R', value: '0.5' },
-      { label: 'G', value: '0.5' },
-      { label: 'B', value: '0.5' }
+      { label: 'R', value: '0.500' },
+      { label: 'G', value: '0.500' },
+      { label: 'B', value: '0.500' }
     ]);
   });
 
@@ -234,7 +234,7 @@ describe('probe helpers', () => {
       0
     );
 
-    expect(preview?.displayValues).toEqual([{ label: 'Mono', value: '0.75' }]);
+    expect(preview?.displayValues).toEqual([{ label: 'Mono', value: '0.750' }]);
   });
 
   it('modulates split RGB Stokes angle previews with split degree labels', () => {
@@ -251,7 +251,7 @@ describe('probe helpers', () => {
     );
 
     expect(preview?.cssColor).toBe('rgb(64, 0, 0)');
-    expect(preview?.displayValues).toEqual([{ label: 'Mono', value: '0' }]);
+    expect(preview?.displayValues).toEqual([{ label: 'Mono', value: '0.00' }]);
   });
 
   it('uses additional Stokes labels for probe preview', () => {
@@ -262,9 +262,9 @@ describe('probe helpers', () => {
     );
 
     expect(preview?.displayValues).toEqual([
-      { label: 'R', value: '0.25' },
-      { label: 'G', value: '0.25' },
-      { label: 'B', value: '0.25' }
+      { label: 'R', value: '0.250' },
+      { label: 'G', value: '0.250' },
+      { label: 'B', value: '0.250' }
     ]);
 
     const copPreview = buildProbeColorPreview(
@@ -274,9 +274,9 @@ describe('probe helpers', () => {
     );
 
     expect(copPreview?.displayValues).toEqual([
-      { label: 'R', value: '-0.7854' },
-      { label: 'G', value: '-0.7854' },
-      { label: 'B', value: '-0.7854' }
+      { label: 'R', value: '-0.785' },
+      { label: 'G', value: '-0.785' },
+      { label: 'B', value: '-0.785' }
     ]);
 
     const topPreview = buildProbeColorPreview(
@@ -286,9 +286,9 @@ describe('probe helpers', () => {
     );
 
     expect(topPreview?.displayValues).toEqual([
-      { label: 'R', value: '0.7854' },
-      { label: 'G', value: '0.7854' },
-      { label: 'B', value: '0.7854' }
+      { label: 'R', value: '0.785' },
+      { label: 'G', value: '0.785' },
+      { label: 'B', value: '0.785' }
     ]);
 
     const normalizedPreview = buildProbeColorPreview(
@@ -297,6 +297,6 @@ describe('probe helpers', () => {
       0
     );
 
-    expect(normalizedPreview?.displayValues).toEqual([{ label: 'Mono', value: '-0.5' }]);
+    expect(normalizedPreview?.displayValues).toEqual([{ label: 'Mono', value: '-0.500' }]);
   });
 });

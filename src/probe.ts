@@ -22,6 +22,7 @@ import {
   PixelSample,
   VisualizationMode
 } from './types';
+import { formatOverlayValue } from './value-format';
 
 export interface ProbeColorPreview {
   cssColor: string;
@@ -73,7 +74,7 @@ export function buildProbeColorPreview(
       visualization.colormapRange,
       visualization.colormapLut ?? null
     );
-    displayValues = [{ label: 'Mono', value: formatProbeRgbValue(monoValue) }];
+    displayValues = [{ label: 'Mono', value: formatOverlayValue(monoValue) }];
 
     const stokesDegreeModulation =
       visualization.stokesDegreeModulation ?? createDefaultStokesDegreeModulation();
@@ -87,18 +88,18 @@ export function buildProbeColorPreview(
       linearToSrgbByte(rawB * exposureScale)
     ];
     displayValues = isMonoSelection(selection)
-      ? [{ label: 'Mono', value: formatProbeRgbValue(rawR) }]
+      ? [{ label: 'Mono', value: formatOverlayValue(rawR) }]
       : [
-          { label: 'R', value: formatProbeRgbValue(rawR) },
-          { label: 'G', value: formatProbeRgbValue(rawG) },
-          { label: 'B', value: formatProbeRgbValue(rawB) }
+          { label: 'R', value: formatOverlayValue(rawR) },
+          { label: 'G', value: formatOverlayValue(rawG) },
+          { label: 'B', value: formatOverlayValue(rawB) }
         ];
   }
 
   if (rawA !== null) {
     displayValues = [
       ...displayValues,
-      { label: 'A', value: formatProbeRgbValue(rawA) }
+      { label: 'A', value: formatOverlayValue(rawA) }
     ];
   }
 
@@ -178,16 +179,4 @@ function clampAlpha(value: number): number {
 
 function formatCssAlpha(value: number): string {
   return Number(clampAlpha(value).toPrecision(4)).toString();
-}
-
-function formatProbeRgbValue(value: number): string {
-  if (!Number.isFinite(value)) {
-    return String(value);
-  }
-
-  if (value === 0) {
-    return '0';
-  }
-
-  return Number(value.toPrecision(4)).toString();
 }

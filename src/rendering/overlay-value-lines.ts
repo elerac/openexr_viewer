@@ -5,6 +5,7 @@ import {
   isMonoSelection
 } from '../display-model';
 import type { ViewerState } from '../types';
+import { formatOverlayValue } from '../value-format';
 
 const OVERLAY_MONO_LABEL_COLOR = 'rgba(255, 255, 255, 0.95)';
 const OVERLAY_RGB_LABEL_COLORS = [
@@ -62,19 +63,6 @@ export function buildOverlayValueLines(
 export function getOverlayValueLineCount(state: OverlayLabelState): number {
   const colorLineCount = state.visualizationMode === 'colormap' || isMonoSelection(state.displaySelection) ? 1 : 3;
   return selectionUsesOverlayAlpha(state.displaySelection) ? colorLineCount + 1 : colorLineCount;
-}
-
-function formatOverlayValue(value: number): string {
-  if (!Number.isFinite(value)) {
-    return String(value);
-  }
-
-  const abs = Math.abs(value);
-  if (abs !== 0 && (abs < 0.001 || abs >= 1000)) {
-    return value.toExponential(1);
-  }
-
-  return value.toPrecision(3);
 }
 
 function overlayLabelColorForChannel(channelName: string): string {
