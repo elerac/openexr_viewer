@@ -322,8 +322,7 @@ export class SessionController implements Disposable {
         label: session.displayName,
         sizeBytes: session.fileSizeBytes,
         sourceDetail: getSessionSourceDetail(session.source, session.filename),
-        thumbnailDataUrl: this.thumbnailService.getThumbnailDataUrl(session.id),
-        pinned: this.renderCache.isPinned(session.id)
+        thumbnailDataUrl: this.thumbnailService.getThumbnailDataUrl(session.id)
       })),
       this.activeSessionId
     );
@@ -534,7 +533,7 @@ export class SessionController implements Disposable {
       this.throwIfStopped(signal);
       const baseState = this.activeSessionId === sessionId ? this.getCurrentState() : session.state;
       const nextState = buildReloadedSessionState(baseState, session.decoded, decoded);
-      this.renderCache.discard(sessionId, { preservePinned: true });
+      this.renderCache.discard(sessionId);
       this.thumbnailService.discard(sessionId, { preserveDataUrl: true });
       const reloadedSession: OpenedImageSession = {
         ...session,

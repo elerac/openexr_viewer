@@ -108,10 +108,6 @@ export async function bootstrapApp(): Promise<AppHandle> {
     onDisplayCacheBudgetChange: (valueMb) => {
       renderCache.setBudgetMb(valueMb);
     },
-    onToggleOpenedImagePin: (sessionId) => {
-      renderCache.togglePin(sessionId);
-      sessionController.syncOpenedImageOptions();
-    },
     onExposureChange: (value) => {
       store.setState({ exposureEv: value });
     },

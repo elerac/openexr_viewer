@@ -717,7 +717,7 @@ test('carries exposure when opening and switching files', async ({ page }) => {
   await expect(exposureValue).toHaveValue('-2.5');
 });
 
-test('persists the cache budget and toggles per-session pin actions', async ({ page }) => {
+test('persists the cache budget and keeps open-file actions limited to reload and close', async ({ page }) => {
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
   await page.waitForTimeout(1500);
 
@@ -739,13 +739,9 @@ test('persists the cache budget and toggles per-session pin actions', async ({ p
 
   await openGalleryCbox(page);
 
-  const pinButton = page.getByRole('button', { name: 'Pin cache for cbox_rgb.exr', exact: true });
-  await expect(pinButton).toBeVisible();
-  await expect(pinButton).toHaveAttribute('aria-pressed', 'false');
-  await pinButton.click();
-  await expect(
-    page.getByRole('button', { name: 'Unpin cache for cbox_rgb.exr', exact: true })
-  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Reload cbox_rgb.exr', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Close cbox_rgb.exr', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Pin cache|Unpin cache/ })).toHaveCount(0);
 
   await settingsMenuButton.click();
   await expect(settingsMenu).toBeVisible();
@@ -773,9 +769,9 @@ test('persists the cache budget and toggles per-session pin actions', async ({ p
   await expect(usageReadout).toContainText('/ 128 MB');
 
   await openGalleryCbox(page);
-  await expect(
-    page.getByRole('button', { name: 'Pin cache for cbox_rgb.exr', exact: true })
-  ).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('button', { name: 'Reload cbox_rgb.exr', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Close cbox_rgb.exr', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Pin cache|Unpin cache/ })).toHaveCount(0);
 });
 
 test('resizes desktop panel splits and persists them', async ({ page }) => {

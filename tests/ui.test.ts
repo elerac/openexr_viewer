@@ -10,7 +10,6 @@ import {
   formatDisplayCacheUsageText,
   getDisplayCacheUsageState,
   getChannelViewSwatches,
-  getOpenedFilePinButtonLabel,
   getListboxOptionIndexAtClientY,
   getPanelSplitKeyboardAction,
   parsePanelSplitStorageValue,
@@ -484,11 +483,6 @@ describe('ui disposal', () => {
 });
 
 describe('display cache UI helpers', () => {
-  it('formats pin button labels from the pinned state', () => {
-    expect(getOpenedFilePinButtonLabel('beauty.exr', false)).toBe('Pin cache for beauty.exr');
-    expect(getOpenedFilePinButtonLabel('beauty.exr', true)).toBe('Unpin cache for beauty.exr');
-  });
-
   it('formats display cache usage readouts in MB', () => {
     expect(formatDisplayCacheUsageText(0, 256 * 1024 * 1024)).toBe('0 / 256 MB');
     expect(formatDisplayCacheUsageText(126 * 1024 * 1024, 256 * 1024 * 1024)).toBe('126 / 256 MB');
@@ -503,6 +497,22 @@ describe('display cache UI helpers', () => {
       text: '300 / 256 MB',
       overBudget: true
     });
+  });
+});
+
+describe('opened files actions', () => {
+  it('renders reload and close actions without any pin toggle', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'beauty.exr' }], 'session-1');
+
+    const actionLabels = Array.from(
+      document.querySelectorAll('#opened-files-list .opened-file-action-button')
+    ).map((button) => button.getAttribute('aria-label'));
+
+    expect(actionLabels).toEqual(['Reload beauty.exr', 'Close beauty.exr']);
+    expect(document.querySelector('[aria-label=\"Pin cache for beauty.exr\"]')).toBeNull();
   });
 });
 
@@ -593,7 +603,6 @@ function createUiCallbacksBase() {
     onOpenedImageSelected: () => {},
     onReorderOpenedImage: () => {},
     onDisplayCacheBudgetChange: () => {},
-    onToggleOpenedImagePin: () => {},
     onExposureChange: () => {},
     onViewerModeChange: () => {},
     onLayerChange: () => {},

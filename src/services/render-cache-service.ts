@@ -6,7 +6,6 @@ import {
   pruneDisplayCachesToBudget,
   readStoredDisplayCacheBudgetMb,
   saveStoredDisplayCacheBudgetMb,
-  clearSessionDisplayCache,
   type DisplayCacheEntry
 } from '../display-cache';
 import {
@@ -164,14 +163,6 @@ export class RenderCacheService implements Disposable {
     return this.entries.get(sessionId)?.displayLuminanceRange ?? null;
   }
 
-  isPinned(sessionId: string): boolean {
-    if (this.disposed) {
-      return false;
-    }
-
-    return this.entries.get(sessionId)?.pinned ?? false;
-  }
-
   setBudgetMb(valueMb: number): void {
     if (this.disposed) {
       return;
@@ -184,19 +175,7 @@ export class RenderCacheService implements Disposable {
     this.syncDisplayCacheUsageUi();
   }
 
-  togglePin(sessionId: string): void {
-    if (this.disposed) {
-      return;
-    }
-
-    const entry = this.getOrCreateEntry(sessionId);
-    entry.pinned = !entry.pinned;
-    this.pruneToBudget();
-    this.syncDisplayCacheUsageUi();
-    this.maybeDeleteEmptyEntry(sessionId);
-  }
-
-  discard(sessionId: string, options: { preservePinned?: boolean } = {}): void {
+  discard(sessionId: string): void {
     if (this.disposed) {
       return;
     }
@@ -206,17 +185,8 @@ export class RenderCacheService implements Disposable {
       return;
     }
 
-    const { preservePinned = false } = options;
-    const pinned = entry.pinned;
-
     this.clearUploadTracking(sessionId);
-
-    if (preservePinned) {
-      clearSessionDisplayCache(entry);
-      entry.pinned = pinned;
-    } else {
-      this.entries.delete(sessionId);
-    }
+    this.entries.delete(sessionId);
 
     this.syncDisplayCacheUsageUi();
   }
@@ -266,10 +236,6 @@ export class RenderCacheService implements Disposable {
         continue;
       }
 
-      if (entry.pinned) {
-        continue;
-      }
-
       this.entries.delete(sessionId);
     }
   }
@@ -304,18 +270,5 @@ export class RenderCacheService implements Disposable {
       this.uploadedSessionId = null;
       this.uploadedTextureRevisionKey = '';
     }
-  }
-
-  private maybeDeleteEmptyEntry(sessionId: string): void {
-    const entry = this.entries.get(sessionId);
-    if (!entry) {
-      return;
-    }
-
-    if (entry.pinned || entry.displayTexture) {
-      return;
-    }
-
-    this.entries.delete(sessionId);
   }
 }

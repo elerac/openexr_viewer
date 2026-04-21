@@ -51,8 +51,7 @@ function createController(options: {
   };
   const renderCache = {
     discard: vi.fn(),
-    clear: vi.fn(),
-    isPinned: vi.fn(() => false)
+    clear: vi.fn()
   };
 
   const controller = new SessionController({
@@ -77,7 +76,6 @@ describe('session controller', () => {
   it('applies decoded images as new active sessions and enqueues thumbnails', async () => {
     const decodeBytes = vi.fn(async () => createDecodedImage(8, 4));
     const { controller, store, ui, thumbnailService, renderCache } = createController({ decodeBytes });
-    renderCache.isPinned.mockReturnValue(true);
     thumbnailService.getThumbnailDataUrl.mockReturnValue('thumb-data');
 
     await controller.enqueueFiles([createFile('beauty.exr')]);
@@ -94,8 +92,7 @@ describe('session controller', () => {
         expect.objectContaining({
           id: session?.id,
           label: 'beauty.exr',
-          thumbnailDataUrl: 'thumb-data',
-          pinned: true
+          thumbnailDataUrl: 'thumb-data'
         })
       ]),
       session?.id
@@ -236,7 +233,7 @@ describe('session controller', () => {
     expect(reloaded?.decoded.height).toBe(8);
     expect(thumbnailService.enqueue).toHaveBeenCalledTimes(2);
     expect(thumbnailService.discard).toHaveBeenCalledWith(sessionId, { preserveDataUrl: true });
-    expect(renderCache.discard).toHaveBeenCalledWith(sessionId, { preservePinned: true });
+    expect(renderCache.discard).toHaveBeenCalledWith(sessionId);
     expect(ui.setExportTarget).toHaveBeenLastCalledWith({
       filename: 'reload.png',
       sourceWidth: 8,

@@ -50,7 +50,6 @@ function getEntries(service: RenderCacheService): Map<string, {
   displayLuminanceRange: { min: number; max: number } | null;
   displayLuminanceRangeRevisionKey: string;
   textureRevisionKey: string;
-  pinned: boolean;
   lastTouched: number;
 }> {
   return (service as unknown as { entries: Map<string, never> }).entries as never;
@@ -115,7 +114,7 @@ describe('render cache service', () => {
     expect(secondColormap.luminanceRangeDirty).toBe(false);
   });
 
-  it('evicts the least recently used inactive entry, keeps the active session, and preserves pinned entries over budget', () => {
+  it('evicts inactive entries by LRU while keeping the active session retained', () => {
     let activeSessionId = 'c';
     const ui = createUiMock();
     const renderer = createRendererMock();
@@ -130,7 +129,6 @@ describe('render cache service', () => {
       displayLuminanceRange: { min: 0, max: 1 },
       displayLuminanceRangeRevisionKey: 'a-range',
       textureRevisionKey: 'a-texture',
-      pinned: false,
       lastTouched: 1
     } as never);
     entries.set('b', {
@@ -138,7 +136,6 @@ describe('render cache service', () => {
       displayLuminanceRange: { min: 0, max: 1 },
       displayLuminanceRangeRevisionKey: 'b-range',
       textureRevisionKey: 'b-texture',
-      pinned: true,
       lastTouched: 2
     } as never);
     entries.set('c', {
@@ -146,14 +143,13 @@ describe('render cache service', () => {
       displayLuminanceRange: { min: 0, max: 1 },
       displayLuminanceRangeRevisionKey: 'c-range',
       textureRevisionKey: 'c-texture',
-      pinned: false,
       lastTouched: 3
     } as never);
 
     service.setBudgetMb(64);
 
     expect(entries.has('a')).toBe(false);
-    expect(entries.get('b')?.displayTexture).not.toBeNull();
+    expect(entries.has('b')).toBe(false);
     expect(entries.get('c')?.displayTexture).not.toBeNull();
 
     activeSessionId = 'a';
@@ -162,11 +158,15 @@ describe('render cache service', () => {
       displayLuminanceRange: { min: 0, max: 1 },
       displayLuminanceRangeRevisionKey: 'a-range',
       textureRevisionKey: 'a-texture',
-      pinned: false,
       lastTouched: 4
     } as never);
-    entries.get('b')!.pinned = false;
-    entries.get('b')!.lastTouched = 1;
+    entries.set('b', {
+      displayTexture: new Float32Array((40 * 1024 * 1024) / 4),
+      displayLuminanceRange: { min: 0, max: 1 },
+      displayLuminanceRangeRevisionKey: 'b-range',
+      textureRevisionKey: 'b-texture',
+      lastTouched: 1
+    } as never);
 
     service.setBudgetMb(64);
 
@@ -192,7 +192,7 @@ describe('render cache service', () => {
 
     service.prepareActiveSession(session, session.state);
     service.setBudgetMb(128);
-    service.discard(session.id, { preservePinned: true });
+    service.discard(session.id);
     service.prepareActiveSession(session, session.state);
     service.clear();
 
@@ -217,7 +217,6 @@ describe('render cache service', () => {
       displayLuminanceRange: null,
       displayLuminanceRangeRevisionKey: '',
       textureRevisionKey: `0:${serializeDisplaySelectionKey(session.state.displaySelection)}`,
-      pinned: false,
       lastTouched: 7
     } as never);
 

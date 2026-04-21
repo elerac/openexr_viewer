@@ -14,7 +14,6 @@ export interface DisplayCacheEntry {
   displayLuminanceRange: DisplayLuminanceRange | null;
   displayLuminanceRangeRevisionKey: string;
   textureRevisionKey: string;
-  pinned: boolean;
   lastTouched: number;
 }
 
@@ -25,7 +24,6 @@ export function createDisplayCacheEntry(id: string): DisplayCacheEntry {
     displayLuminanceRange: null,
     displayLuminanceRangeRevisionKey: '',
     textureRevisionKey: '',
-    pinned: false,
     lastTouched: 0
   };
 }
@@ -60,7 +58,6 @@ export function pruneDisplayCachesToBudget(
     .filter(
       (session) =>
         session.id !== activeSessionId &&
-        !session.pinned &&
         Boolean(session.displayTexture)
     )
     .sort((a, b) => {

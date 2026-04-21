@@ -743,19 +743,6 @@ body.is-resizing-panel-columns * {
   outline: none;
 }
 
-.opened-file-action-button.is-pressed {
-  border-color: rgba(255, 214, 122, 0.42);
-  background: rgba(255, 214, 122, 0.14);
-  color: #ffe294;
-}
-
-.opened-file-action-button.is-pressed:hover:not(:disabled),
-.opened-file-action-button.is-pressed:focus-visible {
-  border-color: rgba(255, 224, 145, 0.64);
-  background: rgba(255, 214, 122, 0.2);
-  color: #fff0bd;
-}
-
 .opened-file-action-button:disabled {
   color: var(--text-dim);
   cursor: default;
@@ -771,12 +758,6 @@ body.is-resizing-panel-columns * {
   border-color: rgba(255, 255, 255, 0.36);
   background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
-}
-
-.image-browser-row[aria-selected='true'] .opened-file-action-button.is-pressed {
-  border-color: rgba(255, 232, 170, 0.55);
-  background: rgba(255, 222, 138, 0.2);
-  color: #fff1c7;
 }
 
 .file-row-icon {

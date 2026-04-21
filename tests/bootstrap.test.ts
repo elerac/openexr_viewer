@@ -119,8 +119,6 @@ vi.mock('../src/services/render-cache-service', () => ({
   RenderCacheService: class {
     readonly dispose = mocks.renderCacheDispose;
     readonly getTextureForSnapshot = vi.fn(() => null);
-    readonly isPinned = vi.fn(() => false);
-    readonly togglePin = vi.fn();
     readonly setBudgetMb = vi.fn();
   }
 }));

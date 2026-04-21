@@ -11,7 +11,6 @@ import { buildPartLayerItemsFromChannelNames, LayerPanel } from './ui/layer-pane
 import {
   formatDisplayCacheUsageText,
   getDisplayCacheUsageState,
-  getOpenedFilePinButtonLabel,
   OpenedImagesPanel
 } from './ui/opened-images-panel';
 import { DisposableBag, type Disposable } from './lifecycle';
@@ -52,7 +51,6 @@ export interface UiCallbacks {
   onOpenedImageSelected: (sessionId: string) => void;
   onReorderOpenedImage: (draggedSessionId: string, targetSessionId: string) => void;
   onDisplayCacheBudgetChange: (mb: number) => void;
-  onToggleOpenedImagePin: (sessionId: string) => void;
   onExposureChange: (value: number) => void;
   onViewerModeChange: (mode: ViewerMode) => void;
   onLayerChange: (layerIndex: number) => void;
@@ -80,7 +78,6 @@ export interface OpenedImageOptionItem {
   sizeBytes?: number | null;
   sourceDetail?: string;
   thumbnailDataUrl?: string | null;
-  pinned?: boolean;
 }
 
 export interface LayerOptionItem {
@@ -215,9 +212,6 @@ export class ViewerUi implements Disposable {
       },
       onDisplayCacheBudgetChange: (mb) => {
         this.callbacks.onDisplayCacheBudgetChange(mb);
-      },
-      onToggleOpenedImagePin: (sessionId) => {
-        this.callbacks.onToggleOpenedImagePin(sessionId);
       },
       onReloadSelectedOpenedImage: (sessionId) => {
         this.callbacks.onReloadSelectedOpenedImage(sessionId);
@@ -1343,7 +1337,6 @@ export {
   getChannelViewSwatches,
   getDisplayCacheUsageState,
   getListboxOptionIndexAtClientY,
-  getOpenedFilePinButtonLabel,
   getPanelSplitKeyboardAction,
   parsePanelSplitStorageValue
 };

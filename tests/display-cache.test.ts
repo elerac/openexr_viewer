@@ -15,7 +15,6 @@ function createSession(
   id: string,
   sizeBytes: number,
   options: {
-    pinned?: boolean;
     touched?: number;
   } = {}
 ): {
@@ -24,7 +23,6 @@ function createSession(
   displayLuminanceRange: { min: number; max: number } | null;
   displayLuminanceRangeRevisionKey: string;
   textureRevisionKey: string;
-  pinned: boolean;
   lastTouched: number;
 } {
   return {
@@ -33,13 +31,12 @@ function createSession(
     displayLuminanceRange: sizeBytes > 0 ? { min: 0, max: 1 } : null,
     displayLuminanceRangeRevisionKey: sizeBytes > 0 ? `${id}-range` : '',
     textureRevisionKey: sizeBytes > 0 ? `${id}-texture` : '',
-    pinned: options.pinned ?? false,
     lastTouched: options.touched ?? 0
   };
 }
 
 describe('display cache policy', () => {
-  it('evicts the least recently used inactive unpinned session first', () => {
+  it('evicts the least recently used inactive session first', () => {
     const sessions = [
       createSession('a', 24, { touched: 1 }),
       createSession('b', 16, { touched: 2 }),
@@ -69,18 +66,18 @@ describe('display cache policy', () => {
     expect(sessions[2].displayTexture?.byteLength).toBe(12);
   });
 
-  it('keeps pinned sessions even when that leaves retained bytes above budget', () => {
+  it('continues evicting inactive sessions until retained bytes fit the budget', () => {
     const sessions = [
-      createSession('a', 24, { pinned: true, touched: 1 }),
+      createSession('a', 24, { touched: 1 }),
       createSession('b', 16, { touched: 2 }),
       createSession('c', 12, { touched: 3 })
     ];
 
     const evicted = pruneDisplayCachesToBudget(sessions, 'c', 20);
 
-    expect(evicted).toEqual(['b']);
-    expect(getRetainedDisplayCacheBytes(sessions)).toBe(36);
-    expect(sessions[0].displayTexture?.byteLength).toBe(24);
+    expect(evicted).toEqual(['a', 'b']);
+    expect(getRetainedDisplayCacheBytes(sessions)).toBe(12);
+    expect(sessions[0].displayTexture).toBeNull();
     expect(sessions[1].displayTexture).toBeNull();
     expect(sessions[2].displayTexture?.byteLength).toBe(12);
   });

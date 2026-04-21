@@ -21,7 +21,6 @@ interface OpenedImagesPanelCallbacks {
   onOpenedImageSelected: (sessionId: string) => void;
   onReorderOpenedImage: (draggedSessionId: string, targetSessionId: string) => void;
   onDisplayCacheBudgetChange: (mb: number) => void;
-  onToggleOpenedImagePin: (sessionId: string) => void;
   onReloadSelectedOpenedImage: (sessionId: string) => void;
   onCloseSelectedOpenedImage: (sessionId: string) => void;
 }
@@ -36,7 +35,6 @@ interface OpenedImageDragState {
 interface OpenedFileRowRefs {
   thumbnail: HTMLElement;
   label: HTMLSpanElement;
-  pinButton: HTMLButtonElement;
   reloadButton: HTMLButtonElement;
   closeButton: HTMLButtonElement;
 }
@@ -398,10 +396,6 @@ export class OpenedImagesPanel implements Disposable {
   }
 }
 
-export function getOpenedFilePinButtonLabel(label: string, pinned: boolean): string {
-  return `${pinned ? 'Unpin' : 'Pin'} cache for ${label}`;
-}
-
 export function formatDisplayCacheUsageText(usedBytes: number, budgetBytes: number): string {
   return `${formatDisplayCacheMegabytes(usedBytes)} / ${formatDisplayCacheMegabytes(budgetBytes)} MB`;
 }
@@ -431,12 +425,6 @@ function createOpenedFileRow(
   const actions = document.createElement('span');
   actions.className = 'opened-file-actions';
 
-  const pinButton = createOpenedFileActionButton({
-    iconName: 'pin',
-    onClick: () => {
-      callbacks.onToggleOpenedImagePin(item.id);
-    }
-  });
   const reloadButton = createOpenedFileActionButton({
     iconName: 'reload',
     onClick: () => {
@@ -450,9 +438,9 @@ function createOpenedFileRow(
     }
   });
 
-  actions.append(pinButton, reloadButton, closeButton);
+  actions.append(reloadButton, closeButton);
   row.append(thumbnail, label, actions);
-  openedFileRowRefs.set(row, { thumbnail, label, pinButton, reloadButton, closeButton });
+  openedFileRowRefs.set(row, { thumbnail, label, reloadButton, closeButton });
   return row;
 }
 
@@ -485,12 +473,6 @@ function updateOpenedFileRow(
     refs.thumbnail = nextThumbnail;
   }
 
-  updateOpenedFileActionButton(refs.pinButton, {
-    iconName: 'pin',
-    label: getOpenedFilePinButtonLabel(item.label, item.pinned ?? false),
-    disabled: options.disabled,
-    pressed: item.pinned ?? false
-  });
   updateOpenedFileActionButton(refs.reloadButton, {
     iconName: 'reload',
     label: `Reload ${item.label}`,
@@ -504,7 +486,7 @@ function updateOpenedFileRow(
 }
 
 function createOpenedFileActionButton(options: {
-  iconName: 'pin' | 'reload' | 'close';
+  iconName: 'reload' | 'close';
   onClick: () => void;
 }): HTMLButtonElement {
   const button = document.createElement('button');
@@ -529,25 +511,15 @@ function createOpenedFileActionButton(options: {
 function updateOpenedFileActionButton(
   button: HTMLButtonElement,
   options: {
-    iconName: 'pin' | 'reload' | 'close';
+    iconName: 'reload' | 'close';
     label: string;
     disabled: boolean;
-    pressed?: boolean;
   }
 ): void {
   button.disabled = options.disabled;
   button.setAttribute('aria-label', options.label);
   button.title = options.label;
-  button.replaceChildren(createOpenedFileActionIcon(options.iconName, options.pressed ?? false));
-
-  if (options.iconName === 'pin') {
-    button.setAttribute('aria-pressed', options.pressed ? 'true' : 'false');
-    button.classList.toggle('is-pressed', Boolean(options.pressed));
-    return;
-  }
-
-  button.removeAttribute('aria-pressed');
-  button.classList.remove('is-pressed');
+  button.replaceChildren(createOpenedFileActionIcon(options.iconName));
 }
 
 function sameThumbnail(current: HTMLElement, next: HTMLElement): boolean {
@@ -562,41 +534,11 @@ function sameThumbnail(current: HTMLElement, next: HTMLElement): boolean {
   return current.className === next.className;
 }
 
-function createOpenedFileActionIcon(
-  iconName: 'pin' | 'reload' | 'close',
-  pressed = false
-): SVGSVGElement {
+function createOpenedFileActionIcon(iconName: 'reload' | 'close'): SVGSVGElement {
   const svg = createSvgElement('svg');
   svg.setAttribute('viewBox', '0 0 20 20');
   svg.setAttribute('aria-hidden', 'true');
   svg.setAttribute('focusable', 'false');
-
-  if (iconName === 'pin') {
-    const head = createSvgElement('path');
-    head.setAttribute('d', 'M7 4.2h6.2l-.9 3.1 2.3 2.2v1H5.4v-1l2.3-2.2-.7-3.1z');
-    head.setAttribute('fill', pressed ? 'currentColor' : 'none');
-    head.setAttribute('stroke', 'currentColor');
-    head.setAttribute('stroke-linejoin', 'round');
-    head.setAttribute('stroke-width', '1.35');
-
-    const stem = createSvgElement('path');
-    stem.setAttribute('d', 'M10 10.6v4.9');
-    stem.setAttribute('fill', 'none');
-    stem.setAttribute('stroke', 'currentColor');
-    stem.setAttribute('stroke-linecap', 'round');
-    stem.setAttribute('stroke-width', '1.5');
-
-    const tip = createSvgElement('path');
-    tip.setAttribute('d', 'M8.7 15.5L10 17l1.3-1.5');
-    tip.setAttribute('fill', 'none');
-    tip.setAttribute('stroke', 'currentColor');
-    tip.setAttribute('stroke-linecap', 'round');
-    tip.setAttribute('stroke-linejoin', 'round');
-    tip.setAttribute('stroke-width', '1.5');
-
-    svg.append(head, stem, tip);
-    return svg;
-  }
 
   if (iconName === 'reload') {
     const path = createSvgElement('path');
