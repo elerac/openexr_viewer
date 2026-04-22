@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { createViewerAppSnapshot } from '../src/app/viewer-app-selectors';
 import { createInitialViewerAppState } from '../src/app/viewer-app-core';
-import { computeInvalidationFlags, InvalidationFlags } from '../src/app/viewer-app-invalidation';
+import {
+  createViewerRenderSnapshotSelector,
+  computeViewerRenderInvalidation,
+  ViewerRenderInvalidationFlags
+} from '../src/app/viewer-app-render';
+import {
+  createViewerUiSnapshotSelector,
+  computeViewerUiInvalidation,
+  ViewerUiInvalidationFlags
+} from '../src/app/viewer-app-ui';
+import type { ViewerAppState } from '../src/app/viewer-app-types';
 import { createInteractionState } from '../src/view-state';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
 import {
@@ -36,7 +45,7 @@ function createSession(id = 'session-1', decoded = createDecodedImage()): Opened
   };
 }
 
-function createActiveState() {
+function createActiveState(): ViewerAppState {
   const session = createSession();
   const state = createInitialViewerAppState();
   return {
@@ -48,19 +57,33 @@ function createActiveState() {
   };
 }
 
-function hasFlag(flags: number, flag: InvalidationFlags): boolean {
+function createUiFlags(previous: ViewerAppState, next: ViewerAppState): number {
+  const selectUiSnapshot = createViewerUiSnapshotSelector();
+  return computeViewerUiInvalidation(selectUiSnapshot(previous), selectUiSnapshot(next));
+}
+
+function createRenderFlags(previous: ViewerAppState, next: ViewerAppState): number {
+  const selectRenderSnapshot = createViewerRenderSnapshotSelector();
+  return computeViewerRenderInvalidation(selectRenderSnapshot(previous), selectRenderSnapshot(next));
+}
+
+function hasUiFlag(flags: number, flag: ViewerUiInvalidationFlags): boolean {
   return (flags & flag) !== 0;
 }
 
-describe('viewer app invalidation', () => {
+function hasRenderFlag(flags: number, flag: ViewerRenderInvalidationFlags): boolean {
+  return (flags & flag) !== 0;
+}
+
+describe('viewer app lanes', () => {
   it('returns no flags for identical snapshots', () => {
     const state = createActiveState();
-    const flags = computeInvalidationFlags(createViewerAppSnapshot(state), createViewerAppSnapshot(state));
 
-    expect(flags).toBe(InvalidationFlags.None);
+    expect(createUiFlags(state, state)).toBe(ViewerUiInvalidationFlags.None);
+    expect(createRenderFlags(state, state)).toBe(ViewerRenderInvalidationFlags.None);
   });
 
-  it('treats hover-only changes as probe readout and probe-overlay invalidation', () => {
+  it('treats hover-only changes as render-lane probe work', () => {
     const previous = createActiveState();
     const next = {
       ...previous,
@@ -70,13 +93,15 @@ describe('viewer app invalidation', () => {
       }
     };
 
-    const flags = computeInvalidationFlags(createViewerAppSnapshot(previous), createViewerAppSnapshot(next));
-    expect(hasFlag(flags, InvalidationFlags.UiProbeReadout)).toBe(true);
-    expect(hasFlag(flags, InvalidationFlags.RenderProbeOverlay)).toBe(true);
-    expect(hasFlag(flags, InvalidationFlags.RenderImage)).toBe(false);
+    const uiFlags = createUiFlags(previous, next);
+    const renderFlags = createRenderFlags(previous, next);
+    expect(uiFlags).toBe(ViewerUiInvalidationFlags.None);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ProbeReadout)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderProbeOverlay)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(false);
   });
 
-  it('treats view-only changes as image and overlay invalidation', () => {
+  it('treats view-only changes as render invalidation without rebuilding probe readout', () => {
     const previous = createActiveState();
     const next = {
       ...previous,
@@ -89,13 +114,16 @@ describe('viewer app invalidation', () => {
       }
     };
 
-    const flags = computeInvalidationFlags(createViewerAppSnapshot(previous), createViewerAppSnapshot(next));
-    expect(hasFlag(flags, InvalidationFlags.RenderImage)).toBe(true);
-    expect(hasFlag(flags, InvalidationFlags.RenderValueOverlay)).toBe(true);
-    expect(hasFlag(flags, InvalidationFlags.RenderProbeOverlay)).toBe(true);
+    const uiFlags = createUiFlags(previous, next);
+    const renderFlags = createRenderFlags(previous, next);
+    expect(uiFlags).toBe(ViewerUiInvalidationFlags.None);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderValueOverlay)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderProbeOverlay)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ProbeReadout)).toBe(false);
   });
 
-  it('treats locked-pixel changes as probe readout and probe-overlay invalidation', () => {
+  it('treats locked-pixel changes as render-lane probe invalidation', () => {
     const previous = createActiveState();
     const next = {
       ...previous,
@@ -105,12 +133,12 @@ describe('viewer app invalidation', () => {
       }
     };
 
-    const flags = computeInvalidationFlags(createViewerAppSnapshot(previous), createViewerAppSnapshot(next));
-    expect(hasFlag(flags, InvalidationFlags.UiProbeReadout)).toBe(true);
-    expect(hasFlag(flags, InvalidationFlags.RenderProbeOverlay)).toBe(true);
+    const renderFlags = createRenderFlags(previous, next);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ProbeReadout)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderProbeOverlay)).toBe(true);
   });
 
-  it('marks session switches as UI, resource, and render invalidation', () => {
+  it('marks session switches as UI and render invalidation', () => {
     const previous = createActiveState();
     const second = createSession('session-2');
     const next = {
@@ -121,13 +149,14 @@ describe('viewer app invalidation', () => {
       interactionState: createInteractionState(second.state)
     };
 
-    const flags = computeInvalidationFlags(createViewerAppSnapshot(previous), createViewerAppSnapshot(next));
-    expect(hasFlag(flags, InvalidationFlags.UiOpenedImages)).toBe(true);
-    expect(hasFlag(flags, InvalidationFlags.ResourcePrepare)).toBe(true);
-    expect(hasFlag(flags, InvalidationFlags.RenderImage)).toBe(true);
+    const uiFlags = createUiFlags(previous, next);
+    const renderFlags = createRenderFlags(previous, next);
+    expect(hasUiFlag(uiFlags, ViewerUiInvalidationFlags.OpenedImages)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ResourcePrepare)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(true);
   });
 
-  it('marks display-selection changes for resource prep and render invalidation', () => {
+  it('marks display-selection changes for RGB group UI and render invalidation', () => {
     const previous = createActiveState();
     const next = {
       ...previous,
@@ -137,21 +166,25 @@ describe('viewer app invalidation', () => {
       }
     };
 
-    const flags = computeInvalidationFlags(createViewerAppSnapshot(previous), createViewerAppSnapshot(next));
-    expect(hasFlag(flags, InvalidationFlags.UiRgbGroupOptions)).toBe(true);
-    expect(hasFlag(flags, InvalidationFlags.ResourcePrepare)).toBe(true);
-    expect(hasFlag(flags, InvalidationFlags.RenderImage)).toBe(true);
+    const uiFlags = createUiFlags(previous, next);
+    const renderFlags = createRenderFlags(previous, next);
+    expect(hasUiFlag(uiFlags, ViewerUiInvalidationFlags.RgbGroupOptions)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ResourcePrepare)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(true);
   });
 
-  it('marks colormap-load completion as gradient invalidation', () => {
+  it('marks colormap-load completion as UI gradient and render texture invalidation', () => {
     const previous = createActiveState();
     const next = {
       ...previous,
       activeColormapLut: { id: '0', label: 'Default', entryCount: 2, rgba8: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]) }
     };
 
-    const flags = computeInvalidationFlags(createViewerAppSnapshot(previous), createViewerAppSnapshot(next));
-    expect(hasFlag(flags, InvalidationFlags.UiColormapGradient)).toBe(true);
+    const uiFlags = createUiFlags(previous, next);
+    const renderFlags = createRenderFlags(previous, next);
+    expect(hasUiFlag(uiFlags, ViewerUiInvalidationFlags.ColormapGradient)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ColormapTexture)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(false);
   });
 
   it('marks auto-range resolution as colormap-range and image invalidation', () => {
@@ -173,12 +206,13 @@ describe('viewer app invalidation', () => {
       activeDisplayLuminanceRange: { min: 0, max: 1 }
     };
 
-    const flags = computeInvalidationFlags(createViewerAppSnapshot(previous), createViewerAppSnapshot(next));
-    expect(hasFlag(flags, InvalidationFlags.UiColormapRange)).toBe(true);
-    expect(hasFlag(flags, InvalidationFlags.RenderImage)).toBe(true);
+    const uiFlags = createUiFlags(previous, next);
+    const renderFlags = createRenderFlags(previous, next);
+    expect(hasUiFlag(uiFlags, ViewerUiInvalidationFlags.ColormapRange)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(true);
   });
 
-  it('marks empty-session transitions as clear-image invalidation', () => {
+  it('marks empty-session transitions as clear-panels and clear-image invalidation', () => {
     const previous = createActiveState();
     const next = {
       ...previous,
@@ -188,8 +222,54 @@ describe('viewer app invalidation', () => {
       interactionState: createInteractionState(createInitialState())
     };
 
-    const flags = computeInvalidationFlags(createViewerAppSnapshot(previous), createViewerAppSnapshot(next));
-    expect(hasFlag(flags, InvalidationFlags.UiClearPanels)).toBe(true);
-    expect(hasFlag(flags, InvalidationFlags.ResourceClearImage)).toBe(true);
+    const uiFlags = createUiFlags(previous, next);
+    const renderFlags = createRenderFlags(previous, next);
+    expect(hasUiFlag(uiFlags, ViewerUiInvalidationFlags.ClearPanels)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ResourceClearImage)).toBe(true);
+  });
+
+  it('keeps panel models memoized across committed view-state persistence', () => {
+    const state = createActiveState();
+    const selectUiSnapshot = createViewerUiSnapshotSelector();
+    const before = selectUiSnapshot(state);
+    const nextSessionState = {
+      ...state.sessionState,
+      zoom: 3,
+      panX: 4,
+      panY: 5
+    };
+    const next = {
+      ...state,
+      sessionState: nextSessionState,
+      sessions: [{
+        ...state.sessions[0]!,
+        state: nextSessionState
+      }]
+    };
+    const after = selectUiSnapshot(next);
+
+    expect(after).toBe(before);
+    expect(after.openedImageOptions).toBe(before.openedImageOptions);
+    expect(after.layerOptions).toBe(before.layerOptions);
+    expect(after.probeMetadata).toBe(before.probeMetadata);
+  });
+
+  it('keeps probe readout memoized across pure view changes', () => {
+    const state = createActiveState();
+    const selectRenderSnapshot = createViewerRenderSnapshotSelector();
+    const before = selectRenderSnapshot(state);
+    const after = selectRenderSnapshot({
+      ...state,
+      interactionState: {
+        ...state.interactionState,
+        view: {
+          ...state.interactionState.view,
+          zoom: 2
+        }
+      }
+    });
+
+    expect(after.probeReadout).toBe(before.probeReadout);
+    expect(after.renderState).not.toBe(before.renderState);
   });
 });

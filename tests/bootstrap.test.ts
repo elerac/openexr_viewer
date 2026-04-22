@@ -100,33 +100,15 @@ vi.mock('../src/app/viewer-app-core', () => ({
       };
     }
 
-    getSnapshot(): object {
-      return {
-        activeSession: null,
-        renderState: {
-          exposureEv: 0,
-          viewerMode: 'image',
-          visualizationMode: 'rgb',
-          activeColormapId: '0',
-          colormapRange: null,
-          colormapRangeMode: 'alwaysAuto',
-          colormapZeroCentered: false,
-          stokesDegreeModulation: { aolp: false, cop: true, top: true },
-          zoom: 1,
-          panX: 0,
-          panY: 0,
-          panoramaYawDeg: 0,
-          panoramaPitchDeg: 0,
-          panoramaHfovDeg: 100,
-          activeLayer: 0,
-          displaySelection: null,
-          lockedPixel: null,
-          hoveredPixel: null
-        }
-      };
+    subscribeState(): () => void {
+      return mocks.unsubscribe;
     }
 
-    subscribe(): () => void {
+    subscribeUi(): () => void {
+      return mocks.unsubscribe;
+    }
+
+    subscribeRender(): () => void {
       return mocks.unsubscribe;
     }
 
@@ -314,7 +296,7 @@ describe('bootstrap app lifecycle', () => {
 
     beforeUnload?.(new Event('beforeunload'));
 
-    expect(mocks.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(mocks.unsubscribe).toHaveBeenCalledTimes(3);
     expect(mocks.interactionCoordinatorDispose).toHaveBeenCalledTimes(1);
     expect(mocks.interactionDestroy).toHaveBeenCalledTimes(1);
     expect(resizeDisconnect).toHaveBeenCalledTimes(1);

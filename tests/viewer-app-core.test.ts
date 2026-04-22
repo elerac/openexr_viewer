@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ViewerAppCore } from '../src/app/viewer-app-core';
 import { buildLoadedSession } from '../src/app/session-resource';
+import { createInteractionState } from '../src/view-state';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
 import {
   createChannelMonoSelection,
@@ -168,5 +169,71 @@ describe('viewer app core', () => {
     expect(core.getState().sessions).toEqual([]);
     expect(core.getState().activeSessionId).toBeNull();
     expect(core.getState().sessionState).toEqual(createInitialState());
+  });
+
+  it('routes hover-only interaction publishes through the render lane without broad UI churn', () => {
+    const core = new ViewerAppCore();
+    const session = createSession('session-1');
+    core.dispatch({ type: 'sessionLoaded', session });
+
+    const stateListener = vi.fn();
+    const uiListener = vi.fn();
+    const renderListener = vi.fn();
+    core.subscribeState(stateListener);
+    core.subscribeUi(uiListener);
+    core.subscribeRender(renderListener);
+
+    core.dispatch({
+      type: 'interactionStatePublished',
+      interactionState: {
+        ...createInteractionState(session.state),
+        hoveredPixel: { ix: 1, iy: 0 }
+      }
+    });
+
+    expect(stateListener).toHaveBeenCalledTimes(1);
+    expect(uiListener).not.toHaveBeenCalled();
+    expect(renderListener).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists committed view state without notifying the UI or render lanes', () => {
+    const core = new ViewerAppCore();
+    const session = createSession('session-1');
+    core.dispatch({ type: 'sessionLoaded', session });
+    core.dispatch({
+      type: 'interactionStatePublished',
+      interactionState: {
+        ...createInteractionState(session.state),
+        view: {
+          ...createInteractionState(session.state).view,
+          zoom: 3,
+          panX: 4,
+          panY: 5
+        }
+      }
+    });
+
+    const stateListener = vi.fn();
+    const uiListener = vi.fn();
+    const renderListener = vi.fn();
+    core.subscribeState(stateListener);
+    core.subscribeUi(uiListener);
+    core.subscribeRender(renderListener);
+
+    core.dispatch({
+      type: 'viewStateCommitted',
+      view: {
+        zoom: 3,
+        panX: 4,
+        panY: 5,
+        panoramaYawDeg: 0,
+        panoramaPitchDeg: 0,
+        panoramaHfovDeg: 100
+      }
+    });
+
+    expect(stateListener).toHaveBeenCalledTimes(1);
+    expect(uiListener).not.toHaveBeenCalled();
+    expect(renderListener).not.toHaveBeenCalled();
   });
 });

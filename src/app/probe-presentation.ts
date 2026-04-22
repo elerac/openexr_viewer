@@ -5,7 +5,7 @@ import {
   resolveProbeMode
 } from '../probe';
 import type { ColormapLut } from '../colormaps';
-import type { PendingColormapActivation, ProbePresentationModel } from './viewer-app-types';
+import type { ProbeReadoutModel } from './viewer-app-types';
 import type {
   DecodedLayer,
   DisplayLuminanceRange,
@@ -21,10 +21,9 @@ export interface BuildProbePresentationArgs {
   interactionState: ViewerInteractionState;
   activeColormapLut: ColormapLut | null;
   activeDisplayLuminanceRange: DisplayLuminanceRange | null;
-  pendingColormapActivation: PendingColormapActivation | null;
 }
 
-export function buildProbePresentationModel(args: BuildProbePresentationArgs): ProbePresentationModel {
+export function buildProbeReadoutModel(args: BuildProbePresentationArgs): ProbeReadoutModel {
   const mode = resolveProbeMode(args.sessionState.lockedPixel);
   const imageSize = args.activeSession
     ? {
@@ -32,15 +31,13 @@ export function buildProbePresentationModel(args: BuildProbePresentationArgs): P
         height: args.activeSession.decoded.height
       }
     : null;
-  const metadata = args.activeLayer?.metadata ?? null;
 
   if (!args.activeSession || !args.activeLayer) {
     return {
       mode,
       sample: null,
       colorPreview: null,
-      imageSize,
-      metadata
+      imageSize
     };
   }
 
@@ -53,8 +50,7 @@ export function buildProbePresentationModel(args: BuildProbePresentationArgs): P
       mode,
       sample: null,
       colorPreview: null,
-      imageSize,
-      metadata
+      imageSize
     };
   }
 
@@ -75,7 +71,6 @@ export function buildProbePresentationModel(args: BuildProbePresentationArgs): P
       colormapLut: args.activeColormapLut,
       stokesDegreeModulation: args.sessionState.stokesDegreeModulation
     }),
-    imageSize,
-    metadata
+    imageSize
   };
 }

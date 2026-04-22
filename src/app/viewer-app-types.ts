@@ -27,12 +27,11 @@ export interface PendingColormapActivation {
   displaySelection: ViewerSessionState['displaySelection'];
 }
 
-export interface ProbePresentationModel {
+export interface ProbeReadoutModel {
   mode: 'Hover' | 'Locked';
   sample: PixelSample | null;
   colorPreview: ProbeColorPreview | null;
   imageSize: { width: number; height: number } | null;
-  metadata: ExrMetadataEntry[] | null;
 }
 
 export interface ViewerOpenedImageOption {
@@ -52,6 +51,16 @@ export interface ViewerLayerOption {
 export interface StokesDegreeModulationControlModel {
   label: string;
   enabled: boolean;
+}
+
+export interface ViewerResourceTarget {
+  sessionId: string;
+  activeLayer: number;
+  displaySelection: ViewerSessionState['displaySelection'];
+}
+
+export interface ViewerDisplayRangeRequest extends ViewerResourceTarget {
+  requestKey: string;
 }
 
 export interface ViewerAppState {
@@ -126,32 +135,57 @@ export type ViewerIntent =
       displayLuminanceRange: DisplayLuminanceRange | null;
     };
 
-export interface ViewerAppSnapshot {
+export interface ViewerStateTransition {
+  previousState: ViewerAppState;
   state: ViewerAppState;
+  intent: ViewerIntent;
+}
+
+export interface ViewerUiSnapshot {
+  errorMessage: string | null;
+  isLoading: boolean;
+  isRgbViewLoading: boolean;
+  activeSessionId: string | null;
+  openedImageOptions: ViewerOpenedImageOption[];
+  exportTarget: { filename: string; sourceWidth: number; sourceHeight: number } | null;
+  exposureEv: number;
+  viewerMode: ViewerSessionState['viewerMode'];
+  visualizationMode: ViewerSessionState['visualizationMode'];
+  stokesDegreeModulationControl: StokesDegreeModulationControlModel | null;
+  activeColormapId: string;
+  defaultColormapId: string;
+  activeColormapLut: ColormapLut | null;
+  colormapOptions: Array<{ id: string; label: string }>;
+  colormapRange: DisplayLuminanceRange | null;
+  activeDisplayLuminanceRange: DisplayLuminanceRange | null;
+  isColormapAutoRange: boolean;
+  colormapZeroCentered: boolean;
+  layerOptions: ViewerLayerOption[];
+  activeLayer: number;
+  probeMetadata: ExrMetadataEntry[] | null;
+  displaySelection: ViewerSessionState['displaySelection'];
+  rgbGroupChannelNames: string[];
+  shouldClearImageBrowserPanels: boolean;
+}
+
+export interface ViewerUiTransition extends ViewerStateTransition {
+  previousSnapshot: ViewerUiSnapshot;
+  snapshot: ViewerUiSnapshot;
+  invalidation: number;
+}
+
+export interface ViewerRenderSnapshot {
   activeSession: OpenedImageSession | null;
   activeLayer: DecodedLayer | null;
   renderState: ViewerRenderState;
-  colormapOptions: Array<{ id: string; label: string }>;
-  openedImageOptions: ViewerOpenedImageOption[];
-  exportTarget: { filename: string; sourceWidth: number; sourceHeight: number } | null;
-  layerOptions: ViewerLayerOption[];
-  probePresentation: ProbePresentationModel;
-  rgbGroupChannelNames: string[];
-  stokesDegreeModulationControl: StokesDegreeModulationControlModel | null;
-  shouldClearImageBrowserPanels: boolean;
-  isRgbViewLoading: boolean;
-  resourceRevisionKey: string | null;
-  displayRangeRequestKey: string | null;
-  renderImageRevisionKey: string | null;
-  renderValueOverlayRevisionKey: string | null;
-  renderProbeOverlayRevisionKey: string | null;
+  activeColormapLut: ColormapLut | null;
+  probeReadout: ProbeReadoutModel;
+  resourceTarget: ViewerResourceTarget | null;
+  displayRangeRequest: ViewerDisplayRangeRequest | null;
 }
 
-export interface ViewerAppTransition {
-  previousState: ViewerAppState;
-  state: ViewerAppState;
-  previousSnapshot: ViewerAppSnapshot;
-  snapshot: ViewerAppSnapshot;
-  intent: ViewerIntent;
+export interface ViewerRenderTransition extends ViewerStateTransition {
+  previousSnapshot: ViewerRenderSnapshot;
+  snapshot: ViewerRenderSnapshot;
   invalidation: number;
 }
