@@ -1,4 +1,4 @@
-import { ImagePixel, ViewerState, ViewportInfo } from './types';
+import { ImagePixel, type ViewerViewState, ViewerState, ViewportInfo } from './types';
 
 export const MIN_ZOOM = 0.125;
 export const MAX_ZOOM = 512;
@@ -19,6 +19,13 @@ type PanoramaCameraState = Pick<
 export interface PanoramaProjectedPixel {
   centerX: number;
   centerY: number;
+  width: number;
+  height: number;
+}
+
+export interface ViewportClientRect {
+  left: number;
+  top: number;
   width: number;
   height: number;
 }
@@ -74,6 +81,29 @@ export function imageToScreen(
   return {
     x: (imageX - state.panX) * state.zoom + viewport.width * 0.5,
     y: (imageY - state.panY) * state.zoom + viewport.height * 0.5
+  };
+}
+
+export function preserveImagePanOnViewportChange(
+  state: Pick<ViewerViewState, 'zoom' | 'panX' | 'panY'>,
+  previousViewport: ViewportClientRect,
+  nextViewport: ViewportClientRect
+): { panX: number; panY: number } {
+  if (!Number.isFinite(state.zoom) || state.zoom <= 0) {
+    return {
+      panX: state.panX,
+      panY: state.panY
+    };
+  }
+
+  const previousCenterX = previousViewport.left + previousViewport.width * 0.5;
+  const previousCenterY = previousViewport.top + previousViewport.height * 0.5;
+  const nextCenterX = nextViewport.left + nextViewport.width * 0.5;
+  const nextCenterY = nextViewport.top + nextViewport.height * 0.5;
+
+  return {
+    panX: state.panX + (nextCenterX - previousCenterX) / state.zoom,
+    panY: state.panY + (nextCenterY - previousCenterY) / state.zoom
   };
 }
 

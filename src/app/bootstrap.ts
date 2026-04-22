@@ -2,7 +2,7 @@ import { disposeDecodeWorker, loadExrOffMainThread } from '../exr-worker-client'
 import { ViewerInteractionCoordinator } from '../interaction-coordinator';
 import { createAbortError, isAbortError } from '../lifecycle';
 import { ViewerUi } from '../ui';
-import { ViewerInteraction } from '../interaction';
+import { preserveImagePanOnViewportChange, type ViewportClientRect, ViewerInteraction } from '../interaction';
 import { WebGlExrRenderer } from '../renderer';
 import { DisplayController } from '../controllers/display-controller';
 import { SessionController } from '../controllers/session-controller';
@@ -32,6 +32,7 @@ export async function bootstrapApp(): Promise<AppHandle> {
   let interaction: ViewerInteraction | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let unsubscribeCore: (() => void) | null = null;
+  let viewerContainerRect: ViewportClientRect | null = null;
   let disposed = false;
   const onBeforeUnload = () => {
     app.dispose();
@@ -283,22 +284,29 @@ export async function bootstrapApp(): Promise<AppHandle> {
         return;
       }
 
-      const rect = ui.viewerContainer.getBoundingClientRect();
+      const rect = readViewportClientRect(ui.viewerContainer);
+      const interactionState = interactionCoordinator.getState();
+      if (viewerContainerRect && core.getState().sessionState.viewerMode === 'image') {
+        const nextPan = preserveImagePanOnViewportChange(interactionState.view, viewerContainerRect, rect);
+        if (nextPan.panX !== interactionState.view.panX || nextPan.panY !== interactionState.view.panY) {
+          interactionCoordinator.enqueueViewPatch(nextPan);
+        }
+      }
+      viewerContainerRect = rect;
       renderer.resize(rect.width, rect.height);
-      const snapshot = core.getSnapshot();
-      if (snapshot.activeSession) {
-        renderer.render(snapshot.renderState);
+      if (selectActiveSession(core.getState())) {
+        renderer.render(mergeRenderState(core.getState().sessionState, interactionCoordinator.getState()));
       } else {
         renderer.clearImage();
       }
     });
     resizeObserver.observe(ui.viewerContainer);
 
-    const rect = ui.viewerContainer.getBoundingClientRect();
+    const rect = readViewportClientRect(ui.viewerContainer);
+    viewerContainerRect = rect;
     renderer.resize(rect.width, rect.height);
-    const snapshot = core.getSnapshot();
-    if (snapshot.activeSession) {
-      renderer.render(snapshot.renderState);
+    if (selectActiveSession(core.getState())) {
+      renderer.render(mergeRenderState(core.getState().sessionState, interactionCoordinator.getState()));
     } else {
       renderer.clearImage();
     }
@@ -562,4 +570,14 @@ function triggerBrowserDownload(blob: Blob, filename: string): void {
   setTimeout(() => {
     URL.revokeObjectURL(objectUrl);
   }, 1000);
+}
+
+function readViewportClientRect(element: HTMLElement): ViewportClientRect {
+  const rect = element.getBoundingClientRect();
+  return {
+    left: Number.isFinite(rect.left) ? rect.left : 0,
+    top: Number.isFinite(rect.top) ? rect.top : 0,
+    width: Number.isFinite(rect.width) ? rect.width : 0,
+    height: Number.isFinite(rect.height) ? rect.height : 0
+  };
 }

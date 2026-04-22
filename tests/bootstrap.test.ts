@@ -14,6 +14,25 @@ const mocks = vi.hoisted(() => {
   const renderCacheDispose = vi.fn();
   const loadQueueDispose = vi.fn();
   const workerDispose = vi.fn();
+  const interactionCoordinatorGetState = vi.fn(() => ({
+    view: {
+      zoom: 4,
+      panX: 10,
+      panY: 20,
+      panoramaYawDeg: 0,
+      panoramaPitchDeg: 0,
+      panoramaHfovDeg: 100
+    },
+    hoveredPixel: null
+  }));
+  const interactionCoordinatorEnqueueViewPatch = vi.fn();
+  const viewerRect = {
+    left: 0,
+    top: 0,
+    width: 320,
+    height: 180
+  };
+  let resizeObserverCallback: ResizeObserverCallback | null = null;
 
   return {
     unsubscribe,
@@ -26,7 +45,14 @@ const mocks = vi.hoisted(() => {
     thumbnailDispose,
     renderCacheDispose,
     loadQueueDispose,
-    workerDispose
+    workerDispose,
+    interactionCoordinatorGetState,
+    interactionCoordinatorEnqueueViewPatch,
+    viewerRect,
+    getResizeObserverCallback: () => resizeObserverCallback,
+    setResizeObserverCallback: (callback: ResizeObserverCallback | null) => {
+      resizeObserverCallback = callback;
+    }
   };
 });
 
@@ -118,7 +144,7 @@ vi.mock('../src/app/viewer-app-core', () => ({
 vi.mock('../src/ui', () => ({
   ViewerUi: class {
     readonly viewerContainer = Object.assign(document.createElement('div'), {
-      getBoundingClientRect: () => ({ width: 320, height: 180 })
+      getBoundingClientRect: () => ({ ...mocks.viewerRect })
     });
     readonly glCanvas = document.createElement('canvas');
     readonly overlayCanvas = document.createElement('canvas');
@@ -167,6 +193,16 @@ vi.mock('../src/renderer', () => ({
 }));
 
 vi.mock('../src/interaction', () => ({
+  preserveImagePanOnViewportChange: vi.fn((state, previousViewport, nextViewport) => ({
+    panX: state.panX + (
+      (nextViewport.left + nextViewport.width * 0.5) -
+      (previousViewport.left + previousViewport.width * 0.5)
+    ) / state.zoom,
+    panY: state.panY + (
+      (nextViewport.top + nextViewport.height * 0.5) -
+      (previousViewport.top + previousViewport.height * 0.5)
+    ) / state.zoom
+  })),
   ViewerInteraction: class {
     readonly destroy = mocks.interactionDestroy;
   }
@@ -175,18 +211,8 @@ vi.mock('../src/interaction', () => ({
 vi.mock('../src/interaction-coordinator', () => ({
   ViewerInteractionCoordinator: class {
     readonly dispose = mocks.interactionCoordinatorDispose;
-    readonly getState = vi.fn(() => ({
-      view: {
-        zoom: 1,
-        panX: 0,
-        panY: 0,
-        panoramaYawDeg: 0,
-        panoramaPitchDeg: 0,
-        panoramaHfovDeg: 100
-      },
-      hoveredPixel: null
-    }));
-    readonly enqueueViewPatch = vi.fn();
+    readonly getState = mocks.interactionCoordinatorGetState;
+    readonly enqueueViewPatch = mocks.interactionCoordinatorEnqueueViewPatch;
     readonly enqueueHoverPixel = vi.fn();
     readonly syncSessionState = vi.fn();
   }
@@ -255,12 +281,21 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   vi.resetModules();
+  mocks.viewerRect.left = 0;
+  mocks.viewerRect.top = 0;
+  mocks.viewerRect.width = 320;
+  mocks.viewerRect.height = 180;
+  mocks.setResizeObserverCallback(null);
 });
 
 describe('bootstrap app lifecycle', () => {
   it('returns an app handle whose unload path disposes every owned subsystem', async () => {
     const resizeDisconnect = vi.fn();
     class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
       observe(): void {}
       disconnect = resizeDisconnect;
     }
@@ -295,5 +330,35 @@ describe('bootstrap app lifecycle', () => {
 
     app.dispose();
     expect(mocks.uiDispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves image alignment when the viewer container shifts during resize', async () => {
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
+      observe(): void {}
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+    const { bootstrapApp } = await import('../src/app/bootstrap');
+    const app = await bootstrapApp();
+    mocks.interactionCoordinatorEnqueueViewPatch.mockClear();
+
+    mocks.viewerRect.left = 40;
+    mocks.viewerRect.width = 260;
+    mocks.viewerRect.top = 10;
+    mocks.viewerRect.height = 200;
+    mocks.getResizeObserverCallback()?.([], {} as ResizeObserver);
+
+    expect(mocks.interactionCoordinatorEnqueueViewPatch).toHaveBeenCalledWith({
+      panX: 12.5,
+      panY: 25
+    });
+
+    app.dispose();
   });
 });

@@ -5,8 +5,10 @@ import {
   clampPanoramaPitch,
   clampZoom,
   exposureToScale,
+  imageToScreen,
   normalizePanoramaYaw,
   orbitPanorama,
+  preserveImagePanOnViewportChange,
   projectPanoramaPixelToScreen,
   screenToImage,
   screenToPanoramaPixel,
@@ -66,6 +68,19 @@ describe('interaction math', () => {
     const after = screenToImage(sx, sy, { ...state, ...next }, viewport, 10000, 10000);
 
     expect(before).toEqual(after);
+  });
+
+  it('preserves image screen position when the viewport frame changes', () => {
+    const previousViewport = { left: 100, top: 40, width: 640, height: 480 };
+    const nextViewport = { left: 200, top: 55, width: 520, height: 420 };
+    const imagePoint = { x: 130, y: 210 };
+
+    const before = imageToScreen(imagePoint.x, imagePoint.y, state, previousViewport);
+    const nextPan = preserveImagePanOnViewportChange(state, previousViewport, nextViewport);
+    const after = imageToScreen(imagePoint.x, imagePoint.y, { ...state, ...nextPan }, nextViewport);
+
+    expect(after.x + nextViewport.left).toBeCloseTo(before.x + previousViewport.left);
+    expect(after.y + nextViewport.top).toBeCloseTo(before.y + previousViewport.top);
   });
 
   it('nearest mapping keeps neighboring screen points inside same source pixel at high zoom', () => {
