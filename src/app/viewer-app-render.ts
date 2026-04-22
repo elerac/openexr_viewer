@@ -219,7 +219,8 @@ function createResourceTargetSelector(): (
       ? {
           sessionId: activeSession.id,
           activeLayer: state.sessionState.activeLayer,
-          displaySelection: state.sessionState.displaySelection
+          displaySelection: state.sessionState.displaySelection,
+          decodedRef: activeSession.decoded
         }
       : null;
     if (sameResourceTarget(previousResult, nextResult)) {
@@ -284,6 +285,7 @@ function createDisplayRangeRequestSelector(): (
           sessionId: activeSession.id,
           activeLayer: state.sessionState.activeLayer,
           displaySelection: state.sessionState.displaySelection,
+          decodedRef: activeSession.decoded,
           requestKey: `${activeSession.id}:${buildDisplayLuminanceRevisionKey(state.sessionState)}`
         }
       : null;
@@ -314,6 +316,7 @@ function sameRenderImageInputs(a: ViewerRenderSnapshot, b: ViewerRenderSnapshot)
   const next = b.renderState;
   const sharesCommonInputs = (
     a.activeSession?.id === b.activeSession?.id &&
+    a.activeSession?.decoded === b.activeSession?.decoded &&
     previous.viewerMode === next.viewerMode &&
     previous.exposureEv === next.exposureEv &&
     previous.activeLayer === next.activeLayer &&
@@ -346,6 +349,7 @@ function sameRenderValueOverlayInputs(a: ViewerRenderSnapshot, b: ViewerRenderSn
   const next = b.renderState;
   return (
     a.activeSession?.id === b.activeSession?.id &&
+    a.activeSession?.decoded === b.activeSession?.decoded &&
     previous.viewerMode === next.viewerMode &&
     previous.activeLayer === next.activeLayer &&
     sameDisplaySelection(previous.displaySelection, next.displaySelection) &&
@@ -358,6 +362,7 @@ function sameRenderProbeOverlayInputs(a: ViewerRenderSnapshot, b: ViewerRenderSn
   const next = b.renderState;
   return (
     a.activeSession?.id === b.activeSession?.id &&
+    a.activeSession?.decoded === b.activeSession?.decoded &&
     previous.viewerMode === next.viewerMode &&
     previous.activeLayer === next.activeLayer &&
     samePixel(previous.lockedPixel, next.lockedPixel) &&

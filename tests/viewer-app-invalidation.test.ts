@@ -57,6 +57,26 @@ function createActiveState(): ViewerAppState {
   };
 }
 
+function createReloadedActiveState(
+  previous: ViewerAppState,
+  decoded: DecodedExrImage,
+  sessionState: ViewerAppState['sessionState'] = previous.sessionState
+): ViewerAppState {
+  const activeSession = previous.sessions[0]!;
+  const reloadedSession: OpenedImageSession = {
+    ...activeSession,
+    decoded,
+    state: sessionState
+  };
+
+  return {
+    ...previous,
+    sessions: [reloadedSession],
+    sessionState,
+    interactionState: createInteractionState(sessionState)
+  };
+}
+
 function createUiFlags(previous: ViewerAppState, next: ViewerAppState): number {
   const selectUiSnapshot = createViewerUiSnapshotSelector();
   return computeViewerUiInvalidation(selectUiSnapshot(previous), selectUiSnapshot(next));
@@ -240,6 +260,35 @@ describe('viewer app lanes', () => {
     const uiFlags = createUiFlags(previous, next);
     const renderFlags = createRenderFlags(previous, next);
     expect(hasUiFlag(uiFlags, ViewerUiInvalidationFlags.ColormapRange)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(true);
+  });
+
+  it('marks active-session reloads as resource and render invalidation even when view state is unchanged', () => {
+    const previous = createActiveState();
+    const next = createReloadedActiveState(previous, createDecodedImage());
+
+    const renderFlags = createRenderFlags(previous, next);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ResourcePrepare)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderValueOverlay)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderProbeOverlay)).toBe(true);
+  });
+
+  it('marks auto-range requests dirty when the active session reloads in colormap mode', () => {
+    const previous = {
+      ...createActiveState(),
+      sessionState: {
+        ...createActiveState().sessionState,
+        visualizationMode: 'colormap' as const,
+        colormapRangeMode: 'alwaysAuto' as const,
+        displaySelection: createChannelMonoSelection('R')
+      }
+    };
+    const next = createReloadedActiveState(previous, createDecodedImage(), previous.sessionState);
+
+    const renderFlags = createRenderFlags(previous, next);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ResourcePrepare)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ResourceRequestDisplayRange)).toBe(true);
     expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(true);
   });
 

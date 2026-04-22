@@ -141,7 +141,8 @@ export function sameResourceTarget(a: ViewerResourceTarget | null, b: ViewerReso
   return (
     a.sessionId === b.sessionId &&
     a.activeLayer === b.activeLayer &&
-    sameDisplaySelection(a.displaySelection, b.displaySelection)
+    sameDisplaySelection(a.displaySelection, b.displaySelection) &&
+    a.decodedRef === b.decodedRef
   );
 }
 

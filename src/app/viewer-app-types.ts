@@ -64,6 +64,7 @@ export interface ViewerResourceTarget {
   sessionId: string;
   activeLayer: number;
   displaySelection: ViewerSessionState['displaySelection'];
+  decodedRef: OpenedImageSession['decoded'];
 }
 
 export interface ViewerDisplayRangeRequest extends ViewerResourceTarget {
