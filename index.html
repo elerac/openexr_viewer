@@ -162,26 +162,6 @@
                 </div>
               </div>
 
-              <section id="metadata-panel" class="readout-block">
-                <div class="readout-block-header">
-                  <h2>Metadata</h2>
-                  <button
-                    id="metadata-toggle"
-                    class="readout-block-toggle"
-                    type="button"
-                    aria-expanded="true"
-                    aria-controls="metadata-content"
-                    aria-label="Collapse Metadata section"
-                  >
-                    <span class="readout-block-chevron" aria-hidden="true"></span>
-                  </button>
-                </div>
-                <div id="metadata-content" class="readout-block-content">
-                  <p id="metadata-empty-state" class="metadata-empty-state">No metadata available.</p>
-                  <div id="metadata-table" class="metadata-table hidden" aria-label="EXR metadata"></div>
-                </div>
-              </section>
-
               <section id="probe-panel" class="readout-block">
                 <div class="readout-block-header">
                   <h2>Probe</h2>
@@ -258,6 +238,26 @@
                     <div id="roi-stats" class="roi-stats" aria-label="ROI statistics"></div>
                     <button id="clear-roi-button" type="button" disabled>Clear ROI</button>
                   </div>
+                </div>
+              </section>
+
+              <section id="metadata-panel" class="readout-block">
+                <div class="readout-block-header">
+                  <h2>Metadata</h2>
+                  <button
+                    id="metadata-toggle"
+                    class="readout-block-toggle"
+                    type="button"
+                    aria-expanded="true"
+                    aria-controls="metadata-content"
+                    aria-label="Collapse Metadata section"
+                  >
+                    <span class="readout-block-chevron" aria-hidden="true"></span>
+                  </button>
+                </div>
+                <div id="metadata-content" class="readout-block-content">
+                  <p id="metadata-empty-state" class="metadata-empty-state">No metadata available.</p>
+                  <div id="metadata-table" class="metadata-table hidden" aria-label="EXR metadata"></div>
                 </div>
               </section>
             </div>
