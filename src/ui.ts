@@ -23,6 +23,7 @@ import type {
   ExrMetadataEntry,
   ExportImageRequest,
   ExportImageTarget,
+  OpenedImageDropPlacement,
   PixelSample,
   ViewerMode,
   VisualizationMode
@@ -49,7 +50,11 @@ export interface UiCallbacks {
   onCloseSelectedOpenedImage: (sessionId: string) => void;
   onCloseAllOpenedImages: () => void;
   onOpenedImageSelected: (sessionId: string) => void;
-  onReorderOpenedImage: (draggedSessionId: string, targetSessionId: string) => void;
+  onReorderOpenedImage: (
+    draggedSessionId: string,
+    targetSessionId: string,
+    placement: OpenedImageDropPlacement
+  ) => void;
   onDisplayCacheBudgetChange: (mb: number) => void;
   onExposureChange: (value: number) => void;
   onViewerModeChange: (mode: ViewerMode) => void;
@@ -221,8 +226,8 @@ export class ViewerUi implements Disposable {
       onOpenedImageSelected: (sessionId) => {
         this.callbacks.onOpenedImageSelected(sessionId);
       },
-      onReorderOpenedImage: (draggedSessionId, targetSessionId) => {
-        this.callbacks.onReorderOpenedImage(draggedSessionId, targetSessionId);
+      onReorderOpenedImage: (draggedSessionId, targetSessionId, placement) => {
+        this.callbacks.onReorderOpenedImage(draggedSessionId, targetSessionId, placement);
       },
       onDisplayCacheBudgetChange: (mb) => {
         this.callbacks.onDisplayCacheBudgetChange(mb);

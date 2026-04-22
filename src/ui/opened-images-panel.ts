@@ -1,11 +1,13 @@
 import type { ListboxHitTestMetrics, OpenedImageOptionItem } from '../ui';
 import { DisposableBag, type Disposable } from '../lifecycle';
+import type { OpenedImageDropPlacement } from '../types';
 import type { OpenedImagesPanelElements } from './elements';
 import {
   applyListboxRowSizing,
   createEmptyListMessage,
   findClosestListRow,
   focusSelectedImageBrowserRow,
+  getImageBrowserRows,
   getImageBrowserRowValueAtClientY,
   getListboxOptionIndexAtClientY,
   handleImageBrowserListKeyDown,
@@ -19,16 +21,26 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 interface OpenedImagesPanelCallbacks {
   onOpenedImageSelected: (sessionId: string) => void;
-  onReorderOpenedImage: (draggedSessionId: string, targetSessionId: string) => void;
+  onReorderOpenedImage: (
+    draggedSessionId: string,
+    targetSessionId: string,
+    placement: OpenedImageDropPlacement
+  ) => void;
   onDisplayCacheBudgetChange: (mb: number) => void;
   onReloadSelectedOpenedImage: (sessionId: string) => void;
   onCloseSelectedOpenedImage: (sessionId: string) => void;
 }
 
+interface OpenedImageDropTarget {
+  sessionId: string;
+  placement: OpenedImageDropPlacement;
+}
+
 interface OpenedImageDragState {
   sessionId: string;
   startY: number;
-  lastTargetSessionId: string | null;
+  lastTargetKey: string | null;
+  dropTarget: OpenedImageDropTarget | null;
   isDragging: boolean;
 }
 
@@ -58,7 +70,6 @@ export class OpenedImagesPanel implements Disposable {
     private readonly callbacks: OpenedImagesPanelCallbacks
   ) {
     this.elements.openedImagesSelect.disabled = true;
-    this.elements.openedImagesSelect.title = 'Click and drag filename rows to reorder.';
     this.elements.displayCacheBudgetInput.disabled = false;
     this.elements.reloadAllOpenedImagesButton.disabled = true;
     this.elements.closeAllOpenedImagesButton.disabled = true;
@@ -94,7 +105,8 @@ export class OpenedImagesPanel implements Disposable {
       this.openedImageDragState = {
         sessionId,
         startY: event.clientY,
-        lastTargetSessionId: null,
+        lastTargetKey: null,
+        dropTarget: null,
         isDragging: false
       };
     });
@@ -120,7 +132,8 @@ export class OpenedImagesPanel implements Disposable {
       this.openedImageDragState = {
         sessionId,
         startY: event.clientY,
-        lastTargetSessionId: null,
+        lastTargetKey: null,
+        dropTarget: null,
         isDragging: false
       };
     });
@@ -277,11 +290,18 @@ export class OpenedImagesPanel implements Disposable {
         updateOpenedFileRow(row, item, {
           sizeText: formatFileSizeMb(item.sizeBytes ?? null),
           selected: item.id === this.openedImagesActiveId,
-          disabled
+          disabled,
+          dragging: this.openedImageDragState?.isDragging === true && this.openedImageDragState.sessionId === item.id,
+          dropPlacement:
+            this.openedImageDragState?.isDragging === true && this.openedImageDragState.dropTarget?.sessionId === item.id
+              ? this.openedImageDragState.dropTarget.placement
+              : null
         });
         return row;
       }
     );
+
+    this.applyOpenedImageDragState();
 
     if (shouldRestoreFocus) {
       focusSelectedImageBrowserRow(this.elements.openedFilesList);
@@ -325,33 +345,36 @@ export class OpenedImagesPanel implements Disposable {
 
     if (!dragState.isDragging) {
       dragState.isDragging = true;
-      this.elements.openedImagesSelect.classList.add('is-reordering');
       this.elements.openedFilesList.classList.add('is-reordering');
     }
 
-    const targetSessionId = this.getOpenedImageSessionAtClientY(event.clientY);
-    if (!targetSessionId) {
+    const dropTarget = this.getOpenedImageDropTargetAtClientY(event.clientY);
+    dragState.dropTarget = dropTarget;
+    this.applyOpenedImageDragState();
+
+    if (!dropTarget) {
+      dragState.lastTargetKey = null;
       return;
     }
 
-    if (targetSessionId === dragState.sessionId) {
-      dragState.lastTargetSessionId = null;
+    const targetKey = serializeOpenedImageDropTarget(dropTarget);
+    if (targetKey === dragState.lastTargetKey) {
       return;
     }
 
-    if (targetSessionId === dragState.lastTargetSessionId) {
+    dragState.lastTargetKey = targetKey;
+    if (dropTarget.sessionId === dragState.sessionId) {
       return;
     }
 
-    dragState.lastTargetSessionId = targetSessionId;
-    this.callbacks.onReorderOpenedImage(dragState.sessionId, targetSessionId);
+    this.callbacks.onReorderOpenedImage(dragState.sessionId, dropTarget.sessionId, dropTarget.placement);
   }
 
   private finishOpenedImagesDrag(): void {
     const dragState = this.openedImageDragState;
     this.openedImageDragState = null;
-    this.elements.openedImagesSelect.classList.remove('is-reordering');
     this.elements.openedFilesList.classList.remove('is-reordering');
+    this.applyOpenedImageDragState();
 
     const activeId = this.openedImagesActiveId;
     if (dragState?.isDragging && activeId) {
@@ -360,6 +383,25 @@ export class OpenedImagesPanel implements Disposable {
 
     if (dragState?.isDragging) {
       this.suppressOpenedImageSelectionUntilMs = performance.now() + 120;
+    }
+  }
+
+  private applyOpenedImageDragState(): void {
+    for (const row of this.elements.openedFilesList.querySelectorAll<HTMLElement>('.opened-file-row')) {
+      const sessionId = row.dataset.sessionId ?? null;
+      const dropPlacement =
+        this.openedImageDragState?.isDragging === true &&
+        sessionId &&
+        this.openedImageDragState.dropTarget?.sessionId === sessionId
+          ? this.openedImageDragState.dropTarget.placement
+          : null;
+
+      row.classList.toggle(
+        'opened-file-row--dragging',
+        this.openedImageDragState?.isDragging === true && sessionId === this.openedImageDragState.sessionId
+      );
+      row.classList.toggle('opened-file-row--drop-before', dropPlacement === 'before');
+      row.classList.toggle('opened-file-row--drop-after', dropPlacement === 'after');
     }
   }
 
@@ -394,6 +436,55 @@ export class OpenedImagesPanel implements Disposable {
     }
     return options[index]?.value ?? null;
   }
+
+  private getOpenedImageDropTargetAtClientY(clientY: number): OpenedImageDropTarget | null {
+    const rows = getImageBrowserRows(this.elements.openedFilesList);
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const listRect = this.elements.openedFilesList.getBoundingClientRect();
+    if (listRect.height <= 0 || clientY < listRect.top || clientY > listRect.bottom) {
+      return null;
+    }
+
+    for (const row of rows) {
+      const rect = row.getBoundingClientRect();
+      if (clientY < rect.top || clientY > rect.bottom) {
+        continue;
+      }
+
+      const sessionId = row.dataset.sessionId ?? null;
+      if (!sessionId) {
+        return null;
+      }
+
+      return {
+        sessionId,
+        placement: clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+      };
+    }
+
+    const firstRow = rows[0];
+    const lastRow = rows[rows.length - 1];
+    const firstSessionId = firstRow?.dataset.sessionId ?? null;
+    const lastSessionId = lastRow?.dataset.sessionId ?? null;
+    if (!firstSessionId || !lastSessionId) {
+      return null;
+    }
+
+    if (clientY < firstRow.getBoundingClientRect().top) {
+      return {
+        sessionId: firstSessionId,
+        placement: 'before'
+      };
+    }
+
+    return {
+      sessionId: lastSessionId,
+      placement: 'after'
+    };
+  }
 }
 
 export function formatDisplayCacheUsageText(usedBytes: number, budgetBytes: number): string {
@@ -417,6 +508,7 @@ function createOpenedFileRow(
   const row = document.createElement('div');
   row.className = 'image-browser-row opened-file-row';
 
+  const grip = createOpenedFileGrip();
   const thumbnail = createOpenedFileThumbnail(item.thumbnailDataUrl ?? null);
 
   const label = document.createElement('span');
@@ -439,7 +531,7 @@ function createOpenedFileRow(
   });
 
   actions.append(reloadButton, closeButton);
-  row.append(thumbnail, label, actions);
+  row.append(grip, thumbnail, label, actions);
   openedFileRowRefs.set(row, { thumbnail, label, reloadButton, closeButton });
   return row;
 }
@@ -451,6 +543,8 @@ function updateOpenedFileRow(
     sizeText: string;
     selected: boolean;
     disabled: boolean;
+    dragging: boolean;
+    dropPlacement: OpenedImageDropPlacement | null;
   }
 ): void {
   const refs = openedFileRowRefs.get(row);
@@ -463,6 +557,9 @@ function updateOpenedFileRow(
   row.setAttribute('aria-selected', options.selected ? 'true' : 'false');
   row.setAttribute('aria-disabled', options.disabled ? 'true' : 'false');
   row.tabIndex = options.disabled ? -1 : 0;
+  row.classList.toggle('opened-file-row--dragging', options.dragging);
+  row.classList.toggle('opened-file-row--drop-before', options.dropPlacement === 'before');
+  row.classList.toggle('opened-file-row--drop-after', options.dropPlacement === 'after');
 
   refs.label.textContent = item.label;
   refs.label.title = `Path: ${item.sourceDetail ?? item.label}\nSize: ${options.sizeText}`;
@@ -483,6 +580,13 @@ function updateOpenedFileRow(
     label: `Close ${item.label}`,
     disabled: options.disabled
   });
+}
+
+function createOpenedFileGrip(): HTMLSpanElement {
+  const grip = document.createElement('span');
+  grip.className = 'opened-file-grip';
+  grip.setAttribute('aria-hidden', 'true');
+  return grip;
 }
 
 function createOpenedFileActionButton(options: {
@@ -598,6 +702,10 @@ function createOpenedFileThumbnail(thumbnailDataUrl: string | null): HTMLElement
 
 function createSvgElement<K extends keyof SVGElementTagNameMap>(tagName: K): SVGElementTagNameMap[K] {
   return document.createElementNS(SVG_NS, tagName) as SVGElementTagNameMap[K];
+}
+
+function serializeOpenedImageDropTarget(target: OpenedImageDropTarget): string {
+  return `${target.sessionId}:${target.placement}`;
 }
 
 function formatDisplayCacheMegabytes(bytes: number): string {

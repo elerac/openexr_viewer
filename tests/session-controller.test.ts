@@ -122,6 +122,26 @@ describe('session controller shim', () => {
     expect(reloaded?.decoded.height).toBe(8);
   });
 
+  it('reorders sessions using explicit before and after placement', async () => {
+    const decodeBytes = vi
+      .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
+      .mockResolvedValueOnce(createDecodedImage())
+      .mockResolvedValueOnce(createDecodedImage())
+      .mockResolvedValueOnce(createDecodedImage());
+    const { controller } = createController({ decodeBytes });
+
+    await controller.enqueueFiles([createFile('first.exr')]);
+    await controller.enqueueFiles([createFile('second.exr')]);
+    await controller.enqueueFiles([createFile('third.exr')]);
+
+    const [first, second, third] = controller.getSessions();
+    controller.reorderSessions(third!.id, second!.id, 'before');
+    expect(controller.getSessions().map((session) => session.id)).toEqual([first!.id, third!.id, second!.id]);
+
+    controller.reorderSessions(first!.id, third!.id, 'after');
+    expect(controller.getSessions().map((session) => session.id)).toEqual([third!.id, first!.id, second!.id]);
+  });
+
   it('clears state when all sessions close', async () => {
     const decodeBytes = vi
       .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()

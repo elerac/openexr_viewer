@@ -108,8 +108,8 @@ export async function bootstrapApp(): Promise<AppHandle> {
     onOpenedImageSelected: (sessionId) => {
       sessionController.switchActiveSession(sessionId);
     },
-    onReorderOpenedImage: (draggedSessionId, targetSessionId) => {
-      sessionController.reorderSessions(draggedSessionId, targetSessionId);
+    onReorderOpenedImage: (draggedSessionId, targetSessionId, placement) => {
+      sessionController.reorderSessions(draggedSessionId, targetSessionId, placement);
     },
     onDisplayCacheBudgetChange: (valueMb) => {
       renderCache.setBudgetMb(valueMb);

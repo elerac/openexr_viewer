@@ -79,6 +79,32 @@ describe('viewer app core', () => {
     });
   });
 
+  it('inserts reordered sessions at explicit before and after boundaries', () => {
+    const core = new ViewerAppCore();
+    const first = createSession('first');
+    const second = createSession('second');
+    const third = createSession('third');
+    core.dispatch({ type: 'sessionLoaded', session: first });
+    core.dispatch({ type: 'sessionLoaded', session: second });
+    core.dispatch({ type: 'sessionLoaded', session: third });
+
+    core.dispatch({
+      type: 'sessionsReordered',
+      draggedSessionId: third.id,
+      targetSessionId: second.id,
+      placement: 'before'
+    });
+    expect(core.getState().sessions.map((session) => session.id)).toEqual([first.id, third.id, second.id]);
+
+    core.dispatch({
+      type: 'sessionsReordered',
+      draggedSessionId: first.id,
+      targetSessionId: third.id,
+      placement: 'after'
+    });
+    expect(core.getState().sessions.map((session) => session.id)).toEqual([third.id, first.id, second.id]);
+  });
+
   it('ignores stale luminance callbacks after the active selection changes', () => {
     const core = new ViewerAppCore();
     const session = createSession('session-1');

@@ -635,18 +635,94 @@ describe('display cache UI helpers', () => {
 });
 
 describe('opened files actions', () => {
-  it('renders reload and close actions without any pin toggle', () => {
+  it('renders a visible reorder grip plus reload and close actions without any pin toggle', () => {
     installUiFixture();
 
     const ui = new ViewerUi(createUiCallbacks());
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'beauty.exr' }], 'session-1');
 
+    const openedFilesList = document.getElementById('opened-files-list') as HTMLDivElement;
     const actionLabels = Array.from(
       document.querySelectorAll('#opened-files-list .opened-file-action-button')
     ).map((button) => button.getAttribute('aria-label'));
 
+    expect(openedFilesList.getAttribute('aria-describedby')).toBe('opened-files-reorder-hint');
+    expect(document.getElementById('opened-files-reorder-hint')?.textContent).toBe('Drag rows to reorder open files.');
+    expect(openedFilesList.querySelector('.opened-file-grip')).toBeInstanceOf(HTMLSpanElement);
     expect(actionLabels).toEqual(['Reload beauty.exr', 'Close beauty.exr']);
+    expect(openedFilesList.querySelectorAll('button')).toHaveLength(2);
     expect(document.querySelector('[aria-label=\"Pin cache for beauty.exr\"]')).toBeNull();
+  });
+});
+
+describe('opened files reordering', () => {
+  it('dispatches before-placement when dragging into the top half of a row', () => {
+    installUiFixture();
+
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onReorderOpenedImage }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'first.exr' },
+      { id: 'session-2', label: 'second.exr' },
+      { id: 'session-3', label: 'third.exr' }
+    ], 'session-1');
+
+    const rows = mockOpenedFilesListGeometry();
+    const secondRow = rows[1] as HTMLDivElement;
+    const thirdRow = rows[2] as HTMLDivElement;
+
+    thirdRow.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientY: 50 }));
+    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientY: 25 }));
+
+    expect(onReorderOpenedImage).toHaveBeenCalledTimes(1);
+    expect(onReorderOpenedImage).toHaveBeenCalledWith('session-3', 'session-2', 'before');
+    expect(thirdRow.classList.contains('opened-file-row--dragging')).toBe(true);
+    expect(secondRow.classList.contains('opened-file-row--drop-before')).toBe(true);
+  });
+
+  it('dispatches after-placement once per boundary when dragging into the bottom half of a row', () => {
+    installUiFixture();
+
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onReorderOpenedImage }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'first.exr' },
+      { id: 'session-2', label: 'second.exr' },
+      { id: 'session-3', label: 'third.exr' }
+    ], 'session-1');
+
+    const rows = mockOpenedFilesListGeometry();
+    const firstRow = rows[0] as HTMLDivElement;
+    const secondRow = rows[1] as HTMLDivElement;
+
+    firstRow.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientY: 10 }));
+    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientY: 35 }));
+    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientY: 36 }));
+
+    expect(onReorderOpenedImage).toHaveBeenCalledTimes(1);
+    expect(onReorderOpenedImage).toHaveBeenCalledWith('session-1', 'session-2', 'after');
+    expect(secondRow.classList.contains('opened-file-row--drop-after')).toBe(true);
+  });
+
+  it('does not start reordering from reload or close action buttons', () => {
+    installUiFixture();
+
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onReorderOpenedImage }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'first.exr' },
+      { id: 'session-2', label: 'second.exr' }
+    ], 'session-1');
+
+    mockOpenedFilesListGeometry();
+    const reloadButton = document.querySelector(
+      '#opened-files-list .opened-file-action-button--reload'
+    ) as HTMLButtonElement;
+
+    reloadButton.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientY: 10 }));
+    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientY: 35 }));
+
+    expect(onReorderOpenedImage).not.toHaveBeenCalled();
   });
 });
 
@@ -714,6 +790,43 @@ function installUiFixture(): void {
   }
 
   vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+}
+
+function mockOpenedFilesListGeometry(rowHeight = 20): Element[] {
+  const openedFilesList = document.getElementById('opened-files-list') as HTMLDivElement;
+  const rows = Array.from(openedFilesList.querySelectorAll('.opened-file-row'));
+  const bottom = rows.length * rowHeight;
+
+  mockDomRect(openedFilesList, { top: 0, bottom, height: bottom });
+  rows.forEach((row, index) => {
+    const top = index * rowHeight;
+    mockDomRect(row as HTMLElement, { top, bottom: top + rowHeight, height: rowHeight });
+  });
+
+  return rows;
+}
+
+function mockDomRect(
+  element: HTMLElement,
+  rect: { top: number; bottom: number; height: number; left?: number; right?: number; width?: number }
+): void {
+  const left = rect.left ?? 0;
+  const width = rect.width ?? 240;
+  const right = rect.right ?? left + width;
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({
+      x: left,
+      y: rect.top,
+      top: rect.top,
+      left,
+      right,
+      bottom: rect.bottom,
+      width,
+      height: rect.height,
+      toJSON: () => ({})
+    })
+  });
 }
 
 function expectTopMenuOpen(buttonId: string, menuId: string): void {

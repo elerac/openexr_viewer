@@ -4,6 +4,7 @@ import type {
   DecodedLayer,
   DisplayLuminanceRange,
   ExrMetadataEntry,
+  OpenedImageDropPlacement,
   OpenedImageSession,
   PixelSample,
   ViewportInfo,
@@ -104,7 +105,12 @@ export type ViewerIntent =
   | { type: 'sessionLoaded'; session: OpenedImageSession }
   | { type: 'sessionReloaded'; sessionId: string; session: OpenedImageSession }
   | { type: 'activeSessionSwitched'; sessionId: string }
-  | { type: 'sessionsReordered'; draggedSessionId: string; targetSessionId: string }
+  | {
+      type: 'sessionsReordered';
+      draggedSessionId: string;
+      targetSessionId: string;
+      placement: OpenedImageDropPlacement;
+    }
   | { type: 'sessionClosed'; sessionId: string }
   | { type: 'allSessionsClosed' }
   | { type: 'activeSessionReset'; viewport: ViewportInfo }

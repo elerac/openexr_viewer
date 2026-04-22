@@ -7,6 +7,7 @@ import type { ChannelStorage, FiniteValueRange } from './channel-storage';
 export type VisualizationMode = 'rgb' | 'colormap';
 export type ColormapRangeMode = 'alwaysAuto' | 'oneTime';
 export type ViewerMode = 'image' | 'panorama';
+export type OpenedImageDropPlacement = 'before' | 'after';
 
 export type {
   ChannelMonoSelection,

@@ -3,7 +3,7 @@ import { ViewerAppCore } from '../app/viewer-app-core';
 import { buildLoadedSession, buildReloadedSession } from '../app/session-resource';
 import { selectActiveSession } from '../app/viewer-app-selectors';
 import { LoadQueueService } from '../services/load-queue';
-import type { DecodedExrImage, OpenedImageSession, SessionSource, ViewportInfo } from '../types';
+import type { DecodedExrImage, OpenedImageDropPlacement, OpenedImageSession, SessionSource, ViewportInfo } from '../types';
 
 const GALLERY_IMAGES = [
   {
@@ -159,7 +159,11 @@ export class SessionController implements Disposable {
     });
   }
 
-  reorderSessions(draggedSessionId: string, targetSessionId: string): void {
+  reorderSessions(
+    draggedSessionId: string,
+    targetSessionId: string,
+    placement: OpenedImageDropPlacement
+  ): void {
     if (this.disposed) {
       return;
     }
@@ -167,7 +171,8 @@ export class SessionController implements Disposable {
     this.core.dispatch({
       type: 'sessionsReordered',
       draggedSessionId,
-      targetSessionId
+      targetSessionId,
+      placement
     });
   }
 

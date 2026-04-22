@@ -224,7 +224,14 @@
               <h3 id="opened-files-heading">Open Files</h3>
               <span id="opened-files-count" class="image-browser-count">0</span>
             </div>
-            <div id="opened-files-list" class="image-browser-list image-browser-list--files" role="listbox" aria-label="Open files"></div>
+            <div
+              id="opened-files-list"
+              class="image-browser-list image-browser-list--files"
+              role="listbox"
+              aria-label="Open files"
+              aria-describedby="opened-files-reorder-hint"
+            ></div>
+            <p id="opened-files-reorder-hint" class="visually-hidden">Drag rows to reorder open files.</p>
             <select id="opened-images-select" class="compat-select" multiple aria-hidden="true" tabindex="-1"></select>
           </section>
 
