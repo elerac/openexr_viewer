@@ -60,6 +60,43 @@ export class SessionController implements Disposable {
     });
   }
 
+  enqueueFolderFiles(files: File[]): Promise<void> {
+    if (this.disposed || files.length === 0) {
+      return Promise.resolve();
+    }
+
+    return this.loadQueue.enqueue(async (signal) => {
+      this.throwIfStopped(signal);
+      this.core.dispatch({ type: 'loadingSet', loading: true });
+      this.core.dispatch({ type: 'errorSet', message: null });
+
+      try {
+        const exrFiles = files
+          .filter((file) => isExrFilename(file.name))
+          .sort((left, right) => getFolderFileSortKey(left).localeCompare(getFolderFileSortKey(right)));
+
+        if (exrFiles.length === 0) {
+          this.core.dispatch({
+            type: 'errorSet',
+            message: 'No OpenEXR files found in the selected folder.'
+          });
+          return;
+        }
+
+        for (const file of exrFiles) {
+          await this.loadFile(file, signal);
+        }
+      } finally {
+        this.core.dispatch({ type: 'loadingSet', loading: false });
+      }
+    }).catch((error) => {
+      if (isAbortError(error)) {
+        return;
+      }
+      throw error;
+    });
+  }
+
   enqueueGalleryImage(galleryId: string): Promise<void> {
     if (this.disposed) {
       return Promise.resolve();
@@ -376,4 +413,13 @@ async function decodeExrFromSessionSource(
     throwIfAborted(signal, 'Session reload was aborted.');
   }
   return decodeBytes(bytes);
+}
+
+function isExrFilename(filename: string): boolean {
+  return /\.exr$/i.test(filename.trim());
+}
+
+function getFolderFileSortKey(file: File): string {
+  const relativePath = file.webkitRelativePath.trim();
+  return relativePath || file.name;
 }

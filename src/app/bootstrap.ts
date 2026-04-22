@@ -44,6 +44,10 @@ export async function bootstrapApp(): Promise<AppHandle> {
       const input = document.getElementById('file-input') as HTMLInputElement;
       input.click();
     },
+    onOpenFolderClick: () => {
+      const input = document.getElementById('folder-input') as HTMLInputElement;
+      input.click();
+    },
     onExportImage: async (request) => {
       if (disposed) {
         throw createAbortError('Viewer application has been disposed.');
@@ -87,6 +91,9 @@ export async function bootstrapApp(): Promise<AppHandle> {
     },
     onFileSelected: (file) => {
       void sessionController.enqueueFiles([file]);
+    },
+    onFolderSelected: (files) => {
+      void sessionController.enqueueFolderFiles(files);
     },
     onFilesDropped: (files) => {
       void sessionController.enqueueFiles(files);

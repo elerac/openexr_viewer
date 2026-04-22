@@ -18,8 +18,10 @@ export interface Elements {
   panoramaViewerMenuItem: HTMLButtonElement;
   galleryCboxRgbButton: HTMLButtonElement;
   openFileButton: HTMLButtonElement;
+  openFolderButton: HTMLButtonElement;
   exportImageButton: HTMLButtonElement;
   fileInput: HTMLInputElement;
+  folderInput: HTMLInputElement;
   exportDialogBackdrop: HTMLDivElement;
   exportDialogForm: HTMLFormElement;
   exportFilenameInput: HTMLInputElement;
@@ -150,8 +152,10 @@ export function resolveElements(): Elements {
     panoramaViewerMenuItem: requireElement('panorama-viewer-menu-item', HTMLButtonElement),
     galleryCboxRgbButton: requireElement('gallery-cbox-rgb-button', HTMLButtonElement),
     openFileButton: requireElement('open-file-button', HTMLButtonElement),
+    openFolderButton: requireElement('open-folder-button', HTMLButtonElement),
     exportImageButton: requireElement('export-image-button', HTMLButtonElement),
     fileInput: requireElement('file-input', HTMLInputElement),
+    folderInput: requireElement('folder-input', HTMLInputElement),
     exportDialogBackdrop: requireElement('export-dialog-backdrop', HTMLDivElement),
     exportDialogForm: requireElement('export-dialog-form', HTMLFormElement),
     exportFilenameInput: requireElement('export-filename-input', HTMLInputElement),

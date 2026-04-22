@@ -29,6 +29,21 @@ function createFile(name: string, bytes: number[] = [1, 2, 3]): File {
   } as unknown as File;
 }
 
+function createFolderFile(
+  relativePath: string,
+  bytes: number[] = [1, 2, 3]
+): File {
+  const segments = relativePath.split(/[\\/]/);
+  const name = segments[segments.length - 1] ?? relativePath;
+
+  return {
+    name,
+    size: bytes.length,
+    webkitRelativePath: relativePath,
+    arrayBuffer: async () => new Uint8Array(bytes).buffer
+  } as unknown as File;
+}
+
 function createController(options: {
   decodeBytes?: (bytes: Uint8Array) => Promise<DecodedExrImage>;
 } = {}) {
@@ -120,6 +135,84 @@ describe('session controller shim', () => {
     const reloaded = controller.getActiveSession();
     expect(reloaded?.decoded.width).toBe(8);
     expect(reloaded?.decoded.height).toBe(8);
+  });
+
+  it('loads only exr files from folder selections', async () => {
+    const decodeBytes = vi
+      .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
+      .mockResolvedValue(createDecodedImage());
+    const { controller } = createController({ decodeBytes });
+
+    await controller.enqueueFolderFiles([
+      createFolderFile('shots/beauty.exr'),
+      createFolderFile('shots/notes.txt'),
+      createFolderFile('shots/aovs/albedo.EXR'),
+      createFolderFile('shots/depth.png')
+    ]);
+
+    expect(decodeBytes).toHaveBeenCalledTimes(2);
+    expect(controller.getSessions().map((session) => session.filename)).toEqual(['albedo.EXR', 'beauty.exr']);
+  });
+
+  it('loads recursive folder selections in stable relative-path order', async () => {
+    const decodeBytes = vi.fn(async (bytes: Uint8Array) => createDecodedImage(bytes[0] ?? 1, 4));
+    const { controller } = createController({ decodeBytes });
+
+    await controller.enqueueFolderFiles([
+      createFolderFile('shots/z_last.exr', [30]),
+      createFolderFile('shots/aovs/beauty.exr', [10]),
+      createFolderFile('shots/aovs/masks/id.exr', [20])
+    ]);
+
+    expect(controller.getSessions().map((session) => session.source.kind === 'file'
+      ? session.source.file.webkitRelativePath
+      : session.filename
+    )).toEqual([
+      'shots/aovs/beauty.exr',
+      'shots/aovs/masks/id.exr',
+      'shots/z_last.exr'
+    ]);
+    expect(controller.getSessions().map((session) => session.decoded.width)).toEqual([10, 20, 30]);
+  });
+
+  it('reports an error and leaves sessions unchanged when a folder has no exr files', async () => {
+    const decodeBytes = vi.fn(async () => createDecodedImage());
+    const { controller, core } = createController({ decodeBytes });
+
+    await controller.enqueueFiles([createFile('existing.exr')]);
+
+    await controller.enqueueFolderFiles([
+      createFolderFile('shots/readme.md'),
+      createFolderFile('shots/aovs/depth.png')
+    ]);
+
+    expect(decodeBytes).toHaveBeenCalledTimes(1);
+    expect(controller.getSessions().map((session) => session.filename)).toEqual(['existing.exr']);
+    expect(core.getState().errorMessage).toBe('No OpenEXR files found in the selected folder.');
+  });
+
+  it('keeps duplicate filename suffixing for files loaded from different subfolders', async () => {
+    const decodeBytes = vi
+      .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
+      .mockResolvedValue(createDecodedImage());
+    const { controller } = createController({ decodeBytes });
+
+    await controller.enqueueFolderFiles([
+      createFolderFile('shots/a/beauty.exr'),
+      createFolderFile('shots/b/beauty.exr')
+    ]);
+
+    expect(controller.getSessions().map((session) => session.displayName)).toEqual([
+      'beauty.exr',
+      'beauty.exr (2)'
+    ]);
+    expect(controller.getSessions().map((session) => session.source.kind === 'file'
+      ? session.source.file.webkitRelativePath
+      : session.filename
+    )).toEqual([
+      'shots/a/beauty.exr',
+      'shots/b/beauty.exr'
+    ]);
   });
 
   it('reorders sessions using explicit before and after placement', async () => {

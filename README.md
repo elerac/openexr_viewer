@@ -8,7 +8,8 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
 
 - OpenEXR decode via a browser-safe `exrs` WASM adapter with full layer/channel extraction.
 - Built-in Gallery sample: `Gallery > cbox_rgb.exr`.
-- Local EXR load via `File > Open...` or drag/drop (drag-and-drop supports multiple files in one action).
+- Local EXR load via `File > Open...` or drag/drop (drag-and-drop supports multiple files and recursive folder drops in one action).
+- Recursive folder EXR load via `File > Open Folder...`; all `.exr` files under the selected folder are appended as sessions.
 - `File > Export...` exports the full active image to LDR PNG with the current layer, channel/stokes selection, exposure, colormap, and alpha settings applied.
 - `View > Image viewer` / `Panorama viewer` switches between the existing 2D image view and an equirectangular panorama projection suitable for 360-degree environment maps and HDRIs.
 - Multi-image sessions:
@@ -135,6 +136,8 @@ npm run test:e2e
 - `Opened Images` list: click-hold-move a filename row to reorder.
 - `Gallery > cbox_rgb.exr`: open the built-in Cornell box sample and append it as a new session.
 - `File > Open...`: open one EXR file and append it as a new session.
+- `File > Open Folder...`: recursively open every `.exr` file under the selected folder and append them as new sessions.
+- Drag/drop: drop one or more `.exr` files, or drop a folder to recursively load every `.exr` under it.
 - `File > Export...`: export the active image to PNG with optional downscaling.
 - `Settings > Cache Budget`: choose the retained display-cache cap from `64`, `128`, `256`, `512`, or `1024` MB. The value persists in `localStorage`.
 - `View > Image viewer` / `Panorama viewer`: switch between planar image viewing and spherical panorama viewing.

@@ -17,6 +17,7 @@
             </button>
             <div id="file-menu" class="app-menu-dropdown hidden" role="menu" aria-labelledby="file-menu-button">
               <button id="open-file-button" class="app-menu-item" type="button" role="menuitem">Open...</button>
+              <button id="open-folder-button" class="app-menu-item" type="button" role="menuitem">Open Folder...</button>
               <button id="export-image-button" class="app-menu-item" type="button" role="menuitem">Export...</button>
               <button id="reload-all-opened-images-button" class="app-menu-item" type="button" role="menuitem">Reload All</button>
               <button id="close-all-opened-images-button" class="app-menu-item" type="button" role="menuitem">Close All</button>
@@ -78,6 +79,7 @@
           </div>
         </nav>
         <input id="file-input" type="file" accept=".exr,image/exr" hidden />
+        <input id="folder-input" type="file" accept=".exr,image/exr" webkitdirectory multiple hidden />
       </header>
 
       <div id="error-banner" class="error-banner hidden"></div>
@@ -206,7 +208,7 @@
           <canvas id="gl-canvas"></canvas>
           <canvas id="overlay-canvas"></canvas>
           <canvas id="probe-overlay-canvas"></canvas>
-          <div id="drop-overlay" class="drop-overlay hidden">Drop .exr file(s) to load</div>
+          <div id="drop-overlay" class="drop-overlay hidden">Drop .exr file(s) or folder to load</div>
           <div id="loading-overlay" class="loading-overlay hidden" role="status" aria-live="polite">
             <div class="loading-spinner" aria-hidden="true"></div>
             <span class="loading-message">Loading image...</span>

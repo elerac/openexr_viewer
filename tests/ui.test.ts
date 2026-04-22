@@ -342,11 +342,11 @@ describe('panel split sizing', () => {
 });
 
 describe('view menu', () => {
-  it('renders file menu items in open-export-reload-close order', () => {
+  it('renders file menu items in open-open-folder-export-reload-close order', () => {
     installUiFixture();
 
     const labels = Array.from(document.querySelectorAll('#file-menu .app-menu-item')).map((item) => item.textContent?.trim());
-    expect(labels).toEqual(['Open...', 'Export...', 'Reload All', 'Close All']);
+    expect(labels).toEqual(['Open...', 'Open Folder...', 'Export...', 'Reload All', 'Close All']);
   });
 
   it('renders the top menu tabs in file-view-gallery-settings order', () => {
@@ -470,6 +470,77 @@ describe('view menu', () => {
     expect(exportButton.disabled).toBe(true);
   });
 
+  it('closes the file menu and dispatches open-folder clicks', () => {
+    installUiFixture();
+
+    const onOpenFolderClick = vi.fn();
+    new ViewerUi(createUiCallbacks({ onOpenFolderClick }));
+    const fileButton = document.getElementById('file-menu-button') as HTMLButtonElement;
+    const openFolderButton = document.getElementById('open-folder-button') as HTMLButtonElement;
+
+    fileButton.click();
+    expectTopMenuOpen('file-menu-button', 'file-menu');
+
+    openFolderButton.click();
+
+    expect(onOpenFolderClick).toHaveBeenCalledTimes(1);
+    expectTopMenuClosed('file-menu-button', 'file-menu');
+  });
+
+  it('forwards folder input selections and clears the input value', () => {
+    installUiFixture();
+
+    const onFolderSelected = vi.fn();
+    new ViewerUi(createUiCallbacks({ onFolderSelected }));
+    const folderInput = document.getElementById('folder-input') as HTMLInputElement;
+    const beautyFile = new File(['beauty'], 'beauty.exr', { type: 'image/exr' });
+    const albedoFile = new File(['albedo'], 'albedo.exr', { type: 'image/exr' });
+
+    Object.defineProperty(beautyFile, 'webkitRelativePath', {
+      configurable: true,
+      value: 'shot/beauty.exr'
+    });
+    Object.defineProperty(albedoFile, 'webkitRelativePath', {
+      configurable: true,
+      value: 'shot/aovs/albedo.exr'
+    });
+    Object.defineProperty(folderInput, 'files', {
+      configurable: true,
+      value: createFileList([beautyFile, albedoFile])
+    });
+    Object.defineProperty(folderInput, 'value', {
+      configurable: true,
+      writable: true,
+      value: 'selected-folder'
+    });
+
+    folderInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(onFolderSelected).toHaveBeenCalledWith([beautyFile, albedoFile]);
+    expect(folderInput.value).toBe('');
+  });
+
+  it('disables open-folder while loading, matching open-file behavior', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const openFileButton = document.getElementById('open-file-button') as HTMLButtonElement;
+    const openFolderButton = document.getElementById('open-folder-button') as HTMLButtonElement;
+
+    expect(openFileButton.disabled).toBe(false);
+    expect(openFolderButton.disabled).toBe(false);
+
+    ui.setLoading(true);
+
+    expect(openFileButton.disabled).toBe(true);
+    expect(openFolderButton.disabled).toBe(true);
+
+    ui.setLoading(false);
+
+    expect(openFileButton.disabled).toBe(false);
+    expect(openFolderButton.disabled).toBe(false);
+  });
+
   it('opens export dialog with defaults, syncs aspect ratio, and normalizes the filename', async () => {
     installUiFixture();
 
@@ -548,6 +619,96 @@ describe('view menu', () => {
     expect(error.classList.contains('hidden')).toBe(false);
     expect(submitButton.disabled).toBe(false);
     expect(cancelButton.disabled).toBe(false);
+  });
+});
+
+describe('drag and drop', () => {
+  it('keeps plain file drops on the existing file-drop callback', async () => {
+    installUiFixture();
+
+    const onFilesDropped = vi.fn();
+    const onFolderSelected = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onFilesDropped, onFolderSelected }));
+    const beautyFile = new File(['beauty'], 'beauty.exr', { type: 'image/exr' });
+
+    ui.viewerContainer.dispatchEvent(createFileDropEvent('drop', [beautyFile]));
+    await flushMicrotasks();
+
+    expect(onFilesDropped).toHaveBeenCalledWith([beautyFile]);
+    expect(onFolderSelected).not.toHaveBeenCalled();
+  });
+
+  it('captures dropped files synchronously before async fallbacks run', async () => {
+    installUiFixture();
+
+    const onFilesDropped = vi.fn();
+    const onFolderSelected = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onFilesDropped, onFolderSelected }));
+    const beautyFile = new File(['beauty'], 'beauty.exr', { type: 'image/exr' });
+    let fileReadCount = 0;
+
+    ui.viewerContainer.dispatchEvent(createEphemeralFileDropEvent('drop', [beautyFile]));
+    await flushMicrotasks();
+    await flushMicrotasks();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onFilesDropped).toHaveBeenCalledWith([beautyFile]);
+    expect(onFolderSelected).not.toHaveBeenCalled();
+    expect(fileReadCount).toBeGreaterThanOrEqual(1);
+
+    function createEphemeralFileDropEvent(type: 'drop' | 'dragover', files: File[]): Event {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'dataTransfer', {
+        value: {
+          types: ['Files'],
+          items: [
+            {
+              kind: 'file'
+            }
+          ],
+          get files() {
+            fileReadCount += 1;
+            return fileReadCount === 1 ? createFileList(files) : createFileList([]);
+          }
+        }
+      });
+      return event;
+    }
+  });
+
+  it('resolves dropped folders recursively and routes them through the folder callback', async () => {
+    installUiFixture();
+
+    const onFilesDropped = vi.fn();
+    const onFolderSelected = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onFilesDropped, onFolderSelected }));
+    const beautyFile = new File(['beauty'], 'beauty.exr', { type: 'image/exr' });
+    const depthFile = new File(['depth'], 'depth.exr', { type: 'image/exr' });
+    const notesFile = new File(['notes'], 'notes.txt', { type: 'text/plain' });
+
+    ui.viewerContainer.dispatchEvent(createHandleDropEvent('drop', [
+      createDirectoryEntryDropItem(createLegacyDirectoryEntry('shots', [
+        createLegacyFileEntry(beautyFile),
+        createLegacyDirectoryEntry('aovs', [
+          createLegacyFileEntry(depthFile),
+          createLegacyFileEntry(notesFile)
+        ])
+      ]))
+    ]));
+    await flushMicrotasks();
+    await flushMicrotasks();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onFilesDropped).not.toHaveBeenCalled();
+    expect(onFolderSelected).toHaveBeenCalledTimes(1);
+    expect(onFolderSelected.mock.calls[0]?.[0].map((file: File) => ({
+      name: file.name,
+      relativePath: file.webkitRelativePath
+    }))).toEqual([
+      { name: 'beauty.exr', relativePath: 'shots/beauty.exr' },
+      { name: 'depth.exr', relativePath: 'shots/aovs/depth.exr' },
+      { name: 'notes.txt', relativePath: 'shots/aovs/notes.txt' }
+    ]);
   });
 });
 
@@ -853,8 +1014,10 @@ function createUiCallbacks(overrides: Partial<ReturnType<typeof createUiCallback
 function createUiCallbacksBase() {
   return {
     onOpenFileClick: () => {},
+    onOpenFolderClick: () => {},
     onExportImage: async (_request: { filename: string; format: 'png'; width: number; height: number }) => {},
     onFileSelected: () => {},
+    onFolderSelected: () => {},
     onFilesDropped: () => {},
     onGalleryImageSelected: () => {},
     onReloadAllOpenedImages: () => {},
@@ -891,16 +1054,130 @@ async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
 }
 
-function createFileDropEvent(type: 'drop' | 'dragover'): Event {
+function createFileDropEvent(type: 'drop' | 'dragover', files: File[] = [new File(['pixels'], 'sample.exr')]): Event {
   const event = new Event(type, { bubbles: true, cancelable: true });
   Object.defineProperty(event, 'dataTransfer', {
     value: {
       types: ['Files'],
-      files: {
-        length: 1,
-        0: new File(['pixels'], 'sample.exr')
-      }
+      files: createFileList(files)
     }
   });
   return event;
+}
+
+function createHandleDropEvent(type: 'drop' | 'dragover', items: DataTransferItem[]): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', {
+    value: {
+      types: ['Files'],
+      items,
+      files: createFileList([])
+    }
+  });
+  return event;
+}
+
+function createFileList(files: File[]): FileList {
+  return {
+    length: files.length,
+    item: (index: number) => files[index] ?? null,
+    ...files
+  } as unknown as FileList;
+}
+
+function createFileHandle(file: File): FileSystemFileHandle {
+  return {
+    kind: 'file',
+    name: file.name,
+    getFile: async () => file
+  } as unknown as FileSystemFileHandle;
+}
+
+function createDirectoryHandle(
+  name: string,
+  entries: Array<FileSystemFileHandle | FileSystemDirectoryHandle>
+): FileSystemDirectoryHandle {
+  return {
+    kind: 'directory',
+    name,
+    values: async function* () {
+      for (const entry of entries) {
+        yield entry;
+      }
+    }
+  } as unknown as FileSystemDirectoryHandle;
+}
+
+function createDirectoryDropItem(
+  name: string,
+  entries: Array<FileSystemFileHandle | FileSystemDirectoryHandle>
+): DataTransferItem {
+  const handle = createDirectoryHandle(name, entries);
+  return {
+    kind: 'file',
+    getAsFileSystemHandle: () => Promise.resolve(handle)
+  } as unknown as DataTransferItem;
+}
+
+interface LegacyMockFileEntry {
+  isFile: true;
+  isDirectory: false;
+  name: string;
+  file: (success: (nextFile: File) => void) => void;
+}
+
+interface LegacyMockDirectoryEntry {
+  isFile: false;
+  isDirectory: true;
+  name: string;
+  createReader: () => {
+    readEntries: (success: (nextEntries: LegacyMockEntry[]) => void) => void;
+  };
+}
+
+type LegacyMockEntry = LegacyMockFileEntry | LegacyMockDirectoryEntry;
+
+function createLegacyFileEntry(file: File): LegacyMockFileEntry {
+  return {
+    isFile: true,
+    isDirectory: false,
+    name: file.name,
+    file: (success) => {
+      success(file);
+    }
+  };
+}
+
+function createLegacyDirectoryEntry(
+  name: string,
+  entries: LegacyMockEntry[]
+): LegacyMockDirectoryEntry {
+  return {
+    isFile: false,
+    isDirectory: true,
+    name,
+    createReader: () => {
+      let emitted = false;
+      return {
+        readEntries: (success) => {
+          if (emitted) {
+            success([]);
+            return;
+          }
+
+          emitted = true;
+          success(entries);
+        }
+      };
+    }
+  };
+}
+
+function createDirectoryEntryDropItem(
+  entry: LegacyMockDirectoryEntry
+): DataTransferItem {
+  return {
+    kind: 'file',
+    webkitGetAsEntry: () => entry
+  } as unknown as DataTransferItem;
 }
