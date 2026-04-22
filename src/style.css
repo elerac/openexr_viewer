@@ -40,8 +40,8 @@ output {
   min-height: 100vh;
   height: 100vh;
   height: 100dvh;
-  gap: 0.35rem;
-  padding: 0.5rem 0.5rem 0.1rem;
+  gap: 0.28rem;
+  padding: 0.4rem 0.4rem 0.08rem;
 }
 
 .app-menu-bar {
@@ -348,20 +348,98 @@ input[type='range'] {
 
 .main-layout {
   --image-panel-width: 220px;
+  --image-panel-tab-width: 18px;
+  --image-panel-resizer-width: 0.5rem;
   --right-panel-width: 320px;
+  --right-panel-tab-width: 18px;
+  --right-panel-resizer-width: 0.5rem;
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: var(--image-panel-width) 0.5rem minmax(360px, 1fr) 0.5rem var(--right-panel-width);
+  grid-template-columns:
+    calc(var(--image-panel-width) + var(--image-panel-tab-width))
+    var(--image-panel-resizer-width)
+    minmax(360px, 1fr)
+    var(--right-panel-resizer-width)
+    calc(var(--right-panel-width) + var(--right-panel-tab-width));
   grid-template-areas: "image image-resizer viewer right-resizer panel";
   gap: 0;
 }
 
+.panel-shell {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.5rem;
+  background: var(--panel);
+  overflow: hidden;
+}
+
 .right-stack {
   grid-area: panel;
-  min-height: 0;
+}
+
+.image-panel-shell {
+  grid-area: image;
+}
+
+.panel-collapse-button {
+  flex: 0 0 var(--panel-collapse-button-width, 18px);
+  align-self: stretch;
+  width: var(--panel-collapse-button-width, 18px);
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--panel) 90%, #000);
+  color: var(--text-dim);
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.panel-collapse-button::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-style: solid;
+}
+
+.panel-shell--left .panel-collapse-button {
+  --panel-collapse-button-width: var(--image-panel-tab-width);
+  border-right: 1px solid color-mix(in srgb, var(--panel-border) 88%, transparent);
+}
+
+.panel-shell--right .panel-collapse-button {
+  --panel-collapse-button-width: var(--right-panel-tab-width);
+  border-left: 1px solid color-mix(in srgb, var(--panel-border) 88%, transparent);
+}
+
+.panel-collapse-button--left::before,
+.panel-collapse-button--right.is-collapsed::before {
+  border-width: 0.38rem 0.48rem 0.38rem 0;
+  border-color: transparent currentColor transparent transparent;
+}
+
+.panel-collapse-button--right::before,
+.panel-collapse-button--left.is-collapsed::before {
+  border-width: 0.38rem 0 0.38rem 0.48rem;
+  border-color: transparent transparent transparent currentColor;
+}
+
+.panel-collapse-button:hover,
+.panel-collapse-button:focus-visible {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--panel) 82%, #000);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.panel-collapse-button:focus-visible {
+  outline: none;
 }
 
 .layout-resizer {
@@ -382,7 +460,7 @@ input[type='range'] {
 }
 
 .layout-resizer--vertical {
-  width: 0.5rem;
+  width: var(--layout-resizer-width, 0.5rem);
   cursor: col-resize;
 }
 
@@ -405,12 +483,23 @@ input[type='range'] {
   outline: none;
 }
 
+.layout-resizer.is-collapsed {
+  pointer-events: none;
+}
+
+.layout-resizer.is-collapsed::before {
+  opacity: 0;
+  box-shadow: none;
+}
+
 #image-panel-resizer {
   grid-area: image-resizer;
+  --layout-resizer-width: var(--image-panel-resizer-width);
 }
 
 #right-panel-resizer {
   grid-area: right-resizer;
+  --layout-resizer-width: var(--right-panel-resizer-width);
 }
 
 body.is-resizing-panel-columns,
@@ -520,26 +609,35 @@ body.is-resizing-panel-columns * {
 }
 
 .side-panel {
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 0.5rem;
-  padding: 0.75rem;
+  display: flex;
+  flex: 0 0 auto;
+  width: var(--right-panel-width);
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.side-panel-body {
   flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.75rem;
+}
+
+.image-panel {
+  flex: 0 0 auto;
+  width: var(--image-panel-width);
+  min-width: 0;
   min-height: 0;
   max-height: 100%;
   overflow: auto;
 }
 
-.image-panel {
-  grid-area: image;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 0.5rem;
-  padding: 0;
-  align-self: stretch;
-  min-height: 0;
-  max-height: 100%;
-  overflow: auto;
+.side-panel.is-collapsed,
+.image-panel.is-collapsed {
+  overflow: hidden;
 }
 
 .image-panel p {
@@ -1388,7 +1486,7 @@ body.is-resizing-panel-columns * {
 
 @media (max-width: 1280px) {
   .app-shell {
-    padding-inline: 0.4rem;
+    padding-inline: 0.34rem;
   }
 
   .main-layout {
@@ -1396,7 +1494,7 @@ body.is-resizing-panel-columns * {
     --right-panel-width: 280px;
   }
 
-  .side-panel {
+  .side-panel-body {
     padding: 0.65rem;
   }
 }
@@ -1427,6 +1525,19 @@ body.is-resizing-panel-columns * {
 
   .layout-resizer {
     display: none;
+  }
+
+  .panel-collapse-button {
+    display: none;
+  }
+
+  .panel-shell {
+    display: block;
+  }
+
+  .side-panel,
+  .image-panel {
+    width: 100% !important;
   }
 
   .right-stack {

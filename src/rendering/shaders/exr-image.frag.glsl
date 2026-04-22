@@ -4,6 +4,7 @@ precision highp float;
 uniform sampler2D uSourceTextures[12];
 uniform sampler2D uColormapTexture;
 uniform vec2 uViewport;
+uniform vec2 uViewportOrigin;
 uniform vec2 uImageSize;
 uniform vec2 uPan;
 uniform float uZoom;
@@ -86,7 +87,8 @@ vec3 linearToSrgb(vec3 linear) {
 }
 
 vec3 checker(vec2 screen) {
-  float tile = mod(floor(screen.x / 16.0) + floor(screen.y / 16.0), 2.0);
+  vec2 anchoredScreen = screen + uViewportOrigin;
+  float tile = mod(floor(anchoredScreen.x / 16.0) + floor(anchoredScreen.y / 16.0), 2.0);
   return mix(vec3(0.09), vec3(0.12), tile);
 }
 

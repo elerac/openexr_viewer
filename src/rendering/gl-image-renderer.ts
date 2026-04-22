@@ -21,6 +21,7 @@ const ALPHA_OUTPUT_PREMULTIPLIED = 2;
 
 interface CommonUniforms {
   viewport: WebGLUniformLocation;
+  viewportOrigin: WebGLUniformLocation;
   imageSize: WebGLUniformLocation;
   exposure: WebGLUniformLocation;
   useColormap: WebGLUniformLocation;
@@ -71,6 +72,8 @@ interface RenderPassOptions {
   alphaOutputMode: AlphaOutputMode;
   viewportWidth?: number;
   viewportHeight?: number;
+  viewportLeft?: number;
+  viewportTop?: number;
 }
 
 type AlphaOutputMode = 'opaque' | 'straight' | 'premultiplied';
@@ -100,6 +103,7 @@ export class GlImageRenderer implements Disposable {
   private exportSourceSurface: ExportSurface | null = null;
   private exportTargetSurface: ExportSurface | null = null;
   private viewport: ViewportInfo = { width: 1, height: 1 };
+  private viewportOrigin = { left: 0, top: 0 };
   private imageSize: { width: number; height: number } | null = null;
   private colormapTextureSize = { width: 1, height: 1 };
   private colormapEntryCount = 0;
@@ -189,7 +193,7 @@ export class GlImageRenderer implements Disposable {
     return this.imageSize;
   }
 
-  resize(width: number, height: number): void {
+  resize(width: number, height: number, left = 0, top = 0): void {
     if (this.disposed) {
       return;
     }
@@ -197,6 +201,10 @@ export class GlImageRenderer implements Disposable {
     this.viewport = {
       width: Math.max(1, Math.floor(width)),
       height: Math.max(1, Math.floor(height))
+    };
+    this.viewportOrigin = {
+      left: Number.isFinite(left) ? left : 0,
+      top: Number.isFinite(top) ? top : 0
     };
 
     this.glCanvas.width = this.viewport.width;
@@ -451,7 +459,9 @@ export class GlImageRenderer implements Disposable {
         compositeCheckerboard: false,
         alphaOutputMode: preserveAlpha && needsResize ? 'premultiplied' : preserveAlpha ? 'straight' : 'opaque',
         viewportWidth: sourceWidth,
-        viewportHeight: sourceHeight
+        viewportHeight: sourceHeight,
+        viewportLeft: 0,
+        viewportTop: 0
       });
 
       let readFramebuffer = sourceSurface.framebuffer;
@@ -575,6 +585,7 @@ export class GlImageRenderer implements Disposable {
   private getCommonUniforms(program: WebGLProgram): CommonUniforms {
     return {
       viewport: getRequiredUniformLocation(this.gl, program, 'uViewport'),
+      viewportOrigin: getRequiredUniformLocation(this.gl, program, 'uViewportOrigin'),
       imageSize: getRequiredUniformLocation(this.gl, program, 'uImageSize'),
       exposure: getRequiredUniformLocation(this.gl, program, 'uExposure'),
       useColormap: getRequiredUniformLocation(this.gl, program, 'uUseColormap'),
@@ -649,6 +660,11 @@ export class GlImageRenderer implements Disposable {
       uniforms.viewport,
       options.viewportWidth ?? this.viewport.width,
       options.viewportHeight ?? this.viewport.height
+    );
+    gl.uniform2f(
+      uniforms.viewportOrigin,
+      options.viewportLeft ?? this.viewportOrigin.left,
+      options.viewportTop ?? this.viewportOrigin.top
     );
 
     const width = this.imageSize?.width ?? 0;

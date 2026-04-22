@@ -130,76 +130,86 @@
       </div>
 
       <main id="main-layout" class="main-layout">
-        <div id="right-stack" class="right-stack">
+        <div id="right-stack" class="right-stack panel-shell panel-shell--right">
           <aside id="inspector-panel" class="side-panel">
-            <div class="control-block">
-              <button id="reset-view-button" type="button">Reset</button>
-            </div>
-            <div class="control-block inspector-button-row">
-              <button id="visualization-none-button" type="button" aria-pressed="true">None</button>
-              <button id="colormap-toggle-button" type="button" aria-pressed="false" aria-controls="colormap-range-control" aria-expanded="false">Colormap</button>
-            </div>
-            <div id="colormap-range-control" class="control-block colormap-range-control hidden">
-              <label class="colormap-palette-control" for="colormap-select">
-                Palette
-                <select id="colormap-select"></select>
-              </label>
-              <div id="stokes-degree-modulation-control" class="stokes-degree-modulation-control hidden">
-                <button id="stokes-degree-modulation-button" type="button" aria-pressed="false">DoLP Modulation</button>
+            <div class="side-panel-body">
+              <div class="control-block">
+                <button id="reset-view-button" type="button">Reset</button>
               </div>
-              <div class="colormap-range-heading">
-                <span>Colormap Range</span>
-                <div class="colormap-range-actions">
-                  <button id="colormap-zero-center-button" type="button">Zero Center</button>
-                  <button id="colormap-auto-range-button" type="button">Auto Range</button>
+              <div class="control-block inspector-button-row">
+                <button id="visualization-none-button" type="button" aria-pressed="true">None</button>
+                <button id="colormap-toggle-button" type="button" aria-pressed="false" aria-controls="colormap-range-control" aria-expanded="false">Colormap</button>
+              </div>
+              <div id="colormap-range-control" class="control-block colormap-range-control hidden">
+                <label class="colormap-palette-control" for="colormap-select">
+                  Palette
+                  <select id="colormap-select"></select>
+                </label>
+                <div id="stokes-degree-modulation-control" class="stokes-degree-modulation-control hidden">
+                  <button id="stokes-degree-modulation-button" type="button" aria-pressed="false">DoLP Modulation</button>
+                </div>
+                <div class="colormap-range-heading">
+                  <span>Colormap Range</span>
+                  <div class="colormap-range-actions">
+                    <button id="colormap-zero-center-button" type="button">Zero Center</button>
+                    <button id="colormap-auto-range-button" type="button">Auto Range</button>
+                  </div>
+                </div>
+                <div id="colormap-range-slider" class="colormap-range-slider" aria-label="Colormap vmin and vmax">
+                  <div class="colormap-range-track" aria-hidden="true"></div>
+                  <div class="colormap-range-fill" aria-hidden="true"></div>
+                  <input id="colormap-vmin-slider" class="colormap-range-thumb colormap-range-thumb-min" type="range" min="0" max="1" step="0.001" value="0" aria-label="Colormap vmin" />
+                  <input id="colormap-vmax-slider" class="colormap-range-thumb colormap-range-thumb-max" type="range" min="0" max="1" step="0.001" value="1" aria-label="Colormap vmax" />
+                </div>
+                <div class="colormap-range-input-row">
+                  <label for="colormap-vmin-input">vmin</label>
+                  <input id="colormap-vmin-input" type="number" step="any" value="0" />
+                  <label for="colormap-vmax-input">vmax</label>
+                  <input id="colormap-vmax-input" type="number" step="any" value="1" />
                 </div>
               </div>
-              <div id="colormap-range-slider" class="colormap-range-slider" aria-label="Colormap vmin and vmax">
-                <div class="colormap-range-track" aria-hidden="true"></div>
-                <div class="colormap-range-fill" aria-hidden="true"></div>
-                <input id="colormap-vmin-slider" class="colormap-range-thumb colormap-range-thumb-min" type="range" min="0" max="1" step="0.001" value="0" aria-label="Colormap vmin" />
-                <input id="colormap-vmax-slider" class="colormap-range-thumb colormap-range-thumb-max" type="range" min="0" max="1" step="0.001" value="1" aria-label="Colormap vmax" />
+              <div id="exposure-control" class="control-block">
+                <label for="exposure-slider">Exposure (EV)</label>
+                <div class="exposure-input-row">
+                  <input id="exposure-slider" type="range" min="-10" max="10" step="0.1" value="0" />
+                  <input id="exposure-value" type="number" min="-10" max="10" step="0.1" value="0.0" />
+                </div>
               </div>
-              <div class="colormap-range-input-row">
-                <label for="colormap-vmin-input">vmin</label>
-                <input id="colormap-vmin-input" type="number" step="any" value="0" />
-                <label for="colormap-vmax-input">vmax</label>
-                <input id="colormap-vmax-input" type="number" step="any" value="1" />
-              </div>
-            </div>
-            <div id="exposure-control" class="control-block">
-              <label for="exposure-slider">Exposure (EV)</label>
-              <div class="exposure-input-row">
-                <input id="exposure-slider" type="range" min="-10" max="10" step="0.1" value="0" />
-                <input id="exposure-value" type="number" min="-10" max="10" step="0.1" value="0.0" />
-              </div>
-            </div>
 
-            <section id="probe-panel" class="readout-block">
-              <h2>Probe</h2>
-              <p id="probe-mode">Hover</p>
-              <p id="probe-coords">x -   y -</p>
-              <div id="probe-color-preview" class="probe-color-preview is-empty">
-                <span id="probe-color-swatch" class="probe-color-swatch" aria-hidden="true"></span>
-                <div id="probe-color-values" class="probe-color-values" aria-label="Probe display values">
-                  <div class="probe-color-row">
-                    <span class="probe-color-channel">R:</span>
-                    <span class="probe-color-number"></span>
-                  </div>
-                  <div class="probe-color-row">
-                    <span class="probe-color-channel">G:</span>
-                    <span class="probe-color-number"></span>
-                  </div>
-                  <div class="probe-color-row">
-                    <span class="probe-color-channel">B:</span>
-                    <span class="probe-color-number"></span>
+              <section id="probe-panel" class="readout-block">
+                <h2>Probe</h2>
+                <p id="probe-mode">Hover</p>
+                <p id="probe-coords">x -   y -</p>
+                <div id="probe-color-preview" class="probe-color-preview is-empty">
+                  <span id="probe-color-swatch" class="probe-color-swatch" aria-hidden="true"></span>
+                  <div id="probe-color-values" class="probe-color-values" aria-label="Probe display values">
+                    <div class="probe-color-row">
+                      <span class="probe-color-channel">R:</span>
+                      <span class="probe-color-number"></span>
+                    </div>
+                    <div class="probe-color-row">
+                      <span class="probe-color-channel">G:</span>
+                      <span class="probe-color-number"></span>
+                    </div>
+                    <div class="probe-color-row">
+                      <span class="probe-color-channel">B:</span>
+                      <span class="probe-color-number"></span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div id="probe-values" class="probe-values"></div>
-              <div id="probe-metadata" class="probe-metadata hidden" aria-label="EXR metadata"></div>
-            </section>
+                <div id="probe-values" class="probe-values"></div>
+                <div id="probe-metadata" class="probe-metadata hidden" aria-label="EXR metadata"></div>
+              </section>
+            </div>
           </aside>
+          <button
+            id="right-panel-collapse-button"
+            class="panel-collapse-button panel-collapse-button--right"
+            type="button"
+            aria-label="Collapse right panel"
+            aria-controls="inspector-panel"
+            aria-expanded="true"
+          ></button>
         </div>
 
         <div id="right-panel-resizer" class="layout-resizer layout-resizer--vertical" role="separator" tabindex="0" aria-label="Resize viewer and inspector panels" aria-orientation="vertical"></div>
@@ -217,55 +227,65 @@
 
         <div id="image-panel-resizer" class="layout-resizer layout-resizer--vertical" role="separator" tabindex="0" aria-label="Resize image and viewer panels" aria-orientation="vertical"></div>
 
-        <aside id="image-panel" class="image-panel">
-          <section class="image-browser-section" aria-labelledby="opened-files-heading">
-            <div class="image-browser-heading">
-              <button id="opened-files-toggle" class="image-browser-toggle" type="button" aria-label="Toggle Open Files" aria-controls="opened-files-list" aria-expanded="true">
-                <span class="image-browser-chevron" aria-hidden="true"></span>
-              </button>
-              <h3 id="opened-files-heading">Open Files</h3>
-              <span id="opened-files-count" class="image-browser-count">0</span>
-            </div>
-            <div
-              id="opened-files-list"
-              class="image-browser-list image-browser-list--files"
-              role="listbox"
-              aria-label="Open files"
-              aria-describedby="opened-files-reorder-hint"
-            ></div>
-            <p id="opened-files-reorder-hint" class="visually-hidden">Drag rows to reorder open files.</p>
-            <select id="opened-images-select" class="compat-select" multiple aria-hidden="true" tabindex="-1"></select>
-          </section>
+        <div id="image-panel" class="image-panel-shell panel-shell panel-shell--left">
+          <button
+            id="image-panel-collapse-button"
+            class="panel-collapse-button panel-collapse-button--left"
+            type="button"
+            aria-label="Collapse left panel"
+            aria-controls="image-panel-content"
+            aria-expanded="true"
+          ></button>
+          <aside id="image-panel-content" class="image-panel">
+            <section class="image-browser-section" aria-labelledby="opened-files-heading">
+              <div class="image-browser-heading">
+                <button id="opened-files-toggle" class="image-browser-toggle" type="button" aria-label="Toggle Open Files" aria-controls="opened-files-list" aria-expanded="true">
+                  <span class="image-browser-chevron" aria-hidden="true"></span>
+                </button>
+                <h3 id="opened-files-heading">Open Files</h3>
+                <span id="opened-files-count" class="image-browser-count">0</span>
+              </div>
+              <div
+                id="opened-files-list"
+                class="image-browser-list image-browser-list--files"
+                role="listbox"
+                aria-label="Open files"
+                aria-describedby="opened-files-reorder-hint"
+              ></div>
+              <p id="opened-files-reorder-hint" class="visually-hidden">Drag rows to reorder open files.</p>
+              <select id="opened-images-select" class="compat-select" multiple aria-hidden="true" tabindex="-1"></select>
+            </section>
 
-          <section class="image-browser-section" aria-labelledby="channel-view-heading">
-            <div class="image-browser-heading image-browser-heading--actions">
-              <button id="channel-view-toggle" class="image-browser-toggle" type="button" aria-label="Toggle Channel View" aria-controls="channel-view-list" aria-expanded="true">
-                <span class="image-browser-chevron" aria-hidden="true"></span>
-              </button>
-              <h3 id="channel-view-heading">Channel View</h3>
-              <span id="channel-view-count" class="image-browser-count">0</span>
-              <button id="rgb-split-toggle-button" class="channel-split-toggle hidden" type="button" aria-pressed="false" aria-controls="rgb-group-select">Split RGB</button>
-            </div>
-            <div id="channel-view-list" class="image-browser-list" role="listbox" aria-label="Channel view"></div>
-            <select id="rgb-group-select" class="compat-select" multiple aria-hidden="true" tabindex="-1"></select>
-          </section>
+            <section class="image-browser-section" aria-labelledby="channel-view-heading">
+              <div class="image-browser-heading image-browser-heading--actions">
+                <button id="channel-view-toggle" class="image-browser-toggle" type="button" aria-label="Toggle Channel View" aria-controls="channel-view-list" aria-expanded="true">
+                  <span class="image-browser-chevron" aria-hidden="true"></span>
+                </button>
+                <h3 id="channel-view-heading">Channel View</h3>
+                <span id="channel-view-count" class="image-browser-count">0</span>
+                <button id="rgb-split-toggle-button" class="channel-split-toggle hidden" type="button" aria-pressed="false" aria-controls="rgb-group-select">Split RGB</button>
+              </div>
+              <div id="channel-view-list" class="image-browser-list" role="listbox" aria-label="Channel view"></div>
+              <select id="rgb-group-select" class="compat-select" multiple aria-hidden="true" tabindex="-1"></select>
+            </section>
 
-          <div id="layer-control" class="control-block compat-control hidden">
-            <label for="layer-select">Layer</label>
-            <select id="layer-select" class="compat-select" multiple aria-hidden="true" tabindex="-1"></select>
-          </div>
-
-          <section class="image-browser-section" aria-labelledby="parts-layers-heading">
-            <div class="image-browser-heading">
-              <button id="parts-layers-toggle" class="image-browser-toggle" type="button" aria-label="Toggle Parts / Layers" aria-controls="parts-layers-list" aria-expanded="true">
-                <span class="image-browser-chevron" aria-hidden="true"></span>
-              </button>
-              <h3 id="parts-layers-heading">Parts / Layers</h3>
-              <span id="parts-layers-count" class="image-browser-count">0</span>
+            <div id="layer-control" class="control-block compat-control hidden">
+              <label for="layer-select">Layer</label>
+              <select id="layer-select" class="compat-select" multiple aria-hidden="true" tabindex="-1"></select>
             </div>
-            <div id="parts-layers-list" class="image-browser-list" role="listbox" aria-label="Parts and layers"></div>
-          </section>
-        </aside>
+
+            <section class="image-browser-section" aria-labelledby="parts-layers-heading">
+              <div class="image-browser-heading">
+                <button id="parts-layers-toggle" class="image-browser-toggle" type="button" aria-label="Toggle Parts / Layers" aria-controls="parts-layers-list" aria-expanded="true">
+                  <span class="image-browser-chevron" aria-hidden="true"></span>
+                </button>
+                <h3 id="parts-layers-heading">Parts / Layers</h3>
+                <span id="parts-layers-count" class="image-browser-count">0</span>
+              </div>
+              <div id="parts-layers-list" class="image-browser-list" role="listbox" aria-label="Parts and layers"></div>
+            </section>
+          </aside>
+        </div>
       </main>
     </div>
 

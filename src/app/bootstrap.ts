@@ -300,7 +300,7 @@ export async function bootstrapApp(): Promise<AppHandle> {
         }
       }
       viewerContainerRect = rect;
-      renderer.resize(rect.width, rect.height);
+      renderer.resize(rect.width, rect.height, rect.left, rect.top);
       if (selectActiveSession(core.getState())) {
         renderer.render(mergeRenderState(core.getState().sessionState, interactionCoordinator.getState()));
       } else {
@@ -311,7 +311,7 @@ export async function bootstrapApp(): Promise<AppHandle> {
 
     const rect = readViewportClientRect(ui.viewerContainer);
     viewerContainerRect = rect;
-    renderer.resize(rect.width, rect.height);
+    renderer.resize(rect.width, rect.height, rect.left, rect.top);
     if (selectActiveSession(core.getState())) {
       renderer.render(mergeRenderState(core.getState().sessionState, interactionCoordinator.getState()));
     } else {

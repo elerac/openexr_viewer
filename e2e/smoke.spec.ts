@@ -775,6 +775,7 @@ test('persists the cache budget and keeps open-file actions limited to reload an
 });
 
 test('resizes desktop panel splits and persists them', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
   await page.waitForTimeout(1500);
 
@@ -786,29 +787,64 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
 
   const imageResizer = page.locator('#image-panel-resizer');
   const rightResizer = page.locator('#right-panel-resizer');
+  const imageCollapseButton = page.locator('#image-panel-collapse-button');
+  const rightCollapseButton = page.locator('#right-panel-collapse-button');
   const viewer = page.locator('#viewer-container');
 
   await expect(imageResizer).toBeVisible();
   await expect(rightResizer).toBeVisible();
+  await expect(imageCollapseButton).toBeVisible();
+  await expect(rightCollapseButton).toBeVisible();
 
   const readLayout = async () => {
     return await page.evaluate(() => {
       const imagePanel = document.querySelector('#image-panel');
+      const imagePanelContent = document.querySelector('#image-panel-content');
       const rightStack = document.querySelector('#right-stack');
+      const inspectorPanel = document.querySelector('#inspector-panel');
+      const imageResizer = document.querySelector('#image-panel-resizer');
+      const rightResizer = document.querySelector('#right-panel-resizer');
+      const imageCollapseButton = document.querySelector('#image-panel-collapse-button');
+      const rightCollapseButton = document.querySelector('#right-panel-collapse-button');
       const viewerContainer = document.querySelector('#viewer-container');
       const canvas = document.querySelector('#gl-canvas');
       if (
         !(imagePanel instanceof HTMLElement) ||
+        !(imagePanelContent instanceof HTMLElement) ||
         !(rightStack instanceof HTMLElement) ||
+        !(inspectorPanel instanceof HTMLElement) ||
+        !(imageResizer instanceof HTMLElement) ||
+        !(rightResizer instanceof HTMLElement) ||
+        !(imageCollapseButton instanceof HTMLButtonElement) ||
+        !(rightCollapseButton instanceof HTMLButtonElement) ||
         !(viewerContainer instanceof HTMLElement) ||
         !(canvas instanceof HTMLCanvasElement)
       ) {
         throw new Error('Missing layout elements.');
       }
 
+      const imagePanelRect = imagePanel.getBoundingClientRect();
+      const imagePanelContentRect = imagePanelContent.getBoundingClientRect();
+      const rightStackRect = rightStack.getBoundingClientRect();
+      const inspectorPanelRect = inspectorPanel.getBoundingClientRect();
+      const imageCollapseButtonRect = imageCollapseButton.getBoundingClientRect();
+      const rightCollapseButtonRect = rightCollapseButton.getBoundingClientRect();
+
       return {
-        imageWidth: imagePanel.getBoundingClientRect().width,
-        rightWidth: rightStack.getBoundingClientRect().width,
+        imageShellWidth: imagePanelRect.width,
+        imageWidth: imagePanelContentRect.width,
+        imageButtonHeight: imageCollapseButtonRect.height,
+        imageShellHeight: imagePanelRect.height,
+        imageButtonLeft: imageCollapseButtonRect.left,
+        imageShellLeft: imagePanelRect.left,
+        rightShellWidth: rightStackRect.width,
+        rightWidth: inspectorPanelRect.width,
+        rightButtonHeight: rightCollapseButtonRect.height,
+        rightShellHeight: rightStackRect.height,
+        rightButtonRight: rightCollapseButtonRect.right,
+        rightShellRight: rightStackRect.right,
+        imageResizerWidth: imageResizer.getBoundingClientRect().width,
+        rightResizerWidth: rightResizer.getBoundingClientRect().width,
         viewerWidth: viewerContainer.getBoundingClientRect().width,
         canvasWidth: canvas.width,
         canvasHeight: canvas.height,
@@ -833,6 +869,11 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
   };
 
   const initial = await readLayout();
+  expect(Math.abs(initial.imageButtonHeight - initial.imageShellHeight)).toBeLessThan(3);
+  expect(Math.abs(initial.rightButtonHeight - initial.rightShellHeight)).toBeLessThan(3);
+  expect(Math.abs(initial.imageButtonLeft - initial.imageShellLeft)).toBeLessThan(2);
+  expect(Math.abs(initial.rightButtonRight - initial.rightShellRight)).toBeLessThan(2);
+
   await dragBy(imageResizer, 48, 0);
   const afterImageResize = await readLayout();
   expect(afterImageResize.imageWidth).toBeGreaterThan(initial.imageWidth + 30);
@@ -849,9 +890,13 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
   const stored = JSON.parse(afterRightResize.stored ?? '{}') as {
     imagePanelWidth?: number;
     rightPanelWidth?: number;
+    imagePanelCollapsed?: boolean;
+    rightPanelCollapsed?: boolean;
   };
   expect(stored.imagePanelWidth).toBeCloseTo(afterRightResize.imageWidth, 0);
   expect(stored.rightPanelWidth).toBeCloseTo(afterRightResize.rightWidth, 0);
+  expect(stored.imagePanelCollapsed).toBe(false);
+  expect(stored.rightPanelCollapsed).toBe(false);
 
   await page.reload();
   await page.waitForTimeout(1500);
@@ -859,9 +904,71 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
   expect(afterReload.imageWidth).toBeCloseTo(afterRightResize.imageWidth, 0);
   expect(afterReload.rightWidth).toBeCloseTo(afterRightResize.rightWidth, 0);
 
+  await imageCollapseButton.click();
+  await page.waitForTimeout(100);
+  const afterImageCollapse = await readLayout();
+  expect(afterImageCollapse.imageWidth).toBeLessThan(2);
+  expect(afterImageCollapse.imageShellWidth).toBeGreaterThan(10);
+  expect(afterImageCollapse.imageResizerWidth).toBeLessThan(2);
+  expect(afterImageCollapse.viewerWidth).toBeGreaterThan(afterReload.viewerWidth + 30);
+  await expect(imageResizer).toBeHidden();
+  await expect(imageCollapseButton).toHaveAttribute('aria-expanded', 'false');
+
+  const storedAfterImageCollapse = JSON.parse(afterImageCollapse.stored ?? '{}') as {
+    imagePanelWidth?: number;
+    imagePanelCollapsed?: boolean;
+  };
+  expect(storedAfterImageCollapse.imagePanelWidth).toBeCloseTo(afterReload.imageWidth, 0);
+  expect(storedAfterImageCollapse.imagePanelCollapsed).toBe(true);
+
+  await page.reload();
+  await page.waitForTimeout(1500);
+  const afterImageCollapseReload = await readLayout();
+  expect(afterImageCollapseReload.imageWidth).toBeLessThan(2);
+  await expect(imageCollapseButton).toHaveAttribute('aria-expanded', 'false');
+
+  await imageCollapseButton.click();
+  await page.waitForTimeout(100);
+  const afterImageReopen = await readLayout();
+  expect(afterImageReopen.imageWidth).toBeCloseTo(afterReload.imageWidth, 0);
+  await expect(imageResizer).toBeVisible();
+  await expect(imageCollapseButton).toHaveAttribute('aria-expanded', 'true');
+
+  await rightCollapseButton.click();
+  await page.waitForTimeout(100);
+  const afterRightCollapse = await readLayout();
+  expect(afterRightCollapse.rightWidth).toBeLessThan(2);
+  expect(afterRightCollapse.rightShellWidth).toBeGreaterThan(10);
+  expect(afterRightCollapse.rightResizerWidth).toBeLessThan(2);
+  expect(afterRightCollapse.viewerWidth).toBeGreaterThan(afterImageReopen.viewerWidth + 30);
+  await expect(rightResizer).toBeHidden();
+  await expect(rightCollapseButton).toHaveAttribute('aria-expanded', 'false');
+
+  const storedAfterRightCollapse = JSON.parse(afterRightCollapse.stored ?? '{}') as {
+    rightPanelWidth?: number;
+    rightPanelCollapsed?: boolean;
+  };
+  expect(storedAfterRightCollapse.rightPanelWidth).toBeCloseTo(afterImageReopen.rightWidth, 0);
+  expect(storedAfterRightCollapse.rightPanelCollapsed).toBe(true);
+
+  await page.reload();
+  await page.waitForTimeout(1500);
+  const afterRightCollapseReload = await readLayout();
+  expect(afterRightCollapseReload.rightWidth).toBeLessThan(2);
+  await expect(rightCollapseButton).toHaveAttribute('aria-expanded', 'false');
+
+  await rightCollapseButton.click();
+  await page.waitForTimeout(100);
+  const afterRightReopen = await readLayout();
+  expect(afterRightReopen.rightWidth).toBeCloseTo(afterImageReopen.rightWidth, 0);
+  await expect(rightResizer).toBeVisible();
+  await expect(rightCollapseButton).toHaveAttribute('aria-expanded', 'true');
+
   await page.setViewportSize({ width: 800, height: 700 });
   await expect(imageResizer).toBeHidden();
   await expect(rightResizer).toBeHidden();
+  await expect(imageCollapseButton).toBeHidden();
+  await expect(rightCollapseButton).toBeHidden();
   await expect(viewer).toBeVisible();
 });
 

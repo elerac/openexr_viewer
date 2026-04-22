@@ -283,7 +283,9 @@ describe('probe coordinate formatting', () => {
 describe('panel split sizing', () => {
   const metrics: PanelSplitMetrics = {
     mainWidth: 900,
+    imagePanelTabWidth: 18,
     imageResizerWidth: 8,
+    rightPanelTabWidth: 18,
     rightResizerWidth: 8
   };
 
@@ -298,10 +300,11 @@ describe('panel split sizing', () => {
         JSON.stringify({
           imagePanelWidth: 260,
           rightPanelWidth: 'wide',
+          imagePanelCollapsed: true,
           removedPanelHeight: 180
         })
       )
-    ).toEqual({ imagePanelWidth: 260 });
+    ).toEqual({ imagePanelWidth: 260, imagePanelCollapsed: true });
   });
 
   it('clamps saved panel sizes to keep the viewer usable', () => {
@@ -313,7 +316,7 @@ describe('panel split sizing', () => {
       metrics
     );
 
-    expect(sizes.imagePanelWidth + sizes.rightPanelWidth).toBeLessThanOrEqual(524);
+    expect(sizes.imagePanelWidth + sizes.rightPanelWidth).toBeLessThanOrEqual(488);
     expect(sizes.imagePanelWidth).toBeGreaterThanOrEqual(160);
     expect(sizes.rightPanelWidth).toBeGreaterThanOrEqual(240);
   });
@@ -328,7 +331,7 @@ describe('panel split sizing', () => {
       'imagePanelWidth'
     );
 
-    expect(sizes.imagePanelWidth).toBe(284);
+    expect(sizes.imagePanelWidth).toBe(248);
     expect(sizes.rightPanelWidth).toBe(240);
   });
 
@@ -338,6 +341,97 @@ describe('panel split sizing', () => {
     expect(getPanelSplitKeyboardAction('Home', false)).toEqual({ type: 'snap', target: 'min' });
     expect(getPanelSplitKeyboardAction('End', false)).toEqual({ type: 'snap', target: 'max' });
     expect(getPanelSplitKeyboardAction('ArrowDown', false)).toBeNull();
+  });
+
+  it('keeps legacy saved panel layouts open by default', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+    window.localStorage.setItem(
+      'openexr-viewer:panel-splits:v1',
+      JSON.stringify({
+        imagePanelWidth: 260,
+        rightPanelWidth: 340
+      })
+    );
+
+    new ViewerUi(createUiCallbacks());
+
+    const imageButton = document.getElementById('image-panel-collapse-button') as HTMLButtonElement;
+    const rightButton = document.getElementById('right-panel-collapse-button') as HTMLButtonElement;
+    const mainLayout = document.getElementById('main-layout') as HTMLElement;
+
+    expect(imageButton.getAttribute('aria-expanded')).toBe('true');
+    expect(rightButton.getAttribute('aria-expanded')).toBe('true');
+    expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('260px');
+    expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('340px');
+  });
+
+  it('toggles panel collapse buttons and restores the last expanded widths', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry({ imageWidth: 280, rightWidth: 340 });
+
+    new ViewerUi(createUiCallbacks());
+
+    const imageButton = document.getElementById('image-panel-collapse-button') as HTMLButtonElement;
+    const rightButton = document.getElementById('right-panel-collapse-button') as HTMLButtonElement;
+    const mainLayout = document.getElementById('main-layout') as HTMLElement;
+
+    imageButton.click();
+
+    expect(imageButton.getAttribute('aria-expanded')).toBe('false');
+    expect(imageButton.getAttribute('aria-label')).toBe('Expand left panel');
+    expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('0px');
+    expect(mainLayout.style.getPropertyValue('--image-panel-tab-width')).toBe('18px');
+    expect(mainLayout.style.getPropertyValue('--image-panel-resizer-width')).toBe('0px');
+    expect(JSON.parse(window.localStorage.getItem('openexr-viewer:panel-splits:v1') ?? '{}')).toMatchObject({
+      imagePanelWidth: 280,
+      imagePanelCollapsed: true
+    });
+
+    rightButton.click();
+
+    expect(rightButton.getAttribute('aria-expanded')).toBe('false');
+    expect(rightButton.getAttribute('aria-label')).toBe('Expand right panel');
+    expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('0px');
+    expect(mainLayout.style.getPropertyValue('--right-panel-tab-width')).toBe('18px');
+    expect(mainLayout.style.getPropertyValue('--right-panel-resizer-width')).toBe('0px');
+
+    imageButton.click();
+    rightButton.click();
+
+    expect(imageButton.getAttribute('aria-expanded')).toBe('true');
+    expect(rightButton.getAttribute('aria-expanded')).toBe('true');
+    expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('280px');
+    expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('340px');
+  });
+
+  it('ignores resizer keyboard input while the matching panel is collapsed', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry({ imageWidth: 280, rightWidth: 340 });
+
+    new ViewerUi(createUiCallbacks());
+
+    const imageButton = document.getElementById('image-panel-collapse-button') as HTMLButtonElement;
+    const imageResizer = document.getElementById('image-panel-resizer') as HTMLElement;
+    const mainLayout = document.getElementById('main-layout') as HTMLElement;
+
+    imageButton.click();
+    imageResizer.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+
+    expect(imageResizer.getAttribute('aria-disabled')).toBe('true');
+    expect(imageResizer.tabIndex).toBe(-1);
+    expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('0px');
+    expect(JSON.parse(window.localStorage.getItem('openexr-viewer:panel-splits:v1') ?? '{}')).toMatchObject({
+      imagePanelWidth: 280,
+      imagePanelCollapsed: true
+    });
+
+    imageButton.click();
+    imageResizer.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+
+    expect(imageResizer.getAttribute('aria-disabled')).toBe('false');
+    expect(imageResizer.tabIndex).toBe(0);
+    expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('296px');
   });
 });
 
@@ -951,6 +1045,33 @@ function installUiFixture(): void {
   }
 
   vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+}
+
+function mockDesktopLayoutGeometry(
+  args: {
+    mainWidth?: number;
+    imageWidth?: number;
+    rightWidth?: number;
+  } = {}
+): void {
+  mockDomRect(document.getElementById('main-layout') as HTMLElement, {
+    top: 0,
+    bottom: 800,
+    height: 800,
+    width: args.mainWidth ?? 1200
+  });
+  mockDomRect(document.getElementById('image-panel-content') as HTMLElement, {
+    top: 0,
+    bottom: 800,
+    height: 800,
+    width: args.imageWidth ?? 220
+  });
+  mockDomRect(document.getElementById('inspector-panel') as HTMLElement, {
+    top: 0,
+    bottom: 800,
+    height: 800,
+    width: args.rightWidth ?? 320
+  });
 }
 
 function mockOpenedFilesListGeometry(rowHeight = 20): Element[] {

@@ -99,9 +99,21 @@ export interface PanelSplitSizes {
   rightPanelWidth: number;
 }
 
+export interface PanelCollapseState {
+  imagePanelCollapsed: boolean;
+  rightPanelCollapsed: boolean;
+}
+
+export interface StoredPanelSplitState extends Partial<PanelSplitSizes> {
+  imagePanelCollapsed?: boolean;
+  rightPanelCollapsed?: boolean;
+}
+
 export interface PanelSplitMetrics {
   mainWidth: number;
+  imagePanelTabWidth: number;
   imageResizerWidth: number;
+  rightPanelTabWidth: number;
   rightResizerWidth: number;
 }
 

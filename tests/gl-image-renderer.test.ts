@@ -250,6 +250,48 @@ describe('gl image renderer', () => {
     expect(lastUniform1iValue(gl, 'uAlphaOutputMode')).toBe(1);
   });
 
+  it('anchors checkerboard rendering to the viewport origin instead of the canvas origin', () => {
+    const { renderer, gl } = createHarness();
+    const layer = createInterleavedLayerFromChannels({
+      R: [1],
+      G: [1],
+      B: [1]
+    });
+    const state = {
+      ...createInitialState(),
+      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+    };
+
+    renderer.ensureLayerChannelsResident('session-1', 0, 1, 1, layer, ['R', 'G', 'B']);
+    renderer.setDisplaySelectionBindings(
+      'session-1',
+      0,
+      1,
+      1,
+      buildDisplaySourceBinding(layer, state.displaySelection)
+    );
+    renderer.resize(320, 180, 48.5, 12.25);
+
+    renderer.render(state);
+
+    expect(lastUniform2fValue(gl, 'uViewportOrigin')).toEqual([48.5, 12.25]);
+
+    gl.uniform2f.mockClear();
+    gl.readPixels.mockImplementation((_x, _y, _width, _height, _format, _type, data: Uint8ClampedArray) => {
+      data.set([255, 255, 255, 255]);
+    });
+
+    renderer.readExportPixels({
+      state,
+      sourceWidth: 1,
+      sourceHeight: 1,
+      targetWidth: 1,
+      targetHeight: 1
+    });
+
+    expect(lastUniform2fValue(gl, 'uViewportOrigin')).toEqual([0, 0]);
+  });
+
   it('unpremultiplies alpha after filtered export downscales', () => {
     const { renderer, gl } = createHarness();
     const layer = createInterleavedLayerFromChannels({
@@ -330,6 +372,20 @@ function lastUniform1iValue(
     return (location as { name?: string } | null)?.name === uniformName;
   });
   return calls.at(-1)?.[1] as number | undefined;
+}
+
+function lastUniform2fValue(
+  gl: ReturnType<typeof createWebGlContextMock>,
+  uniformName: string
+): [number, number] | undefined {
+  const calls = gl.uniform2f.mock.calls.filter(([location]) => {
+    return (location as { name?: string } | null)?.name === uniformName;
+  });
+  const lastCall = calls.at(-1);
+  if (!lastCall) {
+    return undefined;
+  }
+  return [lastCall[1] as number, lastCall[2] as number];
 }
 
 function createWebGlContextMock(): WebGL2RenderingContext & {

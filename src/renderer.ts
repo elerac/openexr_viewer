@@ -31,12 +31,12 @@ export class WebGlExrRenderer implements Disposable {
     return this.imageRenderer.getImageSize();
   }
 
-  resize(width: number, height: number): void {
+  resize(width: number, height: number, viewportLeft = 0, viewportTop = 0): void {
     if (this.disposed) {
       return;
     }
 
-    this.imageRenderer.resize(width, height);
+    this.imageRenderer.resize(width, height, viewportLeft, viewportTop);
     const viewport = this.imageRenderer.getViewport();
     this.overlayRenderer.resize(viewport.width, viewport.height);
     this.probeOverlayRenderer.resize(viewport.width, viewport.height);

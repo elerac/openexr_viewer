@@ -4,6 +4,9 @@ export interface Elements {
   rightStack: HTMLElement;
   sidePanel: HTMLElement;
   imagePanel: HTMLElement;
+  imagePanelContent: HTMLElement;
+  imagePanelCollapseButton: HTMLButtonElement;
+  rightPanelCollapseButton: HTMLButtonElement;
   imagePanelResizer: HTMLElement;
   rightPanelResizer: HTMLElement;
   fileMenuButton: HTMLButtonElement;
@@ -128,7 +131,15 @@ export type ColormapPanelElements = Pick<
 
 export type LayoutSplitElements = Pick<
   Elements,
-  'mainLayout' | 'rightStack' | 'imagePanel' | 'imagePanelResizer' | 'rightPanelResizer'
+  | 'mainLayout'
+  | 'rightStack'
+  | 'sidePanel'
+  | 'imagePanel'
+  | 'imagePanelContent'
+  | 'imagePanelCollapseButton'
+  | 'rightPanelCollapseButton'
+  | 'imagePanelResizer'
+  | 'rightPanelResizer'
 >;
 
 export function resolveElements(): Elements {
@@ -138,6 +149,9 @@ export function resolveElements(): Elements {
     rightStack: requireElement('right-stack', HTMLElement),
     sidePanel: requireElement('inspector-panel', HTMLElement),
     imagePanel: requireElement('image-panel', HTMLElement),
+    imagePanelContent: requireElement('image-panel-content', HTMLElement),
+    imagePanelCollapseButton: requireElement('image-panel-collapse-button', HTMLButtonElement),
+    rightPanelCollapseButton: requireElement('right-panel-collapse-button', HTMLButtonElement),
     imagePanelResizer: requireElement('image-panel-resizer', HTMLElement),
     rightPanelResizer: requireElement('right-panel-resizer', HTMLElement),
     fileMenuButton: requireElement('file-menu-button', HTMLButtonElement),
