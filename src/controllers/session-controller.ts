@@ -1,26 +1,9 @@
-import { DEFAULT_PANORAMA_HFOV_DEG, clampZoom } from '../interaction';
-import { cloneDisplayLuminanceRange } from '../colormap-range';
-import {
-  buildSessionDisplayName,
-  pickNextSessionIndexAfterRemoval,
-  persistActiveSessionState
-} from '../session-state';
-import { cloneDisplaySelection } from '../display-model';
 import { createAbortError, isAbortError, throwIfAborted, type Disposable } from '../lifecycle';
-import { createDefaultStokesDegreeModulation } from '../stokes';
-import { buildDefaultExportFilename, ViewerUi } from '../ui';
-import { buildViewerStateForLayer } from '../viewer-store';
+import { ViewerAppCore } from '../app/viewer-app-core';
+import { buildLoadedSession, buildReloadedSession } from '../app/session-resource';
+import { selectActiveSession } from '../app/viewer-app-selectors';
 import { LoadQueueService } from '../services/load-queue';
-import { ThumbnailService } from '../services/thumbnail-service';
-import { RenderCacheService } from '../services/render-cache-service';
-import {
-  DecodedExrImage,
-  ImagePixel,
-  OpenedImageSession,
-  SessionSource,
-  ViewerSessionState,
-  ViewportInfo
-} from '../types';
+import type { DecodedExrImage, OpenedImageSession, SessionSource, ViewportInfo } from '../types';
 
 const GALLERY_IMAGES = [
   {
@@ -30,62 +13,27 @@ const GALLERY_IMAGES = [
   }
 ] as const;
 
-type SessionUi = Pick<
-  ViewerUi,
-  | 'setError'
-  | 'setExportTarget'
-  | 'setLoading'
-  | 'setOpenedImageOptions'
->;
-
 export interface SessionControllerDependencies {
-  ui: SessionUi;
+  core: ViewerAppCore;
   loadQueue: LoadQueueService;
-  thumbnailService: ThumbnailService;
-  renderCache: RenderCacheService;
   decodeBytes: (bytes: Uint8Array) => Promise<DecodedExrImage>;
-  getCurrentState: () => ViewerSessionState;
-  setState: (next: Partial<ViewerSessionState>) => void;
   getViewport: () => ViewportInfo;
-  getDefaultColormapId: () => string;
-  clearRendererImage: () => void;
-  onSessionClosed?: (sessionId: string) => void;
-  onAllSessionsClosed?: () => void;
 }
 
 export class SessionController implements Disposable {
-  private readonly ui: SessionUi;
+  private readonly core: ViewerAppCore;
   private readonly loadQueue: LoadQueueService;
-  private readonly thumbnailService: ThumbnailService;
-  private readonly renderCache: RenderCacheService;
   private readonly decodeBytes: SessionControllerDependencies['decodeBytes'];
-  private readonly getCurrentState: SessionControllerDependencies['getCurrentState'];
-  private readonly setState: SessionControllerDependencies['setState'];
   private readonly getViewport: SessionControllerDependencies['getViewport'];
-  private readonly getDefaultColormapId: SessionControllerDependencies['getDefaultColormapId'];
-  private readonly clearRendererImage: SessionControllerDependencies['clearRendererImage'];
-  private readonly onSessionClosed: SessionControllerDependencies['onSessionClosed'];
-  private readonly onAllSessionsClosed: SessionControllerDependencies['onAllSessionsClosed'];
 
-  private sessions: OpenedImageSession[] = [];
-  private activeSessionId: string | null = null;
-  private sessionCounter = 0;
   private readonly abortController = new AbortController();
   private disposed = false;
 
   constructor(dependencies: SessionControllerDependencies) {
-    this.ui = dependencies.ui;
+    this.core = dependencies.core;
     this.loadQueue = dependencies.loadQueue;
-    this.thumbnailService = dependencies.thumbnailService;
-    this.renderCache = dependencies.renderCache;
     this.decodeBytes = dependencies.decodeBytes;
-    this.getCurrentState = dependencies.getCurrentState;
-    this.setState = dependencies.setState;
     this.getViewport = dependencies.getViewport;
-    this.getDefaultColormapId = dependencies.getDefaultColormapId;
-    this.clearRendererImage = dependencies.clearRendererImage;
-    this.onSessionClosed = dependencies.onSessionClosed;
-    this.onAllSessionsClosed = dependencies.onAllSessionsClosed;
   }
 
   enqueueFiles(files: File[]): Promise<void> {
@@ -95,8 +43,14 @@ export class SessionController implements Disposable {
 
     return this.loadQueue.enqueue(async (signal) => {
       this.throwIfStopped(signal);
-      for (const file of files) {
-        await this.loadFile(file, signal);
+      this.core.dispatch({ type: 'loadingSet', loading: true });
+      this.core.dispatch({ type: 'errorSet', message: null });
+      try {
+        for (const file of files) {
+          await this.loadFile(file, signal);
+        }
+      } finally {
+        this.core.dispatch({ type: 'loadingSet', loading: false });
       }
     }).catch((error) => {
       if (isAbortError(error)) {
@@ -113,7 +67,13 @@ export class SessionController implements Disposable {
 
     return this.loadQueue.enqueue(async (signal) => {
       this.throwIfStopped(signal);
-      await this.loadGalleryImage(galleryId, signal);
+      this.core.dispatch({ type: 'loadingSet', loading: true });
+      this.core.dispatch({ type: 'errorSet', message: null });
+      try {
+        await this.loadGalleryImage(galleryId, signal);
+      } finally {
+        this.core.dispatch({ type: 'loadingSet', loading: false });
+      }
     }).catch((error) => {
       if (isAbortError(error)) {
         return;
@@ -129,7 +89,16 @@ export class SessionController implements Disposable {
 
     return this.loadQueue.enqueue(async (signal) => {
       this.throwIfStopped(signal);
-      await this.reloadSessionWithUi(sessionId, signal);
+      this.core.dispatch({ type: 'loadingSet', loading: true });
+      this.core.dispatch({ type: 'errorSet', message: null });
+      try {
+        const error = await this.reloadSessionByIdInternal(sessionId, signal);
+        if (error) {
+          this.core.dispatch({ type: 'errorSet', message: `Reload failed: ${error}` });
+        }
+      } finally {
+        this.core.dispatch({ type: 'loadingSet', loading: false });
+      }
     }).catch((error) => {
       if (isAbortError(error)) {
         return;
@@ -139,13 +108,38 @@ export class SessionController implements Disposable {
   }
 
   reloadAllSessions(): Promise<void> {
-    if (this.disposed || this.sessions.length === 0) {
+    if (this.disposed || this.getSessions().length === 0) {
       return Promise.resolve();
     }
 
     return this.loadQueue.enqueue(async (signal) => {
       this.throwIfStopped(signal);
-      await this.reloadAllSessionsWithUi(signal);
+      this.core.dispatch({ type: 'loadingSet', loading: true });
+      this.core.dispatch({ type: 'errorSet', message: null });
+      const failures: string[] = [];
+
+      try {
+        const reloadIds = this.getSessions().map((session) => session.id);
+        for (const sessionId of reloadIds) {
+          this.throwIfStopped(signal);
+          const label = this.getSessions().find((session) => session.id === sessionId)?.displayName ?? sessionId;
+          const error = await this.reloadSessionByIdInternal(sessionId, signal);
+          if (error) {
+            failures.push(`${label}: ${error}`);
+          }
+        }
+
+        if (failures.length > 0) {
+          const preview = failures.slice(0, 3).join(' | ');
+          const suffix = failures.length > 3 ? ` (+${failures.length - 3} more)` : '';
+          this.core.dispatch({
+            type: 'errorSet',
+            message: `Reload all finished with ${failures.length} failure(s): ${preview}${suffix}`
+          });
+        }
+      } finally {
+        this.core.dispatch({ type: 'loadingSet', loading: false });
+      }
     }).catch((error) => {
       if (isAbortError(error)) {
         return;
@@ -159,19 +153,10 @@ export class SessionController implements Disposable {
       return;
     }
 
-    const nextSession = this.sessions.find((session) => session.id === sessionId);
-    if (!nextSession || this.activeSessionId === nextSession.id) {
-      return;
-    }
-
-    const currentState = this.getCurrentState();
-    const nextState = buildSwitchedSessionState(nextSession, currentState, this.getActiveSession()?.decoded ?? null);
-
-    this.activeSessionId = nextSession.id;
-    this.syncOpenedImageOptions();
-    this.syncActiveSessionExportTarget();
-
-    this.setState(nextState);
+    this.core.dispatch({
+      type: 'activeSessionSwitched',
+      sessionId
+    });
   }
 
   reorderSessions(draggedSessionId: string, targetSessionId: string): void {
@@ -179,25 +164,11 @@ export class SessionController implements Disposable {
       return;
     }
 
-    if (this.sessions.length <= 1 || draggedSessionId === targetSessionId) {
-      return;
-    }
-
-    const draggedIndex = this.sessions.findIndex((session) => session.id === draggedSessionId);
-    const targetIndex = this.sessions.findIndex((session) => session.id === targetSessionId);
-    if (draggedIndex < 0 || targetIndex < 0) {
-      return;
-    }
-
-    const reordered = [...this.sessions];
-    const [draggedSession] = reordered.splice(draggedIndex, 1);
-    if (!draggedSession) {
-      return;
-    }
-
-    reordered.splice(targetIndex, 0, draggedSession);
-    this.sessions = reordered;
-    this.syncOpenedImageOptions();
+    this.core.dispatch({
+      type: 'sessionsReordered',
+      draggedSessionId,
+      targetSessionId
+    });
   }
 
   closeSession(sessionId: string): void {
@@ -205,54 +176,20 @@ export class SessionController implements Disposable {
       return;
     }
 
-    const removeIndex = this.sessions.findIndex((session) => session.id === sessionId);
-    if (removeIndex < 0) {
-      return;
-    }
-
-    const removingActiveSession = this.activeSessionId === sessionId;
-    const removedSession = this.sessions[removeIndex] ?? null;
-    this.sessions = this.sessions.filter((session) => session.id !== sessionId);
-    this.thumbnailService.discard(sessionId);
-    this.renderCache.discard(sessionId);
-    this.onSessionClosed?.(sessionId);
-
-    if (!removingActiveSession) {
-      this.syncOpenedImageOptions();
-      this.syncActiveSessionExportTarget();
-      return;
-    }
-
-    if (this.sessions.length === 0) {
-      this.clearAllSessionsState();
-      return;
-    }
-
-    const nextIndex = pickNextSessionIndexAfterRemoval(removeIndex, this.sessions.length);
-    if (nextIndex < 0) {
-      return;
-    }
-
-    const nextSession = this.sessions[nextIndex];
-    const currentState = this.getCurrentState();
-    const nextState = buildSwitchedSessionState(nextSession, currentState, removedSession?.decoded ?? null);
-    this.activeSessionId = nextSession.id;
-
-    this.syncOpenedImageOptions();
-    this.syncActiveSessionExportTarget();
-    this.setState(nextState);
+    this.core.dispatch({
+      type: 'sessionClosed',
+      sessionId
+    });
   }
 
   closeAllSessions(): void {
-    if (this.disposed) {
+    if (this.disposed || this.getSessions().length === 0) {
       return;
     }
 
-    if (this.sessions.length === 0) {
-      return;
-    }
-
-    this.clearAllSessionsState();
+    this.core.dispatch({
+      type: 'allSessionsClosed'
+    });
   }
 
   resetActiveSessionState(): void {
@@ -260,90 +197,22 @@ export class SessionController implements Disposable {
       return;
     }
 
-    const defaultColormapId = this.getDefaultColormapId();
-    const activeSession = this.getActiveSession();
-    const currentState = this.getCurrentState();
-
-    if (!activeSession) {
-      this.setState(createClearedViewerState(defaultColormapId));
-      return;
-    }
-
-    const fitView = this.computeFitView(activeSession.decoded.width, activeSession.decoded.height);
-    const nextState = buildViewerStateForLayer(
-      {
-        ...createClearedViewerState(defaultColormapId),
-        viewerMode: currentState.viewerMode,
-        zoom: fitView.zoom,
-        panX: fitView.panX,
-        panY: fitView.panY
-      },
-      activeSession.decoded,
-      0
-    );
-
-    activeSession.state = nextState;
-
-    this.setState(nextState);
-  }
-
-  handleStoreChange(state: ViewerSessionState): void {
-    if (this.disposed) {
-      return;
-    }
-
-    persistActiveSessionState(this.sessions, this.activeSessionId, state);
+    this.core.dispatch({
+      type: 'activeSessionReset',
+      viewport: this.getViewport()
+    });
   }
 
   getSessions(): OpenedImageSession[] {
-    return this.sessions;
+    return this.core.getState().sessions;
   }
 
   getActiveSession(): OpenedImageSession | null {
-    if (!this.activeSessionId) {
-      return null;
-    }
-
-    return this.sessions.find((session) => session.id === this.activeSessionId) ?? null;
+    return selectActiveSession(this.core.getState());
   }
 
   getActiveSessionId(): string | null {
-    return this.activeSessionId;
-  }
-
-  syncOpenedImageOptions(): void {
-    if (this.disposed) {
-      return;
-    }
-
-    this.ui.setOpenedImageOptions(
-      this.sessions.map((session) => ({
-        id: session.id,
-        label: session.displayName,
-        sizeBytes: session.fileSizeBytes,
-        sourceDetail: getSessionSourceDetail(session.source, session.filename),
-        thumbnailDataUrl: this.thumbnailService.getThumbnailDataUrl(session.id)
-      })),
-      this.activeSessionId
-    );
-  }
-
-  syncActiveSessionExportTarget(): void {
-    if (this.disposed) {
-      return;
-    }
-
-    const activeSession = this.getActiveSession();
-    if (!activeSession) {
-      this.ui.setExportTarget(null);
-      return;
-    }
-
-    this.ui.setExportTarget({
-      filename: buildDefaultExportFilename(activeSession.displayName),
-      sourceWidth: activeSession.decoded.width,
-      sourceHeight: activeSession.decoded.height
-    });
+    return this.core.getState().activeSessionId;
   }
 
   dispose(): void {
@@ -353,21 +222,14 @@ export class SessionController implements Disposable {
 
     this.disposed = true;
     this.abortController.abort(createAbortError('Session controller has been disposed.'));
-    this.sessions = [];
-    this.activeSessionId = null;
   }
 
   private async loadGalleryImage(galleryId: string, signal: AbortSignal): Promise<void> {
     this.throwIfStopped(signal);
-    this.ui.setLoading(true);
-    this.ui.setError(null);
 
     const galleryImage = GALLERY_IMAGES.find((item) => item.id === galleryId);
     if (!galleryImage) {
-      if (!this.disposed) {
-        this.ui.setError(`Unknown gallery image: ${galleryId}`);
-        this.ui.setLoading(false);
-      }
+      this.core.dispatch({ type: 'errorSet', message: `Unknown gallery image: ${galleryId}` });
       return;
     }
 
@@ -381,149 +243,74 @@ export class SessionController implements Disposable {
 
       const bytes = new Uint8Array(await response.arrayBuffer());
       this.throwIfStopped(signal);
-      await this.applyDecodedImage(await this.decodeBytes(bytes), galleryImage.filename, bytes.byteLength, {
+      const decoded = await this.decodeBytes(bytes);
+      this.throwIfStopped(signal);
+      this.applyDecodedImage(decoded, galleryImage.filename, bytes.byteLength, {
         kind: 'url',
         url: galleryImageUrl
-      }, signal);
+      });
     } catch (error) {
       if (!isAbortError(error) && !this.disposed) {
-        this.ui.setError(error instanceof Error ? error.message : `Unknown error while loading ${galleryImage.label}`);
-      }
-    } finally {
-      if (!this.disposed) {
-        this.ui.setLoading(false);
+        this.core.dispatch({
+          type: 'errorSet',
+          message: error instanceof Error ? error.message : `Unknown error while loading ${galleryImage.label}`
+        });
       }
     }
   }
 
   private async loadFile(file: File, signal: AbortSignal): Promise<void> {
     this.throwIfStopped(signal);
-    this.ui.setLoading(true);
-    this.ui.setError(null);
 
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       this.throwIfStopped(signal);
       const decoded = await this.decodeBytes(bytes);
       this.throwIfStopped(signal);
-      await this.applyDecodedImage(decoded, file.name, file.size, {
+      this.applyDecodedImage(decoded, file.name, file.size, {
         kind: 'file',
         file
-      }, signal);
+      });
     } catch (error) {
       if (!isAbortError(error) && !this.disposed) {
-        this.ui.setError(error instanceof Error ? `Load failed: ${error.message}` : 'Load failed.');
-      }
-    } finally {
-      if (!this.disposed) {
-        this.ui.setLoading(false);
+        this.core.dispatch({
+          type: 'errorSet',
+          message: error instanceof Error ? `Load failed: ${error.message}` : 'Load failed.'
+        });
       }
     }
   }
 
-  private async applyDecodedImage(
+  private applyDecodedImage(
     decoded: DecodedExrImage,
     filename: string,
     fileSizeBytes: number | null,
-    source: SessionSource,
-    signal: AbortSignal
-  ): Promise<void> {
-    this.throwIfStopped(signal);
-    const sessionId = `session-${++this.sessionCounter}`;
-    const displayName = buildSessionDisplayName(
-      filename,
-      this.sessions.map((session) => session.filename)
-    );
-
-    const fitView = this.computeFitView(decoded.width, decoded.height);
-    const initialExposureEv = this.activeSessionId ? this.getCurrentState().exposureEv : 0;
-    const sessionState = buildViewerStateForLayer(
-      {
-        ...createClearedViewerState(this.getDefaultColormapId()),
-        exposureEv: initialExposureEv,
-        zoom: fitView.zoom,
-        panX: fitView.panX,
-        panY: fitView.panY
-      },
+    source: SessionSource
+  ): void {
+    const currentState = this.core.getState();
+    const session = buildLoadedSession({
+      sessionId: this.core.issueSessionId(),
       decoded,
-      0
-    );
-
-    const session: OpenedImageSession = {
-      id: sessionId,
       filename,
-      displayName,
       fileSizeBytes,
       source,
-      decoded,
-      state: sessionState
-    };
+      existingSessions: currentState.sessions,
+      defaultColormapId: currentState.defaultColormapId,
+      viewport: this.getViewport(),
+      currentSessionState: currentState.sessionState,
+      hasActiveSession: Boolean(selectActiveSession(currentState))
+    });
 
-    this.sessions = [...this.sessions, session];
-    this.activeSessionId = session.id;
-    this.syncOpenedImageOptions();
-    this.syncActiveSessionExportTarget();
-
-    this.throwIfStopped(signal);
-    this.setState(session.state);
-    await this.thumbnailService.enqueue(session.id, session.state);
-  }
-
-  private async reloadSessionWithUi(sessionId: string, signal: AbortSignal): Promise<void> {
-    this.throwIfStopped(signal);
-    this.ui.setLoading(true);
-    this.ui.setError(null);
-
-    try {
-      const error = await this.reloadSessionByIdInternal(sessionId, signal);
-      if (error && !this.disposed) {
-        this.ui.setError(`Reload failed: ${error}`);
-      }
-    } finally {
-      if (!this.disposed) {
-        this.ui.setLoading(false);
-      }
-    }
-  }
-
-  private async reloadAllSessionsWithUi(signal: AbortSignal): Promise<void> {
-    const reloadIds = this.sessions.map((session) => session.id);
-    const failures: string[] = [];
-
-    this.throwIfStopped(signal);
-    this.ui.setLoading(true);
-    this.ui.setError(null);
-
-    try {
-      for (const sessionId of reloadIds) {
-        this.throwIfStopped(signal);
-        const label = this.sessions.find((session) => session.id === sessionId)?.displayName ?? sessionId;
-        const error = await this.reloadSessionByIdInternal(sessionId, signal);
-        if (error) {
-          failures.push(`${label}: ${error}`);
-        }
-      }
-
-      if (failures.length > 0 && !this.disposed) {
-        const preview = failures.slice(0, 3).join(' | ');
-        const suffix = failures.length > 3 ? ` (+${failures.length - 3} more)` : '';
-        this.ui.setError(`Reload all finished with ${failures.length} failure(s): ${preview}${suffix}`);
-      }
-    } finally {
-      if (!this.disposed) {
-        this.ui.setLoading(false);
-      }
-    }
+    this.core.dispatch({
+      type: 'sessionLoaded',
+      session
+    });
   }
 
   private async reloadSessionByIdInternal(sessionId: string, signal: AbortSignal): Promise<string | null> {
     this.throwIfStopped(signal);
-    const sessionIndex = this.sessions.findIndex((session) => session.id === sessionId);
-    if (sessionIndex < 0) {
-      return 'Session not found.';
-    }
 
-    const session = this.sessions[sessionIndex];
+    const session = this.getSessions().find((current) => current.id === sessionId);
     if (!session) {
       return 'Session not found.';
     }
@@ -531,26 +318,15 @@ export class SessionController implements Disposable {
     try {
       const decoded = await decodeExrFromSessionSource(session.source, this.decodeBytes, this.abortController.signal);
       this.throwIfStopped(signal);
-      const baseState = this.activeSessionId === sessionId ? this.getCurrentState() : session.state;
-      const nextState = buildReloadedSessionState(baseState, session.decoded, decoded);
-      this.renderCache.discard(sessionId);
-      this.thumbnailService.discard(sessionId, { preserveDataUrl: true });
-      const reloadedSession: OpenedImageSession = {
-        ...session,
-        decoded,
-        state: nextState
-      };
-
-      this.sessions = this.sessions.map((current) => (current.id === sessionId ? reloadedSession : current));
-      this.syncOpenedImageOptions();
-      this.syncActiveSessionExportTarget();
-
-      if (this.activeSessionId === sessionId) {
-        this.throwIfStopped(signal);
-        this.setState(nextState);
-      }
-
-      await this.thumbnailService.enqueue(sessionId, nextState);
+      const baseState = this.getActiveSessionId() === sessionId
+        ? this.core.getState().sessionState
+        : session.state;
+      const reloadedSession = buildReloadedSession(session, decoded, baseState);
+      this.core.dispatch({
+        type: 'sessionReloaded',
+        sessionId,
+        session: reloadedSession
+      });
       return null;
     } catch (error) {
       if (isAbortError(error)) {
@@ -558,34 +334,6 @@ export class SessionController implements Disposable {
       }
       return error instanceof Error ? error.message : 'Unknown error.';
     }
-  }
-
-  private clearAllSessionsState(): void {
-    for (const session of this.sessions) {
-      this.thumbnailService.discard(session.id);
-    }
-    this.sessions = [];
-    this.thumbnailService.clear();
-    this.renderCache.clear();
-    this.activeSessionId = null;
-
-    this.onAllSessionsClosed?.();
-    this.clearRendererImage();
-    this.setState(createClearedViewerState(this.getDefaultColormapId()));
-
-    this.syncOpenedImageOptions();
-    this.syncActiveSessionExportTarget();
-  }
-
-  private computeFitView(width: number, height: number): { zoom: number; panX: number; panY: number } {
-    const viewport = this.getViewport();
-    const fitZoom = clampZoom(Math.min(viewport.width / width, viewport.height / height));
-
-    return {
-      zoom: fitZoom,
-      panX: width * 0.5,
-      panY: height * 0.5
-    };
   }
 
   private throwIfStopped(signal?: AbortSignal): void {
@@ -615,168 +363,12 @@ async function decodeExrFromSessionSource(
     if (signal) {
       throwIfAborted(signal, 'Session reload was aborted.');
     }
-    return await decodeBytes(bytes);
+    return decodeBytes(bytes);
   }
 
   const bytes = new Uint8Array(await source.file.arrayBuffer());
   if (signal) {
     throwIfAborted(signal, 'Session reload was aborted.');
   }
-  return await decodeBytes(bytes);
-}
-
-function createClearedViewerState(defaultColormapId: string): ViewerSessionState {
-  return {
-    exposureEv: 0,
-    viewerMode: 'image',
-    visualizationMode: 'rgb',
-    activeColormapId: defaultColormapId,
-    colormapRange: null,
-    colormapRangeMode: 'alwaysAuto',
-    colormapZeroCentered: false,
-    stokesDegreeModulation: createDefaultStokesDegreeModulation(),
-    zoom: 1,
-    panX: 0,
-    panY: 0,
-    panoramaYawDeg: 0,
-    panoramaPitchDeg: 0,
-    panoramaHfovDeg: DEFAULT_PANORAMA_HFOV_DEG,
-    activeLayer: 0,
-    displaySelection: null,
-    lockedPixel: null
-  };
-}
-
-function getSessionSourceDetail(source: SessionSource, fallbackName: string): string {
-  if (source.kind === 'url') {
-    return source.url;
-  }
-
-  const relativePath = source.file.webkitRelativePath.trim();
-  return relativePath || source.file.name || fallbackName;
-}
-
-function buildReloadedSessionState(
-  currentState: ViewerSessionState,
-  previousImage: DecodedExrImage,
-  decoded: DecodedExrImage
-): ViewerSessionState {
-  const lockedPixel = currentState.lockedPixel
-    ? clampPixelToImageBounds(currentState.lockedPixel, decoded.width, decoded.height)
-    : null;
-  const nextImageCamera = currentState.viewerMode === 'image'
-    ? {
-        zoom: currentState.zoom,
-        ...remapPanToImageCenterAnchor(
-          currentState.panX,
-          currentState.panY,
-          previousImage,
-          decoded
-        )
-      }
-    : {
-        zoom: currentState.zoom,
-        panX: currentState.panX,
-        panY: currentState.panY
-      };
-
-  return buildViewerStateForLayer(
-    {
-      ...currentState,
-      ...nextImageCamera,
-      lockedPixel
-    },
-    decoded,
-    currentState.activeLayer
-  );
-}
-
-function buildSwitchedSessionState(
-  nextSession: OpenedImageSession,
-  currentState: ViewerSessionState,
-  previousImage: DecodedExrImage | null
-): ViewerSessionState {
-  const lockedPixel = currentState.lockedPixel
-    ? clampPixelToImageBounds(currentState.lockedPixel, nextSession.decoded.width, nextSession.decoded.height)
-    : null;
-  const nextImageCamera = currentState.viewerMode === 'image'
-    ? {
-        zoom: currentState.zoom,
-        ...remapPanToImageCenterAnchor(
-          currentState.panX,
-          currentState.panY,
-          previousImage,
-          nextSession.decoded
-        )
-      }
-    : {
-        zoom: nextSession.state.zoom,
-        panX: nextSession.state.panX,
-        panY: nextSession.state.panY
-      };
-  const nextPanoramaCamera = currentState.viewerMode === 'panorama'
-    ? {
-        panoramaYawDeg: currentState.panoramaYawDeg,
-        panoramaPitchDeg: currentState.panoramaPitchDeg,
-        panoramaHfovDeg: currentState.panoramaHfovDeg
-      }
-    : {
-        panoramaYawDeg: nextSession.state.panoramaYawDeg,
-        panoramaPitchDeg: nextSession.state.panoramaPitchDeg,
-        panoramaHfovDeg: nextSession.state.panoramaHfovDeg
-      };
-
-  const nextState = buildViewerStateForLayer(
-    {
-      ...nextSession.state,
-      viewerMode: currentState.viewerMode,
-      ...nextImageCamera,
-      ...nextPanoramaCamera,
-      exposureEv: currentState.exposureEv,
-      displaySelection: cloneDisplaySelection(currentState.displaySelection),
-      visualizationMode: currentState.visualizationMode,
-      activeColormapId: currentState.activeColormapId,
-      colormapRange: cloneDisplayLuminanceRange(currentState.colormapRange),
-      colormapRangeMode: currentState.colormapRangeMode,
-      colormapZeroCentered: currentState.colormapZeroCentered,
-      stokesDegreeModulation: { ...currentState.stokesDegreeModulation },
-      lockedPixel
-    },
-    nextSession.decoded,
-    nextSession.state.activeLayer
-  );
-
-  return nextState;
-}
-
-function remapPanToImageCenterAnchor(
-  panX: number,
-  panY: number,
-  previousImage: DecodedExrImage | null,
-  nextImage: DecodedExrImage
-): { panX: number; panY: number } {
-  if (!previousImage) {
-    return { panX, panY };
-  }
-
-  const previousCenterX = previousImage.width * 0.5;
-  const previousCenterY = previousImage.height * 0.5;
-  const nextCenterX = nextImage.width * 0.5;
-  const nextCenterY = nextImage.height * 0.5;
-
-  return {
-    panX: nextCenterX + (panX - previousCenterX),
-    panY: nextCenterY + (panY - previousCenterY)
-  };
-}
-
-function clampPixelToImageBounds(pixel: ImagePixel, width: number, height: number): ImagePixel | null {
-  if (pixel.ix < 0 || pixel.iy < 0 || pixel.ix >= width || pixel.iy >= height) {
-    return null;
-  }
-
-  return {
-    ix: pixel.ix,
-    iy: pixel.iy
-  };
+  return decodeBytes(bytes);
 }

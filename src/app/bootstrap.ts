@@ -1,7 +1,6 @@
 import { disposeDecodeWorker, loadExrOffMainThread } from '../exr-worker-client';
 import { ViewerInteractionCoordinator } from '../interaction-coordinator';
-import { createAbortError } from '../lifecycle';
-import { ViewerStore, createInitialState } from '../viewer-store';
+import { createAbortError, isAbortError } from '../lifecycle';
 import { ViewerUi } from '../ui';
 import { ViewerInteraction } from '../interaction';
 import { WebGlExrRenderer } from '../renderer';
@@ -11,14 +10,18 @@ import { createPngBlobFromPixels } from '../export-image';
 import { LoadQueueService } from '../services/load-queue';
 import { ThumbnailService } from '../services/thumbnail-service';
 import { RenderCacheService } from '../services/render-cache-service';
-import { mergeRenderState, samePixel } from '../view-state';
+import { mergeRenderState, samePixel, sameViewState } from '../view-state';
+import { ViewerAppCore } from './viewer-app-core';
+import { selectActiveSession } from './viewer-app-selectors';
+import { InvalidationFlags } from './viewer-app-invalidation';
+import type { ViewerAppTransition } from './viewer-app-types';
 
 export interface AppHandle {
   dispose(): void;
 }
 
 export async function bootstrapApp(): Promise<AppHandle> {
-  const store = new ViewerStore(createInitialState());
+  const core = new ViewerAppCore();
 
   let sessionController!: SessionController;
   let displayController!: DisplayController;
@@ -28,7 +31,7 @@ export async function bootstrapApp(): Promise<AppHandle> {
   let interactionCoordinator!: ViewerInteractionCoordinator;
   let interaction: ViewerInteraction | null = null;
   let resizeObserver: ResizeObserver | null = null;
-  let unsubscribeStore: (() => void) | null = null;
+  let unsubscribeCore: (() => void) | null = null;
   let disposed = false;
   const onBeforeUnload = () => {
     app.dispose();
@@ -45,22 +48,22 @@ export async function bootstrapApp(): Promise<AppHandle> {
         throw createAbortError('Viewer application has been disposed.');
       }
 
-      const activeSession = sessionController.getActiveSession();
+      const activeSession = selectActiveSession(core.getState());
       if (!activeSession) {
         const error = new Error('No image is active.');
-        ui.setError(error.message);
+        core.dispatch({ type: 'errorSet', message: error.message });
         throw error;
       }
 
-      const state = store.getState();
+      const state = core.getState();
       try {
-        if (state.visualizationMode === 'colormap' && !displayController.getActiveColormapLutForState(state.activeColormapId)) {
+        if (state.sessionState.visualizationMode === 'colormap' && !displayController.getActiveColormapLutForState(state.sessionState.activeColormapId)) {
           throw new Error('The active colormap is not ready for export.');
         }
 
-        renderCache.prepareActiveSession(activeSession, state);
+        renderCache.prepareActiveSession(activeSession, state.sessionState);
         const pixels = renderer!.readExportPixels({
-          state,
+          state: mergeRenderState(state.sessionState, state.interactionState),
           sourceWidth: activeSession.decoded.width,
           sourceHeight: activeSession.decoded.height,
           targetWidth: request.width,
@@ -77,7 +80,7 @@ export async function bootstrapApp(): Promise<AppHandle> {
         }
 
         const message = error instanceof Error ? error.message : 'Export failed.';
-        ui.setError(message);
+        core.dispatch({ type: 'errorSet', message });
         throw new Error(message);
       }
     },
@@ -112,7 +115,7 @@ export async function bootstrapApp(): Promise<AppHandle> {
       renderCache.setBudgetMb(valueMb);
     },
     onExposureChange: (value) => {
-      store.setState({ exposureEv: value });
+      core.dispatch({ type: 'exposureSet', exposureEv: value });
     },
     onViewerModeChange: (mode) => {
       displayController.setViewerMode(mode);
@@ -153,8 +156,8 @@ export async function bootstrapApp(): Promise<AppHandle> {
 
       disposed = true;
       window.removeEventListener('beforeunload', onBeforeUnload);
-      unsubscribeStore?.();
-      unsubscribeStore = null;
+      unsubscribeCore?.();
+      unsubscribeCore = null;
       interactionCoordinator?.dispose();
       interaction?.destroy();
       interaction = null;
@@ -176,74 +179,82 @@ export async function bootstrapApp(): Promise<AppHandle> {
     renderCache = new RenderCacheService({
       ui,
       renderer,
-      getActiveSessionId: () => sessionController?.getActiveSessionId() ?? null,
+      getActiveSessionId: () => core.getState().activeSessionId,
       onDisplayLuminanceRangeResolved: (event) => {
-        displayController?.handleDisplayLuminanceRangeResolved(event);
+        core.dispatch({
+          type: 'displayLuminanceRangeResolved',
+          requestId: event.requestId,
+          sessionId: event.sessionId,
+          activeLayer: event.activeLayer,
+          displaySelection: event.displaySelection,
+          displayLuminanceRange: event.displayLuminanceRange
+        });
       }
     });
     thumbnailService = new ThumbnailService({
       getSession: (sessionId) => {
-        return sessionController?.getSessions().find((session) => session.id === sessionId) ?? null;
+        return core.getState().sessions.find((session) => session.id === sessionId) ?? null;
       },
-      onThumbnailUpdated: () => {
-        sessionController.syncOpenedImageOptions();
+      onThumbnailReady: (event) => {
+        core.dispatch({
+          type: 'thumbnailReady',
+          sessionId: event.sessionId,
+          token: event.token,
+          thumbnailDataUrl: event.thumbnailDataUrl
+        });
       }
     });
 
     sessionController = new SessionController({
-      ui,
+      core,
       loadQueue,
-      thumbnailService,
-      renderCache,
       decodeBytes: loadExrOffMainThread,
-      getCurrentState: () => store.getState(),
-      setState: (next) => {
-        store.setState(next);
-      },
-      getViewport: () => renderer!.getViewport(),
-      getDefaultColormapId: () => displayController.getDefaultColormapId(),
-      clearRendererImage: () => {
-        renderer!.clearImage();
-      },
-      onSessionClosed: (sessionId) => {
-        displayController.handleSessionClosed(sessionId);
-      },
-      onAllSessionsClosed: () => {
-        displayController.handleAllSessionsClosed();
-      }
+      getViewport: () => renderer!.getViewport()
     });
 
     interactionCoordinator = new ViewerInteractionCoordinator({
-      initialSessionState: store.getState(),
-      getSessionState: () => store.getState(),
+      initialSessionState: core.getState().sessionState,
+      getSessionState: () => core.getState().sessionState,
       commitViewState: (view) => {
-        store.setState(view);
+        core.dispatch({
+          type: 'viewStateCommitted',
+          view
+        });
       },
-      onInteractionChange: (state, previous) => {
+      onInteractionChange: (state) => {
         if (disposed) {
           return;
         }
 
-        displayController.handleInteractionStateChange(state, previous);
+        core.dispatch({
+          type: 'interactionStatePublished',
+          interactionState: state
+        });
       }
     });
 
     displayController = new DisplayController({
-      store,
-      ui,
-      renderer,
-      renderCache,
-      getActiveSession: () => sessionController.getActiveSession(),
-      getInteractionState: () => interactionCoordinator.getState()
+      core
+    });
+
+    unsubscribeCore = core.subscribe((transition) => {
+      if (disposed) {
+        return;
+      }
+
+      syncInteractionCoordinator(interactionCoordinator, transition);
+      applySessionResourceEffects(transition, core, renderCache, thumbnailService!);
+      applyUiEffects(ui, renderer!, transition);
+      applyRenderEffects(core, renderer!, renderCache, transition);
     });
 
     await displayController.initialize();
 
     interaction = new ViewerInteraction(ui.viewerContainer, {
-      getState: () => mergeRenderState(store.getState(), interactionCoordinator.getState()),
+      getState: () => mergeRenderState(core.getState().sessionState, core.getState().interactionState),
       getViewport: () => renderer!.getViewport(),
       getImageSize: () => {
-        const activeSession = sessionController.getActiveSession();
+        const activeSession = selectActiveSession(core.getState());
         if (!activeSession) {
           return null;
         }
@@ -260,32 +271,11 @@ export async function bootstrapApp(): Promise<AppHandle> {
         interactionCoordinator.enqueueHoverPixel(pixel);
       },
       onToggleLockPixel: (pixel) => {
-        const current = store.getState().lockedPixel;
-        if (samePixel(current, pixel)) {
-          store.setState({ lockedPixel: null });
-          return;
-        }
-
-        store.setState({ lockedPixel: pixel });
+        core.dispatch({
+          type: 'lockedPixelToggled',
+          pixel
+        });
       }
-    });
-
-    let lastActiveSession = sessionController.getActiveSession();
-    unsubscribeStore = store.subscribe((state, previous) => {
-      if (disposed) {
-        return;
-      }
-
-      const activeSession = sessionController.getActiveSession();
-      const interactionSync = interactionCoordinator.syncSessionState(state, {
-        clearHover:
-          activeSession !== lastActiveSession ||
-          state.activeLayer !== previous.activeLayer ||
-          state.viewerMode !== previous.viewerMode
-      });
-      sessionController.handleStoreChange(state);
-      displayController.handleSessionStateChange(state, previous, interactionSync.changed);
-      lastActiveSession = activeSession;
     });
 
     resizeObserver = new ResizeObserver(() => {
@@ -295,25 +285,269 @@ export async function bootstrapApp(): Promise<AppHandle> {
 
       const rect = ui.viewerContainer.getBoundingClientRect();
       renderer.resize(rect.width, rect.height);
-      renderer.render(mergeRenderState(store.getState(), interactionCoordinator.getState()));
+      const snapshot = core.getSnapshot();
+      if (snapshot.activeSession) {
+        renderer.render(snapshot.renderState);
+      } else {
+        renderer.clearImage();
+      }
     });
     resizeObserver.observe(ui.viewerContainer);
 
     const rect = ui.viewerContainer.getBoundingClientRect();
     renderer.resize(rect.width, rect.height);
-    renderer.render(mergeRenderState(store.getState(), interactionCoordinator.getState()));
-    sessionController.syncOpenedImageOptions();
+    const snapshot = core.getSnapshot();
+    if (snapshot.activeSession) {
+      renderer.render(snapshot.renderState);
+    } else {
+      renderer.clearImage();
+    }
 
     window.addEventListener('beforeunload', onBeforeUnload);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to initialize WebGL2 renderer.';
     if (!disposed) {
-      ui.setError(message);
-      ui.setLoading(false);
+      core.dispatch({ type: 'errorSet', message });
+      core.dispatch({ type: 'loadingSet', loading: false });
     }
   }
 
   return app;
+}
+
+function applySessionResourceEffects(
+  transition: ViewerAppTransition,
+  core: ViewerAppCore,
+  renderCache: RenderCacheService,
+  thumbnailService: ThumbnailService
+): void {
+  switch (transition.intent.type) {
+    case 'sessionLoaded': {
+      scheduleThumbnailGeneration(core, thumbnailService, transition.intent.session.id, transition.intent.session.state);
+      return;
+    }
+    case 'sessionReloaded': {
+      renderCache.discard(transition.intent.sessionId);
+      thumbnailService.discard(transition.intent.sessionId);
+      scheduleThumbnailGeneration(core, thumbnailService, transition.intent.sessionId, transition.intent.session.state);
+      return;
+    }
+    case 'sessionClosed': {
+      renderCache.discard(transition.intent.sessionId);
+      thumbnailService.discard(transition.intent.sessionId);
+      return;
+    }
+    case 'allSessionsClosed': {
+      renderCache.clear();
+      thumbnailService.clear();
+      return;
+    }
+    default:
+      return;
+  }
+}
+
+function scheduleThumbnailGeneration(
+  core: ViewerAppCore,
+  thumbnailService: ThumbnailService,
+  sessionId: string,
+  stateSnapshot: ViewerAppTransition['state']['sessionState']
+): void {
+  const token = core.issueRequestId();
+  core.dispatch({
+    type: 'thumbnailRequested',
+    sessionId,
+    token
+  });
+  void thumbnailService.enqueue(sessionId, stateSnapshot, token).catch(() => undefined);
+}
+
+function syncInteractionCoordinator(
+  interactionCoordinator: ViewerInteractionCoordinator,
+  transition: ViewerAppTransition
+): void {
+  const coordinatorState = interactionCoordinator.getState();
+  const nextInteractionState = transition.state.interactionState;
+  if (
+    sameViewState(coordinatorState.view, nextInteractionState.view) &&
+    samePixel(coordinatorState.hoveredPixel, nextInteractionState.hoveredPixel)
+  ) {
+    return;
+  }
+
+  interactionCoordinator.syncSessionState(transition.state.sessionState, {
+    clearHover: nextInteractionState.hoveredPixel === null
+  });
+}
+
+function applyUiEffects(
+  ui: ViewerUi,
+  renderer: WebGlExrRenderer,
+  transition: ViewerAppTransition
+): void {
+  const { snapshot, invalidation, state } = transition;
+
+  if (invalidation & InvalidationFlags.UiError) {
+    ui.setError(state.errorMessage);
+  }
+
+  if (invalidation & InvalidationFlags.UiLoading) {
+    ui.setLoading(state.isLoading);
+    ui.setRgbViewLoading(snapshot.isRgbViewLoading);
+  }
+
+  if (invalidation & InvalidationFlags.UiOpenedImages) {
+    ui.setOpenedImageOptions(snapshot.openedImageOptions, state.activeSessionId);
+  }
+
+  if (invalidation & InvalidationFlags.UiExportTarget) {
+    ui.setExportTarget(snapshot.exportTarget);
+  }
+
+  if (invalidation & InvalidationFlags.UiExposure) {
+    ui.setExposure(state.sessionState.exposureEv);
+  }
+
+  if (invalidation & InvalidationFlags.UiViewerMode) {
+    ui.setViewerMode(state.sessionState.viewerMode);
+  }
+
+  if (invalidation & InvalidationFlags.UiVisualizationMode) {
+    ui.setVisualizationMode(state.sessionState.visualizationMode);
+  }
+
+  if (invalidation & InvalidationFlags.UiStokesDegreeModulation) {
+    ui.setStokesDegreeModulationControl(
+      snapshot.stokesDegreeModulationControl?.label ?? null,
+      snapshot.stokesDegreeModulationControl?.enabled ?? false
+    );
+  }
+
+  if (invalidation & InvalidationFlags.UiActiveColormap) {
+    ui.setActiveColormap(state.sessionState.activeColormapId);
+  }
+
+  if (invalidation & InvalidationFlags.UiColormapOptions) {
+    ui.setColormapOptions(snapshot.colormapOptions, state.defaultColormapId);
+  }
+
+  if ((invalidation & InvalidationFlags.UiColormapGradient) && state.activeColormapLut) {
+    renderer.setColormapTexture(state.activeColormapLut.entryCount, state.activeColormapLut.rgba8);
+    ui.setColormapGradient(state.activeColormapLut);
+  }
+
+  if (invalidation & InvalidationFlags.UiColormapRange) {
+    ui.setColormapRange(
+      state.sessionState.colormapRange,
+      state.activeDisplayLuminanceRange ?? state.sessionState.colormapRange,
+      state.sessionState.colormapRangeMode === 'alwaysAuto',
+      state.sessionState.colormapZeroCentered
+    );
+  }
+
+  if (invalidation & InvalidationFlags.UiLayerOptions) {
+    ui.setLayerOptions(snapshot.layerOptions, state.sessionState.activeLayer);
+  }
+
+  if (invalidation & InvalidationFlags.UiProbeMetadata) {
+    ui.setProbeMetadata(snapshot.probePresentation.metadata);
+  }
+
+  if (invalidation & InvalidationFlags.UiRgbGroupOptions) {
+    ui.setRgbGroupOptions(snapshot.rgbGroupChannelNames, state.sessionState.displaySelection);
+  }
+
+  if (invalidation & InvalidationFlags.UiClearPanels) {
+    ui.clearImageBrowserPanels();
+  }
+
+  if (invalidation & InvalidationFlags.UiProbeReadout) {
+    ui.setProbeReadout(
+      snapshot.probePresentation.mode,
+      snapshot.probePresentation.sample,
+      snapshot.probePresentation.colorPreview,
+      snapshot.probePresentation.imageSize
+    );
+  }
+}
+
+function applyRenderEffects(
+  core: ViewerAppCore,
+  renderer: WebGlExrRenderer,
+  renderCache: RenderCacheService,
+  transition: ViewerAppTransition
+): void {
+  const { snapshot, invalidation, state } = transition;
+  const activeSession = snapshot.activeSession;
+  if (invalidation & InvalidationFlags.ResourceClearImage) {
+    renderer.clearImage();
+  }
+
+  if ((invalidation & InvalidationFlags.ResourcePrepare) && activeSession) {
+    renderCache.prepareActiveSession(activeSession, state.sessionState);
+    synchronizeCachedDisplayRange(core, renderCache, activeSession.id, state.sessionState);
+  }
+
+  if ((invalidation & InvalidationFlags.ResourceRequestDisplayRange) && activeSession && snapshot.displayRangeRequestKey) {
+    const requestId = core.issueRequestId();
+    const result = renderCache.requestDisplayLuminanceRange(activeSession, state.sessionState, requestId);
+    if (result.pending) {
+      core.dispatch({
+        type: 'displayRangeRequestStarted',
+        requestId,
+        requestKey: snapshot.displayRangeRequestKey
+      });
+    } else {
+      core.dispatch({
+        type: 'displayLuminanceRangeResolved',
+        requestId,
+        sessionId: activeSession.id,
+        activeLayer: state.sessionState.activeLayer,
+        displaySelection: state.sessionState.displaySelection,
+        displayLuminanceRange: result.displayLuminanceRange
+      });
+    }
+  }
+
+  if (!activeSession) {
+    return;
+  }
+
+  if (invalidation & InvalidationFlags.RenderImage) {
+    renderer.renderImage(snapshot.renderState);
+  }
+
+  if (invalidation & InvalidationFlags.RenderValueOverlay) {
+    renderer.renderValueOverlay(snapshot.renderState);
+  }
+
+  if (invalidation & InvalidationFlags.RenderProbeOverlay) {
+    renderer.renderProbeOverlay(snapshot.renderState);
+  }
+}
+
+function synchronizeCachedDisplayRange(
+  core: ViewerAppCore,
+  renderCache: RenderCacheService,
+  sessionId: string,
+  sessionState: ViewerAppTransition['state']['sessionState']
+): void {
+  const cachedRange = renderCache.getCachedLuminanceRange(sessionId, sessionState);
+  if (
+    cachedRange?.min === core.getState().activeDisplayLuminanceRange?.min &&
+    cachedRange?.max === core.getState().activeDisplayLuminanceRange?.max
+  ) {
+    return;
+  }
+
+  core.dispatch({
+    type: 'displayLuminanceRangeResolved',
+    requestId: null,
+    sessionId,
+    activeLayer: sessionState.activeLayer,
+    displaySelection: sessionState.displaySelection,
+    displayLuminanceRange: cachedRange
+  });
 }
 
 function triggerBrowserDownload(blob: Blob, filename: string): void {

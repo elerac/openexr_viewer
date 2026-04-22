@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => {
   const uiDispose = vi.fn();
   const rendererDispose = vi.fn();
   const interactionDestroy = vi.fn();
+  const interactionCoordinatorDispose = vi.fn();
   const sessionDispose = vi.fn();
   const displayDispose = vi.fn();
   const thumbnailDispose = vi.fn();
@@ -19,6 +20,7 @@ const mocks = vi.hoisted(() => {
     uiDispose,
     rendererDispose,
     interactionDestroy,
+    interactionCoordinatorDispose,
     sessionDispose,
     displayDispose,
     thumbnailDispose,
@@ -28,21 +30,87 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock('../src/viewer-store', () => ({
-  createInitialState: () => ({}),
-  ViewerStore: class {
-    private state = {};
-
+vi.mock('../src/app/viewer-app-core', () => ({
+  ViewerAppCore: class {
     getState(): object {
-      return this.state;
+      return {
+        activeSessionId: null,
+        sessions: [],
+        errorMessage: null,
+        isLoading: false,
+        defaultColormapId: '0',
+        activeColormapLut: null,
+        activeDisplayLuminanceRange: null,
+        sessionState: {
+          exposureEv: 0,
+          viewerMode: 'image',
+          visualizationMode: 'rgb',
+          activeColormapId: '0',
+          colormapRange: null,
+          colormapRangeMode: 'alwaysAuto',
+          colormapZeroCentered: false,
+          stokesDegreeModulation: { aolp: false, cop: true, top: true },
+          zoom: 1,
+          panX: 0,
+          panY: 0,
+          panoramaYawDeg: 0,
+          panoramaPitchDeg: 0,
+          panoramaHfovDeg: 100,
+          activeLayer: 0,
+          displaySelection: null,
+          lockedPixel: null
+        },
+        interactionState: {
+          view: {
+            zoom: 1,
+            panX: 0,
+            panY: 0,
+            panoramaYawDeg: 0,
+            panoramaPitchDeg: 0,
+            panoramaHfovDeg: 100
+          },
+          hoveredPixel: null
+        }
+      };
     }
 
-    setState(patch: Record<string, unknown>): void {
-      this.state = { ...this.state, ...patch };
+    getSnapshot(): object {
+      return {
+        activeSession: null,
+        renderState: {
+          exposureEv: 0,
+          viewerMode: 'image',
+          visualizationMode: 'rgb',
+          activeColormapId: '0',
+          colormapRange: null,
+          colormapRangeMode: 'alwaysAuto',
+          colormapZeroCentered: false,
+          stokesDegreeModulation: { aolp: false, cop: true, top: true },
+          zoom: 1,
+          panX: 0,
+          panY: 0,
+          panoramaYawDeg: 0,
+          panoramaPitchDeg: 0,
+          panoramaHfovDeg: 100,
+          activeLayer: 0,
+          displaySelection: null,
+          lockedPixel: null,
+          hoveredPixel: null
+        }
+      };
     }
 
     subscribe(): () => void {
       return mocks.unsubscribe;
+    }
+
+    dispatch(): void {}
+    issueRequestId(): number {
+      return 1;
+    }
+
+    issueSessionId(): string {
+      return 'session-1';
     }
   }
 }));
@@ -58,10 +126,24 @@ vi.mock('../src/ui', () => ({
     readonly dispose = mocks.uiDispose;
     readonly setError = vi.fn();
     readonly setLoading = vi.fn();
+    readonly setRgbViewLoading = vi.fn();
     readonly setDisplayCacheBudget = vi.fn();
     readonly setDisplayCacheUsage = vi.fn();
     readonly setOpenedImageOptions = vi.fn();
     readonly setExportTarget = vi.fn();
+    readonly setExposure = vi.fn();
+    readonly setViewerMode = vi.fn();
+    readonly setVisualizationMode = vi.fn();
+    readonly setStokesDegreeModulationControl = vi.fn();
+    readonly setActiveColormap = vi.fn();
+    readonly setColormapOptions = vi.fn();
+    readonly setColormapGradient = vi.fn();
+    readonly setColormapRange = vi.fn();
+    readonly setLayerOptions = vi.fn();
+    readonly setProbeMetadata = vi.fn();
+    readonly setRgbGroupOptions = vi.fn();
+    readonly clearImageBrowserPanels = vi.fn();
+    readonly setProbeReadout = vi.fn();
   }
 }));
 
@@ -75,7 +157,6 @@ vi.mock('../src/renderer', () => ({
     readonly renderProbeOverlay = vi.fn();
     readonly getViewport = vi.fn(() => ({ width: 320, height: 180 }));
     readonly clearImage = vi.fn();
-    readonly setDisplayTexture = vi.fn();
     readonly setColormapTexture = vi.fn();
     readonly readExportPixels = vi.fn(() => ({
       width: 1,
@@ -91,16 +172,32 @@ vi.mock('../src/interaction', () => ({
   }
 }));
 
+vi.mock('../src/interaction-coordinator', () => ({
+  ViewerInteractionCoordinator: class {
+    readonly dispose = mocks.interactionCoordinatorDispose;
+    readonly getState = vi.fn(() => ({
+      view: {
+        zoom: 1,
+        panX: 0,
+        panY: 0,
+        panoramaYawDeg: 0,
+        panoramaPitchDeg: 0,
+        panoramaHfovDeg: 100
+      },
+      hoveredPixel: null
+    }));
+    readonly enqueueViewPatch = vi.fn();
+    readonly enqueueHoverPixel = vi.fn();
+    readonly syncSessionState = vi.fn();
+  }
+}));
+
 vi.mock('../src/controllers/session-controller', () => ({
   SessionController: class {
     readonly dispose = mocks.sessionDispose;
     readonly getActiveSession = vi.fn(() => null);
     readonly getActiveSessionId = vi.fn(() => null);
     readonly getSessions = vi.fn(() => []);
-    readonly syncOpenedImageOptions = vi.fn();
-    readonly handleStoreChange = vi.fn();
-    readonly handleSessionClosed = vi.fn();
-    readonly handleAllSessionsClosed = vi.fn();
   }
 }));
 
@@ -108,20 +205,16 @@ vi.mock('../src/controllers/display-controller', () => ({
   DisplayController: class {
     readonly dispose = mocks.displayDispose;
     readonly initialize = vi.fn(async () => undefined);
-    readonly handleSessionStateChange = vi.fn();
-    readonly handleInteractionStateChange = vi.fn();
-    readonly getDefaultColormapId = vi.fn(() => '0');
     readonly getActiveColormapLutForState = vi.fn(() => null);
-    readonly handleSessionClosed = vi.fn();
-    readonly handleAllSessionsClosed = vi.fn();
-    readonly setViewerMode = vi.fn();
   }
 }));
 
 vi.mock('../src/services/thumbnail-service', () => ({
   ThumbnailService: class {
     readonly dispose = mocks.thumbnailDispose;
-    readonly getThumbnailDataUrl = vi.fn(() => null);
+    readonly enqueue = vi.fn(async () => undefined);
+    readonly discard = vi.fn();
+    readonly clear = vi.fn();
   }
 }));
 
@@ -132,6 +225,13 @@ vi.mock('../src/services/render-cache-service', () => ({
       textureRevisionKey: '',
       textureDirty: false
     }));
+    readonly requestDisplayLuminanceRange = vi.fn(() => ({
+      displayLuminanceRange: null,
+      pending: false
+    }));
+    readonly getCachedLuminanceRange = vi.fn(() => null);
+    readonly discard = vi.fn();
+    readonly clear = vi.fn();
     readonly setBudgetMb = vi.fn();
   }
 }));
@@ -180,6 +280,7 @@ describe('bootstrap app lifecycle', () => {
     beforeUnload?.(new Event('beforeunload'));
 
     expect(mocks.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(mocks.interactionCoordinatorDispose).toHaveBeenCalledTimes(1);
     expect(mocks.interactionDestroy).toHaveBeenCalledTimes(1);
     expect(resizeDisconnect).toHaveBeenCalledTimes(1);
     expect(mocks.displayDispose).toHaveBeenCalledTimes(1);

@@ -37,6 +37,7 @@ export interface RequestDisplayLuminanceRangeResult {
 }
 
 export interface DisplayLuminanceRangeResolvedEvent {
+  requestId: number | null;
   sessionId: string;
   activeLayer: number;
   displaySelection: DisplaySelection | null;
@@ -95,6 +96,7 @@ export interface RenderCacheWindowLike {
 }
 
 interface PendingDisplayLuminanceRangeJob {
+  requestId: number | null;
   sessionId: string;
   revisionKey: string;
   activeLayer: number;
@@ -237,7 +239,8 @@ export class RenderCacheService implements Disposable {
 
   requestDisplayLuminanceRange(
     session: OpenedImageSession,
-    state: Pick<ViewerSessionState, 'activeLayer' | 'displaySelection'>
+    state: Pick<ViewerSessionState, 'activeLayer' | 'displaySelection'>,
+    requestId: number | null = null
   ): RequestDisplayLuminanceRangeResult {
     if (this.disposed) {
       return {
@@ -265,6 +268,10 @@ export class RenderCacheService implements Disposable {
 
     const pendingJobs = this.getOrCreatePendingDisplayLuminanceRangeJobs(session.id);
     if (pendingJobs.has(revisionKey)) {
+      const existingJob = pendingJobs.get(revisionKey);
+      if (existingJob) {
+        existingJob.requestId = requestId;
+      }
       return {
         displayLuminanceRange: null,
         pending: true
@@ -272,6 +279,7 @@ export class RenderCacheService implements Disposable {
     }
 
     const job: PendingDisplayLuminanceRangeJob = {
+      requestId,
       sessionId: session.id,
       revisionKey,
       activeLayer: state.activeLayer,
@@ -437,6 +445,7 @@ export class RenderCacheService implements Disposable {
 
           entry.luminanceRangeByRevision.set(job.revisionKey, range);
           this.onDisplayLuminanceRangeResolved({
+            requestId: job.requestId,
             sessionId: job.sessionId,
             activeLayer: job.activeLayer,
             displaySelection: cloneDisplaySelection(job.displaySelection),

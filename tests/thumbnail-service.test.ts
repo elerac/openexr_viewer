@@ -3,7 +3,7 @@ import { serializeDisplaySelectionKey } from '../src/display-model';
 import { ThumbnailService } from '../src/services/thumbnail-service';
 import { DecodedExrImage, OpenedImageSession, ViewerSessionState } from '../src/types';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
-import { createChannelMonoSelection, createChannelRgbSelection, createLayerFromChannels } from './helpers/state-fixtures';
+import { createChannelMonoSelection, createLayerFromChannels } from './helpers/state-fixtures';
 
 function createDecodedImage(): DecodedExrImage {
   const layer = createLayerFromChannels({
@@ -37,11 +37,11 @@ function createSession(id = 'session-1'): OpenedImageSession {
 describe('thumbnail service', () => {
   it('suppresses stale thumbnail jobs when a newer token replaces them', async () => {
     const session = createSession();
-    const updates: string[] = [];
+    const updates: Array<{ sessionId: string; token: number; thumbnailDataUrl: string | null }> = [];
     const service = new ThumbnailService({
       getSession: () => session,
-      onThumbnailUpdated: () => {
-        updates.push('updated');
+      onThumbnailReady: (event) => {
+        updates.push(event);
       },
       windowLike: null,
       createThumbnailDataUrl: ({ stateSnapshot }) => serializeDisplaySelectionKey(stateSnapshot.displaySelection)
@@ -50,33 +50,37 @@ describe('thumbnail service', () => {
     const firstState: ViewerSessionState = { ...session.state, displaySelection: createChannelMonoSelection('first') };
     const secondState: ViewerSessionState = { ...session.state, displaySelection: createChannelMonoSelection('second') };
 
-    const first = service.enqueue(session.id, firstState);
-    const second = service.enqueue(session.id, secondState);
+    const first = service.enqueue(session.id, firstState, 1);
+    const second = service.enqueue(session.id, secondState, 2);
 
     await Promise.all([first, second]);
 
-    expect(service.getThumbnailDataUrl(session.id)).toBe('channelMono:second:');
-    expect(updates).toEqual(['updated']);
+    expect(updates).toEqual([
+      {
+        sessionId: session.id,
+        token: 2,
+        thumbnailDataUrl: 'channelMono:second:'
+      }
+    ]);
   });
 
   it('skips discarded jobs once the backing session is gone', async () => {
     const sessions = new Map<string, OpenedImageSession>([['session-1', createSession()]]);
-    const onThumbnailUpdated = vi.fn();
+    const onThumbnailReady = vi.fn();
     const service = new ThumbnailService({
       getSession: (sessionId) => sessions.get(sessionId) ?? null,
-      onThumbnailUpdated,
+      onThumbnailReady,
       windowLike: null,
       createThumbnailDataUrl: () => 'thumb'
     });
 
-    const promise = service.enqueue('session-1', sessions.get('session-1')!.state);
+    const promise = service.enqueue('session-1', sessions.get('session-1')!.state, 1);
     sessions.delete('session-1');
     service.discard('session-1');
 
     await promise;
 
-    expect(onThumbnailUpdated).not.toHaveBeenCalled();
-    expect(service.getThumbnailDataUrl('session-1')).toBeNull();
+    expect(onThumbnailReady).not.toHaveBeenCalled();
   });
 
   it('clears queued jobs that have not started yet', async () => {
@@ -89,43 +93,20 @@ describe('thumbnail service', () => {
     const updates: string[] = [];
     const service = new ThumbnailService({
       getSession: (sessionId) => sessions.get(sessionId) ?? null,
-      onThumbnailUpdated: () => {
-        updates.push('updated');
+      onThumbnailReady: (event) => {
+        updates.push(`${event.sessionId}:${event.thumbnailDataUrl}`);
       },
       windowLike: null,
       createThumbnailDataUrl: ({ session }) => `${session.id}-thumb`
     });
 
-    const first = service.enqueue(firstSession.id, firstSession.state);
-    const second = service.enqueue(secondSession.id, secondSession.state);
+    const first = service.enqueue(firstSession.id, firstSession.state, 1);
+    const second = service.enqueue(secondSession.id, secondSession.state, 2);
     service.clear();
 
     await Promise.all([first, second]);
 
-    expect(service.getThumbnailDataUrl(firstSession.id)).toBe('first-thumb');
-    expect(service.getThumbnailDataUrl(secondSession.id)).toBeNull();
-    expect(updates).toEqual(['updated']);
-  });
-
-  it('preserves the previous thumbnail while reload work is queued', async () => {
-    const session = createSession();
-    const service = new ThumbnailService({
-      getSession: () => session,
-      onThumbnailUpdated: () => undefined,
-      windowLike: null,
-      createThumbnailDataUrl: ({ stateSnapshot }) => serializeDisplaySelectionKey(stateSnapshot.displaySelection)
-    });
-
-    await service.enqueue(session.id, session.state);
-    service.discard(session.id, { preserveDataUrl: true });
-
-    const reloadedState: ViewerSessionState = {
-      ...session.state,
-      displaySelection: createChannelMonoSelection('reload')
-    };
-    await service.enqueue(session.id, reloadedState);
-
-    expect(service.getThumbnailDataUrl(session.id)).toBe('channelMono:reload:');
+    expect(updates).toEqual(['first:first-thumb']);
   });
 
   it('passes session, layer, and state snapshot to the thumbnail renderer', async () => {
@@ -133,19 +114,18 @@ describe('thumbnail service', () => {
     const createThumbnailDataUrl = vi.fn(() => 'thumb');
     const service = new ThumbnailService({
       getSession: () => session,
-      onThumbnailUpdated: () => undefined,
+      onThumbnailReady: () => undefined,
       windowLike: null,
       createThumbnailDataUrl
     });
 
-    await service.enqueue(session.id, session.state);
+    await service.enqueue(session.id, session.state, 1);
 
     expect(createThumbnailDataUrl).toHaveBeenCalledWith({
       session,
       layer: session.decoded.layers[0],
       stateSnapshot: session.state
     });
-    expect(service.getThumbnailDataUrl(session.id)).toBe('thumb');
   });
 
   it('stops pending thumbnail work after dispose', async () => {
@@ -153,10 +133,10 @@ describe('thumbnail service', () => {
     const rafCallbacks: FrameRequestCallback[] = [];
     const idleCallbacks: Array<() => void> = [];
     const createThumbnailDataUrl = vi.fn(() => 'thumb');
-    const onThumbnailUpdated = vi.fn();
+    const onThumbnailReady = vi.fn();
     const service = new ThumbnailService({
       getSession: () => session,
-      onThumbnailUpdated,
+      onThumbnailReady,
       windowLike: {
         requestAnimationFrame: (callback) => {
           rafCallbacks.push(callback);
@@ -179,7 +159,7 @@ describe('thumbnail service', () => {
       createThumbnailDataUrl
     });
 
-    const pending = service.enqueue(session.id, session.state).catch((error) => error);
+    const pending = service.enqueue(session.id, session.state, 1).catch((error) => error);
     service.dispose();
 
     for (const callback of rafCallbacks) {
@@ -192,7 +172,6 @@ describe('thumbnail service', () => {
     await pending;
 
     expect(createThumbnailDataUrl).not.toHaveBeenCalled();
-    expect(onThumbnailUpdated).not.toHaveBeenCalled();
-    expect(service.getThumbnailDataUrl(session.id)).toBeNull();
+    expect(onThumbnailReady).not.toHaveBeenCalled();
   });
 });

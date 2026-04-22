@@ -243,6 +243,7 @@ describe('render cache service', () => {
     });
     expect(onDisplayLuminanceRangeResolved).toHaveBeenCalledTimes(1);
     expect(onDisplayLuminanceRangeResolved).toHaveBeenCalledWith({
+      requestId: null,
       sessionId: session.id,
       activeLayer: 0,
       displaySelection: session.state.displaySelection,

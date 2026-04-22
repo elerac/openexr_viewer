@@ -1,19 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DisplayController } from '../src/controllers/display-controller';
-import { RenderCacheService, type RenderCacheWindowLike } from '../src/services/render-cache-service';
-import { buildViewerStateForLayer, createInitialState, ViewerStore } from '../src/viewer-store';
-import { DecodedExrImage, OpenedImageSession, ViewerInteractionState, ViewerSessionState } from '../src/types';
+import { ViewerAppCore } from '../src/app/viewer-app-core';
+import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
+import { DecodedExrImage, OpenedImageSession } from '../src/types';
 import {
-  createChannelMonoSelection,
   createChannelRgbSelection,
   createLayerFromChannels,
-  createStokesSelection,
-  createViewerInteractionState
+  createStokesSelection
 } from './helpers/state-fixtures';
 
 const colormapMocks = vi.hoisted(() => ({
   loadColormapRegistry: vi.fn(),
-  getColormapOptions: vi.fn(),
   loadColormapLut: vi.fn(),
   getColormapAsset: vi.fn(),
   findColormapIdByLabel: vi.fn()
@@ -22,7 +19,7 @@ const colormapMocks = vi.hoisted(() => ({
 vi.mock('../src/colormaps', () => ({
   DEFAULT_COLORMAP_ID: '0',
   loadColormapRegistry: colormapMocks.loadColormapRegistry,
-  getColormapOptions: colormapMocks.getColormapOptions,
+  getColormapOptions: vi.fn(() => []),
   loadColormapLut: colormapMocks.loadColormapLut,
   getColormapAsset: colormapMocks.getColormapAsset,
   findColormapIdByLabel: colormapMocks.findColormapIdByLabel
@@ -34,12 +31,10 @@ function createDecodedImage(channelNames: string[] = ['R', 'G', 'B']): DecodedEx
     channelValues[channelName] = new Float32Array([channelName.startsWith('S') ? 0.5 : 1, 0]);
   }
 
-  const layer = createLayerFromChannels(channelValues, 'beauty');
-
   return {
     width: 2,
     height: 1,
-    layers: [layer]
+    layers: [createLayerFromChannels(channelValues, 'beauty')]
   };
 }
 
@@ -56,108 +51,12 @@ function createSession(decoded: DecodedExrImage): OpenedImageSession {
   };
 }
 
-function createUiMock() {
-  return {
-    setActiveColormap: vi.fn(),
-    clearImageBrowserPanels: vi.fn(),
-    setDisplayCacheBudget: vi.fn(),
-    setDisplayCacheUsage: vi.fn(),
-    setColormapGradient: vi.fn(),
-    setColormapOptions: vi.fn(),
-    setColormapRange: vi.fn(),
-    setError: vi.fn(),
-    setExposure: vi.fn(),
-    setLayerOptions: vi.fn(),
-    setProbeMetadata: vi.fn(),
-    setProbeReadout: vi.fn(),
-    setRgbGroupOptions: vi.fn(),
-    setRgbViewLoading: vi.fn(),
-    setStokesDegreeModulationControl: vi.fn(),
-    setViewerMode: vi.fn(),
-    setVisualizationMode: vi.fn()
-  };
-}
-
-function createRendererMock() {
-  return {
-    getViewport: vi.fn(() => ({ width: 200, height: 100 })),
-    render: vi.fn(),
-    renderImage: vi.fn(),
-    renderValueOverlay: vi.fn(),
-    renderProbeOverlay: vi.fn(),
-    setColormapTexture: vi.fn(),
-    ensureLayerChannelsResident: vi.fn(() => []),
-    setDisplaySelectionBindings: vi.fn(),
-    discardChannelSourceTexture: vi.fn(),
-    discardLayerSourceTextures: vi.fn(),
-    discardSessionTextures: vi.fn()
-  };
-}
-
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((innerResolve) => {
     resolve = innerResolve;
   });
   return { promise, resolve };
-}
-
-function createRenderCacheWindowLike() {
-  const rafCallbacks: FrameRequestCallback[] = [];
-  const idleCallbacks: Array<() => void> = [];
-  const timeoutCallbacks: Array<() => void> = [];
-
-  return {
-    windowLike: {
-      requestAnimationFrame: (callback: FrameRequestCallback) => {
-        rafCallbacks.push(callback);
-        return rafCallbacks.length;
-      },
-      cancelAnimationFrame: vi.fn(),
-      requestIdleCallback: (callback: (deadline: { didTimeout: boolean; timeRemaining(): number }) => void) => {
-        idleCallbacks.push(() => {
-          callback({
-            didTimeout: false,
-            timeRemaining: () => 1
-          });
-        });
-        return idleCallbacks.length;
-      },
-      cancelIdleCallback: vi.fn(),
-      setTimeout: ((callback: TimerHandler) => {
-        if (typeof callback === 'function') {
-          timeoutCallbacks.push(callback as () => void);
-        }
-        return timeoutCallbacks.length;
-      }) as typeof window.setTimeout,
-      clearTimeout: vi.fn()
-    },
-    flush: async () => {
-      let advanced = true;
-      while (advanced) {
-        advanced = false;
-
-        while (rafCallbacks.length > 0) {
-          advanced = true;
-          rafCallbacks.shift()?.(0);
-        }
-        await Promise.resolve();
-
-        while (idleCallbacks.length > 0) {
-          advanced = true;
-          idleCallbacks.shift()?.();
-        }
-
-        while (timeoutCallbacks.length > 0) {
-          advanced = true;
-          timeoutCallbacks.shift()?.();
-        }
-        await Promise.resolve();
-      }
-
-      await Promise.resolve();
-    }
-  };
 }
 
 const registry = {
@@ -180,51 +79,21 @@ const luts = {
   '2': { id: '2', label: 'Secondary', entryCount: 2, rgba8: new Uint8Array([0, 0, 1, 255, 1, 1, 0, 255]) }
 };
 
-function createController(options: {
-  session?: OpenedImageSession | null;
-  windowLike?: RenderCacheWindowLike | null;
-} = {}) {
-  const store = new ViewerStore(createInitialState());
-  const ui = createUiMock();
-  const renderer = createRendererMock();
-  const session = options.session ?? null;
-  let interactionState: ViewerInteractionState = createViewerInteractionState({}, store.getState());
-  let controller!: DisplayController;
-  const renderCache = new RenderCacheService({
-    ui,
-    renderer: renderer as never,
-    getActiveSessionId: () => session?.id ?? null,
-    windowLike: options.windowLike,
-    onDisplayLuminanceRangeResolved: (event) => {
-      controller.handleDisplayLuminanceRangeResolved(event);
-    }
-  });
+function createController(session: OpenedImageSession | null = null) {
+  const core = new ViewerAppCore();
+  if (session) {
+    core.dispatch({
+      type: 'sessionLoaded',
+      session
+    });
+  }
 
-  controller = new DisplayController({
-    store,
-    ui,
-    renderer: renderer as never,
-    renderCache,
-    getActiveSession: () => session,
-    getInteractionState: () => interactionState
-  });
-
-  return {
-    controller,
-    store,
-    ui,
-    renderer,
-    session,
-    renderCache,
-    getInteractionState: () => interactionState,
-    setInteractionState: (next: ViewerInteractionState) => {
-      interactionState = next;
-    }
-  };
+  const controller = new DisplayController({ core });
+  return { controller, core };
 }
 
 beforeEach(() => {
-  const immediateWindow = {
+  vi.stubGlobal('window', {
     requestAnimationFrame: (callback: FrameRequestCallback) => {
       callback(0);
       return 1;
@@ -236,20 +105,9 @@ beforeEach(() => {
       }
       return 1;
     }) as typeof window.setTimeout,
-    clearTimeout: vi.fn(),
-    requestIdleCallback: (callback: (deadline: { didTimeout: boolean; timeRemaining(): number }) => void) => {
-      callback({
-        didTimeout: false,
-        timeRemaining: () => 1
-      });
-      return 1;
-    },
-    cancelIdleCallback: vi.fn()
-  };
-
-  vi.stubGlobal('window', immediateWindow);
+    clearTimeout: vi.fn()
+  });
   colormapMocks.loadColormapRegistry.mockResolvedValue(registry);
-  colormapMocks.getColormapOptions.mockReturnValue(registry.options);
   colormapMocks.loadColormapLut.mockImplementation(async (_registry: unknown, id: keyof typeof luts) => luts[id]);
   colormapMocks.getColormapAsset.mockImplementation((_registry: typeof registry, id: string) => {
     return registry.assets[Number(id)] ?? null;
@@ -264,38 +122,18 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('display controller', () => {
-  it('initializes the default colormap and publishes the options to the UI', async () => {
-    const { controller, store, ui, renderer } = createController();
+describe('display controller shim', () => {
+  it('initializes the default colormap into the app core', async () => {
+    const { controller, core } = createController();
 
     await controller.initialize();
 
-    expect(ui.setColormapOptions).toHaveBeenCalledWith(registry.options, '0');
-    expect(store.getState().activeColormapId).toBe('0');
-    expect(renderer.setColormapTexture).toHaveBeenCalledWith(luts['0'].entryCount, luts['0'].rgba8);
+    expect(core.getState().defaultColormapId).toBe('0');
+    expect(core.getState().sessionState.activeColormapId).toBe('0');
+    expect(core.getState().activeColormapLut).toEqual(luts['0']);
   });
 
-  it('uploads the active source textures once per layer and only rebinds the active revision once', async () => {
-    const session = createSession(createDecodedImage());
-    const { controller, store, renderer } = createController({ session });
-
-    await controller.initialize();
-
-    const previous = store.getState();
-    const next = {
-      ...session.state,
-      visualizationMode: 'rgb' as const
-    };
-    store.setState(next);
-
-    controller.handleSessionStateChange(store.getState(), previous);
-    controller.handleSessionStateChange(store.getState(), store.getState());
-
-    expect(renderer.ensureLayerChannelsResident).toHaveBeenCalledTimes(1);
-    expect(renderer.setDisplaySelectionBindings).toHaveBeenCalledTimes(1);
-  });
-
-  it('ignores stale async colormap loads when a newer selection wins', async () => {
+  it('ignores stale explicit colormap loads when a newer request wins', async () => {
     const firstDeferred = createDeferred<(typeof luts)['1']>();
     const secondDeferred = createDeferred<(typeof luts)['2']>();
     colormapMocks.loadColormapLut.mockImplementation((_registry: unknown, id: string) => {
@@ -308,7 +146,7 @@ describe('display controller', () => {
       return secondDeferred.promise;
     });
 
-    const { controller, store, renderer } = createController();
+    const { controller, core } = createController();
     await controller.initialize();
 
     const first = controller.setActiveColormap('1');
@@ -318,247 +156,25 @@ describe('display controller', () => {
     firstDeferred.resolve(luts['1']);
     await first;
 
-    expect(store.getState().activeColormapId).toBe('2');
-    expect(renderer.setColormapTexture).toHaveBeenLastCalledWith(luts['2'].entryCount, luts['2'].rgba8);
+    expect(core.getState().sessionState.activeColormapId).toBe('2');
+    expect(core.getState().loadedColormapId).toBe('2');
   });
 
-  it('defers entering colormap mode until a cold always-auto range resolves', async () => {
-    const decoded = createDecodedImage();
-    const session = createSession(decoded);
-    const renderCacheWindow = createRenderCacheWindowLike();
-    const { controller, store, ui } = createController({
-      session,
-      windowLike: renderCacheWindow.windowLike
-    });
-
-    await controller.initialize();
-    store.setState(session.state);
-    expect(store.getState().visualizationMode).toBe('rgb');
-
-    controller.setVisualizationMode('colormap');
-
-    expect(ui.setRgbViewLoading).toHaveBeenCalledWith(true);
-    expect(store.getState().visualizationMode).toBe('rgb');
-    expect(store.getState().colormapRange).toBeNull();
-
-    await renderCacheWindow.flush();
-
-    expect(ui.setRgbViewLoading).toHaveBeenLastCalledWith(false);
-    expect(store.getState().visualizationMode).toBe('colormap');
-    expect(store.getState().colormapRange).toEqual({ min: 0, max: 1 });
-  });
-
-  it('updates active always-auto colormap ranges when async analysis resolves', async () => {
-    const decoded = createDecodedImage();
-    const session = createSession(decoded);
-    const renderCacheWindow = createRenderCacheWindowLike();
-    const { controller, store } = createController({
-      session,
-      windowLike: renderCacheWindow.windowLike
-    });
-
-    await controller.initialize();
-
-    const previous = store.getState();
-    store.setState({
-      ...session.state,
-      visualizationMode: 'colormap',
-      colormapRange: null,
-      colormapRangeMode: 'alwaysAuto'
-    });
-
-    controller.handleSessionStateChange(store.getState(), previous);
-    expect(store.getState().colormapRange).toBeNull();
-
-    await renderCacheWindow.flush();
-
-    expect(store.getState().colormapRange).toEqual({ min: 0, max: 1 });
-  });
-
-  it('ignores stale luminance callbacks after the active selection changes', async () => {
-    const decoded: DecodedExrImage = {
-      width: 2,
-      height: 1,
-      layers: [
-        createLayerFromChannels({
-          R: new Float32Array([1, 1]),
-          G: new Float32Array([0.5, 0.5]),
-          B: new Float32Array([0, 0])
-        }, 'beauty')
-      ]
-    };
-    const session = createSession(decoded);
-    const renderCacheWindow = createRenderCacheWindowLike();
-    const { controller, store } = createController({
-      session,
-      windowLike: renderCacheWindow.windowLike
-    });
-
-    await controller.initialize();
-
-    const firstPrevious = store.getState();
-    store.setState({
-      ...session.state,
-      visualizationMode: 'colormap',
-      colormapRange: null,
-      colormapRangeMode: 'alwaysAuto'
-    });
-    controller.handleSessionStateChange(store.getState(), firstPrevious);
-
-    const secondPrevious = store.getState();
-    store.setState({
-      ...store.getState(),
-      displaySelection: createChannelMonoSelection('R')
-    });
-    controller.handleSessionStateChange(store.getState(), secondPrevious);
-
-    await renderCacheWindow.flush();
-
-    expect(store.getState().displaySelection).toEqual(createChannelMonoSelection('R'));
-    expect(store.getState().colormapRange).toEqual({ min: 1, max: 1 });
-  });
-
-  it('restores the saved non-stokes visualization state when returning to channels', async () => {
+  it('applies stokes selection through the core and restores the previous non-stokes visualization state', async () => {
     const decoded = createDecodedImage(['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3']);
-    const session = createSession(decoded);
-    const { controller, store } = createController({ session });
+    const { controller, core } = createController(createSession(decoded));
 
     await controller.initialize();
 
-    await controller.applyDisplaySelection({
-      ...createStokesSelection('aolp')
-    });
-    await controller.applyDisplaySelection({
-      ...createChannelRgbSelection('R', 'G', 'B')
-    });
-    await Promise.resolve();
+    await controller.applyDisplaySelection(createStokesSelection('aolp'));
+    expect(core.getState().sessionState.visualizationMode).toBe('colormap');
+    expect(core.getState().sessionState.activeColormapId).toBe('1');
 
-    expect(store.getState().visualizationMode).toBe('rgb');
-    expect(store.getState().activeColormapId).toBe('0');
-    expect(store.getState().displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
-  });
+    await controller.applyDisplaySelection(createChannelRgbSelection('R', 'G', 'B'));
 
-  it('clears image browser panels explicitly when there is no active session', async () => {
-    const { controller, store, ui } = createController();
-
-    await controller.initialize();
-    vi.clearAllMocks();
-
-    const previous = store.getState();
-    controller.handleSessionStateChange(store.getState(), previous);
-
-    expect(ui.clearImageBrowserPanels).toHaveBeenCalledTimes(1);
-    expect(ui.setLayerOptions).not.toHaveBeenCalled();
-    expect(ui.setRgbGroupOptions).not.toHaveBeenCalled();
-  });
-
-  it('does not prepare or analyze ranges for interaction-only hover updates', async () => {
-    const session = createSession(createDecodedImage());
-    const { controller, store, renderCache, setInteractionState, renderer } = createController({ session });
-
-    await controller.initialize();
-    controller.handleSessionStateChange(store.getState(), store.getState());
-    const prepareSpy = vi.spyOn(renderCache, 'prepareActiveSession');
-    const requestRangeSpy = vi.spyOn(renderCache, 'requestDisplayLuminanceRange');
-    vi.clearAllMocks();
-
-    const previousInteraction = createViewerInteractionState({
-      hoveredPixel: null
-    }, store.getState());
-    const nextInteraction = createViewerInteractionState({
-      hoveredPixel: { ix: 1, iy: 0 }
-    }, store.getState());
-    setInteractionState(nextInteraction);
-    controller.handleInteractionStateChange(nextInteraction, previousInteraction);
-
-    expect(prepareSpy).not.toHaveBeenCalled();
-    expect(requestRangeSpy).not.toHaveBeenCalled();
-    expect(renderer.renderImage).not.toHaveBeenCalled();
-    expect(renderer.renderValueOverlay).not.toHaveBeenCalled();
-    expect(renderer.renderProbeOverlay).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not request luminance analysis for manual colormap mode or rgb-only selection changes', async () => {
-    const session = createSession(createDecodedImage());
-    const { controller, store, renderCache } = createController({ session });
-
-    await controller.initialize();
-
-    const requestRangeSpy = vi.spyOn(renderCache, 'requestDisplayLuminanceRange');
-    const manualPrevious = store.getState();
-    store.setState({
-      ...session.state,
-      visualizationMode: 'colormap',
-      colormapRange: { min: 0, max: 1 },
-      colormapRangeMode: 'oneTime'
-    });
-    controller.handleSessionStateChange(store.getState(), manualPrevious);
-
-    const rgbPrevious = store.getState();
-    store.setState({
-      ...session.state,
-      visualizationMode: 'rgb',
-      displaySelection: createChannelMonoSelection('R')
-    });
-    controller.handleSessionStateChange(store.getState(), rgbPrevious);
-
-    expect(requestRangeSpy).not.toHaveBeenCalled();
-  });
-
-  it('ignores structurally identical hover pixels in the interaction path', async () => {
-    const session = createSession(createDecodedImage());
-    const { controller, store, setInteractionState, renderer, ui } = createController({ session });
-
-    await controller.initialize();
-    controller.handleSessionStateChange(store.getState(), store.getState());
-    vi.clearAllMocks();
-
-    const previousInteraction = createViewerInteractionState({
-      hoveredPixel: { ix: 1, iy: 0 }
-    }, store.getState());
-    const nextInteraction = createViewerInteractionState({
-      hoveredPixel: { ix: 1, iy: 0 }
-    }, store.getState());
-    setInteractionState(nextInteraction);
-    controller.handleInteractionStateChange(nextInteraction, previousInteraction);
-
-    expect(ui.setProbeReadout).not.toHaveBeenCalled();
-    expect(renderer.renderImage).not.toHaveBeenCalled();
-    expect(renderer.renderValueOverlay).not.toHaveBeenCalled();
-    expect(renderer.renderProbeOverlay).not.toHaveBeenCalled();
-  });
-
-  it('refreshes panorama interaction rendering and probe sampling without cache prep', async () => {
-    const session = createSession(createDecodedImage());
-    const { controller, store, renderCache, setInteractionState, renderer, ui } = createController({ session });
-
-    await controller.initialize();
-    store.setState({ viewerMode: 'panorama' });
-    controller.handleSessionStateChange(store.getState(), createInitialState(), true);
-    const prepareSpy = vi.spyOn(renderCache, 'prepareActiveSession');
-    vi.clearAllMocks();
-
-    const previousInteraction = createViewerInteractionState({
-      hoveredPixel: { ix: 0, iy: 0 }
-    }, store.getState());
-    const nextInteraction = createViewerInteractionState({
-      view: {
-        ...store.getState(),
-        panoramaYawDeg: 20,
-        panoramaPitchDeg: 10,
-        panoramaHfovDeg: 80
-      },
-      hoveredPixel: { ix: 1, iy: 0 }
-    }, store.getState());
-
-    setInteractionState(nextInteraction);
-    controller.handleInteractionStateChange(nextInteraction, previousInteraction);
-
-    expect(prepareSpy).not.toHaveBeenCalled();
-    expect(ui.setProbeReadout).toHaveBeenCalled();
-    expect(renderer.renderImage).toHaveBeenCalledTimes(1);
-    expect(renderer.renderValueOverlay).toHaveBeenCalledTimes(1);
-    expect(renderer.renderProbeOverlay).toHaveBeenCalledTimes(1);
+    expect(core.getState().sessionState.visualizationMode).toBe('rgb');
+    expect(core.getState().sessionState.activeColormapId).toBe('0');
+    expect(core.getState().sessionState.displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
   });
 
   it('suppresses late colormap loads after dispose', async () => {
@@ -570,7 +186,7 @@ describe('display controller', () => {
       return deferred.promise;
     });
 
-    const { controller, store, renderer } = createController();
+    const { controller, core } = createController();
     await controller.initialize();
 
     const pending = controller.setActiveColormap('1');
@@ -578,7 +194,6 @@ describe('display controller', () => {
     deferred.resolve(luts['1']);
 
     await expect(pending).resolves.toBeUndefined();
-    expect(store.getState().activeColormapId).toBe('0');
-    expect(renderer.setColormapTexture).toHaveBeenCalledTimes(1);
+    expect(core.getState().sessionState.activeColormapId).toBe('0');
   });
 });

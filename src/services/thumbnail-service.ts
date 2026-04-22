@@ -10,12 +10,12 @@ const THUMBNAIL_IDLE_FALLBACK_DELAY_MS = 64;
 interface ThumbnailJob {
   sessionId: string;
   token: number;
+  stateSnapshot: ViewerSessionState;
 }
 
 interface ThumbnailSessionState {
-  generationToken: number;
+  token: number;
   stateSnapshot: ViewerSessionState;
-  thumbnailDataUrl: string | null;
 }
 
 interface IdleDeadlineLike {
@@ -36,7 +36,7 @@ export interface ThumbnailWindowLike {
 
 export interface ThumbnailServiceDependencies {
   getSession: (sessionId: string) => OpenedImageSession | null;
-  onThumbnailUpdated: () => void;
+  onThumbnailReady: (event: { sessionId: string; token: number; thumbnailDataUrl: string | null }) => void;
   windowLike?: ThumbnailWindowLike | null;
   createThumbnailDataUrl?: (args: {
     session: OpenedImageSession;
@@ -47,7 +47,7 @@ export interface ThumbnailServiceDependencies {
 
 export class ThumbnailService implements Disposable {
   private readonly getSession: ThumbnailServiceDependencies['getSession'];
-  private readonly onThumbnailUpdated: ThumbnailServiceDependencies['onThumbnailUpdated'];
+  private readonly onThumbnailReady: ThumbnailServiceDependencies['onThumbnailReady'];
   private readonly windowLike: ThumbnailWindowLike | null;
   private readonly createThumbnailDataUrl: NonNullable<ThumbnailServiceDependencies['createThumbnailDataUrl']>;
   private readonly jobs: ThumbnailJob[] = [];
@@ -58,13 +58,13 @@ export class ThumbnailService implements Disposable {
 
   constructor(dependencies: ThumbnailServiceDependencies) {
     this.getSession = dependencies.getSession;
-    this.onThumbnailUpdated = dependencies.onThumbnailUpdated;
+    this.onThumbnailReady = dependencies.onThumbnailReady;
     this.windowLike = dependencies.windowLike ?? resolveWindowLike();
     this.createThumbnailDataUrl =
       dependencies.createThumbnailDataUrl ?? defaultCreateThumbnailDataUrl;
   }
 
-  enqueue(sessionId: string, stateSnapshot: ViewerSessionState): Promise<void> {
+  enqueue(sessionId: string, stateSnapshot: ViewerSessionState, token: number): Promise<void> {
     if (this.abortController.signal.aborted) {
       return Promise.reject(this.abortController.signal.reason ?? createAbortError('Thumbnail service has been disposed.'));
     }
@@ -75,33 +75,22 @@ export class ThumbnailService implements Disposable {
     }
 
     const entry = this.getOrCreateSessionState(sessionId, stateSnapshot);
-    entry.generationToken += 1;
+    entry.token = token;
     entry.stateSnapshot = cloneViewerState(stateSnapshot);
     this.jobs.push({
       sessionId,
-      token: entry.generationToken
+      token,
+      stateSnapshot: cloneViewerState(stateSnapshot)
     });
 
     return this.processJobs();
   }
 
-  getThumbnailDataUrl(sessionId: string): string | null {
-    if (this.disposed) {
-      return null;
-    }
-
-    return this.sessionState.get(sessionId)?.thumbnailDataUrl ?? null;
-  }
-
-  discard(sessionId: string, options: { preserveDataUrl?: boolean } = {}): void {
+  discard(sessionId: string): void {
     for (let index = this.jobs.length - 1; index >= 0; index -= 1) {
       if (this.jobs[index]?.sessionId === sessionId) {
         this.jobs.splice(index, 1);
       }
-    }
-
-    if (options.preserveDataUrl) {
-      return;
     }
 
     this.sessionState.delete(sessionId);
@@ -143,18 +132,21 @@ export class ThumbnailService implements Disposable {
 
           await this.runNonCriticalTask(async () => {
             const thumbnailDataUrl = this.createThumbnailDataUrlForJob(job);
-            if (!thumbnailDataUrl) {
+            if (thumbnailDataUrl === null) {
               return;
             }
 
             const session = this.getSession(job.sessionId);
             const entry = this.sessionState.get(job.sessionId);
-            if (this.disposed || !session || !entry || entry.generationToken !== job.token) {
+            if (this.disposed || !session || !entry || entry.token !== job.token) {
               return;
             }
 
-            entry.thumbnailDataUrl = thumbnailDataUrl;
-            this.onThumbnailUpdated();
+            this.onThumbnailReady({
+              sessionId: job.sessionId,
+              token: job.token,
+              thumbnailDataUrl
+            });
           });
         }
       } catch (error) {
@@ -179,11 +171,11 @@ export class ThumbnailService implements Disposable {
 
     const session = this.getSession(job.sessionId);
     const entry = this.sessionState.get(job.sessionId);
-    if (!session || !entry || entry.generationToken !== job.token) {
+    if (!session || !entry || entry.token !== job.token) {
       return null;
     }
 
-    const stateSnapshot = entry.stateSnapshot;
+    const stateSnapshot = job.stateSnapshot;
     const layer = getSelectedLayer(session, stateSnapshot.activeLayer);
     if (!layer || session.decoded.width <= 0 || session.decoded.height <= 0) {
       return null;
@@ -285,9 +277,8 @@ export class ThumbnailService implements Disposable {
     }
 
     const entry: ThumbnailSessionState = {
-      generationToken: 0,
-      stateSnapshot: cloneViewerState(stateSnapshot),
-      thumbnailDataUrl: null
+      token: 0,
+      stateSnapshot: cloneViewerState(stateSnapshot)
     };
     this.sessionState.set(sessionId, entry);
     return entry;
