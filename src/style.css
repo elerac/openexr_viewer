@@ -45,6 +45,7 @@ output {
 }
 
 .app-menu-bar {
+  grid-row: 1;
   position: relative;
   z-index: 20;
   min-height: 2.1rem;
@@ -232,6 +233,7 @@ input[type='range'] {
 }
 
 .error-banner {
+  grid-row: 2;
   padding: 0.5rem 0.75rem;
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--error) 12%, transparent);
@@ -353,7 +355,8 @@ input[type='range'] {
   --right-panel-width: 320px;
   --right-panel-tab-width: 18px;
   --right-panel-resizer-width: 0.5rem;
-  height: 100%;
+  grid-row: 3;
+  align-self: stretch;
   min-height: 0;
   display: grid;
   grid-template-columns:

@@ -3,21 +3,40 @@ import { SessionController } from '../src/controllers/session-controller';
 import { LoadQueueService } from '../src/services/load-queue';
 import { ViewerAppCore } from '../src/app/viewer-app-core';
 import { DecodedExrImage } from '../src/types';
-import { createChannelMonoSelection, createChannelRgbSelection, createLayerFromChannels } from './helpers/state-fixtures';
+import {
+  createChannelMonoSelection,
+  createChannelRgbSelection,
+  createLayerFromChannels,
+  createStokesSelection
+} from './helpers/state-fixtures';
 
-function createDecodedImage(width = 4, height = 4): DecodedExrImage {
+const RGB_STOKES_CHANNEL_NAMES = [
+  'R', 'G', 'B',
+  'S0.R', 'S0.G', 'S0.B',
+  'S1.R', 'S1.G', 'S1.B',
+  'S2.R', 'S2.G', 'S2.B',
+  'S3.R', 'S3.G', 'S3.B'
+];
+
+function createDecodedImage(width = 4, height = 4, channelNames: string[] = ['R', 'G', 'B']): DecodedExrImage {
   const pixelCount = width * height;
-  const layer = createLayerFromChannels({
-    R: new Float32Array(pixelCount).fill(1),
-    G: new Float32Array(pixelCount).fill(2),
-    B: new Float32Array(pixelCount).fill(3)
-  }, 'beauty');
+  const channelValues = Object.fromEntries(
+    channelNames.map((channelName, index) => {
+      const fillValue = channelName.startsWith('S') ? (index + 1) * 0.25 : index + 1;
+      return [channelName, new Float32Array(pixelCount).fill(fillValue)];
+    })
+  ) as Record<string, Float32Array>;
+  const layer = createLayerFromChannels(channelValues, 'beauty');
 
   return {
     width,
     height,
     layers: [layer]
   };
+}
+
+function createRgbStokesDecodedImage(width = 4, height = 4): DecodedExrImage {
+  return createDecodedImage(width, height, RGB_STOKES_CHANNEL_NAMES);
 }
 
 function createFile(name: string, bytes: number[] = [1, 2, 3]): File {
@@ -70,6 +89,138 @@ describe('session controller shim', () => {
     expect(session?.filename).toBe('beauty.exr');
     expect(core.getState().sessionState.activeColormapId).toBe(core.getState().defaultColormapId);
     expect(core.getState().sessionState.displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
+  });
+
+  it('keeps a matching plain channel selection when loading a new image', async () => {
+    const decodeBytes = vi
+      .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
+      .mockResolvedValueOnce(createDecodedImage(6, 6))
+      .mockResolvedValueOnce(createDecodedImage(6, 6));
+    const { controller, core } = createController({ decodeBytes });
+
+    await controller.enqueueFiles([createFile('first.exr')]);
+    core.dispatch({
+      type: 'displaySelectionSet',
+      displaySelection: createChannelMonoSelection('G')
+    });
+
+    await controller.enqueueFiles([createFile('second.exr')]);
+
+    expect(controller.getActiveSession()?.filename).toBe('second.exr');
+    expect(core.getState().sessionState.displaySelection).toEqual(createChannelMonoSelection('G'));
+  });
+
+  it('keeps a matching grouped Stokes selection when loading a new image', async () => {
+    const decodeBytes = vi
+      .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
+      .mockResolvedValueOnce(createRgbStokesDecodedImage(6, 6))
+      .mockResolvedValueOnce(createRgbStokesDecodedImage(6, 6));
+    const { controller, core } = createController({ decodeBytes });
+
+    await controller.enqueueFiles([createFile('stokes-first.exr')]);
+    core.dispatch({
+      type: 'displaySelectionSet',
+      displaySelection: createStokesSelection('aolp', 'stokesRgb')
+    });
+
+    await controller.enqueueFiles([createFile('stokes-second.exr')]);
+
+    expect(controller.getActiveSession()?.filename).toBe('stokes-second.exr');
+    expect(core.getState().sessionState.displaySelection).toEqual(createStokesSelection('aolp', 'stokesRgb'));
+  });
+
+  it('keeps a matching split Stokes selection and colormap state when loading a new image', async () => {
+    const decodeBytes = vi
+      .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
+      .mockResolvedValueOnce(createRgbStokesDecodedImage(6, 6))
+      .mockResolvedValueOnce(createRgbStokesDecodedImage(6, 6));
+    const { controller, core } = createController({ decodeBytes });
+
+    await controller.enqueueFiles([createFile('stokes-first.exr')]);
+    core.dispatch({
+      type: 'displaySelectionSet',
+      displaySelection: createStokesSelection('aolp', 'stokesRgb', 'R')
+    });
+    core.dispatch({
+      type: 'colormapLoadResolved',
+      requestId: null as never,
+      colormapId: '2',
+      lut: {
+        id: '2',
+        label: 'Secondary',
+        entryCount: 2,
+        rgba8: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255])
+      }
+    });
+    core.dispatch({
+      type: 'colormapRangeSet',
+      range: { min: 0.1, max: 0.9 }
+    });
+
+    await controller.enqueueFiles([createFile('stokes-second.exr')]);
+
+    expect(controller.getActiveSession()?.filename).toBe('stokes-second.exr');
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'colormap',
+      activeColormapId: '2',
+      colormapRange: { min: 0.1, max: 0.9 },
+      colormapRangeMode: 'oneTime',
+      displaySelection: createStokesSelection('aolp', 'stokesRgb', 'R')
+    });
+  });
+
+  it('falls back to the new image default selection when the current selection is incompatible', async () => {
+    const decodeBytes = vi
+      .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
+      .mockResolvedValueOnce(createDecodedImage(6, 6, ['R', 'G', 'B', 'mask']))
+      .mockResolvedValueOnce(createDecodedImage(6, 6));
+    const { controller, core } = createController({ decodeBytes });
+
+    await controller.enqueueFiles([createFile('first.exr')]);
+    core.dispatch({
+      type: 'displaySelectionSet',
+      displaySelection: createChannelMonoSelection('mask')
+    });
+
+    await controller.enqueueFiles([createFile('second.exr')]);
+
+    expect(controller.getActiveSession()?.filename).toBe('second.exr');
+    expect(core.getState().sessionState.displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
+  });
+
+  it('carries current image view and lock state when loading a new image', async () => {
+    const decodeBytes = vi
+      .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
+      .mockResolvedValueOnce(createDecodedImage(6, 6))
+      .mockResolvedValueOnce(createDecodedImage(8, 8));
+    const { controller, core } = createController({ decodeBytes });
+
+    await controller.enqueueFiles([createFile('first.exr')]);
+    core.dispatch({
+      type: 'lockedPixelToggled',
+      pixel: { ix: 1, iy: 1 }
+    });
+    core.dispatch({
+      type: 'viewStateCommitted',
+      view: {
+        zoom: 3,
+        panX: 4,
+        panY: 5,
+        panoramaYawDeg: 0,
+        panoramaPitchDeg: 0,
+        panoramaHfovDeg: 100
+      }
+    });
+
+    await controller.enqueueFiles([createFile('second.exr')]);
+
+    expect(controller.getActiveSession()?.filename).toBe('second.exr');
+    expect(core.getState().sessionState).toMatchObject({
+      zoom: 3,
+      panX: 5,
+      panY: 6,
+      lockedPixel: { ix: 1, iy: 1 }
+    });
   });
 
   it('switches active sessions while carrying current view and lock state', async () => {

@@ -27,15 +27,18 @@ export interface BuildLoadedSessionArgs {
   viewport: ViewportInfo;
   currentSessionState: ViewerSessionState;
   hasActiveSession: boolean;
+  previousImage: DecodedExrImage | null;
 }
 
 export function buildLoadedSession(args: BuildLoadedSessionArgs): OpenedImageSession {
   const fitView = computeFitView(args.viewport, args.decoded.width, args.decoded.height);
-  const initialExposureEv = args.hasActiveSession ? args.currentSessionState.exposureEv : 0;
-  const sessionState = buildViewerStateForLayer(
+  const displayName = buildSessionDisplayName(
+    args.filename,
+    args.existingSessions.map((session) => session.filename)
+  );
+  const defaultSessionState = buildViewerStateForLayer(
     {
       ...createClearedViewerState(args.defaultColormapId),
-      exposureEv: initialExposureEv,
       zoom: fitView.zoom,
       panX: fitView.panX,
       panY: fitView.panY
@@ -43,17 +46,21 @@ export function buildLoadedSession(args: BuildLoadedSessionArgs): OpenedImageSes
     args.decoded,
     0
   );
-
-  return {
+  const baseSession: OpenedImageSession = {
     id: args.sessionId,
     filename: args.filename,
-    displayName: buildSessionDisplayName(
-      args.filename,
-      args.existingSessions.map((session) => session.filename)
-    ),
+    displayName,
     fileSizeBytes: args.fileSizeBytes,
     source: args.source,
     decoded: args.decoded,
+    state: defaultSessionState
+  };
+  const sessionState = args.hasActiveSession
+    ? buildSwitchedSessionState(baseSession, args.currentSessionState, args.previousImage)
+    : defaultSessionState;
+
+  return {
+    ...baseSession,
     state: sessionState
   };
 }

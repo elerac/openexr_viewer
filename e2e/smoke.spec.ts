@@ -972,6 +972,68 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
   await expect(viewer).toBeVisible();
 });
 
+test('keeps desktop panel heights stable after opening an image', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  const imageCollapseButton = page.locator('#image-panel-collapse-button');
+  const rightCollapseButton = page.locator('#right-panel-collapse-button');
+
+  await expect(imageCollapseButton).toBeVisible();
+  await expect(rightCollapseButton).toBeVisible();
+
+  const readHeights = async () => {
+    return await page.evaluate(() => {
+      const mainLayout = document.querySelector('#main-layout');
+      const imagePanel = document.querySelector('#image-panel');
+      const rightStack = document.querySelector('#right-stack');
+      const imageCollapseButton = document.querySelector('#image-panel-collapse-button');
+      const rightCollapseButton = document.querySelector('#right-panel-collapse-button');
+
+      if (
+        !(mainLayout instanceof HTMLElement) ||
+        !(imagePanel instanceof HTMLElement) ||
+        !(rightStack instanceof HTMLElement) ||
+        !(imageCollapseButton instanceof HTMLButtonElement) ||
+        !(rightCollapseButton instanceof HTMLButtonElement)
+      ) {
+        throw new Error('Missing panel height elements.');
+      }
+
+      return {
+        mainLayoutHeight: mainLayout.getBoundingClientRect().height,
+        imageShellHeight: imagePanel.getBoundingClientRect().height,
+        rightShellHeight: rightStack.getBoundingClientRect().height,
+        imageButtonHeight: imageCollapseButton.getBoundingClientRect().height,
+        rightButtonHeight: rightCollapseButton.getBoundingClientRect().height
+      };
+    });
+  };
+
+  const initial = await readHeights();
+  expect(Math.abs(initial.imageButtonHeight - initial.imageShellHeight)).toBeLessThan(3);
+  expect(Math.abs(initial.rightButtonHeight - initial.rightShellHeight)).toBeLessThan(3);
+
+  await page.getByRole('button', { name: 'Gallery', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'cbox_rgb.exr', exact: true }).click();
+  await expect(page.locator('#opened-images-select option:checked')).toContainText('cbox_rgb.exr', { timeout: 30000 });
+  await page.waitForTimeout(250);
+
+  const afterOpen = await readHeights();
+  expect(afterOpen.mainLayoutHeight).toBeCloseTo(initial.mainLayoutHeight, 0);
+  expect(afterOpen.imageShellHeight).toBeCloseTo(initial.imageShellHeight, 0);
+  expect(afterOpen.rightShellHeight).toBeCloseTo(initial.rightShellHeight, 0);
+  expect(Math.abs(afterOpen.imageButtonHeight - afterOpen.imageShellHeight)).toBeLessThan(3);
+  expect(Math.abs(afterOpen.rightButtonHeight - afterOpen.rightShellHeight)).toBeLessThan(3);
+});
+
 test('loads scalar Stokes channels and applies derived-channel defaults', async ({ page }) => {
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
   await page.waitForTimeout(1500);
@@ -1262,6 +1324,52 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   await expect(exposureControl).toBeHidden();
   await expect(colormapRangeControl).toBeVisible();
   await expect(colormapSelect).toHaveValue(previousColormapId);
+});
+
+test('keeps the selected split RGB Stokes channel when opening another matching image', async ({ page }) => {
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  const openedImages = page.locator('#opened-images-select');
+  const channelSelect = page.locator('#rgb-group-select');
+  const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
+  const colormapRangeControl = page.locator('#colormap-range-control');
+  const colormapSelect = page.locator('#colormap-select');
+  const rdBuId = String(expectedColormapLabels.indexOf('RdBu'));
+
+  expect(rdBuId).not.toBe('-1');
+
+  await page.setInputFiles('#file-input', {
+    name: 'stokes_rgb_first.exr',
+    mimeType: 'image/exr',
+    buffer: buildRgbStokesExr()
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('stokes_rgb_first.exr', { timeout: 30000 });
+
+  await channelSelect.selectOption({ label: 'AoLP.(R,G,B)' });
+  await rgbSplitToggleButton.click();
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(channelSelect.locator('option:checked')).toHaveText('AoLP.R');
+  await colormapSelect.selectOption({ label: 'RdBu' });
+  await expect(colormapRangeControl).toBeVisible();
+  await expect(colormapSelect).toHaveValue(rdBuId);
+
+  await page.setInputFiles('#file-input', {
+    name: 'stokes_rgb_second.exr',
+    mimeType: 'image/exr',
+    buffer: buildRgbStokesExr()
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('stokes_rgb_second.exr', { timeout: 30000 });
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(channelSelect.locator('option:checked')).toHaveText('AoLP.R');
+  await expect(colormapRangeControl).toBeVisible();
+  await expect(colormapSelect).toHaveValue(rdBuId);
 });
 
 test('loads arbitrary scalar channels as grayscale display options', async ({ page }) => {

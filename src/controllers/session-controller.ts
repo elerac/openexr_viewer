@@ -330,6 +330,7 @@ export class SessionController implements Disposable {
     source: SessionSource
   ): void {
     const currentState = this.core.getState();
+    const activeSession = selectActiveSession(currentState);
     const session = buildLoadedSession({
       sessionId: this.core.issueSessionId(),
       decoded,
@@ -340,7 +341,8 @@ export class SessionController implements Disposable {
       defaultColormapId: currentState.defaultColormapId,
       viewport: this.getViewport(),
       currentSessionState: currentState.sessionState,
-      hasActiveSession: Boolean(selectActiveSession(currentState))
+      hasActiveSession: Boolean(activeSession),
+      previousImage: activeSession?.decoded ?? null
     });
 
     this.core.dispatch({
