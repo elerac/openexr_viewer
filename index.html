@@ -163,59 +163,101 @@
               </div>
 
               <section id="metadata-panel" class="readout-block">
-                <h2>Metadata</h2>
-                <p id="metadata-empty-state" class="metadata-empty-state">No metadata available.</p>
-                <div id="metadata-table" class="metadata-table hidden" aria-label="EXR metadata"></div>
+                <div class="readout-block-header">
+                  <h2>Metadata</h2>
+                  <button
+                    id="metadata-toggle"
+                    class="readout-block-toggle"
+                    type="button"
+                    aria-expanded="true"
+                    aria-controls="metadata-content"
+                    aria-label="Collapse Metadata section"
+                  >
+                    <span class="readout-block-chevron" aria-hidden="true"></span>
+                  </button>
+                </div>
+                <div id="metadata-content" class="readout-block-content">
+                  <p id="metadata-empty-state" class="metadata-empty-state">No metadata available.</p>
+                  <div id="metadata-table" class="metadata-table hidden" aria-label="EXR metadata"></div>
+                </div>
               </section>
 
               <section id="probe-panel" class="readout-block">
-                <h2>Probe</h2>
-                <p id="probe-mode">Hover</p>
-                <p id="probe-coords">x -   y -</p>
-                <div id="probe-color-preview" class="probe-color-preview is-empty">
-                  <span id="probe-color-swatch" class="probe-color-swatch" aria-hidden="true"></span>
-                  <div id="probe-color-values" class="probe-color-values" aria-label="Probe display values">
-                    <div class="probe-color-row">
-                      <span class="probe-color-channel">R:</span>
-                      <span class="probe-color-number"></span>
-                    </div>
-                    <div class="probe-color-row">
-                      <span class="probe-color-channel">G:</span>
-                      <span class="probe-color-number"></span>
-                    </div>
-                    <div class="probe-color-row">
-                      <span class="probe-color-channel">B:</span>
-                      <span class="probe-color-number"></span>
+                <div class="readout-block-header">
+                  <h2>Probe</h2>
+                  <button
+                    id="probe-toggle"
+                    class="readout-block-toggle"
+                    type="button"
+                    aria-expanded="true"
+                    aria-controls="probe-content"
+                    aria-label="Collapse Probe section"
+                  >
+                    <span class="readout-block-chevron" aria-hidden="true"></span>
+                  </button>
+                </div>
+                <div id="probe-content" class="readout-block-content">
+                  <p id="probe-mode">Hover</p>
+                  <p id="probe-coords">x -   y -</p>
+                  <div id="probe-color-preview" class="probe-color-preview is-empty">
+                    <span id="probe-color-swatch" class="probe-color-swatch" aria-hidden="true"></span>
+                    <div id="probe-color-values" class="probe-color-values" aria-label="Probe display values">
+                      <div class="probe-color-row">
+                        <span class="probe-color-channel">R:</span>
+                        <span class="probe-color-number"></span>
+                      </div>
+                      <div class="probe-color-row">
+                        <span class="probe-color-channel">G:</span>
+                        <span class="probe-color-number"></span>
+                      </div>
+                      <div class="probe-color-row">
+                        <span class="probe-color-channel">B:</span>
+                        <span class="probe-color-number"></span>
+                      </div>
                     </div>
                   </div>
+                  <div id="probe-values" class="probe-values"></div>
                 </div>
-                <div id="probe-values" class="probe-values"></div>
               </section>
 
               <section id="roi-panel" class="readout-block">
-                <h2>ROI</h2>
-                <p id="roi-empty-state" class="roi-empty-state">Shift-drag in Image viewer to create ROI.</p>
-                <div id="roi-details" class="roi-details hidden">
-                  <div class="roi-summary">
-                    <div class="roi-summary-row">
-                      <span class="roi-summary-label">Bounds</span>
-                      <span id="roi-bounds" class="roi-summary-value"></span>
+                <div class="readout-block-header">
+                  <h2>ROI</h2>
+                  <button
+                    id="roi-toggle"
+                    class="readout-block-toggle"
+                    type="button"
+                    aria-expanded="true"
+                    aria-controls="roi-content"
+                    aria-label="Collapse ROI section"
+                  >
+                    <span class="readout-block-chevron" aria-hidden="true"></span>
+                  </button>
+                </div>
+                <div id="roi-content" class="readout-block-content">
+                  <p id="roi-empty-state" class="roi-empty-state">Shift-drag in Image viewer to create ROI.</p>
+                  <div id="roi-details" class="roi-details hidden">
+                    <div class="roi-summary">
+                      <div class="roi-summary-row">
+                        <span class="roi-summary-label">Bounds</span>
+                        <span id="roi-bounds" class="roi-summary-value"></span>
+                      </div>
+                      <div class="roi-summary-row">
+                        <span class="roi-summary-label">Size</span>
+                        <span id="roi-size" class="roi-summary-value"></span>
+                      </div>
+                      <div class="roi-summary-row">
+                        <span class="roi-summary-label">Pixels</span>
+                        <span id="roi-pixel-count" class="roi-summary-value"></span>
+                      </div>
+                      <div class="roi-summary-row">
+                        <span class="roi-summary-label">Valid</span>
+                        <span id="roi-valid-count" class="roi-summary-value"></span>
+                      </div>
                     </div>
-                    <div class="roi-summary-row">
-                      <span class="roi-summary-label">Size</span>
-                      <span id="roi-size" class="roi-summary-value"></span>
-                    </div>
-                    <div class="roi-summary-row">
-                      <span class="roi-summary-label">Pixels</span>
-                      <span id="roi-pixel-count" class="roi-summary-value"></span>
-                    </div>
-                    <div class="roi-summary-row">
-                      <span class="roi-summary-label">Valid</span>
-                      <span id="roi-valid-count" class="roi-summary-value"></span>
-                    </div>
+                    <div id="roi-stats" class="roi-stats" aria-label="ROI statistics"></div>
+                    <button id="clear-roi-button" type="button" disabled>Clear ROI</button>
                   </div>
-                  <div id="roi-stats" class="roi-stats" aria-label="ROI statistics"></div>
-                  <button id="clear-roi-button" type="button" disabled>Clear ROI</button>
                 </div>
               </section>
             </div>

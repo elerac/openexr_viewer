@@ -281,6 +281,47 @@ describe('probe coordinate formatting', () => {
 });
 
 describe('metadata inspector', () => {
+  it('starts with all inspector readout sections expanded and toggles them independently', () => {
+    installUiFixture();
+
+    new ViewerUi(createUiCallbacks());
+
+    const metadataToggle = document.getElementById('metadata-toggle') as HTMLButtonElement;
+    const metadataContent = document.getElementById('metadata-content') as HTMLDivElement;
+    const probeToggle = document.getElementById('probe-toggle') as HTMLButtonElement;
+    const probeContent = document.getElementById('probe-content') as HTMLDivElement;
+    const roiToggle = document.getElementById('roi-toggle') as HTMLButtonElement;
+    const roiContent = document.getElementById('roi-content') as HTMLDivElement;
+
+    expect(metadataToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(metadataContent.hidden).toBe(false);
+    expect(probeToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(probeContent.hidden).toBe(false);
+    expect(roiToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(roiContent.hidden).toBe(false);
+
+    metadataToggle.click();
+
+    expect(metadataToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(metadataContent.hidden).toBe(true);
+    expect((document.getElementById('metadata-panel') as HTMLElement).classList.contains('is-collapsed')).toBe(true);
+    expect(probeContent.hidden).toBe(false);
+    expect(roiContent.hidden).toBe(false);
+
+    metadataToggle.click();
+    probeToggle.click();
+    roiToggle.click();
+
+    expect(metadataToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(metadataContent.hidden).toBe(false);
+    expect(probeToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(probeContent.hidden).toBe(true);
+    expect(roiToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(roiContent.hidden).toBe(true);
+    expect(document.querySelector('#probe-panel .readout-block-header')).not.toBeNull();
+    expect(document.querySelector('#roi-panel .readout-block-header')).not.toBeNull();
+  });
+
   it('shows the empty state until metadata is available', () => {
     installUiFixture();
 
@@ -312,6 +353,26 @@ describe('metadata inspector', () => {
       { key: 'Compression', value: 'PIZ' },
       { key: 'Channels', value: '3 (R, G, B)' }
     ]);
+
+    ui.setMetadata([{ key: 'owner', label: 'Owner', value: 'render-farm-a' }]);
+
+    expect(
+      Array.from(document.querySelectorAll('#metadata-table .metadata-row')).map((row) => ({
+        key: row.querySelector('.metadata-key')?.textContent,
+        value: row.querySelector('.metadata-value')?.textContent
+      }))
+    ).toEqual([{ key: 'Owner', value: 'render-farm-a' }]);
+  });
+
+  it('updates metadata content while the section is collapsed', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const metadataToggle = document.getElementById('metadata-toggle') as HTMLButtonElement;
+    const metadataContent = document.getElementById('metadata-content') as HTMLDivElement;
+
+    metadataToggle.click();
+    expect(metadataContent.hidden).toBe(true);
 
     ui.setMetadata([{ key: 'owner', label: 'Owner', value: 'render-farm-a' }]);
 
@@ -373,6 +434,55 @@ describe('roi inspector', () => {
 
     (document.getElementById('clear-roi-button') as HTMLButtonElement).click();
     expect(onClearRoi).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates probe and roi content while their sections are collapsed', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const probeToggle = document.getElementById('probe-toggle') as HTMLButtonElement;
+    const probeContent = document.getElementById('probe-content') as HTMLDivElement;
+    const roiToggle = document.getElementById('roi-toggle') as HTMLButtonElement;
+    const roiContent = document.getElementById('roi-content') as HTMLDivElement;
+
+    probeToggle.click();
+    roiToggle.click();
+    expect(probeContent.hidden).toBe(true);
+    expect(roiContent.hidden).toBe(true);
+
+    ui.setProbeReadout(
+      'Locked',
+      {
+        x: 1,
+        y: 2,
+        values: { Y: 0.5 }
+      },
+      {
+        cssColor: 'rgb(128, 128, 128)',
+        displayValues: [{ label: 'Mono', value: '0.500' }]
+      }
+    );
+    ui.setRoiReadout({
+      roi: { x0: 2, y0: 3, x1: 5, y1: 7 },
+      stats: {
+        roi: { x0: 2, y0: 3, x1: 5, y1: 7 },
+        width: 4,
+        height: 5,
+        pixelCount: 20,
+        channels: [{ label: 'Mono', min: 0.1, mean: 0.25, max: 0.5, validPixelCount: 18 }]
+      }
+    });
+
+    expect((document.getElementById('probe-mode') as HTMLElement).textContent).toBe('Locked');
+    expect((document.getElementById('probe-coords') as HTMLElement).textContent).toBe('x 1   y 2');
+    expect(
+      Array.from(document.querySelectorAll('#probe-values .probe-row')).map((row) => ({
+        key: row.querySelector('.probe-key')?.textContent,
+        value: row.querySelector('.probe-value')?.textContent
+      }))
+    ).toEqual([{ key: 'Y', value: '0.500' }]);
+    expect((document.getElementById('roi-bounds') as HTMLElement).textContent).toBe('x 2..5  y 3..7');
+    expect((document.getElementById('roi-valid-count') as HTMLElement).textContent).toBe('Mono 18/20');
   });
 });
 

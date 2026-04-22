@@ -72,14 +72,20 @@ export interface Elements {
   channelViewToggle: HTMLButtonElement;
   channelViewList: HTMLElement;
   channelViewCount: HTMLElement;
+  metadataToggle: HTMLButtonElement;
+  metadataContent: HTMLDivElement;
   probeMode: HTMLElement;
   probeCoords: HTMLElement;
   probeColorPreview: HTMLDivElement;
   probeColorSwatch: HTMLElement;
   probeColorValues: HTMLElement;
   probeValues: HTMLElement;
+  probeToggle: HTMLButtonElement;
+  probeContent: HTMLDivElement;
   metadataEmptyState: HTMLElement;
   metadataTable: HTMLElement;
+  roiToggle: HTMLButtonElement;
+  roiContent: HTMLDivElement;
   roiEmptyState: HTMLElement;
   roiDetails: HTMLDivElement;
   roiBounds: HTMLElement;
@@ -223,14 +229,20 @@ export function resolveElements(): Elements {
     channelViewToggle: requireElement('channel-view-toggle', HTMLButtonElement),
     channelViewList: requireElement('channel-view-list', HTMLElement),
     channelViewCount: requireElement('channel-view-count', HTMLElement),
+    metadataToggle: requireElement('metadata-toggle', HTMLButtonElement),
+    metadataContent: requireElement('metadata-content', HTMLDivElement),
     probeMode: requireElement('probe-mode', HTMLElement),
     probeCoords: requireElement('probe-coords', HTMLElement),
     probeColorPreview: requireElement('probe-color-preview', HTMLDivElement),
     probeColorSwatch: requireElement('probe-color-swatch', HTMLElement),
     probeColorValues: requireElement('probe-color-values', HTMLElement),
     probeValues: requireElement('probe-values', HTMLElement),
+    probeToggle: requireElement('probe-toggle', HTMLButtonElement),
+    probeContent: requireElement('probe-content', HTMLDivElement),
     metadataEmptyState: requireElement('metadata-empty-state', HTMLElement),
     metadataTable: requireElement('metadata-table', HTMLElement),
+    roiToggle: requireElement('roi-toggle', HTMLButtonElement),
+    roiContent: requireElement('roi-content', HTMLDivElement),
     roiEmptyState: requireElement('roi-empty-state', HTMLElement),
     roiDetails: requireElement('roi-details', HTMLDivElement),
     roiBounds: requireElement('roi-bounds', HTMLElement),

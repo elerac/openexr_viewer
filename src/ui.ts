@@ -150,6 +150,11 @@ interface ProbeColorRowElements {
   value: HTMLSpanElement;
 }
 
+interface ReadoutSectionElements {
+  toggle: HTMLButtonElement;
+  content: HTMLElement;
+}
+
 interface FileSystemHandleLike {
   kind: 'file' | 'directory';
   name: string;
@@ -961,6 +966,21 @@ export class ViewerUi implements Disposable {
     content.closest('.image-browser-section')?.classList.toggle('is-collapsed', collapsed);
   }
 
+  private bindReadoutSection(section: ReadoutSectionElements): void {
+    this.setReadoutSectionCollapsed(section, false);
+    this.disposables.addEventListener(section.toggle, 'click', () => {
+      const collapsed = section.toggle.getAttribute('aria-expanded') === 'true';
+      this.setReadoutSectionCollapsed(section, collapsed);
+    });
+  }
+
+  private setReadoutSectionCollapsed(section: ReadoutSectionElements, collapsed: boolean): void {
+    section.toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    section.toggle.setAttribute('aria-label', `${collapsed ? 'Expand' : 'Collapse'} ${getReadoutSectionName(section.toggle)} section`);
+    section.content.hidden = collapsed;
+    section.content.closest('.readout-block')?.classList.toggle('is-collapsed', collapsed);
+  }
+
   private bindTopMenu(menu: TopMenuElements): void {
     this.disposables.addEventListener(menu.button, 'click', () => {
       if (this.hoverOpenedTopMenuButton === menu.button && this.isTopMenuOpen(menu)) {
@@ -1048,6 +1068,9 @@ export class ViewerUi implements Disposable {
     this.bindImageBrowserToggle(this.elements.openedFilesToggle, this.elements.openedFilesList);
     this.bindImageBrowserToggle(this.elements.partsLayersToggle, this.elements.partsLayersList);
     this.bindImageBrowserToggle(this.elements.channelViewToggle, this.elements.channelViewList);
+    this.bindReadoutSection({ toggle: this.elements.metadataToggle, content: this.elements.metadataContent });
+    this.bindReadoutSection({ toggle: this.elements.probeToggle, content: this.elements.probeContent });
+    this.bindReadoutSection({ toggle: this.elements.roiToggle, content: this.elements.roiContent });
 
     for (const menu of this.getTopMenus()) {
       this.bindTopMenu(menu);
@@ -1382,6 +1405,10 @@ function syncRowOrder(container: HTMLElement, orderedRows: HTMLElement[]): void 
 
     container.insertBefore(row, referenceNode);
   }
+}
+
+function getReadoutSectionName(toggle: HTMLButtonElement): string {
+  return toggle.closest('.readout-block')?.querySelector('h2')?.textContent?.trim() ?? 'readout';
 }
 
 export function formatProbeCoordinates(
