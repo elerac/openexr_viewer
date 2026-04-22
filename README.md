@@ -2,7 +2,7 @@
 
 Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-like interaction and exact value inspection.
 
-![OpenEXR Viewer thumbnail](https://elerac.github.io/openexr_viewer/thumbnail.jpg)
+[![OpenEXR Viewer thumbnail](https://elerac.github.io/openexr_viewer/thumbnail.jpg)](https://elerac.github.io/openexr_viewer/)
 
 ## Current MVP Features
 

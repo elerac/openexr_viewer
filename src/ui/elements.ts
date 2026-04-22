@@ -78,7 +78,8 @@ export interface Elements {
   probeColorSwatch: HTMLElement;
   probeColorValues: HTMLElement;
   probeValues: HTMLElement;
-  probeMetadata: HTMLElement;
+  metadataEmptyState: HTMLElement;
+  metadataTable: HTMLElement;
   roiEmptyState: HTMLElement;
   roiDetails: HTMLDivElement;
   roiBounds: HTMLElement;
@@ -228,7 +229,8 @@ export function resolveElements(): Elements {
     probeColorSwatch: requireElement('probe-color-swatch', HTMLElement),
     probeColorValues: requireElement('probe-color-values', HTMLElement),
     probeValues: requireElement('probe-values', HTMLElement),
-    probeMetadata: requireElement('probe-metadata', HTMLElement),
+    metadataEmptyState: requireElement('metadata-empty-state', HTMLElement),
+    metadataTable: requireElement('metadata-table', HTMLElement),
     roiEmptyState: requireElement('roi-empty-state', HTMLElement),
     roiDetails: requireElement('roi-details', HTMLDivElement),
     roiBounds: requireElement('roi-bounds', HTMLElement),

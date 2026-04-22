@@ -60,6 +60,27 @@ describe('viewer interaction roi gestures', () => {
     expect(harness.onToggleLockPixel).not.toHaveBeenCalled();
   });
 
+  it('clears ROI when shift-drag resolves to a single image pixel', () => {
+    const harness = createHarness();
+
+    dispatchPointer(harness.element, 'pointerdown', {
+      pointerId: 1,
+      clientX: 50,
+      clientY: 50,
+      shiftKey: true
+    });
+    dispatchPointer(harness.element, 'pointerup', {
+      pointerId: 1,
+      clientX: 50,
+      clientY: 50,
+      shiftKey: true
+    });
+
+    expect(harness.onDraftRoi).toHaveBeenCalledWith({ x0: 5, y0: 5, x1: 5, y1: 5 });
+    expect(harness.onCommitRoi).toHaveBeenCalledWith(null);
+    expect(harness.onToggleLockPixel).not.toHaveBeenCalled();
+  });
+
   it('does not start ROI interaction in panorama mode', () => {
     const harness = createHarness({
       viewerMode: 'panorama'

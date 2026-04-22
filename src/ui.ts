@@ -618,29 +618,31 @@ export class ViewerUi implements Disposable {
     );
   }
 
-  setProbeMetadata(metadata: ExrMetadataEntry[] | null): void {
+  setMetadata(metadata: ExrMetadataEntry[] | null): void {
     if (this.disposed) {
       return;
     }
 
     if (!metadata || metadata.length === 0) {
-      this.elements.probeMetadata.classList.add('hidden');
-      this.elements.probeMetadata.replaceChildren();
+      this.elements.metadataEmptyState.classList.remove('hidden');
+      this.elements.metadataTable.classList.add('hidden');
+      this.elements.metadataTable.replaceChildren();
       return;
     }
 
-    this.elements.probeMetadata.classList.remove('hidden');
-    this.elements.probeMetadata.replaceChildren(
+    this.elements.metadataEmptyState.classList.add('hidden');
+    this.elements.metadataTable.classList.remove('hidden');
+    this.elements.metadataTable.replaceChildren(
       ...metadata.map((item) => {
         const row = document.createElement('div');
-        row.className = 'probe-metadata-row';
+        row.className = 'metadata-row';
 
         const key = document.createElement('span');
-        key.className = 'probe-metadata-key';
+        key.className = 'metadata-key';
         key.textContent = item.label;
 
         const value = document.createElement('span');
-        value.className = 'probe-metadata-value';
+        value.className = 'metadata-value';
         value.textContent = item.value;
 
         row.append(key, value);

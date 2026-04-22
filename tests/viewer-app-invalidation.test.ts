@@ -282,7 +282,7 @@ describe('viewer app lanes', () => {
     expect(after).toBe(before);
     expect(after.openedImageOptions).toBe(before.openedImageOptions);
     expect(after.layerOptions).toBe(before.layerOptions);
-    expect(after.probeMetadata).toBe(before.probeMetadata);
+    expect(after.metadata).toBe(before.metadata);
   });
 
   it('keeps probe readout memoized across pure view changes', () => {

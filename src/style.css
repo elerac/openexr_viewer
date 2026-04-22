@@ -1448,7 +1448,7 @@ body.is-resizing-panel-columns * {
   text-overflow: ellipsis;
 }
 
-.probe-metadata {
+.metadata-table {
   margin-top: 0.65rem;
   border: 1px solid var(--panel-border);
   border-radius: 0.25rem;
@@ -1457,31 +1457,38 @@ body.is-resizing-panel-columns * {
   font-size: 0.84rem;
 }
 
-.probe-metadata-row {
+.metadata-empty-state {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.metadata-row {
   display: grid;
   grid-template-columns: minmax(7.2rem, 0.9fr) minmax(0, 1.5fr);
   border-bottom: 1px solid color-mix(in srgb, var(--panel-border) 82%, transparent);
   min-height: 2.1rem;
 }
 
-.probe-metadata-row:last-child {
+.metadata-row:last-child {
   border-bottom: 0;
 }
 
-.probe-metadata-key,
-.probe-metadata-value {
+.metadata-key,
+.metadata-value {
   padding: 0.42rem 0.55rem;
   line-height: 1.35;
 }
 
-.probe-metadata-key {
+.metadata-key {
   color: color-mix(in srgb, var(--text-dim) 68%, transparent);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  border-right: 1px solid color-mix(in srgb, var(--panel-border) 88%, transparent);
 }
 
-.probe-metadata-value {
+.metadata-value {
   color: var(--text);
   overflow-wrap: anywhere;
   white-space: normal;

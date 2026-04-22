@@ -66,8 +66,8 @@ export function applyUiEffects(ui: ViewerUi, transition: ViewerUiTransition): vo
     ui.setLayerOptions(snapshot.layerOptions, snapshot.activeLayer);
   }
 
-  if (invalidation & ViewerUiInvalidationFlags.ProbeMetadata) {
-    ui.setProbeMetadata(snapshot.probeMetadata);
+  if (invalidation & ViewerUiInvalidationFlags.Metadata) {
+    ui.setMetadata(snapshot.metadata);
   }
 
   if (invalidation & ViewerUiInvalidationFlags.RgbGroupOptions) {

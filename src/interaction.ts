@@ -1,4 +1,4 @@
-import { createImageRoiFromPixels } from './roi';
+import { createImageRoiFromPixels, getImageRoiPixelCount } from './roi';
 import { ImagePixel, type ViewerViewState, ViewerState, ViewportInfo } from './types';
 
 export const MIN_ZOOM = 0.125;
@@ -1046,8 +1046,9 @@ export class ViewerInteraction {
         imageSize.width,
         imageSize.height
       ) ?? this.roiAnchorPixel;
+      const roi = createImageRoiFromPixels(this.roiAnchorPixel, targetPixel);
       this.callbacks.onDraftRoi(null);
-      this.callbacks.onCommitRoi(createImageRoiFromPixels(this.roiAnchorPixel, targetPixel));
+      this.callbacks.onCommitRoi(getImageRoiPixelCount(roi) === 1 ? null : roi);
       this.clearDrag(event.pointerId);
       return;
     }

@@ -170,7 +170,7 @@ export interface ViewerUiSnapshot {
   colormapZeroCentered: boolean;
   layerOptions: ViewerLayerOption[];
   activeLayer: number;
-  probeMetadata: ExrMetadataEntry[] | null;
+  metadata: ExrMetadataEntry[] | null;
   displaySelection: ViewerSessionState['displaySelection'];
   rgbGroupChannelNames: string[];
   shouldClearImageBrowserPanels: boolean;

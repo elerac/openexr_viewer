@@ -34,7 +34,7 @@ export const enum ViewerUiInvalidationFlags {
   ColormapGradient = 1 << 10,
   ColormapRange = 1 << 11,
   LayerOptions = 1 << 12,
-  ProbeMetadata = 1 << 13,
+  Metadata = 1 << 13,
   RgbGroupOptions = 1 << 14,
   ClearPanels = 1 << 15
 }
@@ -44,7 +44,7 @@ export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => Vie
   const selectOpenedImageOptions = createOpenedImageOptionsSelector();
   const selectExportTarget = createExportTargetSelector();
   const selectLayerOptions = createLayerOptionsSelector();
-  const selectProbeMetadata = createProbeMetadataSelector();
+  const selectMetadata = createMetadataSelector();
   const selectRgbGroupChannelNames = createRgbGroupChannelNamesSelector();
   const selectStokesControl = createStokesControlSelector();
 
@@ -77,7 +77,7 @@ export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => Vie
       colormapZeroCentered: state.sessionState.colormapZeroCentered,
       layerOptions: selectLayerOptions(activeSession),
       activeLayer: state.sessionState.activeLayer,
-      probeMetadata: selectProbeMetadata(activeSession, state.sessionState.activeLayer),
+      metadata: selectMetadata(activeSession, state.sessionState.activeLayer),
       displaySelection: state.sessionState.displaySelection,
       rgbGroupChannelNames: selectRgbGroupChannelNames(activeSession, state.sessionState.activeLayer),
       shouldClearImageBrowserPanels: !activeSession
@@ -166,8 +166,8 @@ export function computeViewerUiInvalidation(
     flags |= ViewerUiInvalidationFlags.LayerOptions;
   }
 
-  if (!sameMetadata(previous.probeMetadata, next.probeMetadata)) {
-    flags |= ViewerUiInvalidationFlags.ProbeMetadata;
+  if (!sameMetadata(previous.metadata, next.metadata)) {
+    flags |= ViewerUiInvalidationFlags.Metadata;
   }
 
   if (
@@ -251,14 +251,14 @@ function createLayerOptionsSelector(): (session: ReturnType<typeof selectActiveS
   };
 }
 
-function createProbeMetadataSelector(): (
+function createMetadataSelector(): (
   session: ReturnType<typeof selectActiveSession>,
   activeLayer: number
-) => ViewerUiSnapshot['probeMetadata'] {
+) => ViewerUiSnapshot['metadata'] {
   let previousSessionId: string | null = null;
   let previousActiveLayer = -1;
   let previousLayer: OpenedImageSession['decoded']['layers'][number] | null = null;
-  let previousResult: ViewerUiSnapshot['probeMetadata'] = null;
+  let previousResult: ViewerUiSnapshot['metadata'] = null;
   return (session, activeLayer) => {
     const layer = session?.decoded.layers[activeLayer] ?? null;
     const metadata = layer?.metadata ?? null;
@@ -346,7 +346,7 @@ function sameViewerUiSnapshot(a: ViewerUiSnapshot, b: ViewerUiSnapshot): boolean
     a.colormapZeroCentered === b.colormapZeroCentered &&
     sameLayerOptions(a.layerOptions, b.layerOptions) &&
     a.activeLayer === b.activeLayer &&
-    sameMetadata(a.probeMetadata, b.probeMetadata) &&
+    sameMetadata(a.metadata, b.metadata) &&
     sameDisplaySelection(a.displaySelection, b.displaySelection) &&
     sameStringArray(a.rgbGroupChannelNames, b.rgbGroupChannelNames) &&
     a.shouldClearImageBrowserPanels === b.shouldClearImageBrowserPanels

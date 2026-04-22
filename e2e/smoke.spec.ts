@@ -138,7 +138,7 @@ test('boots empty, opens the gallery demo image, and keeps core controls stable'
   const probeCoords = page.locator('#probe-coords');
   const probeColorValues = page.locator('#probe-color-values');
   const probeValues = page.locator('#probe-values');
-  const probeMetadata = page.locator('#probe-metadata');
+  const metadataTable = page.locator('#metadata-table');
   const viewer = page.locator('#viewer-container');
   const resetButton = page.getByRole('button', { name: 'Reset', exact: true });
   const noneButton = page.getByRole('button', { name: 'None', exact: true });
@@ -282,11 +282,11 @@ test('boots empty, opens the gallery demo image, and keeps core controls stable'
   await expect(closeOpenedFileButton).toBeVisible();
   await expect(openedFileRow.locator('.opened-file-label')).toHaveAttribute('title', /Path: .*cbox_rgb\.exr\nSize: .* MB/);
   await expect(layerControl).toBeHidden();
-  await expect(probeMetadata).toContainText('compression');
-  await expect(probeMetadata).toContainText('PIZ');
-  await expect(probeMetadata).toContainText('dataWindow');
-  await expect(probeMetadata).toContainText('channels');
-  await expect(probeMetadata).toContainText('3 (R, G, B)');
+  await expect(metadataTable).toContainText('compression');
+  await expect(metadataTable).toContainText('PIZ');
+  await expect(metadataTable).toContainText('dataWindow');
+  await expect(metadataTable).toContainText('channels');
+  await expect(metadataTable).toContainText('3 (R, G, B)');
 
   await fileMenuButton.click();
   await expect(fileMenu).toBeVisible();

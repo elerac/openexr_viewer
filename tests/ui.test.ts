@@ -280,6 +280,50 @@ describe('probe coordinate formatting', () => {
   });
 });
 
+describe('metadata inspector', () => {
+  it('shows the empty state until metadata is available', () => {
+    installUiFixture();
+
+    new ViewerUi(createUiCallbacks());
+
+    expect((document.getElementById('metadata-empty-state') as HTMLElement).textContent).toContain(
+      'No metadata available.'
+    );
+    expect((document.getElementById('metadata-table') as HTMLElement).classList.contains('hidden')).toBe(true);
+  });
+
+  it('renders metadata rows and updates them when the active layer changes', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setMetadata([
+      { key: 'compression', label: 'Compression', value: 'PIZ' },
+      { key: 'channels', label: 'Channels', value: '3 (R, G, B)' }
+    ]);
+
+    expect((document.getElementById('metadata-empty-state') as HTMLElement).classList.contains('hidden')).toBe(true);
+    expect((document.getElementById('metadata-table') as HTMLElement).classList.contains('hidden')).toBe(false);
+    expect(
+      Array.from(document.querySelectorAll('#metadata-table .metadata-row')).map((row) => ({
+        key: row.querySelector('.metadata-key')?.textContent,
+        value: row.querySelector('.metadata-value')?.textContent
+      }))
+    ).toEqual([
+      { key: 'Compression', value: 'PIZ' },
+      { key: 'Channels', value: '3 (R, G, B)' }
+    ]);
+
+    ui.setMetadata([{ key: 'owner', label: 'Owner', value: 'render-farm-a' }]);
+
+    expect(
+      Array.from(document.querySelectorAll('#metadata-table .metadata-row')).map((row) => ({
+        key: row.querySelector('.metadata-key')?.textContent,
+        value: row.querySelector('.metadata-value')?.textContent
+      }))
+    ).toEqual([{ key: 'Owner', value: 'render-farm-a' }]);
+  });
+});
+
 describe('roi inspector', () => {
   it('shows the empty-state hint until an ROI exists', () => {
     installUiFixture();
