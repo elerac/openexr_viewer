@@ -1,9 +1,12 @@
 import { computeRec709Luminance } from './color';
 import {
+  readPixelChannelValue,
   getChannelReadView,
   readChannelValue,
+  type FiniteValueRange,
   type ChannelReadView
 } from './channel-storage';
+import { buildChannelDisplayOptions } from './display-selection';
 import {
   isStokesSelection,
   serializeDisplaySelectionKey,
@@ -18,6 +21,7 @@ import {
   detectRgbStokesChannels,
   detectScalarStokesChannels,
   getStokesDegreeModulationLabel,
+  getStokesDisplayOptions,
   getStokesParameterLabel,
   isStokesDisplayAvailable,
   type RgbStokesChannels,
@@ -100,10 +104,35 @@ const EMPTY_DISPLAY_SLOTS = Object.freeze(
   Array.from({ length: DISPLAY_SOURCE_SLOT_COUNT }, () => null as string | null)
 );
 
+export function serializeDisplaySelectionLuminanceKey(selection: DisplaySelection | null): string {
+  if (!selection) {
+    return 'none';
+  }
+
+  switch (selection.kind) {
+    case 'channelRgb':
+      return `channelRgb:${selection.r}:${selection.g}:${selection.b}`;
+    case 'channelMono':
+      return `channelMono:${selection.channel}`;
+    case 'stokesScalar':
+    case 'stokesAngle':
+      return serializeDisplaySelectionKey(selection);
+  }
+}
+
 export function buildDisplayTextureRevisionKey(state: Pick<ViewerState, 'activeLayer' | 'displaySelection'>): string {
   return [
     state.activeLayer,
     serializeDisplaySelectionKey(state.displaySelection)
+  ].join(':');
+}
+
+export function buildDisplayLuminanceRevisionKey(
+  state: Pick<ViewerState, 'activeLayer' | 'displaySelection'>
+): string {
+  return [
+    state.activeLayer,
+    serializeDisplaySelectionLuminanceKey(state.displaySelection)
   ].join(':');
 }
 
@@ -269,6 +298,28 @@ export function computeDisplaySelectionLuminanceRange(
   return { min, max };
 }
 
+export function precomputeDisplaySelectionLuminanceRangeBySelectionKey(
+  layer: DecodedLayer,
+  width: number,
+  height: number,
+  finiteRangeByChannel: Record<string, FiniteValueRange | null> = {}
+): Record<string, DisplayLuminanceRange | null> {
+  const rangesBySelectionKey: Record<string, DisplayLuminanceRange | null> = {};
+  const selectionsByKey = collectDisplaySelectionsForAnalysis(layer.channelNames);
+
+  for (const [selectionKey, selection] of selectionsByKey) {
+    if (selection?.kind === 'channelMono') {
+      rangesBySelectionKey[selectionKey] = finiteRangeByChannel[selection.channel]
+        ?? computeDisplaySelectionLuminanceRange(layer, width, height, selection);
+      continue;
+    }
+
+    rangesBySelectionKey[selectionKey] = computeDisplaySelectionLuminanceRange(layer, width, height, selection);
+  }
+
+  return rangesBySelectionKey;
+}
+
 export function readDisplaySelectionPixelValues(
   layer: DecodedLayer,
   width: number,
@@ -355,15 +406,13 @@ export function samplePixelValues(
 
   const flatIndex = pixel.iy * width + pixel.ix;
   const values: Record<string, number> = {};
-  const { pixels, channelCount } = layer.channelStorage;
-  const pixelBaseIndex = flatIndex * channelCount;
 
   for (let channelIndex = 0; channelIndex < layer.channelNames.length; channelIndex += 1) {
     const channelName = layer.channelNames[channelIndex];
     if (!channelName) {
       continue;
     }
-    values[channelName] = pixels[pixelBaseIndex + channelIndex] ?? 0;
+    values[channelName] = readPixelChannelValue(layer, flatIndex, channelName);
   }
 
   return {
@@ -463,6 +512,45 @@ function resolveStokesDisplaySelectionEvaluator(
     g: resolveStokesChannelArrays(layer, channels.g),
     b: resolveStokesChannelArrays(layer, channels.b)
   };
+}
+
+function collectDisplaySelectionsForAnalysis(channelNames: string[]): Map<string, DisplaySelection | null> {
+  const selections = new Map<string, DisplaySelection | null>();
+  const pushSelection = (selection: DisplaySelection | null): void => {
+    selections.set(serializeDisplaySelectionLuminanceKey(selection), selection);
+  };
+
+  pushSelection(null);
+
+  for (const option of buildChannelDisplayOptions(channelNames, {
+    includeRgbGroups: true,
+    includeSplitChannels: false
+  })) {
+    pushSelection(option.selection);
+  }
+
+  for (const option of buildChannelDisplayOptions(channelNames, {
+    includeRgbGroups: false,
+    includeSplitChannels: true
+  })) {
+    pushSelection(option.selection);
+  }
+
+  for (const option of getStokesDisplayOptions(channelNames, {
+    includeRgbGroups: true,
+    includeSplitChannels: false
+  })) {
+    pushSelection(option.selection);
+  }
+
+  for (const option of getStokesDisplayOptions(channelNames, {
+    includeRgbGroups: false,
+    includeSplitChannels: true
+  })) {
+    pushSelection(option.selection);
+  }
+
+  return selections;
 }
 
 function createDisplaySourceBinding(

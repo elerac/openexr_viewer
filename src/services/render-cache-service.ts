@@ -8,9 +8,11 @@ import {
   type SessionResourceEntry
 } from '../display-cache';
 import {
+  buildDisplayLuminanceRevisionKey,
   buildDisplaySourceBinding,
   buildDisplayTextureRevisionKey,
   buildSelectedDisplayTexture,
+  serializeDisplaySelectionLuminanceKey,
   computeDisplaySelectionLuminanceRange
 } from '../display-texture';
 import type {
@@ -104,6 +106,7 @@ export class RenderCacheService implements Disposable {
 
     const entry = this.getOrCreateEntry(session.id);
     const textureRevisionKey = buildDisplayTextureRevisionKey(state);
+    const luminanceRevisionKey = buildDisplayLuminanceRevisionKey(state);
     const layerResident = entry.residentLayers.has(state.activeLayer);
     const textureDirty =
       !layerResident ||
@@ -150,23 +153,30 @@ export class RenderCacheService implements Disposable {
       this.boundTextureRevisionKey = textureRevisionKey;
     }
 
-    const luminanceRangeDirty = !entry.luminanceRangeByRevision.has(textureRevisionKey);
+    const luminanceRangeDirty = !entry.luminanceRangeByRevision.has(luminanceRevisionKey);
     if (luminanceRangeDirty) {
+      const selectionKey = serializeDisplaySelectionLuminanceKey(state.displaySelection);
+      const hasPrecomputedRange = Object.prototype.hasOwnProperty.call(
+        layer.analysis.displayLuminanceRangeBySelectionKey,
+        selectionKey
+      );
       entry.luminanceRangeByRevision.set(
-        textureRevisionKey,
-        computeDisplaySelectionLuminanceRange(
-          layer,
-          session.decoded.width,
-          session.decoded.height,
-          state.displaySelection
-        )
+        luminanceRevisionKey,
+        hasPrecomputedRange
+          ? layer.analysis.displayLuminanceRangeBySelectionKey[selectionKey] ?? null
+          : computeDisplaySelectionLuminanceRange(
+            layer,
+            session.decoded.width,
+            session.decoded.height,
+            state.displaySelection
+          )
       );
     }
 
     this.syncDisplayCacheUsageUi();
 
     return {
-      displayLuminanceRange: entry.luminanceRangeByRevision.get(textureRevisionKey) ?? null,
+      displayLuminanceRange: entry.luminanceRangeByRevision.get(luminanceRevisionKey) ?? null,
       textureRevisionKey,
       textureDirty,
       luminanceRangeDirty
@@ -207,7 +217,7 @@ export class RenderCacheService implements Disposable {
       return null;
     }
 
-    return entry.luminanceRangeByRevision.get(buildDisplayTextureRevisionKey(state)) ?? null;
+    return entry.luminanceRangeByRevision.get(buildDisplayLuminanceRevisionKey(state)) ?? null;
   }
 
   setBudgetMb(valueMb: number): void {

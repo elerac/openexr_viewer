@@ -6,11 +6,14 @@ import {
   readChannelValue,
   readPixelChannelValue
 } from '../src/channel-storage';
-import { createLayerFromChannels } from './helpers/state-fixtures';
+import {
+  createInterleavedLayerFromChannels,
+  createLayerFromChannels
+} from './helpers/state-fixtures';
 
 describe('channel storage', () => {
   it('exposes stable offsets and strides for interleaved channel views', () => {
-    const layer = createLayerFromChannels({
+    const layer = createInterleavedLayerFromChannels({
       R: [1, 2],
       G: [10, 20],
       B: [100, 200]
@@ -32,7 +35,7 @@ describe('channel storage', () => {
   });
 
   it('reads strided channel values and tolerates missing channels', () => {
-    const layer = createLayerFromChannels({
+    const layer = createInterleavedLayerFromChannels({
       B: [100, 200],
       R: [1, 2],
       G: [10, 20]
@@ -60,7 +63,7 @@ describe('channel storage', () => {
   });
 
   it('materializes fallback planar channels lazily and memoizes them', () => {
-    const layer = createLayerFromChannels({
+    const layer = createInterleavedLayerFromChannels({
       R: [1, 2],
       G: [10, 20],
       B: [100, 200]
@@ -78,5 +81,22 @@ describe('channel storage', () => {
 
     expect(__debugGetMaterializedChannel(layer, 'A')).toBeNull();
     expect(__debugGetMaterializedChannelCount(layer)).toBe(1);
+  });
+
+  it('returns dense direct views for planar channel storage without materialization', () => {
+    const layer = createLayerFromChannels({
+      R: [1, 2],
+      G: [10, 20],
+      B: [100, 200]
+    });
+
+    const green = getChannelReadView(layer, 'G');
+
+    expect(green).toEqual({
+      pixels: layer.channelStorage.kind === 'planar-f32' ? layer.channelStorage.pixelsByChannel.G : null,
+      offset: 0,
+      stride: 1
+    });
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
   });
 });

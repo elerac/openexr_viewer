@@ -49,6 +49,28 @@ describe('gl image renderer', () => {
     expect(gl.createTexture).toHaveBeenCalledTimes(5);
   });
 
+  it('uploads planar source textures directly from decoded channel buffers', () => {
+    const { renderer, gl } = createHarness();
+    const layer = createLayerFromChannels({
+      R: [1, 2],
+      G: [3, 4],
+      B: [5, 6]
+    });
+
+    renderer.ensureLayerSourceTextures('session-1', 0, 2, 1, layer);
+
+    expect(layer.channelStorage.kind).toBe('planar-f32');
+    expect(gl.texImage2D.mock.calls[2]?.[8]).toBe(
+      layer.channelStorage.kind === 'planar-f32' ? layer.channelStorage.pixelsByChannel.R : null
+    );
+    expect(gl.texImage2D.mock.calls[3]?.[8]).toBe(
+      layer.channelStorage.kind === 'planar-f32' ? layer.channelStorage.pixelsByChannel.G : null
+    );
+    expect(gl.texImage2D.mock.calls[4]?.[8]).toBe(
+      layer.channelStorage.kind === 'planar-f32' ? layer.channelStorage.pixelsByChannel.B : null
+    );
+  });
+
   it('discards one resident layer at a time and prunes empty session containers', () => {
     const { renderer, gl } = createHarness();
     const layer = createLayerFromChannels({

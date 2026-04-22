@@ -1,4 +1,4 @@
-import { copyChannelToDenseArray } from '../channel-storage';
+import { getChannelDenseArray } from '../channel-storage';
 import {
   DISPLAY_SOURCE_SLOT_COUNT,
   createEmptyDisplaySourceBinding,
@@ -190,18 +190,15 @@ export class GlImageRenderer implements Disposable {
     }
 
     const textureByChannel = new Map<string, WebGLTexture>();
-    let uploadBuffer: Float32Array | undefined;
-
     for (const channelName of layer.channelNames) {
       if (!channelName) {
         continue;
       }
 
-      const denseChannel = copyChannelToDenseArray(layer, channelName, uploadBuffer);
+      const denseChannel = getChannelDenseArray(layer, channelName);
       if (!denseChannel) {
         continue;
       }
-      uploadBuffer = denseChannel;
 
       const texture = this.gl.createTexture();
       if (!texture) {

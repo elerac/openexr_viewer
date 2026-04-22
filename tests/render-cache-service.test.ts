@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RenderCacheService } from '../src/services/render-cache-service';
 import { DecodedExrImage, OpenedImageSession } from '../src/types';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
-import { createChannelMonoSelection, createLayerFromChannels } from './helpers/state-fixtures';
+import {
+  createChannelMonoSelection,
+  createLayerFromChannels
+} from './helpers/state-fixtures';
 
 const MB = 1024 * 1024;
 
@@ -128,6 +131,48 @@ describe('render cache service', () => {
     expect(secondColormap.luminanceRangeDirty).toBe(false);
     expect(monoColormap.luminanceRangeDirty).toBe(true);
     expect(service.getCachedLuminanceRange(session.id, monoState)).toEqual({ min: 1, max: 1 });
+  });
+
+  it('reuses luminance ranges across alpha-only selection changes', () => {
+    const pixelCount = 2;
+    const layer = createLayerFromChannels({
+      R: new Float32Array(pixelCount).fill(1),
+      G: new Float32Array(pixelCount).fill(0.5),
+      B: new Float32Array(pixelCount).fill(0),
+      A: new Float32Array(pixelCount).fill(0.25)
+    }, 'beauty');
+    layer.analysis.displayLuminanceRangeBySelectionKey['channelMono:R'] = { min: 1, max: 1 };
+
+    const decoded: DecodedExrImage = {
+      width: 2,
+      height: 1,
+      layers: [layer]
+    };
+    const session = createSession('session-1', decoded);
+    const ui = createUiMock();
+    const renderer = createRendererMock();
+    const service = new RenderCacheService({
+      ui,
+      renderer
+    });
+
+    const withAlpha = {
+      ...session.state,
+      displaySelection: createChannelMonoSelection('R', 'A')
+    };
+    const withoutAlpha = {
+      ...session.state,
+      displaySelection: createChannelMonoSelection('R')
+    };
+
+    const first = service.prepareActiveSession(session, withAlpha);
+    const second = service.prepareActiveSession(session, withoutAlpha);
+
+    expect(first.displayLuminanceRange).toEqual({ min: 1, max: 1 });
+    expect(first.luminanceRangeDirty).toBe(true);
+    expect(second.textureDirty).toBe(true);
+    expect(second.luminanceRangeDirty).toBe(false);
+    expect(second.displayLuminanceRange).toEqual({ min: 1, max: 1 });
   });
 
   it('tracks resident texture bytes in the usage UI and tears down session resources on discard and clear', () => {

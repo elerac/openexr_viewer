@@ -1,6 +1,7 @@
 import { decodeRawExr } from './exr-runtime';
 import { parseExrMetadata } from './exr-metadata';
-import { createInterleavedChannelStorage } from './channel-storage';
+import { createPlanarChannelStorageFromInterleaved } from './channel-storage';
+import { precomputeDisplaySelectionLuminanceRangeBySelectionKey } from './display-texture';
 import { DecodedExrImage, DecodedLayer } from './types';
 
 export async function loadExr(bytes: Uint8Array): Promise<DecodedExrImage> {
@@ -14,6 +15,8 @@ export async function loadExr(bytes: Uint8Array): Promise<DecodedExrImage> {
   try {
     for (let layerIndex = 0; layerIndex < decoded.layerCount; layerIndex += 1) {
       const channelNames = decoded.getLayerChannelNames(layerIndex);
+      const name = decoded.getLayerName(layerIndex) ?? null;
+      const metadata = metadataByLayer[layerIndex] ?? [];
       const interleaved = decoded.getLayerPixels(layerIndex, channelNames);
       if (!interleaved) {
         throw new Error(`Decoded EXR layer ${layerIndex} is missing pixel data.`);
@@ -25,12 +28,24 @@ export async function loadExr(bytes: Uint8Array): Promise<DecodedExrImage> {
         );
       }
 
-      layers.push({
-        name: decoded.getLayerName(layerIndex) ?? null,
+      const { storage, finiteRangeByChannel } = createPlanarChannelStorageFromInterleaved(interleaved, channelNames);
+      const layer: DecodedLayer = {
+        name,
         channelNames,
-        channelStorage: createInterleavedChannelStorage(interleaved, channelNames),
-        metadata: metadataByLayer[layerIndex] ?? []
-      });
+        channelStorage: storage,
+        analysis: {
+          displayLuminanceRangeBySelectionKey: {}
+        },
+        metadata
+      };
+      layer.analysis.displayLuminanceRangeBySelectionKey = precomputeDisplaySelectionLuminanceRangeBySelectionKey(
+        layer,
+        width,
+        height,
+        finiteRangeByChannel
+      );
+
+      layers.push(layer);
     }
   } finally {
     decoded.free();

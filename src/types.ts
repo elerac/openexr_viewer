@@ -2,7 +2,7 @@ import type {
   DisplaySelection as DisplaySelectionModel,
   StokesDegreeModulationState
 } from './display-model';
-import type { InterleavedChannelStorage } from './channel-storage';
+import type { ChannelStorage } from './channel-storage';
 
 export type VisualizationMode = 'rgb' | 'colormap';
 export type ColormapRangeMode = 'alwaysAuto' | 'oneTime';
@@ -38,8 +38,13 @@ export interface ImagePixel {
 export interface DecodedLayer {
   name: string | null;
   channelNames: string[];
-  channelStorage: InterleavedChannelStorage;
+  channelStorage: ChannelStorage;
+  analysis: DecodedLayerAnalysis;
   metadata?: ExrMetadataEntry[];
+}
+
+export interface DecodedLayerAnalysis {
+  displayLuminanceRangeBySelectionKey: Record<string, DisplayLuminanceRange | null>;
 }
 
 export interface DecodedExrImage {
