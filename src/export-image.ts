@@ -94,6 +94,14 @@ export function buildExportImagePixels({
   };
 }
 
+export async function createPngBlobFromPixels(pixels: ExportImagePixels): Promise<Blob> {
+  if (typeof document === 'undefined') {
+    throw new Error('Image export is only available in a browser environment.');
+  }
+
+  return await canvasToBlob(createCanvasFromPixels(pixels), 'image/png');
+}
+
 export async function createExportImageBlob({
   request,
   decoded,
@@ -122,20 +130,7 @@ export async function createExportImageBlob({
     colormapLut
   });
 
-  const sourceCanvas = document.createElement('canvas');
-  sourceCanvas.width = pixels.width;
-  sourceCanvas.height = pixels.height;
-
-  const sourceContext = sourceCanvas.getContext('2d');
-  if (!sourceContext) {
-    throw new Error('Unable to create a 2D canvas context for export.');
-  }
-
-  sourceContext.putImageData(
-    new ImageData(new Uint8ClampedArray(Array.from(pixels.data)), pixels.width, pixels.height),
-    0,
-    0
-  );
+  const sourceCanvas = createCanvasFromPixels(pixels);
 
   const targetWidth = clampRequestedDimension(request.width, pixels.width);
   const targetHeight = clampRequestedDimension(request.height, pixels.height);
@@ -144,6 +139,20 @@ export async function createExportImageBlob({
     : resizeExportCanvas(sourceCanvas, targetWidth, targetHeight);
 
   return await canvasToBlob(exportCanvas, 'image/png');
+}
+
+function createCanvasFromPixels(pixels: ExportImagePixels): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = pixels.width;
+  canvas.height = pixels.height;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Unable to create a 2D canvas context for export.');
+  }
+
+  context.putImageData(new ImageData(pixels.data, pixels.width, pixels.height), 0, 0);
+  return canvas;
 }
 
 function resizeExportCanvas(

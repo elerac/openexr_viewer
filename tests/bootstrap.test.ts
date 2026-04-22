@@ -77,6 +77,11 @@ vi.mock('../src/renderer', () => ({
     readonly clearImage = vi.fn();
     readonly setDisplayTexture = vi.fn();
     readonly setColormapTexture = vi.fn();
+    readonly readExportPixels = vi.fn(() => ({
+      width: 1,
+      height: 1,
+      data: new Uint8ClampedArray([0, 0, 0, 255])
+    }));
   }
 }));
 
@@ -123,7 +128,10 @@ vi.mock('../src/services/thumbnail-service', () => ({
 vi.mock('../src/services/render-cache-service', () => ({
   RenderCacheService: class {
     readonly dispose = mocks.renderCacheDispose;
-    readonly getTextureForSnapshot = vi.fn(() => null);
+    readonly prepareActiveSession = vi.fn(() => ({
+      textureRevisionKey: '',
+      textureDirty: false
+    }));
     readonly setBudgetMb = vi.fn();
   }
 }));
@@ -140,7 +148,7 @@ vi.mock('../src/exr-worker-client', () => ({
 }));
 
 vi.mock('../src/export-image', () => ({
-  createExportImageBlob: vi.fn()
+  createPngBlobFromPixels: vi.fn()
 }));
 
 afterEach(() => {

@@ -586,26 +586,4 @@ describe('render cache service', () => {
     await disposed.flush();
     expect(disposedCallback).not.toHaveBeenCalled();
   });
-
-  it('returns snapshot textures without retaining CPU display buffers', () => {
-    const session = createSession('session-1');
-    const ui = createUiMock();
-    const renderer = createRendererMock();
-    const service = new RenderCacheService({
-      ui,
-      renderer
-    });
-
-    const rgbSnapshot = service.getTextureForSnapshot(session, session.state);
-    const monoSnapshot = service.getTextureForSnapshot(session, {
-      ...session.state,
-      displaySelection: createChannelMonoSelection('R')
-    });
-
-    expect(rgbSnapshot).not.toBeNull();
-    expect(monoSnapshot).not.toBeNull();
-    expect(rgbSnapshot).not.toBe(monoSnapshot);
-    expect(getEntries(service).size).toBe(0);
-    expect(ui.setDisplayCacheUsage).toHaveBeenCalledTimes(1);
-  });
 });

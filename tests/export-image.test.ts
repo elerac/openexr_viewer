@@ -1,7 +1,14 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { linearToSrgbByte } from '../src/color';
-import { buildExportImagePixels } from '../src/export-image';
+import { buildExportImagePixels, createPngBlobFromPixels } from '../src/export-image';
 import { createDefaultStokesDegreeModulation } from '../src/stokes';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('export image pixels', () => {
   it('applies exposure and sRGB encoding for rgb exports', () => {
@@ -82,5 +89,35 @@ describe('export image pixels', () => {
     });
 
     expect(Array.from(pixels.data)).toEqual([255, 0, 0, 64]);
+  });
+
+  it('encodes pngs from the existing rgba buffer without copying it', async () => {
+    const putImageData = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      putImageData
+    } as never);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(function(callback: BlobCallback | null) {
+      callback?.(new Blob(['png'], { type: 'image/png' }));
+    });
+    const imageData = vi.fn(function(this: object, data: Uint8ClampedArray, width: number, height: number) {
+      return { data, width, height };
+    });
+    vi.stubGlobal('ImageData', imageData as unknown as typeof ImageData);
+
+    const pixels = {
+      width: 1,
+      height: 1,
+      data: new Uint8ClampedArray([1, 2, 3, 4])
+    };
+
+    const blob = await createPngBlobFromPixels(pixels);
+
+    expect(imageData).toHaveBeenCalledWith(pixels.data, 1, 1);
+    expect(putImageData).toHaveBeenCalledWith(
+      expect.objectContaining({ data: pixels.data, width: 1, height: 1 }),
+      0,
+      0
+    );
+    expect(blob.type).toBe('image/png');
   });
 });

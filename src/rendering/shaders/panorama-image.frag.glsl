@@ -15,6 +15,8 @@ uniform int uDisplayMode;
 uniform int uStokesParameter;
 uniform bool uUseStokesDegreeModulation;
 uniform bool uUseImageAlpha;
+uniform bool uCompositeCheckerboard;
+uniform int uAlphaOutputMode;
 uniform float uPanoramaYawDeg;
 uniform float uPanoramaPitchDeg;
 uniform float uPanoramaHfovDeg;
@@ -25,6 +27,9 @@ const int DISPLAY_MODE_CHANNEL_RGB = 1;
 const int DISPLAY_MODE_CHANNEL_MONO = 2;
 const int DISPLAY_MODE_STOKES_DIRECT = 3;
 const int DISPLAY_MODE_STOKES_RGB_LUMINANCE = 4;
+const int ALPHA_OUTPUT_OPAQUE = 0;
+const int ALPHA_OUTPUT_STRAIGHT = 1;
+const int ALPHA_OUTPUT_PREMULTIPLIED = 2;
 
 const int STOKES_PARAMETER_AOLP = 0;
 const int STOKES_PARAMETER_DOLP = 1;
@@ -85,6 +90,34 @@ vec3 linearToSrgb(vec3 linear) {
 vec3 checker(vec2 screen) {
   float tile = mod(floor(screen.x / 16.0) + floor(screen.y / 16.0), 2.0);
   return mix(vec3(0.09), vec3(0.12), tile);
+}
+
+vec4 backgroundColor(vec2 screen) {
+  if (uCompositeCheckerboard) {
+    return vec4(checker(screen), 1.0);
+  }
+
+  if (uAlphaOutputMode == ALPHA_OUTPUT_OPAQUE) {
+    return vec4(0.0, 0.0, 0.0, 1.0);
+  }
+
+  return vec4(0.0);
+}
+
+vec4 encodeOutputColor(vec2 screen, vec3 color, float alpha) {
+  if (uCompositeCheckerboard) {
+    return vec4(mix(checker(screen), color, alpha), 1.0);
+  }
+
+  if (uAlphaOutputMode == ALPHA_OUTPUT_PREMULTIPLIED) {
+    return vec4(color * alpha, alpha);
+  }
+
+  if (uAlphaOutputMode == ALPHA_OUTPUT_STRAIGHT) {
+    return vec4(color, alpha);
+  }
+
+  return vec4(color, 1.0);
 }
 
 ivec2 colormapCoord(int index) {
@@ -407,7 +440,7 @@ void main() {
   vec2 screen = vec2(gl_FragCoord.x - 0.5, uViewport.y - gl_FragCoord.y - 0.5);
 
   if (uImageSize.x <= 0.0 || uImageSize.y <= 0.0) {
-    outColor = vec4(checker(screen), 1.0);
+    outColor = backgroundColor(screen);
     return;
   }
 
@@ -448,11 +481,11 @@ void main() {
       );
       color = hsvToRgb(hsv);
     }
-    outColor = vec4(mix(checker(screen), color, imageAlpha), 1.0);
+    outColor = encodeOutputColor(screen, color, imageAlpha);
     return;
   }
 
   linear = max(linear * exp2(uExposure), vec3(0.0));
   vec3 srgb = linearToSrgb(linear);
-  outColor = vec4(mix(checker(screen), srgb, imageAlpha), 1.0);
+  outColor = encodeOutputColor(screen, srgb, imageAlpha);
 }

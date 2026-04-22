@@ -13,7 +13,6 @@ import {
   buildDisplaySourceBinding,
   getDisplaySourceBindingChannelNames,
   buildDisplayTextureRevisionKey,
-  buildSelectedDisplayTexture,
   serializeDisplaySelectionLuminanceKey,
   computeDisplaySelectionLuminanceRange
 } from '../display-texture';
@@ -289,27 +288,6 @@ export class RenderCacheService implements Disposable {
       displayLuminanceRange: null,
       pending: true
     };
-  }
-
-  getTextureForSnapshot(
-    session: OpenedImageSession,
-    state: Pick<ViewerSessionState, 'activeLayer' | 'displaySelection'>
-  ): Float32Array | null {
-    if (this.disposed) {
-      return null;
-    }
-
-    const layer = session.decoded.layers[state.activeLayer] ?? null;
-    if (!layer || session.decoded.width <= 0 || session.decoded.height <= 0) {
-      return null;
-    }
-
-    return buildSelectedDisplayTexture(
-      layer,
-      session.decoded.width,
-      session.decoded.height,
-      state.displaySelection
-    );
   }
 
   getCachedLuminanceRange(

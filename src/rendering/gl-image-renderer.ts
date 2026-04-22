@@ -5,6 +5,7 @@ import {
   type DisplaySourceBinding,
   type DisplaySourceMode
 } from '../display-texture';
+import type { ExportImagePixels } from '../export-image';
 import { isStokesDegreeModulationEnabled } from '../stokes';
 import type { DecodedLayer, ViewerState, ViewportInfo } from '../types';
 import type { Disposable } from '../lifecycle';
@@ -14,6 +15,9 @@ import vertexSource from './shaders/fullscreen-triangle.vert.glsl?raw';
 
 const COLORMAP_TEXTURE_UNIT = DISPLAY_SOURCE_SLOT_COUNT;
 const REQUIRED_TEXTURE_UNITS = DISPLAY_SOURCE_SLOT_COUNT + 1;
+const ALPHA_OUTPUT_OPAQUE = 0;
+const ALPHA_OUTPUT_STRAIGHT = 1;
+const ALPHA_OUTPUT_PREMULTIPLIED = 2;
 
 interface CommonUniforms {
   viewport: WebGLUniformLocation;
@@ -28,6 +32,8 @@ interface CommonUniforms {
   stokesParameter: WebGLUniformLocation;
   useStokesDegreeModulation: WebGLUniformLocation;
   useImageAlpha: WebGLUniformLocation;
+  compositeCheckerboard: WebGLUniformLocation;
+  alphaOutputMode: WebGLUniformLocation;
 }
 
 interface ImageUniforms extends CommonUniforms {
@@ -53,6 +59,35 @@ interface LayerSourceTextures {
   textureByChannel: Map<string, WebGLTexture>;
 }
 
+interface ExportSurface {
+  framebuffer: WebGLFramebuffer;
+  texture: WebGLTexture;
+  width: number;
+  height: number;
+}
+
+interface RenderPassOptions {
+  compositeCheckerboard: boolean;
+  alphaOutputMode: AlphaOutputMode;
+  viewportWidth?: number;
+  viewportHeight?: number;
+}
+
+type AlphaOutputMode = 'opaque' | 'straight' | 'premultiplied';
+
+export interface ReadExportPixelsArgs {
+  state: ViewerState;
+  sourceWidth: number;
+  sourceHeight: number;
+  targetWidth: number;
+  targetHeight: number;
+}
+
+const DEFAULT_RENDER_PASS_OPTIONS: RenderPassOptions = {
+  compositeCheckerboard: true,
+  alphaOutputMode: 'opaque'
+};
+
 export class GlImageRenderer implements Disposable {
   private readonly glCanvas: HTMLCanvasElement;
   private readonly gl: WebGL2RenderingContext;
@@ -62,6 +97,8 @@ export class GlImageRenderer implements Disposable {
   private readonly imageProgram: ProgramBundle<ImageUniforms>;
   private readonly panoramaProgram: ProgramBundle<PanoramaUniforms>;
   private readonly layerTexturesBySession = new Map<string, Map<number, LayerSourceTextures>>();
+  private exportSourceSurface: ExportSurface | null = null;
+  private exportTargetSurface: ExportSurface | null = null;
   private viewport: ViewportInfo = { width: 1, height: 1 };
   private imageSize: { width: number; height: number } | null = null;
   private colormapTextureSize = { width: 1, height: 1 };
@@ -376,38 +413,108 @@ export class GlImageRenderer implements Disposable {
     this.activeBinding = createEmptyDisplaySourceBinding();
   }
 
+  readExportPixels({
+    state,
+    sourceWidth,
+    sourceHeight,
+    targetWidth,
+    targetHeight
+  }: ReadExportPixelsArgs): ExportImagePixels {
+    if (this.disposed) {
+      throw new Error('Renderer has been disposed.');
+    }
+    if (!this.imageSize || this.imageSize.width !== sourceWidth || this.imageSize.height !== sourceHeight) {
+      throw new Error('No prepared image is active for export.');
+    }
+    if (sourceWidth <= 0 || sourceHeight <= 0 || targetWidth <= 0 || targetHeight <= 0) {
+      throw new Error('Export dimensions must be positive.');
+    }
+
+    const gl = this.gl;
+    const sourceSurface = this.getOrCreateExportSurface(this.exportSourceSurface, sourceWidth, sourceHeight);
+    this.exportSourceSurface = sourceSurface;
+
+    const needsResize = sourceWidth !== targetWidth || sourceHeight !== targetHeight;
+    const preserveAlpha = this.activeBinding.usesImageAlpha;
+    const exportState: ViewerState = {
+      ...state,
+      viewerMode: 'image',
+      zoom: 1,
+      panX: sourceWidth * 0.5,
+      panY: sourceHeight * 0.5
+    };
+
+    try {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, sourceSurface.framebuffer);
+      gl.viewport(0, 0, sourceWidth, sourceHeight);
+      this.renderImagePass(exportState, {
+        compositeCheckerboard: false,
+        alphaOutputMode: preserveAlpha && needsResize ? 'premultiplied' : preserveAlpha ? 'straight' : 'opaque',
+        viewportWidth: sourceWidth,
+        viewportHeight: sourceHeight
+      });
+
+      let readFramebuffer = sourceSurface.framebuffer;
+      let readWidth = sourceWidth;
+      let readHeight = sourceHeight;
+
+      if (needsResize) {
+        const targetSurface = this.getOrCreateExportSurface(this.exportTargetSurface, targetWidth, targetHeight);
+        this.exportTargetSurface = targetSurface;
+
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, sourceSurface.framebuffer);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, targetSurface.framebuffer);
+        gl.blitFramebuffer(
+          0,
+          0,
+          sourceWidth,
+          sourceHeight,
+          0,
+          0,
+          targetWidth,
+          targetHeight,
+          gl.COLOR_BUFFER_BIT,
+          gl.LINEAR
+        );
+
+        readFramebuffer = targetSurface.framebuffer;
+        readWidth = targetWidth;
+        readHeight = targetHeight;
+      }
+
+      const data = new Uint8ClampedArray(readWidth * readHeight * 4);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, readFramebuffer);
+      gl.readPixels(0, 0, readWidth, readHeight, gl.RGBA, gl.UNSIGNED_BYTE, data);
+
+      flipRgbaRowsInPlace(data, readWidth, readHeight);
+      if (preserveAlpha && needsResize) {
+        unpremultiplyRgbaInPlace(data);
+      }
+
+      return {
+        width: readWidth,
+        height: readHeight,
+        data
+      };
+    } finally {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+      gl.viewport(0, 0, this.viewport.width, this.viewport.height);
+    }
+  }
+
   render(state: ViewerState): void {
     if (this.disposed) {
       return;
     }
 
-    const gl = this.gl;
     if (state.viewerMode === 'panorama') {
-      const program = this.panoramaProgram;
-      gl.useProgram(program.program);
-      gl.bindVertexArray(this.vao);
-      gl.activeTexture(gl.TEXTURE0 + COLORMAP_TEXTURE_UNIT);
-      gl.bindTexture(gl.TEXTURE_2D, this.colormapTexture);
-
-      this.setCommonUniforms(program.uniforms, state);
-      gl.uniform1f(program.uniforms.panoramaYawDeg, state.panoramaYawDeg);
-      gl.uniform1f(program.uniforms.panoramaPitchDeg, state.panoramaPitchDeg);
-      gl.uniform1f(program.uniforms.panoramaHfovDeg, state.panoramaHfovDeg);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      this.renderPanoramaPass(state, DEFAULT_RENDER_PASS_OPTIONS);
       return;
     }
 
-    const program = this.imageProgram;
-    gl.useProgram(program.program);
-    gl.bindVertexArray(this.vao);
-    gl.activeTexture(gl.TEXTURE0 + COLORMAP_TEXTURE_UNIT);
-    gl.bindTexture(gl.TEXTURE_2D, this.colormapTexture);
-
-    this.setCommonUniforms(program.uniforms, state);
-    gl.uniform2f(program.uniforms.pan, state.panX, state.panY);
-    gl.uniform1f(program.uniforms.zoom, state.zoom);
-
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    this.renderImagePass(state, DEFAULT_RENDER_PASS_OPTIONS);
   }
 
   dispose(): void {
@@ -423,6 +530,10 @@ export class GlImageRenderer implements Disposable {
     this.imageSize = null;
     this.colormapEntryCount = 0;
     this.activeBinding = createEmptyDisplaySourceBinding();
+    this.deleteExportSurface(this.exportSourceSurface);
+    this.deleteExportSurface(this.exportTargetSurface);
+    this.exportSourceSurface = null;
+    this.exportTargetSurface = null;
     this.gl.bindVertexArray(null);
     this.gl.useProgram(null);
     for (let slotIndex = 0; slotIndex < REQUIRED_TEXTURE_UNITS; slotIndex += 1) {
@@ -474,8 +585,39 @@ export class GlImageRenderer implements Disposable {
       displayMode: getRequiredUniformLocation(this.gl, program, 'uDisplayMode'),
       stokesParameter: getRequiredUniformLocation(this.gl, program, 'uStokesParameter'),
       useStokesDegreeModulation: getRequiredUniformLocation(this.gl, program, 'uUseStokesDegreeModulation'),
-      useImageAlpha: getRequiredUniformLocation(this.gl, program, 'uUseImageAlpha')
+      useImageAlpha: getRequiredUniformLocation(this.gl, program, 'uUseImageAlpha'),
+      compositeCheckerboard: getRequiredUniformLocation(this.gl, program, 'uCompositeCheckerboard'),
+      alphaOutputMode: getRequiredUniformLocation(this.gl, program, 'uAlphaOutputMode')
     };
+  }
+
+  private renderImagePass(state: ViewerState, options: RenderPassOptions): void {
+    const gl = this.gl;
+    const program = this.imageProgram;
+    gl.useProgram(program.program);
+    gl.bindVertexArray(this.vao);
+    gl.activeTexture(gl.TEXTURE0 + COLORMAP_TEXTURE_UNIT);
+    gl.bindTexture(gl.TEXTURE_2D, this.colormapTexture);
+
+    this.setCommonUniforms(program.uniforms, state, options);
+    gl.uniform2f(program.uniforms.pan, state.panX, state.panY);
+    gl.uniform1f(program.uniforms.zoom, state.zoom);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  private renderPanoramaPass(state: ViewerState, options: RenderPassOptions): void {
+    const gl = this.gl;
+    const program = this.panoramaProgram;
+    gl.useProgram(program.program);
+    gl.bindVertexArray(this.vao);
+    gl.activeTexture(gl.TEXTURE0 + COLORMAP_TEXTURE_UNIT);
+    gl.bindTexture(gl.TEXTURE_2D, this.colormapTexture);
+
+    this.setCommonUniforms(program.uniforms, state, options);
+    gl.uniform1f(program.uniforms.panoramaYawDeg, state.panoramaYawDeg);
+    gl.uniform1f(program.uniforms.panoramaPitchDeg, state.panoramaPitchDeg);
+    gl.uniform1f(program.uniforms.panoramaHfovDeg, state.panoramaHfovDeg);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
   private configureSourceTexture(): void {
@@ -499,10 +641,15 @@ export class GlImageRenderer implements Disposable {
 
   private setCommonUniforms(
     uniforms: CommonUniforms,
-    state: ViewerState
+    state: ViewerState,
+    options: RenderPassOptions
   ): void {
     const gl = this.gl;
-    gl.uniform2f(uniforms.viewport, this.viewport.width, this.viewport.height);
+    gl.uniform2f(
+      uniforms.viewport,
+      options.viewportWidth ?? this.viewport.width,
+      options.viewportHeight ?? this.viewport.height
+    );
 
     const width = this.imageSize?.width ?? 0;
     const height = this.imageSize?.height ?? 0;
@@ -524,6 +671,79 @@ export class GlImageRenderer implements Disposable {
       isStokesDegreeModulationEnabled(state.displaySelection, state.stokesDegreeModulation) ? 1 : 0
     );
     gl.uniform1i(uniforms.useImageAlpha, this.activeBinding.usesImageAlpha ? 1 : 0);
+    gl.uniform1i(uniforms.compositeCheckerboard, options.compositeCheckerboard ? 1 : 0);
+    gl.uniform1i(uniforms.alphaOutputMode, resolveAlphaOutputModeUniformValue(options.alphaOutputMode));
+  }
+
+  private getOrCreateExportSurface(
+    existing: ExportSurface | null,
+    width: number,
+    height: number
+  ): ExportSurface {
+    if (existing && existing.width === width && existing.height === height) {
+      return existing;
+    }
+
+    this.deleteExportSurface(existing);
+
+    this.gl.activeTexture(this.gl.TEXTURE0 + COLORMAP_TEXTURE_UNIT);
+
+    const texture = this.gl.createTexture();
+    if (!texture) {
+      throw new Error('Failed to create export texture.');
+    }
+    this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+    this.gl.texImage2D(
+      this.gl.TEXTURE_2D,
+      0,
+      this.gl.RGBA8,
+      width,
+      height,
+      0,
+      this.gl.RGBA,
+      this.gl.UNSIGNED_BYTE,
+      null
+    );
+
+    const framebuffer = this.gl.createFramebuffer();
+    if (!framebuffer) {
+      this.gl.deleteTexture(texture);
+      throw new Error('Failed to create export framebuffer.');
+    }
+
+    this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, framebuffer);
+    this.gl.framebufferTexture2D(
+      this.gl.FRAMEBUFFER,
+      this.gl.COLOR_ATTACHMENT0,
+      this.gl.TEXTURE_2D,
+      texture,
+      0
+    );
+    if (this.gl.checkFramebufferStatus(this.gl.FRAMEBUFFER) !== this.gl.FRAMEBUFFER_COMPLETE) {
+      this.gl.deleteFramebuffer(framebuffer);
+      this.gl.deleteTexture(texture);
+      throw new Error('Failed to initialize export framebuffer.');
+    }
+
+    return {
+      framebuffer,
+      texture,
+      width,
+      height
+    };
+  }
+
+  private deleteExportSurface(surface: ExportSurface | null): void {
+    if (!surface) {
+      return;
+    }
+
+    this.gl.deleteFramebuffer(surface.framebuffer);
+    this.gl.deleteTexture(surface.texture);
   }
 
   private getOrCreateLayerSourceTextures(
@@ -596,6 +816,45 @@ function resolveStokesParameterUniformValue(parameter: DisplaySourceBinding['sto
       return 8;
     case null:
       return -1;
+  }
+}
+
+function resolveAlphaOutputModeUniformValue(mode: AlphaOutputMode): number {
+  switch (mode) {
+    case 'opaque':
+      return ALPHA_OUTPUT_OPAQUE;
+    case 'straight':
+      return ALPHA_OUTPUT_STRAIGHT;
+    case 'premultiplied':
+      return ALPHA_OUTPUT_PREMULTIPLIED;
+  }
+}
+
+function flipRgbaRowsInPlace(data: Uint8ClampedArray, width: number, height: number): void {
+  const rowStride = width * 4;
+  const scratch = new Uint8ClampedArray(rowStride);
+  const halfHeight = Math.floor(height / 2);
+
+  for (let row = 0; row < halfHeight; row += 1) {
+    const topOffset = row * rowStride;
+    const bottomOffset = (height - row - 1) * rowStride;
+    scratch.set(data.subarray(topOffset, topOffset + rowStride));
+    data.copyWithin(topOffset, bottomOffset, bottomOffset + rowStride);
+    data.set(scratch, bottomOffset);
+  }
+}
+
+function unpremultiplyRgbaInPlace(data: Uint8ClampedArray): void {
+  for (let offset = 0; offset < data.length; offset += 4) {
+    const alpha = data[offset + 3] ?? 0;
+    if (alpha <= 0 || alpha >= 255) {
+      continue;
+    }
+
+    const scale = 255 / alpha;
+    data[offset + 0] = Math.min(255, Math.round(data[offset + 0] * scale));
+    data[offset + 1] = Math.min(255, Math.round(data[offset + 1] * scale));
+    data[offset + 2] = Math.min(255, Math.round(data[offset + 2] * scale));
   }
 }
 

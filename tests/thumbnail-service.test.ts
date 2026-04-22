@@ -1,6 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import { __debugGetMaterializedChannelCount } from '../src/channel-storage';
-import { buildSelectedDisplayTexture } from '../src/display-texture';
 import { serializeDisplaySelectionKey } from '../src/display-model';
 import { ThumbnailService } from '../src/services/thumbnail-service';
 import { DecodedExrImage, OpenedImageSession, ViewerSessionState } from '../src/types';
@@ -36,20 +34,12 @@ function createSession(id = 'session-1'): OpenedImageSession {
   };
 }
 
-function createRenderCacheStub(texture?: Float32Array | null) {
-  return {
-    getTextureForSnapshot: vi.fn(() => texture ?? new Float32Array([0, 0, 0, 1, 1, 1, 1, 1]))
-  };
-}
-
 describe('thumbnail service', () => {
   it('suppresses stale thumbnail jobs when a newer token replaces them', async () => {
     const session = createSession();
-    const renderCache = createRenderCacheStub();
     const updates: string[] = [];
     const service = new ThumbnailService({
       getSession: () => session,
-      renderCache: renderCache as never,
       onThumbnailUpdated: () => {
         updates.push('updated');
       },
@@ -71,11 +61,9 @@ describe('thumbnail service', () => {
 
   it('skips discarded jobs once the backing session is gone', async () => {
     const sessions = new Map<string, OpenedImageSession>([['session-1', createSession()]]);
-    const renderCache = createRenderCacheStub();
     const onThumbnailUpdated = vi.fn();
     const service = new ThumbnailService({
       getSession: (sessionId) => sessions.get(sessionId) ?? null,
-      renderCache: renderCache as never,
       onThumbnailUpdated,
       windowLike: null,
       createThumbnailDataUrl: () => 'thumb'
@@ -98,11 +86,9 @@ describe('thumbnail service', () => {
       [firstSession.id, firstSession],
       [secondSession.id, secondSession]
     ]);
-    const renderCache = createRenderCacheStub();
     const updates: string[] = [];
     const service = new ThumbnailService({
       getSession: (sessionId) => sessions.get(sessionId) ?? null,
-      renderCache: renderCache as never,
       onThumbnailUpdated: () => {
         updates.push('updated');
       },
@@ -123,10 +109,8 @@ describe('thumbnail service', () => {
 
   it('preserves the previous thumbnail while reload work is queued', async () => {
     const session = createSession();
-    const renderCache = createRenderCacheStub();
     const service = new ThumbnailService({
       getSession: () => session,
-      renderCache: renderCache as never,
       onThumbnailUpdated: () => undefined,
       windowLike: null,
       createThumbnailDataUrl: ({ stateSnapshot }) => serializeDisplaySelectionKey(stateSnapshot.displaySelection)
@@ -144,68 +128,34 @@ describe('thumbnail service', () => {
     expect(service.getThumbnailDataUrl(session.id)).toBe('channelMono:reload:');
   });
 
-  it('reuses the render cache texture when available', async () => {
+  it('passes session, layer, and state snapshot to the thumbnail renderer', async () => {
     const session = createSession();
-    const cachedTexture = new Float32Array([0.5, 0.5, 0.5, 1, 1, 1, 1, 1]);
-    const renderCache = createRenderCacheStub(cachedTexture);
-
-    let receivedTexture: Float32Array | null = null;
+    const createThumbnailDataUrl = vi.fn(() => 'thumb');
     const service = new ThumbnailService({
       getSession: () => session,
-      renderCache: renderCache as never,
       onThumbnailUpdated: () => undefined,
       windowLike: null,
-      createThumbnailDataUrl: ({ displayTexture }) => {
-        receivedTexture = displayTexture;
-        return 'thumb';
-      }
+      createThumbnailDataUrl
     });
 
     await service.enqueue(session.id, session.state);
 
-    expect(renderCache.getTextureForSnapshot).toHaveBeenCalledWith(session, session.state);
-    expect(receivedTexture).toBe(cachedTexture);
-    expect(service.getThumbnailDataUrl(session.id)).toBe('thumb');
-  });
-
-  it('does not trigger planar materialization while building thumbnail display textures', async () => {
-    const session = createSession();
-    const layer = session.decoded.layers[0]!;
-    const renderCache = {
-      getTextureForSnapshot: vi.fn(() =>
-        buildSelectedDisplayTexture(
-          layer,
-          session.decoded.width,
-          session.decoded.height,
-          session.state.displaySelection
-        )
-      )
-    };
-    const service = new ThumbnailService({
-      getSession: () => session,
-      renderCache: renderCache as never,
-      onThumbnailUpdated: () => undefined,
-      windowLike: null,
-      createThumbnailDataUrl: () => 'thumb'
+    expect(createThumbnailDataUrl).toHaveBeenCalledWith({
+      session,
+      layer: session.decoded.layers[0],
+      stateSnapshot: session.state
     });
-
-    expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
-    await service.enqueue(session.id, session.state);
-
-    expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
     expect(service.getThumbnailDataUrl(session.id)).toBe('thumb');
   });
 
   it('stops pending thumbnail work after dispose', async () => {
     const session = createSession();
-    const renderCache = createRenderCacheStub();
     const rafCallbacks: FrameRequestCallback[] = [];
     const idleCallbacks: Array<() => void> = [];
     const createThumbnailDataUrl = vi.fn(() => 'thumb');
     const onThumbnailUpdated = vi.fn();
     const service = new ThumbnailService({
       getSession: () => session,
-      renderCache: renderCache as never,
       onThumbnailUpdated,
       windowLike: {
         requestAnimationFrame: (callback) => {

@@ -7,7 +7,7 @@ import { ViewerInteraction } from '../interaction';
 import { WebGlExrRenderer } from '../renderer';
 import { DisplayController } from '../controllers/display-controller';
 import { SessionController } from '../controllers/session-controller';
-import { createExportImageBlob } from '../export-image';
+import { createPngBlobFromPixels } from '../export-image';
 import { LoadQueueService } from '../services/load-queue';
 import { ThumbnailService } from '../services/thumbnail-service';
 import { RenderCacheService } from '../services/render-cache-service';
@@ -53,20 +53,20 @@ export async function bootstrapApp(): Promise<AppHandle> {
       }
 
       const state = store.getState();
-      const colormapLut = displayController.getActiveColormapLutForState(state.activeColormapId);
-      const displayTexture = renderCache.getTextureForSnapshot(activeSession, state);
       try {
-        if (!displayTexture) {
-          throw new Error('No exportable image is active.');
+        if (state.visualizationMode === 'colormap' && !displayController.getActiveColormapLutForState(state.activeColormapId)) {
+          throw new Error('The active colormap is not ready for export.');
         }
 
-        const blob = await createExportImageBlob({
-          request,
-          decoded: activeSession.decoded,
-          displayTexture,
+        renderCache.prepareActiveSession(activeSession, state);
+        const pixels = renderer!.readExportPixels({
           state,
-          colormapLut
+          sourceWidth: activeSession.decoded.width,
+          sourceHeight: activeSession.decoded.height,
+          targetWidth: request.width,
+          targetHeight: request.height
         });
+        const blob = await createPngBlobFromPixels(pixels);
         if (disposed) {
           throw createAbortError('Viewer application has been disposed.');
         }
@@ -185,7 +185,6 @@ export async function bootstrapApp(): Promise<AppHandle> {
       getSession: (sessionId) => {
         return sessionController?.getSessions().find((session) => session.id === sessionId) ?? null;
       },
-      renderCache,
       onThumbnailUpdated: () => {
         sessionController.syncOpenedImageOptions();
       }

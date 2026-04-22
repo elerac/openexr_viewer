@@ -1,9 +1,11 @@
 import { GlImageRenderer } from './rendering/gl-image-renderer';
 import { OverlayRenderer } from './rendering/overlay-renderer';
 import { ProbeOverlayRenderer } from './rendering/probe-overlay-renderer';
+import type { ExportImagePixels } from './export-image';
 import type { Disposable } from './lifecycle';
 import type { DisplaySourceBinding } from './display-texture';
 import type { DecodedLayer, ViewerRenderState, ViewerState, ViewportInfo } from './types';
+import type { ReadExportPixelsArgs } from './rendering/gl-image-renderer';
 
 export class WebGlExrRenderer implements Disposable {
   private readonly imageRenderer: GlImageRenderer;
@@ -148,6 +150,14 @@ export class WebGlExrRenderer implements Disposable {
     }
 
     this.probeOverlayRenderer.render(state);
+  }
+
+  readExportPixels(args: ReadExportPixelsArgs): ExportImagePixels {
+    if (this.disposed) {
+      throw new Error('Renderer has been disposed.');
+    }
+
+    return this.imageRenderer.readExportPixels(args);
   }
 
   dispose(): void {

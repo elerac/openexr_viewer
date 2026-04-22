@@ -1,12 +1,22 @@
 import { linearToSrgbByte } from './color';
 import { isMonoSelection } from './display-model';
-import { buildSelectedDisplayTexture } from './display-texture';
-import { DecodedExrImage, ViewerSessionState } from './types';
+import {
+  readDisplaySelectionPixelValuesAtIndex,
+  resolveDisplaySelectionEvaluator,
+  type DisplayPixelValues
+} from './display-texture';
+import { DecodedExrImage, DecodedLayer, ViewerSessionState } from './types';
 
 const OPENED_IMAGE_THUMBNAIL_SIZE = 40;
 const THUMBNAIL_STATS_MAX_SAMPLES = 4096;
 const THUMBNAIL_CHECKER_DARK = 23;
 const THUMBNAIL_CHECKER_LIGHT = 31;
+
+export interface OpenedImageThumbnailPixels {
+  width: number;
+  height: number;
+  data: Uint8ClampedArray;
+}
 
 export function createOpenedImageThumbnailDataUrl(
   decoded: DecodedExrImage,
@@ -22,48 +32,36 @@ export function createOpenedImageThumbnailDataUrl(
   }
 
   try {
-    const displayTexture = buildSelectedDisplayTexture(
+    const pixels = buildOpenedImageThumbnailPixels(
       layer,
-      decoded.width,
-      decoded.height,
-      state.displaySelection
-    );
-
-    return createOpenedImageThumbnailDataUrlFromDisplayTexture(
-      displayTexture,
       decoded.width,
       decoded.height,
       state
     );
+
+    return createOpenedImageThumbnailDataUrlFromPixels(pixels);
   } catch {
     return null;
   }
 }
 
-export function createOpenedImageThumbnailDataUrlFromDisplayTexture(
-  displayTexture: Float32Array,
+export function buildOpenedImageThumbnailPixels(
+  layer: DecodedLayer,
   width: number,
   height: number,
   state: ViewerSessionState
-): string | null {
-  const canvas = document.createElement('canvas');
-  canvas.width = OPENED_IMAGE_THUMBNAIL_SIZE;
-  canvas.height = OPENED_IMAGE_THUMBNAIL_SIZE;
-
-  const context = canvas.getContext('2d');
-  if (!context) {
-    return null;
-  }
-
+): OpenedImageThumbnailPixels {
   const thumbnailSize = OPENED_IMAGE_THUMBNAIL_SIZE;
-  const imageData = context.createImageData(thumbnailSize, thumbnailSize);
+  const thumbnailData = new Uint8ClampedArray(thumbnailSize * thumbnailSize * 4);
   const fitScale = Math.min(thumbnailSize / width, thumbnailSize / height);
   const fittedWidth = Math.max(1, Math.round(width * fitScale));
   const fittedHeight = Math.max(1, Math.round(height * fitScale));
   const offsetX = Math.floor((thumbnailSize - fittedWidth) / 2);
   const offsetY = Math.floor((thumbnailSize - fittedHeight) / 2);
   const scalarThumbnail = isMonoSelection(state.displaySelection);
-  const stats = computeThumbnailStats(displayTexture, scalarThumbnail);
+  const evaluator = resolveDisplaySelectionEvaluator(layer, state.displaySelection);
+  const sample = createThumbnailSample();
+  const stats = computeThumbnailStats(evaluator, width, height, scalarThumbnail, sample);
   const exposureScale = Math.pow(2, state.exposureEv);
 
   for (let y = 0; y < thumbnailSize; y += 1) {
@@ -72,10 +70,10 @@ export function createOpenedImageThumbnailDataUrlFromDisplayTexture(
       const checker = ((Math.floor(x / 5) + Math.floor(y / 5)) % 2) === 0
         ? THUMBNAIL_CHECKER_DARK
         : THUMBNAIL_CHECKER_LIGHT;
-      imageData.data[outIndex + 0] = checker;
-      imageData.data[outIndex + 1] = checker;
-      imageData.data[outIndex + 2] = checker;
-      imageData.data[outIndex + 3] = 255;
+      thumbnailData[outIndex + 0] = checker;
+      thumbnailData[outIndex + 1] = checker;
+      thumbnailData[outIndex + 2] = checker;
+      thumbnailData[outIndex + 3] = 255;
 
       if (
         x < offsetX ||
@@ -94,12 +92,13 @@ export function createOpenedImageThumbnailDataUrlFromDisplayTexture(
         height - 1,
         Math.max(0, Math.floor(((y - offsetY + 0.5) / fittedHeight) * height))
       );
-      const sourceIndex = (sourceY * width + sourceX) * 4;
-      const alpha = clamp01(displayTexture[sourceIndex + 3]);
+      const sourceIndex = sourceY * width + sourceX;
+      readDisplaySelectionPixelValuesAtIndex(evaluator, sourceIndex, sample);
+      const alpha = clamp01(sample.a);
 
-      let r = displayTexture[sourceIndex + 0];
-      let g = displayTexture[sourceIndex + 1];
-      let b = displayTexture[sourceIndex + 2];
+      let r = sample.r;
+      let g = sample.g;
+      let b = sample.b;
 
       if (scalarThumbnail && stats.scalarMax > stats.scalarMin) {
         const value = clamp01((r - stats.scalarMin) / (stats.scalarMax - stats.scalarMin));
@@ -117,32 +116,58 @@ export function createOpenedImageThumbnailDataUrlFromDisplayTexture(
       const srgbG = linearToSrgbByte(g);
       const srgbB = linearToSrgbByte(b);
 
-      imageData.data[outIndex + 0] = Math.round(srgbR * alpha + checker * (1 - alpha));
-      imageData.data[outIndex + 1] = Math.round(srgbG * alpha + checker * (1 - alpha));
-      imageData.data[outIndex + 2] = Math.round(srgbB * alpha + checker * (1 - alpha));
-      imageData.data[outIndex + 3] = 255;
+      thumbnailData[outIndex + 0] = Math.round(srgbR * alpha + checker * (1 - alpha));
+      thumbnailData[outIndex + 1] = Math.round(srgbG * alpha + checker * (1 - alpha));
+      thumbnailData[outIndex + 2] = Math.round(srgbB * alpha + checker * (1 - alpha));
+      thumbnailData[outIndex + 3] = 255;
     }
   }
 
-  context.putImageData(imageData, 0, 0);
+  return {
+    width: thumbnailSize,
+    height: thumbnailSize,
+    data: thumbnailData
+  };
+}
+
+export function createOpenedImageThumbnailDataUrlFromPixels(
+  pixels: OpenedImageThumbnailPixels
+): string | null {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = pixels.width;
+  canvas.height = pixels.height;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return null;
+  }
+
+  context.putImageData(new ImageData(pixels.data, pixels.width, pixels.height), 0, 0);
   return canvas.toDataURL('image/png');
 }
 
 function computeThumbnailStats(
-  displayTexture: Float32Array,
-  scalarThumbnail: boolean
+  evaluator: ReturnType<typeof resolveDisplaySelectionEvaluator>,
+  width: number,
+  height: number,
+  scalarThumbnail: boolean,
+  sample: DisplayPixelValues
 ): { scalarMin: number; scalarMax: number; rgbMax: number } {
-  const pixelCount = displayTexture.length / 4;
+  const pixelCount = width * height;
   const sampleStep = Math.max(1, Math.floor(pixelCount / THUMBNAIL_STATS_MAX_SAMPLES));
   let scalarMin = Number.POSITIVE_INFINITY;
   let scalarMax = Number.NEGATIVE_INFINITY;
   let rgbMax = 0;
 
   for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += sampleStep) {
-    const textureIndex = pixelIndex * 4;
-    const r = displayTexture[textureIndex + 0];
-    const g = displayTexture[textureIndex + 1];
-    const b = displayTexture[textureIndex + 2];
+    readDisplaySelectionPixelValuesAtIndex(evaluator, pixelIndex, sample);
+    const r = sample.r;
+    const g = sample.g;
+    const b = sample.b;
 
     if (scalarThumbnail && Number.isFinite(r)) {
       scalarMin = Math.min(scalarMin, r);
@@ -164,6 +189,15 @@ function computeThumbnailStats(
     scalarMin: Number.isFinite(scalarMin) ? scalarMin : 0,
     scalarMax: Number.isFinite(scalarMax) ? scalarMax : 0,
     rgbMax: Math.max(rgbMax, 1e-6)
+  };
+}
+
+function createThumbnailSample(): DisplayPixelValues {
+  return {
+    r: 0,
+    g: 0,
+    b: 0,
+    a: 0
   };
 }
 

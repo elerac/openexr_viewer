@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { __debugGetMaterializedChannel, __debugGetMaterializedChannelCount } from '../src/channel-storage';
 import { buildDisplaySourceBinding } from '../src/display-texture';
 import { GlImageRenderer } from '../src/rendering/gl-image-renderer';
+import { createInitialState } from '../src/viewer-store';
 import {
   createChannelMonoSelection,
   createChannelRgbSelection,
@@ -110,17 +111,190 @@ describe('gl image renderer', () => {
     expect(gl.deleteProgram).toHaveBeenCalledTimes(2);
     expect(gl.deleteVertexArray).toHaveBeenCalledTimes(1);
   });
+
+  it('reuses export framebuffers and textures when the export size is unchanged', () => {
+    const { renderer, gl } = createHarness();
+    const layer = createInterleavedLayerFromChannels({
+      R: [1, 2],
+      G: [3, 4],
+      B: [5, 6]
+    });
+    const state = {
+      ...createInitialState(),
+      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+    };
+
+    renderer.ensureLayerChannelsResident('session-1', 0, 2, 1, layer, ['R', 'G', 'B']);
+    renderer.setDisplaySelectionBindings(
+      'session-1',
+      0,
+      2,
+      1,
+      buildDisplaySourceBinding(layer, state.displaySelection)
+    );
+    gl.readPixels.mockImplementation((_x, _y, _width, _height, _format, _type, data: Uint8ClampedArray) => {
+      data.set([1, 2, 3, 255, 4, 5, 6, 255]);
+    });
+
+    const first = renderer.readExportPixels({
+      state,
+      sourceWidth: 2,
+      sourceHeight: 1,
+      targetWidth: 2,
+      targetHeight: 1
+    });
+    const framebuffersAfterFirst = gl.createFramebuffer.mock.calls.length;
+    const texturesAfterFirst = gl.createTexture.mock.calls.length;
+
+    const second = renderer.readExportPixels({
+      state,
+      sourceWidth: 2,
+      sourceHeight: 1,
+      targetWidth: 2,
+      targetHeight: 1
+    });
+
+    expect(first).toEqual({
+      width: 2,
+      height: 1,
+      data: new Uint8ClampedArray([1, 2, 3, 255, 4, 5, 6, 255])
+    });
+    expect(second).toEqual(first);
+    expect(gl.createFramebuffer.mock.calls.length).toBe(framebuffersAfterFirst);
+    expect(gl.createTexture.mock.calls.length).toBe(texturesAfterFirst);
+  });
+
+  it('uses filtered blits and reads only the target-sized export buffer when downscaling', () => {
+    const { renderer, gl } = createHarness();
+    const layer = createInterleavedLayerFromChannels({
+      R: [1, 2, 3, 4],
+      G: [1, 2, 3, 4],
+      B: [1, 2, 3, 4]
+    });
+    const state = {
+      ...createInitialState(),
+      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+    };
+
+    renderer.ensureLayerChannelsResident('session-1', 0, 2, 2, layer, ['R', 'G', 'B']);
+    renderer.setDisplaySelectionBindings(
+      'session-1',
+      0,
+      2,
+      2,
+      buildDisplaySourceBinding(layer, state.displaySelection)
+    );
+    gl.readPixels.mockImplementation((_x, _y, width, height, _format, _type, data: Uint8ClampedArray) => {
+      expect(width).toBe(1);
+      expect(height).toBe(1);
+      data.set([10, 20, 30, 255]);
+    });
+
+    const pixels = renderer.readExportPixels({
+      state,
+      sourceWidth: 2,
+      sourceHeight: 2,
+      targetWidth: 1,
+      targetHeight: 1
+    });
+
+    expect(gl.blitFramebuffer).toHaveBeenCalledWith(0, 0, 2, 2, 0, 0, 1, 1, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+    expect(pixels).toEqual({
+      width: 1,
+      height: 1,
+      data: new Uint8ClampedArray([10, 20, 30, 255])
+    });
+  });
+
+  it('uses transparent alpha export mode instead of viewer checkerboard compositing', () => {
+    const { renderer, gl } = createHarness();
+    const layer = createInterleavedLayerFromChannels({
+      R: [1],
+      G: [0],
+      B: [0],
+      A: [0.5]
+    });
+    const state = {
+      ...createInitialState(),
+      displaySelection: createChannelRgbSelection('R', 'G', 'B', 'A')
+    };
+
+    renderer.ensureLayerChannelsResident('session-1', 0, 1, 1, layer, ['R', 'G', 'B', 'A']);
+    renderer.setDisplaySelectionBindings(
+      'session-1',
+      0,
+      1,
+      1,
+      buildDisplaySourceBinding(layer, state.displaySelection)
+    );
+
+    renderer.render(state);
+
+    expect(lastUniform1iValue(gl, 'uCompositeCheckerboard')).toBe(1);
+    expect(lastUniform1iValue(gl, 'uAlphaOutputMode')).toBe(0);
+
+    gl.uniform1i.mockClear();
+    gl.readPixels.mockImplementation((_x, _y, _width, _height, _format, _type, data: Uint8ClampedArray) => {
+      data.set([255, 0, 0, 128]);
+    });
+
+    renderer.readExportPixels({
+      state,
+      sourceWidth: 1,
+      sourceHeight: 1,
+      targetWidth: 1,
+      targetHeight: 1
+    });
+
+    expect(lastUniform1iValue(gl, 'uCompositeCheckerboard')).toBe(0);
+    expect(lastUniform1iValue(gl, 'uAlphaOutputMode')).toBe(1);
+  });
+
+  it('unpremultiplies alpha after filtered export downscales', () => {
+    const { renderer, gl } = createHarness();
+    const layer = createInterleavedLayerFromChannels({
+      R: [1, 0, 0, 1],
+      G: [0, 1, 0, 0],
+      B: [0, 0, 1, 0],
+      A: [0.5, 0.5, 0.5, 0.5]
+    });
+    const state = {
+      ...createInitialState(),
+      displaySelection: createChannelRgbSelection('R', 'G', 'B', 'A')
+    };
+
+    renderer.ensureLayerChannelsResident('session-1', 0, 2, 2, layer, ['R', 'G', 'B', 'A']);
+    renderer.setDisplaySelectionBindings(
+      'session-1',
+      0,
+      2,
+      2,
+      buildDisplaySourceBinding(layer, state.displaySelection)
+    );
+    gl.readPixels.mockImplementation((_x, _y, _width, _height, _format, _type, data: Uint8ClampedArray) => {
+      data.set([64, 32, 16, 128]);
+    });
+
+    const pixels = renderer.readExportPixels({
+      state,
+      sourceWidth: 2,
+      sourceHeight: 2,
+      targetWidth: 1,
+      targetHeight: 1
+    });
+
+    expect(lastUniform1iValue(gl, 'uAlphaOutputMode')).toBe(2);
+    expect(pixels).toEqual({
+      width: 1,
+      height: 1,
+      data: new Uint8ClampedArray([128, 64, 32, 128])
+    });
+  });
 });
 
 function createHarness(): {
   renderer: GlImageRenderer;
-  gl: WebGL2RenderingContext & {
-    texImage2D: ReturnType<typeof vi.fn>;
-    createTexture: ReturnType<typeof vi.fn>;
-    deleteTexture: ReturnType<typeof vi.fn>;
-    deleteProgram: ReturnType<typeof vi.fn>;
-    deleteVertexArray: ReturnType<typeof vi.fn>;
-  };
+  gl: ReturnType<typeof createWebGlContextMock>;
 } {
   const gl = createWebGlContextMock();
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((contextId) => {
@@ -148,6 +322,16 @@ function getLayerTextureChannels(renderer: GlImageRenderer, sessionId: string, l
   return [...(layerTextures?.textureByChannel.keys() ?? [])];
 }
 
+function lastUniform1iValue(
+  gl: ReturnType<typeof createWebGlContextMock>,
+  uniformName: string
+): number | undefined {
+  const calls = gl.uniform1i.mock.calls.filter(([location]) => {
+    return (location as { name?: string } | null)?.name === uniformName;
+  });
+  return calls.at(-1)?.[1] as number | undefined;
+}
+
 function createWebGlContextMock(): WebGL2RenderingContext & {
   texImage2D: ReturnType<typeof vi.fn>;
   createTexture: ReturnType<typeof vi.fn>;
@@ -164,6 +348,7 @@ function createWebGlContextMock(): WebGL2RenderingContext & {
     { id: 'texture-4' },
     { id: 'texture-5' }
   ];
+  const framebuffers = [{ id: 'framebuffer-1' }, { id: 'framebuffer-2' }];
   const vaos = [{ id: 'vao-1' }];
 
   return {
@@ -179,6 +364,7 @@ function createWebGlContextMock(): WebGL2RenderingContext & {
     TEXTURE_WRAP_S: 0x2802,
     TEXTURE_WRAP_T: 0x2803,
     NEAREST: 0x2600,
+    LINEAR: 0x2601,
     CLAMP_TO_EDGE: 0x812f,
     RGBA8: 0x8058,
     RGBA: 0x1908,
@@ -187,10 +373,17 @@ function createWebGlContextMock(): WebGL2RenderingContext & {
     RED: 0x1903,
     FLOAT: 0x1406,
     TRIANGLES: 0x0004,
+    FRAMEBUFFER: 0x8d40,
+    READ_FRAMEBUFFER: 0x8ca8,
+    DRAW_FRAMEBUFFER: 0x8ca9,
+    COLOR_ATTACHMENT0: 0x8ce0,
+    FRAMEBUFFER_COMPLETE: 0x8cd5,
+    COLOR_BUFFER_BIT: 0x00004000,
     MAX_TEXTURE_SIZE: 4096,
     MAX_TEXTURE_IMAGE_UNITS: 16,
     createVertexArray: vi.fn(() => vaos.shift() ?? { id: 'vao-extra' }),
     createTexture: vi.fn(() => textures.shift() ?? { id: 'texture-extra' }),
+    createFramebuffer: vi.fn(() => framebuffers.shift() ?? { id: 'framebuffer-extra' }),
     createProgram: vi.fn(() => programs.shift() ?? { id: 'program-extra' }),
     createShader: vi.fn(() => shaders.shift() ?? { id: 'shader-extra' }),
     shaderSource: vi.fn(),
@@ -206,6 +399,10 @@ function createWebGlContextMock(): WebGL2RenderingContext & {
     bindVertexArray: vi.fn(),
     activeTexture: vi.fn(),
     bindTexture: vi.fn(),
+    bindFramebuffer: vi.fn(),
+    framebufferTexture2D: vi.fn(),
+    checkFramebufferStatus: vi.fn(() => 0x8cd5),
+    blitFramebuffer: vi.fn(),
     pixelStorei: vi.fn(),
     texParameteri: vi.fn(),
     texImage2D: vi.fn(),
@@ -216,8 +413,9 @@ function createWebGlContextMock(): WebGL2RenderingContext & {
     uniform2f: vi.fn(),
     uniform2i: vi.fn(),
     drawArrays: vi.fn(),
+    readPixels: vi.fn(),
     viewport: vi.fn(),
-    getUniformLocation: vi.fn(() => ({ id: 'uniform' })),
+    getUniformLocation: vi.fn((_program, name: string) => ({ name })),
     getParameter: vi.fn((parameter) => {
       if (parameter === 16) {
         return 16;
@@ -225,11 +423,17 @@ function createWebGlContextMock(): WebGL2RenderingContext & {
       return 4096;
     }),
     deleteTexture: vi.fn(),
+    deleteFramebuffer: vi.fn(),
     deleteVertexArray: vi.fn()
   } as unknown as WebGL2RenderingContext & {
     texImage2D: ReturnType<typeof vi.fn>;
     createTexture: ReturnType<typeof vi.fn>;
+    createFramebuffer: ReturnType<typeof vi.fn>;
+    readPixels: ReturnType<typeof vi.fn>;
+    uniform1i: ReturnType<typeof vi.fn>;
+    blitFramebuffer: ReturnType<typeof vi.fn>;
     deleteTexture: ReturnType<typeof vi.fn>;
+    deleteFramebuffer: ReturnType<typeof vi.fn>;
     deleteProgram: ReturnType<typeof vi.fn>;
     deleteVertexArray: ReturnType<typeof vi.fn>;
   };

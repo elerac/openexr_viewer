@@ -1,9 +1,8 @@
 import { cloneDisplayLuminanceRange } from '../colormap-range';
 import { cloneDisplaySelection } from '../display-model';
 import { createAbortError, isAbortError, throwIfAborted, type Disposable } from '../lifecycle';
-import { createOpenedImageThumbnailDataUrlFromDisplayTexture } from '../thumbnail';
+import { createOpenedImageThumbnailDataUrl } from '../thumbnail';
 import { DecodedLayer, OpenedImageSession, ViewerSessionState } from '../types';
-import { RenderCacheService } from './render-cache-service';
 
 const THUMBNAIL_IDLE_TIMEOUT_MS = 250;
 const THUMBNAIL_IDLE_FALLBACK_DELAY_MS = 64;
@@ -37,20 +36,17 @@ export interface ThumbnailWindowLike {
 
 export interface ThumbnailServiceDependencies {
   getSession: (sessionId: string) => OpenedImageSession | null;
-  renderCache: RenderCacheService;
   onThumbnailUpdated: () => void;
   windowLike?: ThumbnailWindowLike | null;
   createThumbnailDataUrl?: (args: {
     session: OpenedImageSession;
     layer: DecodedLayer;
     stateSnapshot: ViewerSessionState;
-    displayTexture: Float32Array;
   }) => string | null;
 }
 
 export class ThumbnailService implements Disposable {
   private readonly getSession: ThumbnailServiceDependencies['getSession'];
-  private readonly renderCache: RenderCacheService;
   private readonly onThumbnailUpdated: ThumbnailServiceDependencies['onThumbnailUpdated'];
   private readonly windowLike: ThumbnailWindowLike | null;
   private readonly createThumbnailDataUrl: NonNullable<ThumbnailServiceDependencies['createThumbnailDataUrl']>;
@@ -62,7 +58,6 @@ export class ThumbnailService implements Disposable {
 
   constructor(dependencies: ThumbnailServiceDependencies) {
     this.getSession = dependencies.getSession;
-    this.renderCache = dependencies.renderCache;
     this.onThumbnailUpdated = dependencies.onThumbnailUpdated;
     this.windowLike = dependencies.windowLike ?? resolveWindowLike();
     this.createThumbnailDataUrl =
@@ -195,16 +190,10 @@ export class ThumbnailService implements Disposable {
     }
 
     try {
-      const displayTexture = this.renderCache.getTextureForSnapshot(session, stateSnapshot);
-      if (!displayTexture) {
-        return null;
-      }
-
       return this.createThumbnailDataUrl({
         session,
         layer,
-        stateSnapshot,
-        displayTexture
+        stateSnapshot
       });
     } catch {
       return null;
@@ -320,20 +309,13 @@ export class ThumbnailService implements Disposable {
 
 function defaultCreateThumbnailDataUrl({
   session,
-  stateSnapshot,
-  displayTexture
+  stateSnapshot
 }: {
   session: OpenedImageSession;
   layer: DecodedLayer;
   stateSnapshot: ViewerSessionState;
-  displayTexture: Float32Array;
 }): string | null {
-  return createOpenedImageThumbnailDataUrlFromDisplayTexture(
-    displayTexture,
-    session.decoded.width,
-    session.decoded.height,
-    stateSnapshot
-  );
+  return createOpenedImageThumbnailDataUrl(session.decoded, stateSnapshot);
 }
 
 function resolveWindowLike(): ThumbnailWindowLike | null {
