@@ -112,6 +112,43 @@ describe('gl image renderer', () => {
     expect(gl.deleteVertexArray).toHaveBeenCalledTimes(1);
   });
 
+  it('clears the default framebuffer and drops the prepared image state', () => {
+    const { renderer, gl } = createHarness();
+    const layer = createInterleavedLayerFromChannels({
+      R: [1, 2],
+      G: [3, 4],
+      B: [5, 6]
+    });
+    const state = {
+      ...createInitialState(),
+      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+    };
+
+    renderer.ensureLayerChannelsResident('session-1', 0, 2, 1, layer, ['R', 'G', 'B']);
+    renderer.setDisplaySelectionBindings(
+      'session-1',
+      0,
+      2,
+      1,
+      buildDisplaySourceBinding(layer, state.displaySelection)
+    );
+    renderer.resize(320, 180);
+
+    renderer.clearImage();
+
+    expect(gl.bindFramebuffer).toHaveBeenCalledWith(gl.FRAMEBUFFER, null);
+    expect(gl.viewport).toHaveBeenLastCalledWith(0, 0, 320, 180);
+    expect(gl.clearColor).toHaveBeenCalledWith(0, 0, 0, 0);
+    expect(gl.clear).toHaveBeenCalledWith(gl.COLOR_BUFFER_BIT);
+    expect(() => renderer.readExportPixels({
+      state,
+      sourceWidth: 2,
+      sourceHeight: 1,
+      targetWidth: 2,
+      targetHeight: 1
+    })).toThrow('No prepared image is active for export.');
+  });
+
   it('reuses export framebuffers and textures when the export size is unchanged', () => {
     const { renderer, gl } = createHarness();
     const layer = createInterleavedLayerFromChannels({
@@ -394,6 +431,8 @@ function createWebGlContextMock(): WebGL2RenderingContext & {
   deleteTexture: ReturnType<typeof vi.fn>;
   deleteProgram: ReturnType<typeof vi.fn>;
   deleteVertexArray: ReturnType<typeof vi.fn>;
+  clearColor: ReturnType<typeof vi.fn>;
+  clear: ReturnType<typeof vi.fn>;
 } {
   const programs = [{ id: 'program-1' }, { id: 'program-2' }];
   const shaders = [{ id: 'shader-1' }, { id: 'shader-2' }, { id: 'shader-3' }, { id: 'shader-4' }];
@@ -468,6 +507,8 @@ function createWebGlContextMock(): WebGL2RenderingContext & {
     uniform1f: vi.fn(),
     uniform2f: vi.fn(),
     uniform2i: vi.fn(),
+    clearColor: vi.fn(),
+    clear: vi.fn(),
     drawArrays: vi.fn(),
     readPixels: vi.fn(),
     viewport: vi.fn(),
@@ -492,5 +533,7 @@ function createWebGlContextMock(): WebGL2RenderingContext & {
     deleteFramebuffer: ReturnType<typeof vi.fn>;
     deleteProgram: ReturnType<typeof vi.fn>;
     deleteVertexArray: ReturnType<typeof vi.fn>;
+    clearColor: ReturnType<typeof vi.fn>;
+    clear: ReturnType<typeof vi.fn>;
   };
 }

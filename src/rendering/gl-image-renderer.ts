@@ -419,6 +419,10 @@ export class GlImageRenderer implements Disposable {
 
     this.imageSize = null;
     this.activeBinding = createEmptyDisplaySourceBinding();
+    this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
+    this.gl.viewport(0, 0, this.viewport.width, this.viewport.height);
+    this.gl.clearColor(0, 0, 0, 0);
+    this.gl.clear(this.gl.COLOR_BUFFER_BIT);
   }
 
   readExportPixels({
