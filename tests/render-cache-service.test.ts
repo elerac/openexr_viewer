@@ -70,6 +70,64 @@ function getEntries(service: RenderCacheService): Map<string, {
   return (service as unknown as { entries: Map<string, never> }).entries as never;
 }
 
+function createRenderCacheWindowLike() {
+  const rafCallbacks: FrameRequestCallback[] = [];
+  const idleCallbacks: Array<() => void> = [];
+  const timeoutCallbacks: Array<() => void> = [];
+
+  return {
+    windowLike: {
+      requestAnimationFrame: (callback: FrameRequestCallback) => {
+        rafCallbacks.push(callback);
+        return rafCallbacks.length;
+      },
+      cancelAnimationFrame: vi.fn(),
+      requestIdleCallback: (callback: (deadline: { didTimeout: boolean; timeRemaining(): number }) => void) => {
+        idleCallbacks.push(() => {
+          callback({
+            didTimeout: false,
+            timeRemaining: () => 1
+          });
+        });
+        return idleCallbacks.length;
+      },
+      cancelIdleCallback: vi.fn(),
+      setTimeout: ((callback: TimerHandler) => {
+        if (typeof callback === 'function') {
+          timeoutCallbacks.push(callback as () => void);
+        }
+        return timeoutCallbacks.length;
+      }) as typeof window.setTimeout,
+      clearTimeout: vi.fn()
+    },
+    flush: async () => {
+      let advanced = true;
+      while (advanced) {
+        advanced = false;
+
+        while (rafCallbacks.length > 0) {
+          advanced = true;
+          rafCallbacks.shift()?.(0);
+        }
+        await Promise.resolve();
+
+        while (idleCallbacks.length > 0) {
+          advanced = true;
+          idleCallbacks.shift()?.();
+        }
+
+        while (timeoutCallbacks.length > 0) {
+          advanced = true;
+          timeoutCallbacks.shift()?.();
+        }
+        await Promise.resolve();
+      }
+
+      await Promise.resolve();
+    }
+  };
+}
+
 describe('render cache service', () => {
   beforeEach(() => {
     vi.stubGlobal('window', {
@@ -121,46 +179,62 @@ describe('render cache service', () => {
     expect(renderer.setDisplaySelectionBindings).toHaveBeenCalledTimes(3);
   });
 
-  it('caches luminance ranges by selection revision for colormap mode', () => {
+  it('keeps texture preparation separate from lazy, deduped luminance requests', async () => {
     const session = createSession('session-1');
     const ui = createUiMock();
     const renderer = createRendererMock();
+    const { windowLike, flush } = createRenderCacheWindowLike();
+    const onDisplayLuminanceRangeResolved = vi.fn();
     const service = new RenderCacheService({
       ui,
-      renderer
+      renderer,
+      windowLike,
+      onDisplayLuminanceRangeResolved
     });
 
-    const firstColormap = service.prepareActiveSession(session, {
-      ...session.state,
-      visualizationMode: 'colormap'
-    });
-    const secondColormap = service.prepareActiveSession(session, {
-      ...session.state,
-      visualizationMode: 'colormap'
-    });
-    const monoState = {
-      ...session.state,
-      visualizationMode: 'colormap' as const,
-      displaySelection: createChannelMonoSelection('R')
-    };
-    const monoColormap = service.prepareActiveSession(session, monoState);
+    service.prepareActiveSession(session, session.state);
 
-    expect(firstColormap.luminanceRangeDirty).toBe(true);
-    expect(firstColormap.displayLuminanceRange).toEqual({ min: 0.5702, max: 0.5702 });
-    expect(secondColormap.luminanceRangeDirty).toBe(false);
-    expect(monoColormap.luminanceRangeDirty).toBe(true);
-    expect(service.getCachedLuminanceRange(session.id, monoState)).toEqual({ min: 1, max: 1 });
-    expect(session.decoded.layers[0]?.analysis.finiteRangeByChannel.R).toEqual({ min: 1, max: 1 });
+    expect(getEntries(service).get(session.id)?.luminanceRangeByRevision.size ?? 0).toBe(0);
+
+    const first = service.requestDisplayLuminanceRange(session, session.state);
+    const second = service.requestDisplayLuminanceRange(session, session.state);
+
+    expect(first).toEqual({
+      displayLuminanceRange: null,
+      pending: true
+    });
+    expect(second).toEqual({
+      displayLuminanceRange: null,
+      pending: true
+    });
+    expect(service.getCachedLuminanceRange(session.id, session.state)).toBeNull();
+
+    await flush();
+
+    expect(service.getCachedLuminanceRange(session.id, session.state)).toEqual({ min: 0.5702, max: 0.5702 });
+    expect(service.requestDisplayLuminanceRange(session, session.state)).toEqual({
+      displayLuminanceRange: { min: 0.5702, max: 0.5702 },
+      pending: false
+    });
+    expect(onDisplayLuminanceRangeResolved).toHaveBeenCalledTimes(1);
+    expect(onDisplayLuminanceRangeResolved).toHaveBeenCalledWith({
+      sessionId: session.id,
+      activeLayer: 0,
+      displaySelection: session.state.displaySelection,
+      displayLuminanceRange: { min: 0.5702, max: 0.5702 }
+    });
   });
 
-  it('reuses luminance ranges across alpha-only selection changes', () => {
+  it('reuses finite mono ranges across alpha-only selection changes', async () => {
     const decoded = createDecodedImage(2, 1, { R: 1, G: 0.5, B: 0, A: 0.25 });
     const session = createSession('session-1', decoded);
     const ui = createUiMock();
     const renderer = createRendererMock();
+    const { windowLike, flush } = createRenderCacheWindowLike();
     const service = new RenderCacheService({
       ui,
-      renderer
+      renderer,
+      windowLike
     });
 
     const withAlpha = {
@@ -172,15 +246,18 @@ describe('render cache service', () => {
       displaySelection: createChannelMonoSelection('R')
     };
 
-    const first = service.prepareActiveSession(session, withAlpha);
-    const second = service.prepareActiveSession(session, withoutAlpha);
+    expect(service.requestDisplayLuminanceRange(session, withAlpha)).toEqual({
+      displayLuminanceRange: null,
+      pending: true
+    });
+    await flush();
 
-    expect(first.displayLuminanceRange).toEqual({ min: 1, max: 1 });
-    expect(first.luminanceRangeDirty).toBe(true);
-    expect(second.textureDirty).toBe(true);
-    expect(second.luminanceRangeDirty).toBe(false);
-    expect(second.displayLuminanceRange).toEqual({ min: 1, max: 1 });
-    expect(renderer.ensureLayerChannelsResident).toHaveBeenCalledTimes(1);
+    expect(service.requestDisplayLuminanceRange(session, withoutAlpha)).toEqual({
+      displayLuminanceRange: { min: 1, max: 1 },
+      pending: false
+    });
+    expect(service.getCachedLuminanceRange(session.id, withoutAlpha)).toEqual({ min: 1, max: 1 });
+    expect(session.decoded.layers[0]?.analysis.finiteRangeByChannel.R).toEqual({ min: 1, max: 1 });
   });
 
   it('tracks resident texture bytes in the usage UI and tears down session resources on discard and clear', () => {
@@ -303,21 +380,28 @@ describe('render cache service', () => {
     expect(ui.setDisplayCacheUsage).toHaveBeenLastCalledWith(160_000_000, 64 * MB);
   });
 
-  it('reuploads evicted channels while preserving cached luminance ranges', () => {
+  it('reuploads evicted channels while preserving cached luminance ranges', async () => {
     const first = createSession('first', createDecodedImage(20_000, 1_000, { Z: 1 }));
     const second = createSession('second', createDecodedImage(20_000, 1_000, { Z: 1 }));
     const ui = createUiMock();
     const renderer = createRendererMock();
+    const { windowLike, flush } = createRenderCacheWindowLike();
 
     let activeSessionId: string | null = first.id;
     const service = new RenderCacheService({
       ui,
       renderer,
-      getActiveSessionId: () => activeSessionId
+      getActiveSessionId: () => activeSessionId,
+      windowLike
     });
 
-    const initial = service.prepareActiveSession(first, first.state);
-    expect(initial.luminanceRangeDirty).toBe(true);
+    service.prepareActiveSession(first, first.state);
+    expect(service.requestDisplayLuminanceRange(first, first.state)).toEqual({
+      displayLuminanceRange: null,
+      pending: true
+    });
+    await flush();
+    expect(service.getCachedLuminanceRange(first.id, first.state)).toEqual({ min: 1, max: 1 });
 
     activeSessionId = second.id;
     service.prepareActiveSession(second, second.state);
@@ -331,9 +415,53 @@ describe('render cache service', () => {
     const stable = service.prepareActiveSession(first, first.state);
 
     expect(reuploaded.textureDirty).toBe(true);
-    expect(reuploaded.luminanceRangeDirty).toBe(false);
     expect(stable.textureDirty).toBe(false);
     expect(renderer.ensureLayerChannelsResident).toHaveBeenCalledTimes(3);
+  });
+
+  it('drops pending luminance callbacks after discard, clear, and dispose', async () => {
+    const session = createSession('session-1');
+
+    const discarded = createRenderCacheWindowLike();
+    const discardedCallback = vi.fn();
+    const discardedService = new RenderCacheService({
+      ui: createUiMock(),
+      renderer: createRendererMock(),
+      windowLike: discarded.windowLike,
+      onDisplayLuminanceRangeResolved: discardedCallback
+    });
+    expect(discardedService.requestDisplayLuminanceRange(session, session.state).pending).toBe(true);
+    discardedService.discard(session.id);
+    await discarded.flush();
+    expect(discardedCallback).not.toHaveBeenCalled();
+    expect(discardedService.getCachedLuminanceRange(session.id, session.state)).toBeNull();
+
+    const cleared = createRenderCacheWindowLike();
+    const clearedCallback = vi.fn();
+    const clearedService = new RenderCacheService({
+      ui: createUiMock(),
+      renderer: createRendererMock(),
+      windowLike: cleared.windowLike,
+      onDisplayLuminanceRangeResolved: clearedCallback
+    });
+    expect(clearedService.requestDisplayLuminanceRange(session, session.state).pending).toBe(true);
+    clearedService.clear();
+    await cleared.flush();
+    expect(clearedCallback).not.toHaveBeenCalled();
+    expect(clearedService.getCachedLuminanceRange(session.id, session.state)).toBeNull();
+
+    const disposed = createRenderCacheWindowLike();
+    const disposedCallback = vi.fn();
+    const disposedService = new RenderCacheService({
+      ui: createUiMock(),
+      renderer: createRendererMock(),
+      windowLike: disposed.windowLike,
+      onDisplayLuminanceRangeResolved: disposedCallback
+    });
+    expect(disposedService.requestDisplayLuminanceRange(session, session.state).pending).toBe(true);
+    disposedService.dispose();
+    await disposed.flush();
+    expect(disposedCallback).not.toHaveBeenCalled();
   });
 
   it('returns snapshot textures without retaining CPU display buffers', () => {

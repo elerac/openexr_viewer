@@ -176,7 +176,10 @@ export async function bootstrapApp(): Promise<AppHandle> {
     renderCache = new RenderCacheService({
       ui,
       renderer,
-      getActiveSessionId: () => sessionController?.getActiveSessionId() ?? null
+      getActiveSessionId: () => sessionController?.getActiveSessionId() ?? null,
+      onDisplayLuminanceRangeResolved: (event) => {
+        displayController?.handleDisplayLuminanceRangeResolved(event);
+      }
     });
     thumbnailService = new ThumbnailService({
       getSession: (sessionId) => {

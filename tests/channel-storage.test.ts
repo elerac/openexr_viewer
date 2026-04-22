@@ -23,14 +23,17 @@ describe('channel storage', () => {
 
     const green = getChannelReadView(layer, 'G');
     const blue = getChannelReadView(layer, 'B');
+    const pixels = layer.channelStorage.kind === 'interleaved-f32'
+      ? layer.channelStorage.pixels
+      : null;
 
     expect(green).toEqual({
-      pixels: layer.channelStorage.pixels,
+      pixels,
       offset: 1,
       stride: 3
     });
     expect(blue).toEqual({
-      pixels: layer.channelStorage.pixels,
+      pixels,
       offset: 2,
       stride: 3
     });

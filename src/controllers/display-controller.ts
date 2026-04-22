@@ -37,7 +37,10 @@ import {
   isStokesDegreeModulationParameter
 } from '../stokes';
 import { ViewerUi } from '../ui';
-import { RenderCacheService } from '../services/render-cache-service';
+import {
+  RenderCacheService,
+  type DisplayLuminanceRangeResolvedEvent
+} from '../services/render-cache-service';
 import {
   DecodedExrImage,
   DecodedLayer,
@@ -59,6 +62,12 @@ type RestorableVisualizationState = Pick<
   ViewerSessionState,
   'visualizationMode' | 'activeColormapId' | 'colormapRange' | 'colormapRangeMode' | 'colormapZeroCentered'
 >;
+
+interface PendingColormapActivation {
+  sessionId: string;
+  activeLayer: number;
+  displaySelection: DisplaySelection | null;
+}
 
 type DisplayUi = Pick<
   ViewerUi,
@@ -104,6 +113,7 @@ export class DisplayController implements Disposable {
   private activeDisplayLuminanceRange: DisplayLuminanceRange | null = null;
   private defaultColormapId = DEFAULT_COLORMAP_ID;
   private colormapRegistry: ColormapRegistry | null = null;
+  private pendingColormapActivation: PendingColormapActivation | null = null;
   private readonly stokesDisplayRestoreStates = new Map<string, RestorableVisualizationState>();
   private readonly abortController = new AbortController();
   private disposed = false;
@@ -145,6 +155,10 @@ export class DisplayController implements Disposable {
     const activeSession = this.getActiveSession();
     const sessionChanged = activeSession !== this.renderedSession;
     const selectionChanged = !sameDisplaySelection(state.displaySelection, previous.displaySelection);
+    const rangeRevisionChanged =
+      sessionChanged ||
+      state.activeLayer !== previous.activeLayer ||
+      selectionChanged;
     const activeRenderState = this.buildRenderState(state);
 
     if (sessionChanged || state.exposureEv !== previous.exposureEv) {
@@ -196,11 +210,36 @@ export class DisplayController implements Disposable {
           this.ui.setRgbGroupOptions(layer.channelNames, state.displaySelection);
         }
 
-        let luminanceRangeDirty = false;
-        if (sessionChanged || state.activeLayer !== previous.activeLayer || selectionChanged) {
-          const prepareResult = this.renderCache.prepareActiveSession(activeSession, state);
-          this.activeDisplayLuminanceRange = prepareResult.displayLuminanceRange;
-          luminanceRangeDirty = prepareResult.luminanceRangeDirty;
+        if (rangeRevisionChanged) {
+          this.renderCache.prepareActiveSession(activeSession, state);
+        }
+        this.activeDisplayLuminanceRange = this.renderCache.getCachedLuminanceRange(activeSession.id, state);
+
+        if (this.pendingColormapActivation) {
+          if (
+            sessionChanged ||
+            state.visualizationMode === 'colormap' ||
+            this.pendingColormapActivation.sessionId !== activeSession.id
+          ) {
+            this.cancelPendingColormapActivation();
+          } else if (rangeRevisionChanged) {
+            this.activateColormapWhenReady(activeSession, state);
+          }
+        }
+
+        const shouldRequestAutoRange =
+          state.visualizationMode === 'colormap' &&
+          state.colormapRangeMode === 'alwaysAuto' &&
+          (
+            rangeRevisionChanged ||
+            state.visualizationMode !== previous.visualizationMode ||
+            state.colormapZeroCentered !== previous.colormapZeroCentered
+          );
+        if (shouldRequestAutoRange) {
+          const rangeRequest = this.renderCache.requestDisplayLuminanceRange(activeSession, state);
+          if (!rangeRequest.pending) {
+            this.activeDisplayLuminanceRange = rangeRequest.displayLuminanceRange;
+          }
         }
 
         const activeAutoColormapRange = resolveColormapAutoRange(
@@ -218,6 +257,7 @@ export class DisplayController implements Disposable {
             state.visualizationMode !== previous.visualizationMode
           ) &&
           state.colormapRangeMode === 'alwaysAuto' &&
+          this.activeDisplayLuminanceRange !== null &&
           !sameDisplayLuminanceRange(state.colormapRange, activeAutoColormapRange)
         ) {
           this.store.setState({
@@ -230,8 +270,7 @@ export class DisplayController implements Disposable {
           sessionChanged ||
           state.colormapRange !== previous.colormapRange ||
           state.colormapRangeMode !== previous.colormapRangeMode ||
-          state.colormapZeroCentered !== previous.colormapZeroCentered ||
-          luminanceRangeDirty
+          state.colormapZeroCentered !== previous.colormapZeroCentered
         ) {
           this.ui.setColormapRange(
             state.colormapRange,
@@ -307,6 +346,7 @@ export class DisplayController implements Disposable {
         });
       }
     } else {
+      this.cancelPendingColormapActivation();
       this.renderedSession = null;
       this.activeDisplayLuminanceRange = null;
       this.ui.setViewerMode('image');
@@ -516,22 +556,38 @@ export class DisplayController implements Disposable {
       return;
     }
 
-    if (!this.getActiveSession()) {
+    const activeSession = this.getActiveSession();
+    if (!activeSession) {
       return;
     }
 
     const currentState = this.store.getState();
-    if (currentState.visualizationMode === mode) {
+    if (mode === 'rgb') {
+      this.cancelPendingColormapActivation();
+      if (currentState.visualizationMode === 'rgb') {
+        return;
+      }
+
+      this.store.setState({
+        visualizationMode: 'rgb'
+      });
       return;
     }
 
-    if (mode === 'colormap') {
-      this.syncColormapTextureForState(currentState.activeColormapId);
+    if (currentState.visualizationMode === 'colormap' && !this.pendingColormapActivation) {
+      return;
     }
 
-    this.store.setState({
-      visualizationMode: mode
-    });
+    this.syncColormapTextureForState(currentState.activeColormapId);
+    if (currentState.colormapRangeMode !== 'alwaysAuto') {
+      this.cancelPendingColormapActivation();
+      this.store.setState({
+        visualizationMode: 'colormap'
+      });
+      return;
+    }
+
+    this.activateColormapWhenReady(activeSession, currentState);
   }
 
   setViewerMode(mode: ViewerMode): void {
@@ -594,16 +650,29 @@ export class DisplayController implements Disposable {
     }
 
     const currentState = this.store.getState();
+    const currentMode = currentState.colormapRangeMode;
+    if (currentMode === 'alwaysAuto') {
+      this.store.setState({
+        colormapRangeMode: 'oneTime'
+      });
+      return;
+    }
+
+    const rangeRequest = this.renderCache.requestDisplayLuminanceRange(activeSession, currentState);
+    if (!rangeRequest.pending) {
+      this.activeDisplayLuminanceRange = rangeRequest.displayLuminanceRange;
+    }
     const nextRange = resolveColormapAutoRange(
       currentState.displaySelection,
-      this.renderCache.getCachedLuminanceRange(activeSession.id, currentState),
+      rangeRequest.pending
+        ? this.renderCache.getCachedLuminanceRange(activeSession.id, currentState)
+        : rangeRequest.displayLuminanceRange,
       currentState.colormapZeroCentered
     );
-    const currentMode = currentState.colormapRangeMode;
 
     this.store.setState({
       colormapRange: nextRange,
-      colormapRangeMode: currentMode === 'alwaysAuto' ? 'oneTime' : 'alwaysAuto'
+      colormapRangeMode: 'alwaysAuto'
     });
   }
 
@@ -619,9 +688,19 @@ export class DisplayController implements Disposable {
 
     const currentState = this.store.getState();
     const nextZeroCentered = !currentState.colormapZeroCentered;
-    const cachedRange = this.renderCache.getCachedLuminanceRange(activeSession.id, currentState);
+    const rangeRequest = currentState.colormapRangeMode === 'alwaysAuto'
+      ? this.renderCache.requestDisplayLuminanceRange(activeSession, currentState)
+      : null;
+    if (rangeRequest && !rangeRequest.pending) {
+      this.activeDisplayLuminanceRange = rangeRequest.displayLuminanceRange;
+    }
+    const cachedRange = rangeRequest
+      ? rangeRequest.displayLuminanceRange
+      : this.renderCache.getCachedLuminanceRange(activeSession.id, currentState);
     const nextRange = currentState.colormapRangeMode === 'alwaysAuto'
-      ? resolveColormapAutoRange(currentState.displaySelection, cachedRange, nextZeroCentered)
+      ? cachedRange
+        ? resolveColormapAutoRange(currentState.displaySelection, cachedRange, nextZeroCentered)
+        : cloneDisplayLuminanceRange(currentState.colormapRange)
       : nextZeroCentered
         ? buildZeroCenteredColormapRange(currentState.colormapRange ?? cachedRange)
         : cloneDisplayLuminanceRange(currentState.colormapRange);
@@ -719,6 +798,9 @@ export class DisplayController implements Disposable {
       return;
     }
 
+    if (this.pendingColormapActivation?.sessionId === sessionId) {
+      this.cancelPendingColormapActivation();
+    }
     this.stokesDisplayRestoreStates.delete(sessionId);
     if (this.renderedSession?.id === sessionId) {
       this.renderedSession = null;
@@ -731,6 +813,7 @@ export class DisplayController implements Disposable {
     }
 
     this.stokesDisplayRestoreStates.clear();
+    this.cancelPendingColormapActivation();
     this.renderedSession = null;
     this.activeDisplayLuminanceRange = null;
   }
@@ -745,10 +828,74 @@ export class DisplayController implements Disposable {
     this.colormapChangeToken += 1;
     this.abortController.abort(createAbortError('Display controller has been disposed.'));
     this.stokesDisplayRestoreStates.clear();
+    this.cancelPendingColormapActivation();
     this.renderedSession = null;
     this.activeDisplayLuminanceRange = null;
     this.uploadedColormapId = null;
     this.activeColormapLut = null;
+  }
+
+  handleDisplayLuminanceRangeResolved(event: DisplayLuminanceRangeResolvedEvent): void {
+    if (this.disposed) {
+      return;
+    }
+
+    const activeSession = this.getActiveSession();
+    if (!activeSession || activeSession.id !== event.sessionId) {
+      return;
+    }
+
+    const currentState = this.store.getState();
+    if (
+      currentState.activeLayer !== event.activeLayer ||
+      !sameDisplaySelection(currentState.displaySelection, event.displaySelection)
+    ) {
+      return;
+    }
+
+    this.activeDisplayLuminanceRange = event.displayLuminanceRange;
+
+    if (
+      this.pendingColormapActivation &&
+      this.pendingColormapActivation.sessionId === activeSession.id &&
+      this.pendingColormapActivation.activeLayer === currentState.activeLayer &&
+      sameDisplaySelection(this.pendingColormapActivation.displaySelection, currentState.displaySelection)
+    ) {
+      const nextRange = resolveColormapAutoRange(
+        currentState.displaySelection,
+        event.displayLuminanceRange,
+        currentState.colormapZeroCentered
+      );
+      this.cancelPendingColormapActivation();
+      if (nextRange) {
+        this.store.setState({
+          visualizationMode: 'colormap',
+          colormapRange: nextRange
+        });
+      }
+      return;
+    }
+
+    if (currentState.visualizationMode === 'colormap' && currentState.colormapRangeMode === 'alwaysAuto') {
+      const nextRange = resolveColormapAutoRange(
+        currentState.displaySelection,
+        event.displayLuminanceRange,
+        currentState.colormapZeroCentered
+      );
+      if (!sameDisplayLuminanceRange(currentState.colormapRange, nextRange)) {
+        this.store.setState({
+          colormapRange: nextRange
+        });
+        return;
+      }
+    }
+
+    this.ui.setColormapRange(
+      currentState.colormapRange,
+      event.displayLuminanceRange,
+      currentState.colormapRangeMode === 'alwaysAuto',
+      currentState.colormapZeroCentered
+    );
   }
 
   private async uploadColormapToRenderer(colormapId: string): Promise<void> {
@@ -884,6 +1031,45 @@ export class DisplayController implements Disposable {
     }
 
     throwIfAborted(this.abortController.signal, 'Display controller has been disposed.');
+  }
+
+  private activateColormapWhenReady(
+    session: OpenedImageSession,
+    state: Pick<ViewerSessionState, 'activeLayer' | 'displaySelection' | 'colormapZeroCentered'>
+  ): void {
+    const rangeRequest = this.renderCache.requestDisplayLuminanceRange(session, state);
+    if (!rangeRequest.pending) {
+      this.activeDisplayLuminanceRange = rangeRequest.displayLuminanceRange;
+      const nextRange = resolveColormapAutoRange(
+        state.displaySelection,
+        rangeRequest.displayLuminanceRange,
+        state.colormapZeroCentered
+      );
+      this.cancelPendingColormapActivation();
+      if (nextRange) {
+        this.store.setState({
+          visualizationMode: 'colormap',
+          colormapRange: nextRange
+        });
+      }
+      return;
+    }
+
+    this.pendingColormapActivation = {
+      sessionId: session.id,
+      activeLayer: state.activeLayer,
+      displaySelection: cloneDisplaySelection(state.displaySelection)
+    };
+    this.ui.setRgbViewLoading(true);
+  }
+
+  private cancelPendingColormapActivation(): void {
+    if (!this.pendingColormapActivation) {
+      return;
+    }
+
+    this.pendingColormapActivation = null;
+    this.ui.setRgbViewLoading(false);
   }
 }
 

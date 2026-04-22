@@ -8,7 +8,6 @@ import {
   buildSelectedDisplayTexture,
   buildStokesDisplayTexture,
   computeDisplaySelectionLuminanceRange,
-  precomputeDisplaySelectionLuminanceRangeBySelectionKey,
   readDisplaySelectionPixelValues,
   samplePixelValues,
   samplePixelValuesForDisplay
@@ -292,57 +291,5 @@ describe('display texture', () => {
     });
 
     expect(buildDisplayTextureRevisionKey(state)).toBe('2:channelMono:Y:A');
-  });
-
-  it('precomputes luminance ranges for channel and stokes selections used by the UI', () => {
-    const channelLayer = createLayerFromChannels({
-      R: [0.25, 0.75],
-      G: [0.5, 0.5],
-      B: [1, 0],
-      A: [0.1, 0.9]
-    });
-    const scalarStokesLayer = createLayerFromChannels({
-      S0: [1, 1],
-      S1: [1, 0],
-      S2: [0, 1],
-      S3: [0, 0]
-    }, 'scalar-stokes');
-    const rgbStokesLayer = createLayerFromChannels({
-      'S0.R': [1, 1],
-      'S0.G': [2, 2],
-      'S0.B': [4, 4],
-      'S1.R': [1, 0],
-      'S1.G': [1, 0],
-      'S1.B': [2, 0],
-      'S2.R': [0, 1],
-      'S2.G': [Math.sqrt(3), 0],
-      'S2.B': [0, 0],
-      'S3.R': [0, 0],
-      'S3.G': [0, 0],
-      'S3.B': [0, 0]
-    }, 'rgb-stokes');
-
-    const channelRanges = precomputeDisplaySelectionLuminanceRangeBySelectionKey(channelLayer, 2, 1, {
-      R: { min: 0.25, max: 0.75 },
-      G: { min: 0.5, max: 0.5 },
-      B: { min: 0, max: 1 },
-      A: { min: 0.1, max: 0.9 }
-    });
-    const scalarStokesRanges = precomputeDisplaySelectionLuminanceRangeBySelectionKey(scalarStokesLayer, 2, 1);
-    const rgbStokesRanges = precomputeDisplaySelectionLuminanceRangeBySelectionKey(rgbStokesLayer, 2, 1);
-
-    expect(channelRanges['channelMono:R']).toEqual({ min: 0.25, max: 0.75 });
-    expect(channelRanges['channelRgb:R:G:B']).toEqual(
-      computeDisplaySelectionLuminanceRange(channelLayer, 2, 1, createChannelRgbSelection('R', 'G', 'B', 'A'))
-    );
-    expect(scalarStokesRanges['stokesAngle:aolp:scalar']).toEqual(
-      computeDisplaySelectionLuminanceRange(scalarStokesLayer, 2, 1, createStokesSelection('aolp'))
-    );
-    expect(rgbStokesRanges['stokesScalar:dolp:rgbLuminance']).toEqual(
-      computeDisplaySelectionLuminanceRange(rgbStokesLayer, 2, 1, createStokesSelection('dolp', 'stokesRgb'))
-    );
-    expect(rgbStokesRanges['stokesAngle:aolp:rgbComponent:G']).toEqual(
-      computeDisplaySelectionLuminanceRange(rgbStokesLayer, 2, 1, createStokesSelection('aolp', 'stokesRgb', 'G'))
-    );
   });
 });

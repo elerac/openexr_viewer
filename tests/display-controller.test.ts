@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DisplayController } from '../src/controllers/display-controller';
-import { RenderCacheService } from '../src/services/render-cache-service';
+import { RenderCacheService, type RenderCacheWindowLike } from '../src/services/render-cache-service';
 import { buildViewerStateForLayer, createInitialState, ViewerStore } from '../src/viewer-store';
 import { DecodedExrImage, OpenedImageSession, ViewerInteractionState, ViewerSessionState } from '../src/types';
 import {
+  createChannelMonoSelection,
   createChannelRgbSelection,
   createLayerFromChannels,
   createStokesSelection,
@@ -101,6 +102,64 @@ function createDeferred<T>() {
   return { promise, resolve };
 }
 
+function createRenderCacheWindowLike() {
+  const rafCallbacks: FrameRequestCallback[] = [];
+  const idleCallbacks: Array<() => void> = [];
+  const timeoutCallbacks: Array<() => void> = [];
+
+  return {
+    windowLike: {
+      requestAnimationFrame: (callback: FrameRequestCallback) => {
+        rafCallbacks.push(callback);
+        return rafCallbacks.length;
+      },
+      cancelAnimationFrame: vi.fn(),
+      requestIdleCallback: (callback: (deadline: { didTimeout: boolean; timeRemaining(): number }) => void) => {
+        idleCallbacks.push(() => {
+          callback({
+            didTimeout: false,
+            timeRemaining: () => 1
+          });
+        });
+        return idleCallbacks.length;
+      },
+      cancelIdleCallback: vi.fn(),
+      setTimeout: ((callback: TimerHandler) => {
+        if (typeof callback === 'function') {
+          timeoutCallbacks.push(callback as () => void);
+        }
+        return timeoutCallbacks.length;
+      }) as typeof window.setTimeout,
+      clearTimeout: vi.fn()
+    },
+    flush: async () => {
+      let advanced = true;
+      while (advanced) {
+        advanced = false;
+
+        while (rafCallbacks.length > 0) {
+          advanced = true;
+          rafCallbacks.shift()?.(0);
+        }
+        await Promise.resolve();
+
+        while (idleCallbacks.length > 0) {
+          advanced = true;
+          idleCallbacks.shift()?.();
+        }
+
+        while (timeoutCallbacks.length > 0) {
+          advanced = true;
+          timeoutCallbacks.shift()?.();
+        }
+        await Promise.resolve();
+      }
+
+      await Promise.resolve();
+    }
+  };
+}
+
 const registry = {
   defaultId: '0',
   assets: [
@@ -123,19 +182,25 @@ const luts = {
 
 function createController(options: {
   session?: OpenedImageSession | null;
+  windowLike?: RenderCacheWindowLike | null;
 } = {}) {
   const store = new ViewerStore(createInitialState());
   const ui = createUiMock();
   const renderer = createRendererMock();
   const session = options.session ?? null;
   let interactionState: ViewerInteractionState = createViewerInteractionState({}, store.getState());
+  let controller!: DisplayController;
   const renderCache = new RenderCacheService({
     ui,
     renderer: renderer as never,
-    getActiveSessionId: () => session?.id ?? null
+    getActiveSessionId: () => session?.id ?? null,
+    windowLike: options.windowLike,
+    onDisplayLuminanceRangeResolved: (event) => {
+      controller.handleDisplayLuminanceRangeResolved(event);
+    }
   });
 
-  const controller = new DisplayController({
+  controller = new DisplayController({
     store,
     ui,
     renderer: renderer as never,
@@ -164,12 +229,22 @@ beforeEach(() => {
       callback(0);
       return 1;
     },
+    cancelAnimationFrame: vi.fn(),
     setTimeout: ((callback: TimerHandler) => {
       if (typeof callback === 'function') {
         callback();
       }
       return 1;
-    }) as typeof window.setTimeout
+    }) as typeof window.setTimeout,
+    clearTimeout: vi.fn(),
+    requestIdleCallback: (callback: (deadline: { didTimeout: boolean; timeRemaining(): number }) => void) => {
+      callback({
+        didTimeout: false,
+        timeRemaining: () => 1
+      });
+      return 1;
+    },
+    cancelIdleCallback: vi.fn()
   };
 
   vi.stubGlobal('window', immediateWindow);
@@ -247,25 +322,100 @@ describe('display controller', () => {
     expect(renderer.setColormapTexture).toHaveBeenLastCalledWith(luts['2'].entryCount, luts['2'].rgba8);
   });
 
-  it('applies always-auto colormap ranges from the computed display luminance range', async () => {
+  it('defers entering colormap mode until a cold always-auto range resolves', async () => {
     const decoded = createDecodedImage();
     const session = createSession(decoded);
-    const { controller, store } = createController({ session });
+    const renderCacheWindow = createRenderCacheWindowLike();
+    const { controller, store, ui } = createController({
+      session,
+      windowLike: renderCacheWindow.windowLike
+    });
+
+    await controller.initialize();
+    store.setState(session.state);
+    expect(store.getState().visualizationMode).toBe('rgb');
+
+    controller.setVisualizationMode('colormap');
+
+    expect(ui.setRgbViewLoading).toHaveBeenCalledWith(true);
+    expect(store.getState().visualizationMode).toBe('rgb');
+    expect(store.getState().colormapRange).toBeNull();
+
+    await renderCacheWindow.flush();
+
+    expect(ui.setRgbViewLoading).toHaveBeenLastCalledWith(false);
+    expect(store.getState().visualizationMode).toBe('colormap');
+    expect(store.getState().colormapRange).toEqual({ min: 0, max: 1 });
+  });
+
+  it('updates active always-auto colormap ranges when async analysis resolves', async () => {
+    const decoded = createDecodedImage();
+    const session = createSession(decoded);
+    const renderCacheWindow = createRenderCacheWindowLike();
+    const { controller, store } = createController({
+      session,
+      windowLike: renderCacheWindow.windowLike
+    });
 
     await controller.initialize();
 
     const previous = store.getState();
-    const next: ViewerSessionState = {
+    store.setState({
       ...session.state,
       visualizationMode: 'colormap',
       colormapRange: null,
       colormapRangeMode: 'alwaysAuto'
-    };
-    store.setState(next);
+    });
 
     controller.handleSessionStateChange(store.getState(), previous);
+    expect(store.getState().colormapRange).toBeNull();
+
+    await renderCacheWindow.flush();
 
     expect(store.getState().colormapRange).toEqual({ min: 0, max: 1 });
+  });
+
+  it('ignores stale luminance callbacks after the active selection changes', async () => {
+    const decoded: DecodedExrImage = {
+      width: 2,
+      height: 1,
+      layers: [
+        createLayerFromChannels({
+          R: new Float32Array([1, 1]),
+          G: new Float32Array([0.5, 0.5]),
+          B: new Float32Array([0, 0])
+        }, 'beauty')
+      ]
+    };
+    const session = createSession(decoded);
+    const renderCacheWindow = createRenderCacheWindowLike();
+    const { controller, store } = createController({
+      session,
+      windowLike: renderCacheWindow.windowLike
+    });
+
+    await controller.initialize();
+
+    const firstPrevious = store.getState();
+    store.setState({
+      ...session.state,
+      visualizationMode: 'colormap',
+      colormapRange: null,
+      colormapRangeMode: 'alwaysAuto'
+    });
+    controller.handleSessionStateChange(store.getState(), firstPrevious);
+
+    const secondPrevious = store.getState();
+    store.setState({
+      ...store.getState(),
+      displaySelection: createChannelMonoSelection('R')
+    });
+    controller.handleSessionStateChange(store.getState(), secondPrevious);
+
+    await renderCacheWindow.flush();
+
+    expect(store.getState().displaySelection).toEqual(createChannelMonoSelection('R'));
+    expect(store.getState().colormapRange).toEqual({ min: 1, max: 1 });
   });
 
   it('restores the saved non-stokes visualization state when returning to channels', async () => {
@@ -302,13 +452,14 @@ describe('display controller', () => {
     expect(ui.setRgbGroupOptions).not.toHaveBeenCalled();
   });
 
-  it('does not prepare the render cache for interaction-only hover updates', async () => {
+  it('does not prepare or analyze ranges for interaction-only hover updates', async () => {
     const session = createSession(createDecodedImage());
     const { controller, store, renderCache, setInteractionState, renderer } = createController({ session });
 
     await controller.initialize();
     controller.handleSessionStateChange(store.getState(), store.getState());
     const prepareSpy = vi.spyOn(renderCache, 'prepareActiveSession');
+    const requestRangeSpy = vi.spyOn(renderCache, 'requestDisplayLuminanceRange');
     vi.clearAllMocks();
 
     const previousInteraction = createViewerInteractionState({
@@ -321,9 +472,37 @@ describe('display controller', () => {
     controller.handleInteractionStateChange(nextInteraction, previousInteraction);
 
     expect(prepareSpy).not.toHaveBeenCalled();
+    expect(requestRangeSpy).not.toHaveBeenCalled();
     expect(renderer.renderImage).not.toHaveBeenCalled();
     expect(renderer.renderValueOverlay).not.toHaveBeenCalled();
     expect(renderer.renderProbeOverlay).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not request luminance analysis for manual colormap mode or rgb-only selection changes', async () => {
+    const session = createSession(createDecodedImage());
+    const { controller, store, renderCache } = createController({ session });
+
+    await controller.initialize();
+
+    const requestRangeSpy = vi.spyOn(renderCache, 'requestDisplayLuminanceRange');
+    const manualPrevious = store.getState();
+    store.setState({
+      ...session.state,
+      visualizationMode: 'colormap',
+      colormapRange: { min: 0, max: 1 },
+      colormapRangeMode: 'oneTime'
+    });
+    controller.handleSessionStateChange(store.getState(), manualPrevious);
+
+    const rgbPrevious = store.getState();
+    store.setState({
+      ...session.state,
+      visualizationMode: 'rgb',
+      displaySelection: createChannelMonoSelection('R')
+    });
+    controller.handleSessionStateChange(store.getState(), rgbPrevious);
+
+    expect(requestRangeSpy).not.toHaveBeenCalled();
   });
 
   it('ignores structurally identical hover pixels in the interaction path', async () => {

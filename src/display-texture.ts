@@ -3,10 +3,8 @@ import {
   readPixelChannelValue,
   getChannelReadView,
   readChannelValue,
-  type FiniteValueRange,
   type ChannelReadView
 } from './channel-storage';
-import { buildChannelDisplayOptions } from './display-selection';
 import {
   isStokesSelection,
   serializeDisplaySelectionKey,
@@ -21,7 +19,6 @@ import {
   detectRgbStokesChannels,
   detectScalarStokesChannels,
   getStokesDegreeModulationLabel,
-  getStokesDisplayOptions,
   getStokesParameterLabel,
   isStokesDisplayAvailable,
   type RgbStokesChannels,
@@ -312,28 +309,6 @@ export function computeDisplaySelectionLuminanceRange(
   return { min, max };
 }
 
-export function precomputeDisplaySelectionLuminanceRangeBySelectionKey(
-  layer: DecodedLayer,
-  width: number,
-  height: number,
-  finiteRangeByChannel: Record<string, FiniteValueRange | null> = {}
-): Record<string, DisplayLuminanceRange | null> {
-  const rangesBySelectionKey: Record<string, DisplayLuminanceRange | null> = {};
-  const selectionsByKey = collectDisplaySelectionsForAnalysis(layer.channelNames);
-
-  for (const [selectionKey, selection] of selectionsByKey) {
-    if (selection?.kind === 'channelMono') {
-      rangesBySelectionKey[selectionKey] = finiteRangeByChannel[selection.channel]
-        ?? computeDisplaySelectionLuminanceRange(layer, width, height, selection);
-      continue;
-    }
-
-    rangesBySelectionKey[selectionKey] = computeDisplaySelectionLuminanceRange(layer, width, height, selection);
-  }
-
-  return rangesBySelectionKey;
-}
-
 export function readDisplaySelectionPixelValues(
   layer: DecodedLayer,
   width: number,
@@ -526,45 +501,6 @@ function resolveStokesDisplaySelectionEvaluator(
     g: resolveStokesChannelArrays(layer, channels.g),
     b: resolveStokesChannelArrays(layer, channels.b)
   };
-}
-
-function collectDisplaySelectionsForAnalysis(channelNames: string[]): Map<string, DisplaySelection | null> {
-  const selections = new Map<string, DisplaySelection | null>();
-  const pushSelection = (selection: DisplaySelection | null): void => {
-    selections.set(serializeDisplaySelectionLuminanceKey(selection), selection);
-  };
-
-  pushSelection(null);
-
-  for (const option of buildChannelDisplayOptions(channelNames, {
-    includeRgbGroups: true,
-    includeSplitChannels: false
-  })) {
-    pushSelection(option.selection);
-  }
-
-  for (const option of buildChannelDisplayOptions(channelNames, {
-    includeRgbGroups: false,
-    includeSplitChannels: true
-  })) {
-    pushSelection(option.selection);
-  }
-
-  for (const option of getStokesDisplayOptions(channelNames, {
-    includeRgbGroups: true,
-    includeSplitChannels: false
-  })) {
-    pushSelection(option.selection);
-  }
-
-  for (const option of getStokesDisplayOptions(channelNames, {
-    includeRgbGroups: false,
-    includeSplitChannels: true
-  })) {
-    pushSelection(option.selection);
-  }
-
-  return selections;
 }
 
 function createDisplaySourceBinding(
