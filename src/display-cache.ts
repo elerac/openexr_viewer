@@ -8,9 +8,13 @@ export const MAX_DISPLAY_CACHE_BUDGET_MB =
 export const DEFAULT_DISPLAY_CACHE_BUDGET_MB = 256;
 export const BYTES_PER_MEGABYTE = 1024 * 1024;
 
-export interface ResidentLayerResourceEntry {
+export interface ResidentChannelResourceEntry {
   textureBytes: number;
   lastAccessToken: number;
+}
+
+export interface ResidentLayerResourceEntry {
+  residentChannels: Map<string, ResidentChannelResourceEntry>;
 }
 
 export interface SessionResourceEntry {
@@ -41,7 +45,9 @@ export function getTrackedResidentTextureBytes(
   return sessions.reduce((total, session) => {
     let sessionBytes = 0;
     for (const layer of session.residentLayers.values()) {
-      sessionBytes += Math.max(0, Math.floor(layer.textureBytes));
+      for (const channel of layer.residentChannels.values()) {
+        sessionBytes += Math.max(0, Math.floor(channel.textureBytes));
+      }
     }
     return total + sessionBytes;
   }, 0);

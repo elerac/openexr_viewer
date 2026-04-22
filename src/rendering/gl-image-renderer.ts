@@ -1,4 +1,4 @@
-import { getChannelDenseArray } from '../channel-storage';
+import { discardMaterializedChannel, getChannelDenseArray } from '../channel-storage';
 import {
   DISPLAY_SOURCE_SLOT_COUNT,
   createEmptyDisplaySourceBinding,
@@ -47,9 +47,9 @@ interface ProgramBundle<TUniforms extends CommonUniforms> {
 }
 
 interface LayerSourceTextures {
+  layer: DecodedLayer;
   width: number;
   height: number;
-  textureBytes: number;
   textureByChannel: Map<string, WebGLTexture>;
 }
 
@@ -167,31 +167,27 @@ export class GlImageRenderer implements Disposable {
     this.gl.viewport(0, 0, this.viewport.width, this.viewport.height);
   }
 
-  ensureLayerSourceTextures(
+  ensureLayerChannelsResident(
     sessionId: string,
     layerIndex: number,
     width: number,
     height: number,
-    layer: DecodedLayer
-  ): number {
+    layer: DecodedLayer,
+    channelNames: string[]
+  ): string[] {
     if (this.disposed) {
-      return 0;
+      return [];
     }
 
-    let sessionLayers = this.layerTexturesBySession.get(sessionId);
-    if (!sessionLayers) {
-      sessionLayers = new Map<number, LayerSourceTextures>();
-      this.layerTexturesBySession.set(sessionId, sessionLayers);
-    }
+    const layerTextures = this.getOrCreateLayerSourceTextures(sessionId, layerIndex, width, height, layer);
+    const newlyResidentChannels: string[] = [];
 
-    const existingLayerTextures = sessionLayers.get(layerIndex);
-    if (existingLayerTextures) {
-      return existingLayerTextures.textureBytes;
-    }
+    for (const channelName of channelNames) {
+      if (!channelName || layerTextures.textureByChannel.has(channelName)) {
+        continue;
+      }
 
-    const textureByChannel = new Map<string, WebGLTexture>();
-    for (const channelName of layer.channelNames) {
-      if (!channelName) {
+      if (layer.channelStorage.channelIndexByName[channelName] === undefined) {
         continue;
       }
 
@@ -218,18 +214,11 @@ export class GlImageRenderer implements Disposable {
         this.gl.FLOAT,
         denseChannel
       );
-      textureByChannel.set(channelName, texture);
+      layerTextures.textureByChannel.set(channelName, texture);
+      newlyResidentChannels.push(channelName);
     }
 
-    const textureBytes =
-      width * height * textureByChannel.size * Float32Array.BYTES_PER_ELEMENT;
-    sessionLayers.set(layerIndex, {
-      width,
-      height,
-      textureBytes,
-      textureByChannel
-    });
-    return textureBytes;
+    return newlyResidentChannels;
   }
 
   setDisplaySelectionBindings(
@@ -339,8 +328,37 @@ export class GlImageRenderer implements Disposable {
       return;
     }
 
-    for (const texture of layerTextures.textureByChannel.values()) {
-      this.gl.deleteTexture(texture);
+    for (const channelName of [...layerTextures.textureByChannel.keys()]) {
+      this.discardChannelSourceTexture(sessionId, layerIndex, channelName);
+    }
+  }
+
+  discardChannelSourceTexture(sessionId: string, layerIndex: number, channelName: string): void {
+    if (this.disposed) {
+      return;
+    }
+
+    const sessionLayers = this.layerTexturesBySession.get(sessionId);
+    if (!sessionLayers) {
+      return;
+    }
+
+    const layerTextures = sessionLayers.get(layerIndex);
+    if (!layerTextures) {
+      return;
+    }
+
+    const texture = layerTextures.textureByChannel.get(channelName);
+    if (!texture) {
+      return;
+    }
+
+    this.gl.deleteTexture(texture);
+    layerTextures.textureByChannel.delete(channelName);
+    discardMaterializedChannel(layerTextures.layer, channelName);
+
+    if (layerTextures.textureByChannel.size > 0) {
+      return;
     }
 
     sessionLayers.delete(layerIndex);
@@ -506,6 +524,38 @@ export class GlImageRenderer implements Disposable {
       isStokesDegreeModulationEnabled(state.displaySelection, state.stokesDegreeModulation) ? 1 : 0
     );
     gl.uniform1i(uniforms.useImageAlpha, this.activeBinding.usesImageAlpha ? 1 : 0);
+  }
+
+  private getOrCreateLayerSourceTextures(
+    sessionId: string,
+    layerIndex: number,
+    width: number,
+    height: number,
+    layer: DecodedLayer
+  ): LayerSourceTextures {
+    let sessionLayers = this.layerTexturesBySession.get(sessionId);
+    if (!sessionLayers) {
+      sessionLayers = new Map<number, LayerSourceTextures>();
+      this.layerTexturesBySession.set(sessionId, sessionLayers);
+    }
+
+    const existingLayerTextures = sessionLayers.get(layerIndex);
+    if (existingLayerTextures && existingLayerTextures.width === width && existingLayerTextures.height === height) {
+      return existingLayerTextures;
+    }
+
+    if (existingLayerTextures) {
+      this.discardLayerSourceTextures(sessionId, layerIndex);
+    }
+
+    const nextLayerTextures: LayerSourceTextures = {
+      layer,
+      width,
+      height,
+      textureByChannel: new Map<string, WebGLTexture>()
+    };
+    sessionLayers.set(layerIndex, nextLayerTextures);
+    return nextLayerTextures;
   }
 }
 

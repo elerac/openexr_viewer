@@ -40,18 +40,19 @@ export class WebGlExrRenderer implements Disposable {
     this.probeOverlayRenderer.resize(viewport.width, viewport.height);
   }
 
-  ensureLayerSourceTextures(
+  ensureLayerChannelsResident(
     sessionId: string,
     layerIndex: number,
     width: number,
     height: number,
-    layer: DecodedLayer
-  ): number {
+    layer: DecodedLayer,
+    channelNames: string[]
+  ): string[] {
     if (this.disposed) {
-      return 0;
+      return [];
     }
 
-    return this.imageRenderer.ensureLayerSourceTextures(sessionId, layerIndex, width, height, layer);
+    return this.imageRenderer.ensureLayerChannelsResident(sessionId, layerIndex, width, height, layer, channelNames);
   }
 
   setDisplaySelectionBindings(
@@ -95,6 +96,14 @@ export class WebGlExrRenderer implements Disposable {
     }
 
     this.imageRenderer.discardLayerSourceTextures(sessionId, layerIndex);
+  }
+
+  discardChannelSourceTexture(sessionId: string, layerIndex: number, channelName: string): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.imageRenderer.discardChannelSourceTexture(sessionId, layerIndex, channelName);
   }
 
   clearImage(): void {

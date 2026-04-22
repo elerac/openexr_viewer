@@ -48,7 +48,8 @@ export function createLayerFromEntries(
     channelNames,
     channelStorage: createPlanarChannelStorage(pixelsByChannel, channelNames),
     analysis: {
-      displayLuminanceRangeBySelectionKey: {}
+      displayLuminanceRangeBySelectionKey: {},
+      finiteRangeByChannel: {}
     }
   };
 }
@@ -79,7 +80,8 @@ export function createInterleavedLayerFromEntries(
     channelNames,
     channelStorage: createInterleavedChannelStorage(pixels, channelNames),
     analysis: {
-      displayLuminanceRangeBySelectionKey: {}
+      displayLuminanceRangeBySelectionKey: {},
+      finiteRangeByChannel: {}
     }
   };
 }

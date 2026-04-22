@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   __debugGetMaterializedChannel,
   __debugGetMaterializedChannelCount,
+  discardMaterializedChannel,
+  getFiniteChannelRange,
   getChannelReadView,
   readChannelValue,
   readPixelChannelValue
@@ -80,6 +82,42 @@ describe('channel storage', () => {
     expect(__debugGetMaterializedChannelCount(layer)).toBe(1);
 
     expect(__debugGetMaterializedChannel(layer, 'A')).toBeNull();
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(1);
+  });
+
+  it('evicts one materialized interleaved channel without disturbing the others', () => {
+    const layer = createInterleavedLayerFromChannels({
+      R: [1, 2],
+      G: [10, 20],
+      B: [100, 200]
+    });
+
+    const red = __debugGetMaterializedChannel(layer, 'R');
+    const green = __debugGetMaterializedChannel(layer, 'G');
+    expect(red).not.toBeNull();
+    expect(green).not.toBeNull();
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(2);
+
+    discardMaterializedChannel(layer, 'R');
+
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(1);
+    const reloadedRed = __debugGetMaterializedChannel(layer, 'R');
+    expect(reloadedRed).not.toBe(red);
+    expect(Array.from(reloadedRed ?? [])).toEqual([1, 2]);
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(2);
+  });
+
+  it('computes and reuses finite ranges for interleaved mono channels', () => {
+    const layer = createInterleavedLayerFromChannels({
+      Z: [Number.NEGATIVE_INFINITY, -2, 4, Number.NaN]
+    });
+
+    expect(getFiniteChannelRange(layer, 'Z')).toEqual({ min: -2, max: 4 });
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
+
+    const dense = __debugGetMaterializedChannel(layer, 'Z');
+    expect(Array.from(dense ?? [])).toEqual([Number.NEGATIVE_INFINITY, -2, 4, Number.NaN]);
+    expect(getFiniteChannelRange(layer, 'Z')).toEqual({ min: -2, max: 4 });
     expect(__debugGetMaterializedChannelCount(layer)).toBe(1);
   });
 

@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { __debugGetMaterializedChannel, __debugGetMaterializedChannelCount } from '../src/channel-storage';
 import { buildDisplaySourceBinding } from '../src/display-texture';
 import { GlImageRenderer } from '../src/rendering/gl-image-renderer';
 import {
   createChannelMonoSelection,
   createChannelRgbSelection,
-  createLayerFromChannels
+  createInterleavedLayerFromChannels
 } from './helpers/state-fixtures';
 
 afterEach(() => {
@@ -14,15 +15,17 @@ afterEach(() => {
 });
 
 describe('gl image renderer', () => {
-  it('uploads source textures once per session layer, returns texture bytes, and rebinds selections without re-uploading', () => {
+  it('uploads only the channels required by the active selection and only uploads newly required channels later', () => {
     const { renderer, gl } = createHarness();
-    const layer = createLayerFromChannels({
+    const layer = createInterleavedLayerFromChannels({
       R: [1, 2],
       G: [3, 4],
-      B: [5, 6]
+      B: [5, 6],
+      A: [0.25, 0.5],
+      Z: [10, 20]
     });
 
-    const firstUploadBytes = renderer.ensureLayerSourceTextures('session-1', 0, 2, 1, layer);
+    const firstUploadedChannels = renderer.ensureLayerChannelsResident('session-1', 0, 2, 1, layer, ['R', 'G', 'B']);
     renderer.setDisplaySelectionBindings(
       'session-1',
       0,
@@ -33,65 +36,68 @@ describe('gl image renderer', () => {
 
     const texImageCallsAfterFirstUpload = gl.texImage2D.mock.calls.length;
 
-    const secondUploadBytes = renderer.ensureLayerSourceTextures('session-1', 0, 2, 1, layer);
+    const secondUploadedChannels = renderer.ensureLayerChannelsResident('session-1', 0, 2, 1, layer, ['Z', 'A']);
     renderer.setDisplaySelectionBindings(
       'session-1',
       0,
       2,
       1,
-      buildDisplaySourceBinding(layer, createChannelMonoSelection('G'))
+      buildDisplaySourceBinding(layer, createChannelMonoSelection('Z', 'A'))
     );
 
-    expect(firstUploadBytes).toBe(2 * 1 * 3 * Float32Array.BYTES_PER_ELEMENT);
-    expect(secondUploadBytes).toBe(firstUploadBytes);
+    expect(firstUploadedChannels).toEqual(['R', 'G', 'B']);
+    expect(secondUploadedChannels).toEqual(['Z', 'A']);
     expect(texImageCallsAfterFirstUpload).toBe(5);
-    expect(gl.texImage2D).toHaveBeenCalledTimes(5);
-    expect(gl.createTexture).toHaveBeenCalledTimes(5);
+    expect(gl.texImage2D).toHaveBeenCalledTimes(7);
+    expect(gl.createTexture).toHaveBeenCalledTimes(7);
   });
 
-  it('uploads planar source textures directly from decoded channel buffers', () => {
+  it('uploads interleaved source textures from lazily materialized dense channel buffers', () => {
     const { renderer, gl } = createHarness();
-    const layer = createLayerFromChannels({
+    const layer = createInterleavedLayerFromChannels({
       R: [1, 2],
       G: [3, 4],
       B: [5, 6]
     });
 
-    renderer.ensureLayerSourceTextures('session-1', 0, 2, 1, layer);
+    renderer.ensureLayerChannelsResident('session-1', 0, 2, 1, layer, ['R', 'G', 'B']);
 
-    expect(layer.channelStorage.kind).toBe('planar-f32');
+    expect(layer.channelStorage.kind).toBe('interleaved-f32');
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(3);
     expect(gl.texImage2D.mock.calls[2]?.[8]).toBe(
-      layer.channelStorage.kind === 'planar-f32' ? layer.channelStorage.pixelsByChannel.R : null
+      __debugGetMaterializedChannel(layer, 'R')
     );
     expect(gl.texImage2D.mock.calls[3]?.[8]).toBe(
-      layer.channelStorage.kind === 'planar-f32' ? layer.channelStorage.pixelsByChannel.G : null
+      __debugGetMaterializedChannel(layer, 'G')
     );
     expect(gl.texImage2D.mock.calls[4]?.[8]).toBe(
-      layer.channelStorage.kind === 'planar-f32' ? layer.channelStorage.pixelsByChannel.B : null
+      __debugGetMaterializedChannel(layer, 'B')
     );
   });
 
-  it('discards one resident layer at a time and prunes empty session containers', () => {
+  it('discards one resident channel at a time and prunes empty session containers', () => {
     const { renderer, gl } = createHarness();
-    const layer = createLayerFromChannels({
+    const layer = createInterleavedLayerFromChannels({
       R: [1, 2],
       G: [3, 4],
       B: [5, 6]
     });
 
-    renderer.ensureLayerSourceTextures('session-1', 0, 2, 1, layer);
-    renderer.ensureLayerSourceTextures('session-1', 1, 2, 1, layer);
+    renderer.ensureLayerChannelsResident('session-1', 0, 2, 1, layer, ['R', 'G']);
 
-    renderer.discardLayerSourceTextures('session-1', 0);
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(2);
 
-    expect(gl.deleteTexture).toHaveBeenCalledTimes(3);
-    expect(getLayerTexturesBySession(renderer).get('session-1')?.has(0)).toBe(false);
-    expect(getLayerTexturesBySession(renderer).get('session-1')?.has(1)).toBe(true);
+    renderer.discardChannelSourceTexture('session-1', 0, 'R');
 
-    renderer.discardLayerSourceTextures('session-1', 1);
+    expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
+    expect(getLayerTextureChannels(renderer, 'session-1', 0)).toEqual(['G']);
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(1);
 
-    expect(gl.deleteTexture).toHaveBeenCalledTimes(6);
+    renderer.discardChannelSourceTexture('session-1', 0, 'G');
+
+    expect(gl.deleteTexture).toHaveBeenCalledTimes(2);
     expect(getLayerTexturesBySession(renderer).has('session-1')).toBe(false);
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
   });
 
   it('deletes owned GL resources exactly once', () => {
@@ -133,6 +139,13 @@ function createHarness(): {
 
 function getLayerTexturesBySession(renderer: GlImageRenderer): Map<string, Map<number, unknown>> {
   return (renderer as unknown as { layerTexturesBySession: Map<string, Map<number, unknown>> }).layerTexturesBySession;
+}
+
+function getLayerTextureChannels(renderer: GlImageRenderer, sessionId: string, layerIndex: number): string[] {
+  const layerTextures = getLayerTexturesBySession(renderer).get(sessionId)?.get(layerIndex) as {
+    textureByChannel: Map<string, unknown>;
+  } | undefined;
+  return [...(layerTextures?.textureByChannel.keys() ?? [])];
 }
 
 function createWebGlContextMock(): WebGL2RenderingContext & {

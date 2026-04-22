@@ -30,7 +30,12 @@ export interface ChannelStorageBackedLayer {
   channelStorage: ChannelStorage;
 }
 
-const materializedChannels = new WeakMap<InterleavedChannelStorage, Map<string, Float32Array>>();
+interface MaterializedChannelEntry {
+  pixels: Float32Array;
+  finiteRange: FiniteValueRange | null;
+}
+
+const materializedChannels = new WeakMap<InterleavedChannelStorage, Map<string, MaterializedChannelEntry>>();
 
 export function createInterleavedChannelStorage(
   pixels: Float32Array,
@@ -181,7 +186,28 @@ export function getChannelDenseArray(
     return layer.channelStorage.pixelsByChannel[channelName] ?? null;
   }
 
-  return materializeChannel(layer, channelName);
+  return materializeChannel(layer, channelName)?.pixels ?? null;
+}
+
+export function getFiniteChannelRange(
+  layer: ChannelStorageBackedLayer,
+  channelName: string
+): FiniteValueRange | null {
+  if (layer.channelStorage.kind === 'planar-f32') {
+    return computeFiniteValueRange(layer.channelStorage.pixelsByChannel[channelName] ?? null);
+  }
+
+  const materialized = materializedChannels.get(layer.channelStorage)?.get(channelName);
+  if (materialized) {
+    return materialized.finiteRange;
+  }
+
+  const view = getChannelReadView(layer, channelName);
+  if (!view) {
+    return null;
+  }
+
+  return computeFiniteValueRangeFromView(view, getChannelStoragePixelCount(layer.channelStorage));
 }
 
 export function getChannelStoragePixelCount(storage: ChannelStorage): number {
@@ -235,18 +261,43 @@ export function copyChannelToDenseArray(
   return dense;
 }
 
+export function discardMaterializedChannel(
+  layer: ChannelStorageBackedLayer,
+  channelName: string
+): void {
+  if (layer.channelStorage.kind !== 'interleaved-f32') {
+    return;
+  }
+
+  const storageChannels = materializedChannels.get(layer.channelStorage);
+  if (!storageChannels) {
+    return;
+  }
+
+  storageChannels.delete(channelName);
+  if (storageChannels.size === 0) {
+    materializedChannels.delete(layer.channelStorage);
+  }
+}
+
 function materializeChannel(
   layer: ChannelStorageBackedLayer,
   channelName: string
-): Float32Array | null {
+): MaterializedChannelEntry | null {
   const storage = layer.channelStorage;
   if (storage.kind !== 'interleaved-f32') {
-    return storage.pixelsByChannel[channelName] ?? null;
+    const pixels = storage.pixelsByChannel[channelName] ?? null;
+    return pixels
+      ? {
+          pixels,
+          finiteRange: computeFiniteValueRange(pixels)
+        }
+      : null;
   }
 
   let storageChannels = materializedChannels.get(storage);
   if (!storageChannels) {
-    storageChannels = new Map<string, Float32Array>();
+    storageChannels = new Map<string, MaterializedChannelEntry>();
     materializedChannels.set(storage, storageChannels);
   }
 
@@ -262,19 +313,91 @@ function materializeChannel(
 
   const pixelCount = getChannelStoragePixelCount(storage);
   const values = new Float32Array(pixelCount);
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  let finiteCount = 0;
   for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
-    values[pixelIndex] = readChannelValue(view, pixelIndex);
+    const value = readChannelValue(view, pixelIndex);
+    values[pixelIndex] = value;
+    if (!Number.isFinite(value)) {
+      continue;
+    }
+
+    finiteCount += 1;
+    if (value < min) {
+      min = value;
+    }
+    if (value > max) {
+      max = value;
+    }
   }
 
-  storageChannels.set(channelName, values);
-  return values;
+  const entry: MaterializedChannelEntry = {
+    pixels: values,
+    finiteRange: finiteCount > 0 ? { min, max } : null
+  };
+  storageChannels.set(channelName, entry);
+  return entry;
+}
+
+function computeFiniteValueRange(pixels: Float32Array | null): FiniteValueRange | null {
+  if (!pixels) {
+    return null;
+  }
+
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  let finiteCount = 0;
+
+  for (let index = 0; index < pixels.length; index += 1) {
+    const value = pixels[index] ?? 0;
+    if (!Number.isFinite(value)) {
+      continue;
+    }
+
+    finiteCount += 1;
+    if (value < min) {
+      min = value;
+    }
+    if (value > max) {
+      max = value;
+    }
+  }
+
+  return finiteCount > 0 ? { min, max } : null;
+}
+
+function computeFiniteValueRangeFromView(
+  view: ChannelReadView,
+  pixelCount: number
+): FiniteValueRange | null {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  let finiteCount = 0;
+
+  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
+    const value = readChannelValue(view, pixelIndex);
+    if (!Number.isFinite(value)) {
+      continue;
+    }
+
+    finiteCount += 1;
+    if (value < min) {
+      min = value;
+    }
+    if (value > max) {
+      max = value;
+    }
+  }
+
+  return finiteCount > 0 ? { min, max } : null;
 }
 
 export function __debugGetMaterializedChannel(
   layer: ChannelStorageBackedLayer,
   channelName: string
 ): Float32Array | null {
-  return materializeChannel(layer, channelName);
+  return materializeChannel(layer, channelName)?.pixels ?? null;
 }
 
 export function __debugGetMaterializedChannelCount(layer: ChannelStorageBackedLayer): number {

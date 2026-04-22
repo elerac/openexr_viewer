@@ -2,7 +2,7 @@ import type {
   DisplaySelection as DisplaySelectionModel,
   StokesDegreeModulationState
 } from './display-model';
-import type { ChannelStorage } from './channel-storage';
+import type { ChannelStorage, FiniteValueRange } from './channel-storage';
 
 export type VisualizationMode = 'rgb' | 'colormap';
 export type ColormapRangeMode = 'alwaysAuto' | 'oneTime';
@@ -45,6 +45,7 @@ export interface DecodedLayer {
 
 export interface DecodedLayerAnalysis {
   displayLuminanceRangeBySelectionKey: Record<string, DisplayLuminanceRange | null>;
+  finiteRangeByChannel: Record<string, FiniteValueRange | null>;
 }
 
 export interface DecodedExrImage {

@@ -20,11 +20,12 @@ describe('exr decode', () => {
     expect(first.channelNames).toContain('R');
     expect(first.channelNames).toContain('G');
     expect(first.channelNames).toContain('B');
-    expect(first.channelStorage.kind).toBe('planar-f32');
+    expect(first.channelStorage.kind).toBe('interleaved-f32');
     expect(first.channelStorage.channelCount).toBe(first.channelNames.length);
-    expect(first.channelStorage.kind === 'planar-f32' && first.channelStorage.pixelsByChannel.R?.length)
-      .toBe(image.width * image.height);
-    expect(first.analysis.displayLuminanceRangeBySelectionKey['channelRgb:R:G:B']).toBeTruthy();
+    expect(first.channelStorage.kind === 'interleaved-f32' && first.channelStorage.pixels.length)
+      .toBe(image.width * image.height * first.channelNames.length);
+    expect(first.analysis.displayLuminanceRangeBySelectionKey).toEqual({});
+    expect(first.analysis.finiteRangeByChannel).toEqual({});
     const red = getChannelReadView(first, 'R');
     expect(readChannelValue(red, 0)).toBeTypeOf('number');
     expect(first.metadata?.some((entry) => entry.key === 'compression' && entry.value === 'PIZ')).toBe(true);

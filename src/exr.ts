@@ -1,7 +1,6 @@
 import { decodeRawExr } from './exr-runtime';
 import { parseExrMetadata } from './exr-metadata';
-import { createPlanarChannelStorageFromInterleaved } from './channel-storage';
-import { precomputeDisplaySelectionLuminanceRangeBySelectionKey } from './display-texture';
+import { createInterleavedChannelStorage } from './channel-storage';
 import { DecodedExrImage, DecodedLayer } from './types';
 
 export async function loadExr(bytes: Uint8Array): Promise<DecodedExrImage> {
@@ -28,22 +27,16 @@ export async function loadExr(bytes: Uint8Array): Promise<DecodedExrImage> {
         );
       }
 
-      const { storage, finiteRangeByChannel } = createPlanarChannelStorageFromInterleaved(interleaved, channelNames);
       const layer: DecodedLayer = {
         name,
         channelNames,
-        channelStorage: storage,
+        channelStorage: createInterleavedChannelStorage(interleaved, channelNames),
         analysis: {
-          displayLuminanceRangeBySelectionKey: {}
+          displayLuminanceRangeBySelectionKey: {},
+          finiteRangeByChannel: {}
         },
         metadata
       };
-      layer.analysis.displayLuminanceRangeBySelectionKey = precomputeDisplaySelectionLuminanceRangeBySelectionKey(
-        layer,
-        width,
-        height,
-        finiteRangeByChannel
-      );
 
       layers.push(layer);
     }

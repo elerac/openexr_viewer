@@ -12,23 +12,39 @@ import {
 } from '../src/display-cache';
 
 describe('display cache resource accounting', () => {
-  it('tracks resident GPU texture bytes across session layers', () => {
+  it('tracks resident GPU texture bytes across session layer channels', () => {
     const sessions = [
       createSessionResourceEntry('a'),
       createSessionResourceEntry('b'),
       createSessionResourceEntry('c')
     ];
-    sessions[0].residentLayers.set(0, { textureBytes: 24, lastAccessToken: 1 });
-    sessions[1].residentLayers.set(0, { textureBytes: 8, lastAccessToken: 2 });
-    sessions[1].residentLayers.set(1, { textureBytes: 4, lastAccessToken: 3 });
+    sessions[0].residentLayers.set(0, {
+      residentChannels: new Map([
+        ['R', { textureBytes: 24, lastAccessToken: 1 }]
+      ])
+    });
+    sessions[1].residentLayers.set(0, {
+      residentChannels: new Map([
+        ['G', { textureBytes: 8, lastAccessToken: 2 }]
+      ])
+    });
+    sessions[1].residentLayers.set(1, {
+      residentChannels: new Map([
+        ['Z', { textureBytes: 4, lastAccessToken: 3 }]
+      ])
+    });
 
     expect(getTrackedResidentTextureBytes(sessions)).toBe(36);
   });
 
-  it('clears pinned state, resident layers, and cached ranges', () => {
+  it('clears pinned state, resident channels, and cached ranges', () => {
     const session = createSessionResourceEntry('a');
     session.pinned = true;
-    session.residentLayers.set(0, { textureBytes: 24, lastAccessToken: 7 });
+    session.residentLayers.set(0, {
+      residentChannels: new Map([
+        ['R', { textureBytes: 24, lastAccessToken: 7 }]
+      ])
+    });
     session.luminanceRangeByRevision.set('rev', { min: 0, max: 1 });
 
     clearSessionResources(session);

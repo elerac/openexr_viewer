@@ -85,8 +85,9 @@ function createRendererMock() {
     renderValueOverlay: vi.fn(),
     renderProbeOverlay: vi.fn(),
     setColormapTexture: vi.fn(),
-    ensureLayerSourceTextures: vi.fn(() => 0),
+    ensureLayerChannelsResident: vi.fn(() => []),
     setDisplaySelectionBindings: vi.fn(),
+    discardChannelSourceTexture: vi.fn(),
     discardLayerSourceTextures: vi.fn(),
     discardSessionTextures: vi.fn()
   };
@@ -215,7 +216,7 @@ describe('display controller', () => {
     controller.handleSessionStateChange(store.getState(), previous);
     controller.handleSessionStateChange(store.getState(), store.getState());
 
-    expect(renderer.ensureLayerSourceTextures).toHaveBeenCalledTimes(1);
+    expect(renderer.ensureLayerChannelsResident).toHaveBeenCalledTimes(1);
     expect(renderer.setDisplaySelectionBindings).toHaveBeenCalledTimes(1);
   });
 

@@ -5,19 +5,23 @@ import {
   getTrackedResidentTextureBytes,
   readStoredDisplayCacheBudgetMb,
   saveStoredDisplayCacheBudgetMb,
+  type ResidentLayerResourceEntry,
   type SessionResourceEntry
 } from '../display-cache';
 import {
   buildDisplayLuminanceRevisionKey,
   buildDisplaySourceBinding,
+  getDisplaySourceBindingChannelNames,
   buildDisplayTextureRevisionKey,
   buildSelectedDisplayTexture,
   serializeDisplaySelectionLuminanceKey,
   computeDisplaySelectionLuminanceRange
 } from '../display-texture';
+import { getFiniteChannelRange } from '../channel-storage';
 import type {
   DecodedLayer,
   DisplayLuminanceRange,
+  DisplaySelection,
   OpenedImageSession,
   ViewerSessionState
 } from '../types';
@@ -36,13 +40,14 @@ interface RenderCacheUi {
 }
 
 interface RenderCacheRenderer {
-  ensureLayerSourceTextures: (
+  ensureLayerChannelsResident: (
     sessionId: string,
     layerIndex: number,
     width: number,
     height: number,
-    layer: DecodedLayer
-  ) => number;
+    layer: DecodedLayer,
+    channelNames: string[]
+  ) => string[];
   setDisplaySelectionBindings: (
     sessionId: string,
     layerIndex: number,
@@ -53,8 +58,15 @@ interface RenderCacheRenderer {
     textureRevisionKey: string,
     binding: ReturnType<typeof buildDisplaySourceBinding>
   ) => void;
+  discardChannelSourceTexture: (sessionId: string, layerIndex: number, channelName: string) => void;
   discardLayerSourceTextures: (sessionId: string, layerIndex: number) => void;
   discardSessionTextures: (sessionId: string) => void;
+}
+
+interface ProtectedBinding {
+  sessionId: string;
+  layerIndex: number;
+  channelNames: Set<string>;
 }
 
 export interface RenderCacheServiceDependencies {
@@ -71,6 +83,8 @@ export class RenderCacheService implements Disposable {
   private readonly entries = new Map<string, SessionResourceEntry>();
   private budgetMb = readStoredDisplayCacheBudgetMb();
   private boundSessionId: string | null = null;
+  private boundLayerIndex: number | null = null;
+  private boundChannelNames = new Set<string>();
   private boundTextureRevisionKey = '';
   private nextAccessToken = 1;
   private disposed = false;
@@ -107,36 +121,55 @@ export class RenderCacheService implements Disposable {
     const entry = this.getOrCreateEntry(session.id);
     const textureRevisionKey = buildDisplayTextureRevisionKey(state);
     const luminanceRevisionKey = buildDisplayLuminanceRevisionKey(state);
-    const layerResident = entry.residentLayers.has(state.activeLayer);
+    const binding = buildDisplaySourceBinding(layer, state.displaySelection);
+    const requiredChannelNames = getDisplaySourceBindingChannelNames(binding).filter((channelName) => {
+      return layer.channelStorage.channelIndexByName[channelName] !== undefined;
+    });
+    const residentLayer = this.getOrCreateResidentLayerEntry(entry, state.activeLayer);
+    const missingChannelNames = requiredChannelNames.filter((channelName) => {
+      return !residentLayer.residentChannels.has(channelName);
+    });
     const textureDirty =
-      !layerResident ||
+      missingChannelNames.length > 0 ||
       this.boundSessionId !== session.id ||
       this.boundTextureRevisionKey !== textureRevisionKey;
 
-    if (!layerResident) {
+    if (missingChannelNames.length > 0) {
+      const protectedBinding: ProtectedBinding = {
+        sessionId: session.id,
+        layerIndex: state.activeLayer,
+        channelNames: new Set(requiredChannelNames)
+      };
       this.enforceResidencyBudget({
-        reservedBytes: predictLayerTextureBytes(session.decoded.width, session.decoded.height, layer),
-        protectedSessionIds: new Set([session.id])
+        reservedBytes: predictChannelTextureBytes(
+          session.decoded.width,
+          session.decoded.height,
+          missingChannelNames.length
+        ),
+        protectedBinding
       });
 
-      const textureBytes = this.renderer.ensureLayerSourceTextures(
+      const residentChannelNames = this.renderer.ensureLayerChannelsResident(
         session.id,
         state.activeLayer,
         session.decoded.width,
         session.decoded.height,
-        layer
+        layer,
+        missingChannelNames
       );
-      entry.residentLayers.set(state.activeLayer, {
-        textureBytes: Math.max(0, Math.floor(textureBytes)),
-        lastAccessToken: this.takeAccessToken()
-      });
+      const textureBytes = predictChannelTextureBytes(session.decoded.width, session.decoded.height, 1);
+      for (const channelName of residentChannelNames) {
+        residentLayer.residentChannels.set(channelName, {
+          textureBytes,
+          lastAccessToken: this.takeAccessToken()
+        });
+      }
 
       this.enforceResidencyBudget({
-        protectedSessionIds: new Set([session.id])
+        protectedBinding
       });
-    } else {
-      this.touchResidentLayer(entry, state.activeLayer);
     }
+    this.touchResidentChannels(residentLayer, requiredChannelNames);
 
     if (textureDirty) {
       this.renderer.setDisplaySelectionBindings(
@@ -147,30 +180,22 @@ export class RenderCacheService implements Disposable {
         layer,
         state.displaySelection,
         textureRevisionKey,
-        buildDisplaySourceBinding(layer, state.displaySelection)
+        binding
       );
       this.boundSessionId = session.id;
+      this.boundLayerIndex = state.activeLayer;
+      this.boundChannelNames = new Set(requiredChannelNames);
       this.boundTextureRevisionKey = textureRevisionKey;
     }
 
     const luminanceRangeDirty = !entry.luminanceRangeByRevision.has(luminanceRevisionKey);
     if (luminanceRangeDirty) {
-      const selectionKey = serializeDisplaySelectionLuminanceKey(state.displaySelection);
-      const hasPrecomputedRange = Object.prototype.hasOwnProperty.call(
-        layer.analysis.displayLuminanceRangeBySelectionKey,
-        selectionKey
-      );
-      entry.luminanceRangeByRevision.set(
-        luminanceRevisionKey,
-        hasPrecomputedRange
-          ? layer.analysis.displayLuminanceRangeBySelectionKey[selectionKey] ?? null
-          : computeDisplaySelectionLuminanceRange(
-            layer,
-            session.decoded.width,
-            session.decoded.height,
-            state.displaySelection
-          )
-      );
+      entry.luminanceRangeByRevision.set(luminanceRevisionKey, this.getOrComputeDisplayLuminanceRange(
+        layer,
+        session.decoded.width,
+        session.decoded.height,
+        state.displaySelection
+      ));
     }
 
     this.syncDisplayCacheUsageUi();
@@ -253,6 +278,8 @@ export class RenderCacheService implements Disposable {
     }
     this.entries.clear();
     this.boundSessionId = null;
+    this.boundLayerIndex = null;
+    this.boundChannelNames.clear();
     this.boundTextureRevisionKey = '';
     this.nextAccessToken = 1;
     this.syncDisplayCacheUsageUi();
@@ -269,6 +296,8 @@ export class RenderCacheService implements Disposable {
     }
     this.entries.clear();
     this.boundSessionId = null;
+    this.boundLayerIndex = null;
+    this.boundChannelNames.clear();
     this.boundTextureRevisionKey = '';
     this.nextAccessToken = 1;
   }
@@ -319,17 +348,41 @@ export class RenderCacheService implements Disposable {
   private clearBoundTextureTracking(sessionId: string): void {
     if (this.boundSessionId === sessionId) {
       this.boundSessionId = null;
+      this.boundLayerIndex = null;
+      this.boundChannelNames.clear();
       this.boundTextureRevisionKey = '';
     }
   }
 
-  private touchResidentLayer(entry: SessionResourceEntry, layerIndex: number): void {
-    const layer = entry.residentLayers.get(layerIndex);
-    if (!layer) {
+  private getOrCreateResidentLayerEntry(entry: SessionResourceEntry, layerIndex: number): ResidentLayerResourceEntry {
+    const existing = entry.residentLayers.get(layerIndex);
+    if (existing) {
+      return existing;
+    }
+
+    const layer: ResidentLayerResourceEntry = {
+      residentChannels: new Map()
+    };
+    entry.residentLayers.set(layerIndex, layer);
+    return layer;
+  }
+
+  private touchResidentChannels(
+    layer: ResidentLayerResourceEntry,
+    channelNames: string[]
+  ): void {
+    if (channelNames.length === 0) {
       return;
     }
 
-    layer.lastAccessToken = this.takeAccessToken();
+    for (const channelName of channelNames) {
+      const channel = layer.residentChannels.get(channelName);
+      if (!channel) {
+        continue;
+      }
+
+      channel.lastAccessToken = this.takeAccessToken();
+    }
   }
 
   private takeAccessToken(): number {
@@ -340,7 +393,7 @@ export class RenderCacheService implements Disposable {
 
   private enforceResidencyBudget(options: {
     reservedBytes?: number;
-    protectedSessionIds?: ReadonlySet<string>;
+    protectedBinding?: ProtectedBinding | null;
   } = {}): void {
     const reservedBytes = Math.max(0, Math.floor(options.reservedBytes ?? 0));
     const budgetBytes = displayCacheBudgetMbToBytes(this.budgetMb);
@@ -349,47 +402,60 @@ export class RenderCacheService implements Disposable {
       return;
     }
 
-    const protectedSessionIds = this.buildProtectedSessionIds(options.protectedSessionIds);
-    for (const candidate of this.getEvictionCandidates(protectedSessionIds)) {
+    const protectedBinding = this.resolveProtectedBinding(options.protectedBinding);
+    for (const candidate of this.getEvictionCandidates(protectedBinding)) {
       if (trackedBytes + reservedBytes <= budgetBytes) {
         break;
       }
-      trackedBytes -= this.evictResidentLayer(candidate.sessionId, candidate.layerIndex);
+      trackedBytes -= this.evictResidentChannel(candidate.sessionId, candidate.layerIndex, candidate.channelName);
     }
   }
 
-  private buildProtectedSessionIds(extraProtectedSessionIds?: ReadonlySet<string>): Set<string> {
-    const protectedSessionIds = new Set(extraProtectedSessionIds ?? []);
+  private resolveProtectedBinding(protectedBinding: ProtectedBinding | null | undefined): ProtectedBinding | null {
+    if (protectedBinding) {
+      return protectedBinding;
+    }
+
     const activeSessionId = this.getActiveSessionId();
-    if (activeSessionId) {
-      protectedSessionIds.add(activeSessionId);
+    if (!activeSessionId || activeSessionId !== this.boundSessionId || this.boundLayerIndex === null) {
+      return null;
     }
 
-    for (const [sessionId, entry] of this.entries) {
-      if (entry.pinned) {
-        protectedSessionIds.add(sessionId);
-      }
-    }
-
-    return protectedSessionIds;
+    return {
+      sessionId: this.boundSessionId,
+      layerIndex: this.boundLayerIndex,
+      channelNames: new Set(this.boundChannelNames)
+    };
   }
 
   private getEvictionCandidates(
-    protectedSessionIds: ReadonlySet<string>
-  ): Array<{ sessionId: string; layerIndex: number; lastAccessToken: number }> {
-    const candidates: Array<{ sessionId: string; layerIndex: number; lastAccessToken: number }> = [];
+    protectedBinding: ProtectedBinding | null
+  ): Array<{ sessionId: string; layerIndex: number; channelName: string; lastAccessToken: number }> {
+    const candidates: Array<{ sessionId: string; layerIndex: number; channelName: string; lastAccessToken: number }> = [];
 
     for (const [sessionId, entry] of this.entries) {
-      if (protectedSessionIds.has(sessionId)) {
+      if (entry.pinned) {
         continue;
       }
 
       for (const [layerIndex, layer] of entry.residentLayers) {
-        candidates.push({
-          sessionId,
-          layerIndex,
-          lastAccessToken: layer.lastAccessToken
-        });
+        for (const [channelName, channel] of layer.residentChannels) {
+          if (
+            protectedBinding &&
+            protectedBinding.sessionId === sessionId &&
+            protectedBinding.layerIndex === layerIndex &&
+            protectedBinding.channelNames.has(channelName)
+          ) {
+            continue;
+          }
+
+          candidates.push({
+            sessionId,
+            layerIndex,
+            channelName,
+            lastAccessToken: channel.lastAccessToken
+          });
+        }
       }
     }
 
@@ -400,31 +466,58 @@ export class RenderCacheService implements Disposable {
       if (left.sessionId !== right.sessionId) {
         return left.sessionId.localeCompare(right.sessionId);
       }
-      return left.layerIndex - right.layerIndex;
+      if (left.layerIndex !== right.layerIndex) {
+        return left.layerIndex - right.layerIndex;
+      }
+      return left.channelName.localeCompare(right.channelName);
     });
     return candidates;
   }
 
-  private evictResidentLayer(sessionId: string, layerIndex: number): number {
+  private evictResidentChannel(sessionId: string, layerIndex: number, channelName: string): number {
     const entry = this.entries.get(sessionId);
     const layer = entry?.residentLayers.get(layerIndex);
-    if (!entry || !layer) {
+    const channel = layer?.residentChannels.get(channelName);
+    if (!entry || !layer || !channel) {
       return 0;
     }
 
-    entry.residentLayers.delete(layerIndex);
-    this.renderer.discardLayerSourceTextures(sessionId, layerIndex);
-    return Math.max(0, Math.floor(layer.textureBytes));
+    layer.residentChannels.delete(channelName);
+    if (layer.residentChannels.size === 0) {
+      entry.residentLayers.delete(layerIndex);
+    }
+    this.renderer.discardChannelSourceTexture(sessionId, layerIndex, channelName);
+    return Math.max(0, Math.floor(channel.textureBytes));
+  }
+
+  private getOrComputeDisplayLuminanceRange(
+    layer: DecodedLayer,
+    width: number,
+    height: number,
+    selection: DisplaySelection | null
+  ): DisplayLuminanceRange | null {
+    const selectionKey = serializeDisplaySelectionLuminanceKey(selection);
+    if (Object.prototype.hasOwnProperty.call(layer.analysis.displayLuminanceRangeBySelectionKey, selectionKey)) {
+      return layer.analysis.displayLuminanceRangeBySelectionKey[selectionKey] ?? null;
+    }
+
+    let range: DisplayLuminanceRange | null;
+    if (selection?.kind === 'channelMono') {
+      if (Object.prototype.hasOwnProperty.call(layer.analysis.finiteRangeByChannel, selection.channel)) {
+        range = layer.analysis.finiteRangeByChannel[selection.channel] ?? null;
+      } else {
+        range = getFiniteChannelRange(layer, selection.channel);
+        layer.analysis.finiteRangeByChannel[selection.channel] = range;
+      }
+    } else {
+      range = computeDisplaySelectionLuminanceRange(layer, width, height, selection);
+    }
+
+    layer.analysis.displayLuminanceRangeBySelectionKey[selectionKey] = range;
+    return range;
   }
 }
 
-function predictLayerTextureBytes(width: number, height: number, layer: DecodedLayer): number {
-  const validChannelCount = layer.channelNames.reduce((count, channelName) => {
-    if (!channelName) {
-      return count;
-    }
-    return layer.channelStorage.channelIndexByName[channelName] === undefined ? count : count + 1;
-  }, 0);
-
-  return Math.max(0, width * height * validChannelCount * Float32Array.BYTES_PER_ELEMENT);
+function predictChannelTextureBytes(width: number, height: number, channelCount: number): number {
+  return Math.max(0, width * height * channelCount * Float32Array.BYTES_PER_ELEMENT);
 }

@@ -196,6 +196,20 @@ export function buildDisplaySourceBinding(
   return resolveDisplaySelectionEvaluator(layer, selection).binding;
 }
 
+export function getDisplaySourceBindingChannelNames(binding: DisplaySourceBinding): string[] {
+  const uniqueChannels = new Set<string>();
+
+  for (const channelName of binding.slots) {
+    if (!channelName) {
+      continue;
+    }
+
+    uniqueChannels.add(channelName);
+  }
+
+  return [...uniqueChannels];
+}
+
 export function buildDisplayTexture(
   layer: DecodedLayer,
   width: number,
