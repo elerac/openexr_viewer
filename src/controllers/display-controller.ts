@@ -23,6 +23,7 @@ export interface DisplayControllerDependencies {
 export class DisplayController implements Disposable {
   private readonly core: ViewerAppCore;
   private readonly abortController = new AbortController();
+  private readonly manualColormapOverrideTransitionIds = new Set<number>();
   private disposed = false;
 
   constructor(dependencies: DisplayControllerDependencies) {
@@ -98,7 +99,14 @@ export class DisplayController implements Disposable {
       }
 
       const latestState = this.core.getState();
+      const keepManualColormap = this.manualColormapOverrideTransitionIds.has(transitionRequestId);
       if (!stokesDefaults) {
+        this.core.dispatch({
+          type: 'displaySelectionSet',
+          displaySelection: cloneDisplaySelection(selection),
+          restoreState
+        });
+      } else if (keepManualColormap) {
         this.core.dispatch({
           type: 'displaySelectionSet',
           displaySelection: cloneDisplaySelection(selection),
@@ -152,6 +160,7 @@ export class DisplayController implements Disposable {
         throw error;
       }
     } finally {
+      this.manualColormapOverrideTransitionIds.delete(transitionRequestId);
       this.core.dispatch({
         type: 'displaySelectionTransitionFinished',
         requestId: transitionRequestId
@@ -165,6 +174,10 @@ export class DisplayController implements Disposable {
     }
 
     const state = this.core.getState();
+    if (state.pendingSelectionTransitionRequestId !== null) {
+      this.manualColormapOverrideTransitionIds.add(state.pendingSelectionTransitionRequestId);
+    }
+
     if (!state.colormapRegistry) {
       return;
     }

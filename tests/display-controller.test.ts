@@ -59,6 +59,51 @@ function createDeferred<T>() {
   return { promise, resolve };
 }
 
+function stubWindow(options: { queueAnimationFrames?: boolean } = {}) {
+  let nextFrameId = 1;
+  let queuedFrames: Array<{ id: number; callback: FrameRequestCallback }> = [];
+  const requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+    const id = nextFrameId;
+    nextFrameId += 1;
+
+    if (options.queueAnimationFrames) {
+      queuedFrames.push({ id, callback });
+    } else {
+      callback(0);
+    }
+
+    return id;
+  });
+  const cancelAnimationFrame = vi.fn((id: number) => {
+    queuedFrames = queuedFrames.filter((frame) => frame.id !== id);
+  });
+
+  vi.stubGlobal('window', {
+    requestAnimationFrame,
+    cancelAnimationFrame,
+    setTimeout: ((callback: TimerHandler) => {
+      if (typeof callback === 'function') {
+        callback();
+      }
+      return 1;
+    }) as typeof window.setTimeout,
+    clearTimeout: vi.fn()
+  });
+
+  return {
+    requestAnimationFrame,
+    flushAnimationFrames: () => {
+      while (queuedFrames.length > 0) {
+        const currentFrames = queuedFrames;
+        queuedFrames = [];
+        for (const frame of currentFrames) {
+          frame.callback(0);
+        }
+      }
+    }
+  };
+}
+
 const registry = {
   defaultId: '0',
   assets: [
@@ -93,20 +138,7 @@ function createController(session: OpenedImageSession | null = null) {
 }
 
 beforeEach(() => {
-  vi.stubGlobal('window', {
-    requestAnimationFrame: (callback: FrameRequestCallback) => {
-      callback(0);
-      return 1;
-    },
-    cancelAnimationFrame: vi.fn(),
-    setTimeout: ((callback: TimerHandler) => {
-      if (typeof callback === 'function') {
-        callback();
-      }
-      return 1;
-    }) as typeof window.setTimeout,
-    clearTimeout: vi.fn()
-  });
+  stubWindow();
   colormapMocks.loadColormapRegistry.mockResolvedValue(registry);
   colormapMocks.loadColormapLut.mockImplementation(async (_registry: unknown, id: keyof typeof luts) => luts[id]);
   colormapMocks.getColormapAsset.mockImplementation((_registry: typeof registry, id: string) => {
@@ -199,6 +231,54 @@ describe('display controller shim', () => {
     expect(core.getState().sessionState.visualizationMode).toBe('rgb');
     expect(core.getState().sessionState.activeColormapId).toBe('0');
     expect(core.getState().sessionState.displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
+  });
+
+  it('keeps a manual colormap override when a split stokes selection is still transitioning', async () => {
+    const decoded = createDecodedImage([
+      'R', 'G', 'B',
+      'S0.R', 'S0.G', 'S0.B',
+      'S1.R', 'S1.G', 'S1.B',
+      'S2.R', 'S2.G', 'S2.B',
+      'S3.R', 'S3.G', 'S3.B'
+    ]);
+    const { controller, core } = createController(createSession(decoded));
+
+    await controller.initialize();
+
+    core.dispatch({
+      type: 'activeColormapSet',
+      colormapId: '1'
+    });
+    core.dispatch({
+      type: 'colormapLoadResolved',
+      requestId: null as never,
+      colormapId: '1',
+      lut: luts['1']
+    });
+    core.dispatch({
+      type: 'displaySelectionSet',
+      displaySelection: createStokesSelection('aolp', 'stokesRgb')
+    });
+
+    const queuedWindow = stubWindow({ queueAnimationFrames: true });
+    colormapMocks.loadColormapLut.mockClear();
+
+    const pendingSelection = controller.applyDisplaySelection(createStokesSelection('aolp', 'stokesRgb', 'R'));
+    expect(core.getState().pendingSelectionTransitionRequestId).not.toBeNull();
+
+    const pendingColormap = controller.setActiveColormap('2');
+    expect(core.getState().sessionState.activeColormapId).toBe('2');
+
+    queuedWindow.flushAnimationFrames();
+    await pendingSelection;
+    await pendingColormap;
+
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'colormap',
+      activeColormapId: '2',
+      displaySelection: createStokesSelection('aolp', 'stokesRgb', 'R')
+    });
+    expect(colormapMocks.loadColormapLut.mock.calls.map(([, id]) => id)).toEqual(['2']);
   });
 
   it('suppresses late colormap loads after dispose', async () => {
