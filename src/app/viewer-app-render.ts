@@ -1,12 +1,14 @@
 import { buildDisplayLuminanceRevisionKey } from '../display-texture';
 import { sameDisplayLuminanceRange } from '../colormap-range';
 import { sameDisplaySelection } from '../display-model';
-import { mergeRenderState, samePixel, sameViewState } from '../view-state';
+import { mergeRenderState, samePixel, sameRoi, sameViewState } from '../view-state';
 import type { OpenedImageSession, ViewerRenderState } from '../types';
 import { buildProbeReadoutModel } from './probe-presentation';
+import { buildRoiReadoutModel } from './roi-presentation';
 import {
   sameDisplayRangeRequest,
   sameProbeReadout,
+  sameRoiReadout,
   sameResourceTarget
 } from './viewer-app-equality';
 import { selectActiveSession } from './viewer-app-selectors';
@@ -21,17 +23,19 @@ export const enum ViewerRenderInvalidationFlags {
   None = 0,
   ColormapTexture = 1 << 0,
   ProbeReadout = 1 << 1,
-  ResourcePrepare = 1 << 2,
-  ResourceRequestDisplayRange = 1 << 3,
-  ResourceClearImage = 1 << 4,
-  RenderImage = 1 << 5,
-  RenderValueOverlay = 1 << 6,
-  RenderProbeOverlay = 1 << 7
+  RoiReadout = 1 << 2,
+  ResourcePrepare = 1 << 3,
+  ResourceRequestDisplayRange = 1 << 4,
+  ResourceClearImage = 1 << 5,
+  RenderImage = 1 << 6,
+  RenderValueOverlay = 1 << 7,
+  RenderProbeOverlay = 1 << 8
 }
 
 export function createViewerRenderSnapshotSelector(): (state: ViewerAppState) => ViewerRenderSnapshot {
   const selectRenderState = createRenderStateSelector();
   const selectProbeReadout = createProbeReadoutSelector();
+  const selectRoiReadout = createRoiReadoutSelector();
   const selectResourceTarget = createResourceTargetSelector();
   const selectDisplayRangeRequest = createDisplayRangeRequestSelector();
 
@@ -46,6 +50,7 @@ export function createViewerRenderSnapshotSelector(): (state: ViewerAppState) =>
       renderState: selectRenderState(state),
       activeColormapLut: state.activeColormapLut,
       probeReadout: selectProbeReadout(state, activeSession, activeLayer),
+      roiReadout: selectRoiReadout(state, activeSession, activeLayer),
       resourceTarget: selectResourceTarget(state, activeSession),
       displayRangeRequest: selectDisplayRangeRequest(state, activeSession, activeLayer)
     };
@@ -75,6 +80,10 @@ export function computeViewerRenderInvalidation(
 
   if (!sameProbeReadout(previous.probeReadout, next.probeReadout)) {
     flags |= ViewerRenderInvalidationFlags.ProbeReadout;
+  }
+
+  if (!sameRoiReadout(previous.roiReadout, next.roiReadout)) {
+    flags |= ViewerRenderInvalidationFlags.RoiReadout;
   }
 
   if (!sameResourceTarget(previous.resourceTarget, next.resourceTarget) && next.resourceTarget) {
@@ -222,6 +231,45 @@ function createResourceTargetSelector(): (
   };
 }
 
+function createRoiReadoutSelector(): (
+  state: ViewerAppState,
+  activeSession: OpenedImageSession | null,
+  activeLayer: ViewerRenderSnapshot['activeLayer']
+) => ViewerRenderSnapshot['roiReadout'] {
+  let previousSessionId: string | null = null;
+  let previousLayer: ViewerRenderSnapshot['activeLayer'] = null;
+  let previousRoi: ViewerAppState['sessionState']['roi'] = null;
+  let previousDisplaySelection: ViewerAppState['sessionState']['displaySelection'] = null;
+  let previousResult = buildRoiReadoutModel({
+    activeSession: null,
+    activeLayer: null,
+    sessionState: stateLikeSessionState()
+  });
+
+  return (state, activeSession, activeLayer) => {
+    const sessionId = activeSession?.id ?? null;
+    if (
+      sessionId === previousSessionId &&
+      activeLayer === previousLayer &&
+      sameRoi(state.sessionState.roi, previousRoi) &&
+      sameDisplaySelection(state.sessionState.displaySelection, previousDisplaySelection)
+    ) {
+      return previousResult;
+    }
+
+    previousSessionId = sessionId;
+    previousLayer = activeLayer;
+    previousRoi = state.sessionState.roi;
+    previousDisplaySelection = state.sessionState.displaySelection;
+    previousResult = buildRoiReadoutModel({
+      activeSession,
+      activeLayer,
+      sessionState: state.sessionState
+    });
+    return previousResult;
+  };
+}
+
 function createDisplayRangeRequestSelector(): (
   state: ViewerAppState,
   activeSession: OpenedImageSession | null,
@@ -255,6 +303,7 @@ function sameViewerRenderSnapshot(a: ViewerRenderSnapshot, b: ViewerRenderSnapsh
     sameViewerRenderState(a.renderState, b.renderState) &&
     a.activeColormapLut === b.activeColormapLut &&
     sameProbeReadout(a.probeReadout, b.probeReadout) &&
+    sameRoiReadout(a.roiReadout, b.roiReadout) &&
     sameResourceTarget(a.resourceTarget, b.resourceTarget) &&
     sameDisplayRangeRequest(a.displayRangeRequest, b.displayRangeRequest)
   );
@@ -313,6 +362,8 @@ function sameRenderProbeOverlayInputs(a: ViewerRenderSnapshot, b: ViewerRenderSn
     previous.activeLayer === next.activeLayer &&
     samePixel(previous.lockedPixel, next.lockedPixel) &&
     samePixel(previous.hoveredPixel, next.hoveredPixel) &&
+    sameRoi(previous.roi, next.roi) &&
+    sameRoi(previous.draftRoi, next.draftRoi) &&
     sameViewState(previous, next)
   );
 }
@@ -333,7 +384,9 @@ function sameViewerRenderState(a: ViewerRenderState, b: ViewerRenderState): bool
     sameDisplaySelection(a.displaySelection, b.displaySelection) &&
     samePixel(a.lockedPixel, b.lockedPixel) &&
     sameViewState(a, b) &&
-    samePixel(a.hoveredPixel, b.hoveredPixel)
+    samePixel(a.hoveredPixel, b.hoveredPixel) &&
+    sameRoi(a.roi, b.roi) &&
+    sameRoi(a.draftRoi, b.draftRoi)
   );
 }
 
@@ -355,7 +408,8 @@ function stateLikeSessionState(): ViewerAppState['sessionState'] {
     panoramaHfovDeg: 100,
     activeLayer: 0,
     displaySelection: null,
-    lockedPixel: null
+    lockedPixel: null,
+    roi: null
   };
 }
 
@@ -366,9 +420,10 @@ function stateLikeInteractionState(): ViewerAppState['interactionState'] {
       panX: 0,
       panY: 0,
       panoramaYawDeg: 0,
-      panoramaPitchDeg: 0,
-      panoramaHfovDeg: 100
+    panoramaPitchDeg: 0,
+    panoramaHfovDeg: 100
     },
-    hoveredPixel: null
+    hoveredPixel: null,
+    draftRoi: null
   };
 }

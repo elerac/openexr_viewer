@@ -23,8 +23,10 @@ import type {
   ExrMetadataEntry,
   ExportImageRequest,
   ExportImageTarget,
+  ImageRoi,
   OpenedImageDropPlacement,
   PixelSample,
+  RoiStats,
   ViewerMode,
   VisualizationMode
 } from './types';
@@ -68,6 +70,7 @@ export interface UiCallbacks {
   onColormapAutoRange: () => void;
   onColormapZeroCenterToggle: () => void;
   onStokesDegreeModulationToggle: () => void;
+  onClearRoi: () => void;
   onResetView: () => void;
 }
 
@@ -646,6 +649,33 @@ export class ViewerUi implements Disposable {
     );
   }
 
+  setRoiReadout(readout: { roi: ImageRoi | null; stats: RoiStats | null }): void {
+    if (this.disposed) {
+      return;
+    }
+
+    if (!readout.roi || !readout.stats) {
+      this.elements.roiEmptyState.classList.remove('hidden');
+      this.elements.roiDetails.classList.add('hidden');
+      this.elements.clearRoiButton.disabled = true;
+      this.elements.roiBounds.textContent = '';
+      this.elements.roiSize.textContent = '';
+      this.elements.roiPixelCount.textContent = '';
+      this.elements.roiValidCount.textContent = '';
+      this.elements.roiStats.replaceChildren();
+      return;
+    }
+
+    this.elements.roiEmptyState.classList.add('hidden');
+    this.elements.roiDetails.classList.remove('hidden');
+    this.elements.clearRoiButton.disabled = false;
+    this.elements.roiBounds.textContent = formatRoiBounds(readout.roi);
+    this.elements.roiSize.textContent = `${readout.stats.width} × ${readout.stats.height} px`;
+    this.elements.roiPixelCount.textContent = String(readout.stats.pixelCount);
+    this.elements.roiValidCount.textContent = formatRoiValidCounts(readout.stats);
+    this.renderRoiStats(readout.stats);
+  }
+
   showDropOverlay(show: boolean): void {
     if (this.disposed) {
       return;
@@ -1150,6 +1180,14 @@ export class ViewerUi implements Disposable {
       this.callbacks.onResetView();
     });
 
+    this.disposables.addEventListener(this.elements.clearRoiButton, 'click', () => {
+      if (this.elements.clearRoiButton.disabled) {
+        return;
+      }
+
+      this.callbacks.onClearRoi();
+    });
+
     this.disposables.addEventListener(this.elements.exportDialogBackdrop, 'click', (event) => {
       if (event.target === this.elements.exportDialogBackdrop && !this.exportDialogBusy) {
         this.closeExportDialog(true);
@@ -1294,6 +1332,23 @@ export class ViewerUi implements Disposable {
     pruneKeyedRows(this.probeValueRows, new Set(items.map((item) => item.key)));
     syncRowOrder(this.elements.probeValues, orderedRows);
   }
+
+  private renderRoiStats(stats: RoiStats): void {
+    this.elements.roiStats.replaceChildren(
+      buildRoiStatsHeaderRow(),
+      ...stats.channels.map((channel) => {
+        const row = document.createElement('div');
+        row.className = 'roi-stats-row';
+        row.append(
+          buildRoiStatsCell('roi-stats-cell roi-stats-cell--label', channel.label),
+          buildRoiStatsCell('roi-stats-cell', formatRoiStatValue(channel.min)),
+          buildRoiStatsCell('roi-stats-cell', formatRoiStatValue(channel.mean)),
+          buildRoiStatsCell('roi-stats-cell', formatRoiStatValue(channel.max))
+        );
+        return row;
+      })
+    );
+  }
 }
 
 function createEmptyProbeDisplayValues(): ProbeDisplayValue[] {
@@ -1353,6 +1408,39 @@ function formatProbeCoordinateValue(value: number | null, width: number): string
   }
 
   return String(Math.trunc(value)).padStart(width, ' ');
+}
+
+function formatRoiBounds(roi: ImageRoi): string {
+  return `x ${roi.x0}..${roi.x1}  y ${roi.y0}..${roi.y1}`;
+}
+
+function formatRoiValidCounts(stats: RoiStats): string {
+  return stats.channels
+    .map((channel) => `${channel.label} ${channel.validPixelCount}/${stats.pixelCount}`)
+    .join(', ');
+}
+
+function formatRoiStatValue(value: number | null): string {
+  return value === null ? 'n/a' : formatOverlayValue(value);
+}
+
+function buildRoiStatsHeaderRow(): HTMLDivElement {
+  const row = document.createElement('div');
+  row.className = 'roi-stats-row roi-stats-row--header';
+  row.append(
+    buildRoiStatsCell('roi-stats-cell roi-stats-cell--label', 'Channel'),
+    buildRoiStatsCell('roi-stats-cell', 'Min'),
+    buildRoiStatsCell('roi-stats-cell', 'Mean'),
+    buildRoiStatsCell('roi-stats-cell', 'Max')
+  );
+  return row;
+}
+
+function buildRoiStatsCell(className: string, text: string): HTMLSpanElement {
+  const cell = document.createElement('span');
+  cell.className = className;
+  cell.textContent = text;
+  return cell;
 }
 
 function hasDroppedFiles(event: DragEvent): boolean {

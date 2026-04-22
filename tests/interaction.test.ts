@@ -36,7 +36,9 @@ const state: ViewerState = {
   activeLayer: 0,
   displaySelection: createChannelRgbSelection('R', 'G', 'B'),
   hoveredPixel: null,
-  lockedPixel: null
+  lockedPixel: null,
+  roi: null,
+  draftRoi: null
 };
 
 describe('interaction math', () => {

@@ -1,5 +1,6 @@
 import { cloneDisplayLuminanceRange } from './colormap-range';
 import { cloneDisplaySelection } from './display-model';
+import { cloneImageRoi } from './roi';
 import { ViewerSessionState } from './types';
 
 export function buildSessionDisplayName(filename: string, existingFilenames: string[]): string {
@@ -57,6 +58,7 @@ export function cloneViewerSessionState(state: ViewerSessionState): ViewerSessio
     panoramaHfovDeg: state.panoramaHfovDeg,
     activeLayer: state.activeLayer,
     displaySelection: cloneDisplaySelection(state.displaySelection),
-    lockedPixel: state.lockedPixel ? { ...state.lockedPixel } : null
+    lockedPixel: state.lockedPixel ? { ...state.lockedPixel } : null,
+    roi: cloneImageRoi(state.roi)
   };
 }

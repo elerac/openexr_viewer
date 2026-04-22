@@ -1,6 +1,6 @@
 import type { Disposable } from './lifecycle';
 import type { ViewerInteractionState, ViewerSessionState, ViewerViewState } from './types';
-import { createInteractionState, pickViewState, samePixel, sameViewState } from './view-state';
+import { createInteractionState, pickViewState, samePixel, sameRoi, sameViewState } from './view-state';
 
 interface SessionSyncOptions {
   clearHover?: boolean;
@@ -82,6 +82,18 @@ export class ViewerInteractionCoordinator implements Disposable {
     this.scheduleFlush();
   }
 
+  enqueueDraftRoi(roi: ViewerInteractionState['draftRoi']): void {
+    if (this.disposed || sameRoi(this.state.draftRoi, roi)) {
+      return;
+    }
+
+    this.state = {
+      ...this.state,
+      draftRoi: roi
+    };
+    this.scheduleFlush();
+  }
+
   syncSessionState(
     sessionState: ViewerSessionState,
     options: SessionSyncOptions = {}
@@ -89,7 +101,8 @@ export class ViewerInteractionCoordinator implements Disposable {
     const previous = this.publishedState;
     const next: ViewerInteractionState = {
       view: pickViewState(sessionState),
-      hoveredPixel: options.clearHover ? null : this.state.hoveredPixel
+      hoveredPixel: options.clearHover ? null : this.state.hoveredPixel,
+      draftRoi: null
     };
 
     this.cancelScheduledFlush();
@@ -157,5 +170,9 @@ export class ViewerInteractionCoordinator implements Disposable {
 }
 
 function sameInteractionState(a: ViewerInteractionState, b: ViewerInteractionState): boolean {
-  return sameViewState(a.view, b.view) && samePixel(a.hoveredPixel, b.hoveredPixel);
+  return (
+    sameViewState(a.view, b.view) &&
+    samePixel(a.hoveredPixel, b.hoveredPixel) &&
+    sameRoi(a.draftRoi, b.draftRoi)
+  );
 }

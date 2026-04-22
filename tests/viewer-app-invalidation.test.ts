@@ -138,6 +138,37 @@ describe('viewer app lanes', () => {
     expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderProbeOverlay)).toBe(true);
   });
 
+  it('treats committed ROI changes as readout and overlay invalidation without rerendering the image', () => {
+    const previous = createActiveState();
+    const next = {
+      ...previous,
+      sessionState: {
+        ...previous.sessionState,
+        roi: { x0: 0, y0: 0, x1: 1, y1: 0 }
+      }
+    };
+
+    const renderFlags = createRenderFlags(previous, next);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RoiReadout)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderProbeOverlay)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(false);
+  });
+
+  it('treats draft ROI changes as overlay-only invalidation', () => {
+    const previous = createActiveState();
+    const next = {
+      ...previous,
+      interactionState: {
+        ...previous.interactionState,
+        draftRoi: { x0: 0, y0: 0, x1: 1, y1: 1 }
+      }
+    };
+
+    const renderFlags = createRenderFlags(previous, next);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RoiReadout)).toBe(false);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderProbeOverlay)).toBe(true);
+  });
+
   it('marks session switches as UI and render invalidation', () => {
     const previous = createActiveState();
     const second = createSession('session-2');

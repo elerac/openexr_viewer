@@ -280,6 +280,58 @@ describe('probe coordinate formatting', () => {
   });
 });
 
+describe('roi inspector', () => {
+  it('shows the empty-state hint until an ROI exists', () => {
+    installUiFixture();
+
+    new ViewerUi(createUiCallbacks());
+
+    expect((document.getElementById('roi-empty-state') as HTMLElement).textContent).toContain(
+      'Shift-drag in Image viewer to create ROI.'
+    );
+    expect((document.getElementById('roi-details') as HTMLElement).classList.contains('hidden')).toBe(true);
+    expect((document.getElementById('clear-roi-button') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('renders ROI summaries and stats and dispatches clear requests', () => {
+    installUiFixture();
+
+    const onClearRoi = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onClearRoi }));
+    ui.setRoiReadout({
+      roi: { x0: 2, y0: 3, x1: 5, y1: 7 },
+      stats: {
+        roi: { x0: 2, y0: 3, x1: 5, y1: 7 },
+        width: 4,
+        height: 5,
+        pixelCount: 20,
+        channels: [
+          { label: 'Mono', min: 0.1, mean: 0.25, max: 0.5, validPixelCount: 18 },
+          { label: 'A', min: 0, mean: 0.5, max: 1, validPixelCount: 20 }
+        ]
+      }
+    });
+
+    expect((document.getElementById('roi-empty-state') as HTMLElement).classList.contains('hidden')).toBe(true);
+    expect((document.getElementById('roi-bounds') as HTMLElement).textContent).toBe('x 2..5  y 3..7');
+    expect((document.getElementById('roi-size') as HTMLElement).textContent).toBe('4 × 5 px');
+    expect((document.getElementById('roi-pixel-count') as HTMLElement).textContent).toBe('20');
+    expect((document.getElementById('roi-valid-count') as HTMLElement).textContent).toBe('Mono 18/20, A 20/20');
+
+    const rows = Array.from(document.querySelectorAll('#roi-stats .roi-stats-row')).map((row) =>
+      Array.from(row.children).map((cell) => cell.textContent)
+    );
+    expect(rows).toEqual([
+      ['Channel', 'Min', 'Mean', 'Max'],
+      ['Mono', '0.100', '0.250', '0.500'],
+      ['A', '0.00', '0.500', '1.00']
+    ]);
+
+    (document.getElementById('clear-roi-button') as HTMLButtonElement).click();
+    expect(onClearRoi).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('panel split sizing', () => {
   const metrics: PanelSplitMetrics = {
     mainWidth: 900,
@@ -1148,6 +1200,7 @@ function createUiCallbacksBase() {
     onColormapAutoRange: () => {},
     onColormapZeroCenterToggle: () => {},
     onStokesDegreeModulationToggle: () => {},
+    onClearRoi: () => {},
     onResetView: () => {}
   };
 }

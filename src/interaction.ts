@@ -1,3 +1,4 @@
+import { createImageRoiFromPixels } from './roi';
 import { ImagePixel, type ViewerViewState, ViewerState, ViewportInfo } from './types';
 
 export const MIN_ZOOM = 0.125;
@@ -70,6 +71,27 @@ export function screenToImage(
   }
 
   return { ix, iy };
+}
+
+export function screenToImageClamped(
+  screenX: number,
+  screenY: number,
+  state: ViewerState,
+  viewport: ViewportInfo,
+  imageWidth: number,
+  imageHeight: number
+): ImagePixel | null {
+  if (imageWidth <= 0 || imageHeight <= 0) {
+    return null;
+  }
+
+  const imageX = state.panX + (screenX - viewport.width * 0.5) / state.zoom;
+  const imageY = state.panY + (screenY - viewport.height * 0.5) / state.zoom;
+
+  return {
+    ix: Math.min(imageWidth - 1, Math.max(0, Math.floor(imageX))),
+    iy: Math.min(imageHeight - 1, Math.max(0, Math.floor(imageY)))
+  };
 }
 
 export function imageToScreen(
@@ -805,6 +827,8 @@ export interface InteractionCallbacks {
   ) => void;
   onHoverPixel: (pixel: ImagePixel | null) => void;
   onToggleLockPixel: (pixel: ImagePixel | null) => void;
+  onDraftRoi: (roi: ViewerState['draftRoi']) => void;
+  onCommitRoi: (roi: ViewerState['roi']) => void;
 }
 
 interface PointerPosition {
@@ -817,7 +841,9 @@ export class ViewerInteraction {
   private readonly callbacks: InteractionCallbacks;
   private dragging = false;
   private movedDuringDrag = false;
+  private dragMode: 'pan' | 'roi' | null = null;
   private previousPointer: PointerPosition | null = null;
+  private roiAnchorPixel: ImagePixel | null = null;
 
   constructor(element: HTMLElement, callbacks: InteractionCallbacks) {
     this.element = element;
@@ -893,7 +919,33 @@ export class ViewerInteraction {
       return;
     }
 
+    const state = this.callbacks.getState();
+    if (state.viewerMode === 'image' && event.shiftKey) {
+      const anchorPoint = this.getLocalPoint(event);
+      const anchorPixel = screenToImage(
+        anchorPoint.x,
+        anchorPoint.y,
+        state,
+        this.callbacks.getViewport(),
+        imageSize.width,
+        imageSize.height
+      );
+      if (!anchorPixel) {
+        return;
+      }
+
+      this.dragging = true;
+      this.dragMode = 'roi';
+      this.movedDuringDrag = false;
+      this.roiAnchorPixel = anchorPixel;
+      this.previousPointer = anchorPoint;
+      this.callbacks.onDraftRoi(createImageRoiFromPixels(anchorPixel, anchorPixel));
+      this.element.setPointerCapture(event.pointerId);
+      return;
+    }
+
     this.dragging = true;
+    this.dragMode = 'pan';
     this.movedDuringDrag = false;
     this.previousPointer = this.getLocalPoint(event);
     this.element.setPointerCapture(event.pointerId);
@@ -919,7 +971,19 @@ export class ViewerInteraction {
         this.movedDuringDrag = true;
       }
 
-      if (state.viewerMode === 'panorama') {
+      if (this.dragMode === 'roi' && this.roiAnchorPixel) {
+        const targetPixel = screenToImageClamped(
+          point.x,
+          point.y,
+          state,
+          viewport,
+          imageSize.width,
+          imageSize.height
+        );
+        this.callbacks.onDraftRoi(
+          targetPixel ? createImageRoiFromPixels(this.roiAnchorPixel, targetPixel) : null
+        );
+      } else if (state.viewerMode === 'panorama') {
         const nextView = orbitPanorama(state, viewport, dx, dy);
         hoverState = { ...state, ...nextView };
         this.callbacks.onViewChange(nextView);
@@ -971,6 +1035,23 @@ export class ViewerInteraction {
       return;
     }
 
+    if (this.dragging && this.dragMode === 'roi' && this.roiAnchorPixel) {
+      const state = this.callbacks.getState();
+      const viewport = this.callbacks.getViewport();
+      const targetPixel = screenToImageClamped(
+        point.x,
+        point.y,
+        state,
+        viewport,
+        imageSize.width,
+        imageSize.height
+      ) ?? this.roiAnchorPixel;
+      this.callbacks.onDraftRoi(null);
+      this.callbacks.onCommitRoi(createImageRoiFromPixels(this.roiAnchorPixel, targetPixel));
+      this.clearDrag(event.pointerId);
+      return;
+    }
+
     if (this.dragging && !this.movedDuringDrag) {
       const state = this.callbacks.getState();
       const viewport = this.callbacks.getViewport();
@@ -1007,8 +1088,10 @@ export class ViewerInteraction {
       this.element.releasePointerCapture(pointerId);
     }
     this.dragging = false;
+    this.dragMode = null;
     this.movedDuringDrag = false;
     this.previousPointer = null;
+    this.roiAnchorPixel = null;
   }
 
   private getLocalPoint(event: MouseEvent): PointerPosition {

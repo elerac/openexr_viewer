@@ -151,6 +151,12 @@ export async function bootstrapApp(): Promise<AppHandle> {
     onStokesDegreeModulationToggle: () => {
       displayController.toggleStokesDegreeModulation();
     },
+    onClearRoi: () => {
+      core.dispatch({
+        type: 'roiSet',
+        roi: null
+      });
+    },
     onResetView: () => {
       sessionController.resetActiveSessionState();
     }
@@ -294,6 +300,15 @@ export async function bootstrapApp(): Promise<AppHandle> {
         core.dispatch({
           type: 'lockedPixelToggled',
           pixel
+        });
+      },
+      onDraftRoi: (roi) => {
+        interactionCoordinator.enqueueDraftRoi(roi);
+      },
+      onCommitRoi: (roi) => {
+        core.dispatch({
+          type: 'roiSet',
+          roi
         });
       }
     });

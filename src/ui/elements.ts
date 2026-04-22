@@ -79,6 +79,14 @@ export interface Elements {
   probeColorValues: HTMLElement;
   probeValues: HTMLElement;
   probeMetadata: HTMLElement;
+  roiEmptyState: HTMLElement;
+  roiDetails: HTMLDivElement;
+  roiBounds: HTMLElement;
+  roiSize: HTMLElement;
+  roiPixelCount: HTMLElement;
+  roiValidCount: HTMLElement;
+  roiStats: HTMLElement;
+  clearRoiButton: HTMLButtonElement;
   glCanvas: HTMLCanvasElement;
   overlayCanvas: HTMLCanvasElement;
   probeOverlayCanvas: HTMLCanvasElement;
@@ -221,6 +229,14 @@ export function resolveElements(): Elements {
     probeColorValues: requireElement('probe-color-values', HTMLElement),
     probeValues: requireElement('probe-values', HTMLElement),
     probeMetadata: requireElement('probe-metadata', HTMLElement),
+    roiEmptyState: requireElement('roi-empty-state', HTMLElement),
+    roiDetails: requireElement('roi-details', HTMLDivElement),
+    roiBounds: requireElement('roi-bounds', HTMLElement),
+    roiSize: requireElement('roi-size', HTMLElement),
+    roiPixelCount: requireElement('roi-pixel-count', HTMLElement),
+    roiValidCount: requireElement('roi-valid-count', HTMLElement),
+    roiStats: requireElement('roi-stats', HTMLElement),
+    clearRoiButton: requireElement('clear-roi-button', HTMLButtonElement),
     glCanvas: requireElement('gl-canvas', HTMLCanvasElement),
     overlayCanvas: requireElement('overlay-canvas', HTMLCanvasElement),
     probeOverlayCanvas: requireElement('probe-overlay-canvas', HTMLCanvasElement)

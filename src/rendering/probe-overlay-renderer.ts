@@ -1,7 +1,7 @@
 import { imageToScreen } from '../interaction';
 import type { Disposable } from '../lifecycle';
 import { resolveActiveProbePixel } from '../probe';
-import type { ImagePixel, ViewerState, ViewportInfo } from '../types';
+import type { ImagePixel, ImageRoi, ViewerState, ViewportInfo } from '../types';
 
 export class ProbeOverlayRenderer implements Disposable {
   private readonly overlayCanvas: HTMLCanvasElement;
@@ -62,6 +62,14 @@ export class ProbeOverlayRenderer implements Disposable {
       return;
     }
 
+    if (state.roi) {
+      this.drawRoi(state, state.roi, 'rgba(255, 122, 89, 0.95)');
+    }
+
+    if (state.draftRoi) {
+      this.drawRoi(state, state.draftRoi, 'rgba(75, 192, 255, 0.95)');
+    }
+
     const probe = resolveActiveProbePixel(state.lockedPixel, state.hoveredPixel);
     if (!probe) {
       return;
@@ -87,5 +95,15 @@ export class ProbeOverlayRenderer implements Disposable {
     ctx.strokeStyle = state.lockedPixel ? 'rgba(255, 196, 0, 0.95)' : 'rgba(255, 255, 255, 0.95)';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(topLeft.x, topLeft.y, state.zoom, state.zoom);
+  }
+
+  private drawRoi(state: ViewerState, roi: ImageRoi, strokeStyle: string): void {
+    const ctx = this.overlayContext;
+    const topLeft = imageToScreen(roi.x0, roi.y0, state, this.viewport);
+    const bottomRight = imageToScreen(roi.x1 + 1, roi.y1 + 1, state, this.viewport);
+
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
   }
 }

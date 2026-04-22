@@ -7,6 +7,7 @@ import {
   buildDisplayTextureRevisionKey,
   buildSelectedDisplayTexture,
   buildStokesDisplayTexture,
+  computeDisplaySelectionRoiStats,
   computeDisplaySelectionLuminanceRange,
   readDisplaySelectionPixelValues,
   samplePixelValues,
@@ -250,6 +251,72 @@ describe('display texture', () => {
       1,
       createChannelMonoSelection('R')
     )).toEqual({ min: 0.25, max: 0.75 });
+  });
+
+  it('computes ROI stats for active RGB selections and preserves per-channel valid counts', () => {
+    const layer = createLayerFromChannels({
+      R: [1, 2, Number.NaN, 4],
+      G: [10, 20, 30, 40],
+      B: [100, 200, 300, 400],
+      A: [0.25, 0.5, Number.POSITIVE_INFINITY, 1]
+    });
+
+    const stats = computeDisplaySelectionRoiStats(
+      layer,
+      2,
+      2,
+      { x0: 0, y0: 0, x1: 1, y1: 1 },
+      createChannelRgbSelection('R', 'G', 'B', 'A')
+    );
+
+    expect(stats?.pixelCount).toBe(4);
+    expect(stats?.channels).toEqual([
+      { label: 'R', min: 1, mean: (1 + 2 + 4) / 3, max: 4, validPixelCount: 3 },
+      { label: 'G', min: 10, mean: 25, max: 40, validPixelCount: 4 },
+      { label: 'B', min: 100, mean: 250, max: 400, validPixelCount: 4 },
+      { label: 'A', min: 0.25, mean: (0.25 + 0.5 + 1) / 3, max: 1, validPixelCount: 3 }
+    ]);
+  });
+
+  it('computes ROI stats for mono and stokes selections without coercing invalid values to zero', () => {
+    const monoLayer = createLayerFromChannels({
+      Y: [0, 1, Number.NaN, 3]
+    });
+    const monoStats = computeDisplaySelectionRoiStats(
+      monoLayer,
+      2,
+      2,
+      { x0: 0, y0: 0, x1: 1, y1: 1 },
+      createChannelMonoSelection('Y')
+    );
+
+    expect(monoStats?.channels).toEqual([
+      { label: 'Mono', min: 0, mean: 4 / 3, max: 3, validPixelCount: 3 }
+    ]);
+
+    const stokesLayer = createLayerFromChannels({
+      S0: [1, 1, 1, 1],
+      S1: [1, 0, Number.NaN, 0],
+      S2: [0, 1, 0, -1],
+      S3: [0, 0, 0, 0]
+    });
+    const stokesStats = computeDisplaySelectionRoiStats(
+      stokesLayer,
+      2,
+      2,
+      { x0: 0, y0: 0, x1: 1, y1: 1 },
+      createStokesSelection('aolp')
+    );
+
+    expect(stokesStats?.channels).toEqual([
+      {
+        label: 'Mono',
+        min: 0,
+        mean: (0 + Math.PI / 4 + (3 * Math.PI) / 4) / 3,
+        max: (3 * Math.PI) / 4,
+        validPixelCount: 3
+      }
+    ]);
   });
 
   it('reads per-pixel display values for overlays without overloading stokes alpha', () => {

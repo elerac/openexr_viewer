@@ -1,6 +1,7 @@
 import { DEFAULT_PANORAMA_HFOV_DEG, clampZoom } from '../interaction';
 import { cloneDisplayLuminanceRange } from '../colormap-range';
 import { cloneDisplaySelection } from '../display-model';
+import { cloneImageRoi, clampImageRoiToBounds } from '../roi';
 import {
   buildSessionDisplayName,
   cloneViewerSessionState
@@ -95,7 +96,8 @@ export function createClearedViewerState(defaultColormapId: string): ViewerSessi
     panoramaHfovDeg: DEFAULT_PANORAMA_HFOV_DEG,
     activeLayer: 0,
     displaySelection: null,
-    lockedPixel: null
+    lockedPixel: null,
+    roi: null
   };
 }
 
@@ -106,6 +108,9 @@ export function buildReloadedSessionState(
 ): ViewerSessionState {
   const lockedPixel = currentState.lockedPixel
     ? clampPixelToImageBounds(currentState.lockedPixel, decoded.width, decoded.height)
+    : null;
+  const roi = currentState.roi
+    ? clampImageRoiToBounds(currentState.roi, decoded.width, decoded.height)
     : null;
   const nextImageCamera = currentState.viewerMode === 'image'
     ? {
@@ -127,7 +132,8 @@ export function buildReloadedSessionState(
     {
       ...currentState,
       ...nextImageCamera,
-      lockedPixel
+      lockedPixel,
+      roi
     },
     decoded,
     currentState.activeLayer
@@ -183,7 +189,8 @@ export function buildSwitchedSessionState(
       colormapRangeMode: currentState.colormapRangeMode,
       colormapZeroCentered: currentState.colormapZeroCentered,
       stokesDegreeModulation: { ...currentState.stokesDegreeModulation },
-      lockedPixel
+      lockedPixel,
+      roi: cloneImageRoi(nextSession.state.roi)
     },
     nextSession.decoded,
     nextSession.state.activeLayer

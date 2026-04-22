@@ -133,6 +133,7 @@ export function createViewerState(overrides: Partial<ViewerState> = {}): ViewerS
   return {
     ...createViewerSessionState(),
     hoveredPixel: null,
+    draftRoi: null,
     ...overrides
   };
 }

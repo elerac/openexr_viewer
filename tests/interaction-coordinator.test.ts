@@ -70,7 +70,8 @@ describe('interaction coordinator', () => {
           panoramaPitchDeg: 0,
           panoramaHfovDeg: 100
         },
-        hoveredPixel: { ix: 2, iy: 1 }
+        hoveredPixel: { ix: 2, iy: 1 },
+        draftRoi: null
       },
       {
         view: {
@@ -81,7 +82,8 @@ describe('interaction coordinator', () => {
           panoramaPitchDeg: 0,
           panoramaHfovDeg: 100
         },
-        hoveredPixel: null
+        hoveredPixel: null,
+        draftRoi: null
       }
     );
     expect(harness.commitViewState).toHaveBeenCalledTimes(1);
@@ -157,7 +159,8 @@ describe('interaction coordinator', () => {
         panoramaPitchDeg: 10,
         panoramaHfovDeg: 70
       },
-      hoveredPixel: null
+      hoveredPixel: null,
+      draftRoi: null
     });
     expect(sync.previous.hoveredPixel).toEqual({ ix: 4, iy: 4 });
     expect(harness.cancelFrame).toHaveBeenCalledTimes(0);

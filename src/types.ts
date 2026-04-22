@@ -36,6 +36,29 @@ export interface ImagePixel {
   iy: number;
 }
 
+export interface ImageRoi {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+export interface RoiStatsChannelSummary {
+  label: string;
+  min: number | null;
+  mean: number | null;
+  max: number | null;
+  validPixelCount: number;
+}
+
+export interface RoiStats {
+  roi: ImageRoi;
+  width: number;
+  height: number;
+  pixelCount: number;
+  channels: RoiStatsChannelSummary[];
+}
+
 export interface DecodedLayer {
   name: string | null;
   channelNames: string[];
@@ -82,15 +105,18 @@ export interface ViewerSessionState extends ViewerViewState {
   activeLayer: number;
   displaySelection: DisplaySelectionModel | null;
   lockedPixel: ImagePixel | null;
+  roi: ImageRoi | null;
 }
 
 export interface ViewerInteractionState {
   view: ViewerViewState;
   hoveredPixel: ImagePixel | null;
+  draftRoi: ImageRoi | null;
 }
 
 export interface ViewerRenderState extends ViewerSessionState {
   hoveredPixel: ImagePixel | null;
+  draftRoi: ImageRoi | null;
 }
 
 export type ViewerState = ViewerRenderState;

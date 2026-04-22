@@ -12,6 +12,7 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
 - Recursive folder EXR load via `File > Open Folder...`; all `.exr` files under the selected folder are appended as sessions.
 - `File > Export...` exports the full active image to LDR PNG with the current layer, channel/stokes selection, exposure, colormap, and alpha settings applied.
 - `View > Image viewer` / `Panorama viewer` switches between the existing 2D image view and an equirectangular panorama projection suitable for 360-degree environment maps and HDRIs.
+- `Shift` + left-drag in `Image viewer` creates a persistent rectangular ROI for measurement.
 - Multi-image sessions:
   - New image opens as active while previously opened images are kept in memory.
   - `Opened Images` list allows switching active image by filename.
@@ -24,6 +25,9 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - `File > Close All` closes all opened sessions at once.
   - Duplicate filenames are disambiguated as `name.exr (2)`, `name.exr (3)`, etc.
 - Visible loading indicator while large EXR files are decoding/loading.
+- ROI inspector:
+  - Shows bounds, size, total pixels, per-channel valid sample counts, and `min` / `mean` / `max` for the active display selection.
+  - ROI is session-specific, survives view-mode switches, and can be cleared from the Inspector.
 - Exposure control: slider + numeric input (`-10` to `+10` EV, step `0.1`).
 - Visualization mode buttons:
   - `None` is the default RGB display path.
@@ -44,6 +48,7 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - Projects the current display texture onto a sphere using equirectangular sampling.
   - Left drag orbits the camera; mouse wheel changes horizontal FOV from `1` to `120` degrees.
   - The Inspector probe remains available through panorama ray-to-pixel lookup.
+  - Existing ROIs remain stored but cannot be created or edited until you return to `Image viewer`.
   - Panorama mode does not draw on-canvas pixel value overlays.
   - On-canvas probe rectangles remain hidden in panorama mode.
 - Probe:
@@ -150,6 +155,7 @@ npm run test:e2e
 - In `Panorama viewer`, mouse wheel changes horizontal FOV and left drag orbits yaw/pitch.
 - Hover: live probe sample.
 - Left click: lock/unlock probe.
+- `Shift` + left drag in `Image viewer`: create or replace the current ROI.
 
 ## Implementation Notes
 

@@ -23,7 +23,8 @@ const mocks = vi.hoisted(() => {
       panoramaPitchDeg: 0,
       panoramaHfovDeg: 100
     },
-    hoveredPixel: null
+    hoveredPixel: null,
+    draftRoi: null
   }));
   const interactionCoordinatorEnqueueViewPatch = vi.fn();
   const viewerRect = {
@@ -84,7 +85,8 @@ vi.mock('../src/app/viewer-app-core', () => ({
           panoramaHfovDeg: 100,
           activeLayer: 0,
           displaySelection: null,
-          lockedPixel: null
+          lockedPixel: null,
+          roi: null
         },
         interactionState: {
           view: {
@@ -95,7 +97,8 @@ vi.mock('../src/app/viewer-app-core', () => ({
             panoramaPitchDeg: 0,
             panoramaHfovDeg: 100
           },
-          hoveredPixel: null
+          hoveredPixel: null,
+          draftRoi: null
         }
       };
     }
@@ -149,6 +152,7 @@ vi.mock('../src/ui', () => ({
     readonly setColormapRange = vi.fn();
     readonly setLayerOptions = vi.fn();
     readonly setProbeMetadata = vi.fn();
+    readonly setRoiReadout = vi.fn();
     readonly setRgbGroupOptions = vi.fn();
     readonly clearImageBrowserPanels = vi.fn();
     readonly setProbeReadout = vi.fn();

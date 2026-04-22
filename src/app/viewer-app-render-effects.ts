@@ -28,6 +28,10 @@ export function applyRenderEffects(
     );
   }
 
+  if (invalidation & ViewerRenderInvalidationFlags.RoiReadout) {
+    ui.setRoiReadout(snapshot.roiReadout);
+  }
+
   if (invalidation & ViewerRenderInvalidationFlags.ResourceClearImage) {
     renderer.clearImage();
   }

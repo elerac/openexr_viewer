@@ -12,6 +12,7 @@ import {
   isStokesSelection,
   sameDisplaySelection
 } from '../display-model';
+import { cloneImageRoi } from '../roi';
 import { cloneViewerSessionState } from '../session-state';
 import {
   getStokesDisplayColormapDefault,
@@ -353,6 +354,10 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         lockedPixel: same ? null : intent.pixel
       });
     }
+    case 'roiSet':
+      return patchSessionState(state, {
+        roi: cloneImageRoi(intent.roi)
+      });
     case 'interactionStatePublished':
       return sameInteractionState(state.interactionState, intent.interactionState) ? state : {
         ...state,
@@ -671,7 +676,8 @@ function patchSessionState(
   if (options.syncInteractionView || options.clearHover) {
     interactionState = {
       view: options.syncInteractionView ? createInteractionState(nextSessionState).view : state.interactionState.view,
-      hoveredPixel: options.clearHover ? null : state.interactionState.hoveredPixel
+      hoveredPixel: options.clearHover ? null : state.interactionState.hoveredPixel,
+      draftRoi: null
     };
   }
 
@@ -747,7 +753,8 @@ function captureRestorableVisualizationState(state: ViewerSessionState): Restora
 function cloneInteractionState(state: ViewerAppState['interactionState']): ViewerAppState['interactionState'] {
   return {
     view: { ...state.view },
-    hoveredPixel: state.hoveredPixel ? { ...state.hoveredPixel } : null
+    hoveredPixel: state.hoveredPixel ? { ...state.hoveredPixel } : null,
+    draftRoi: cloneImageRoi(state.draftRoi)
   };
 }
 
@@ -755,7 +762,11 @@ function sameInteractionState(
   a: ViewerAppState['interactionState'],
   b: ViewerAppState['interactionState']
 ): boolean {
-  return sameViewCommit(a.view, b.view) && samePixel(a.hoveredPixel, b.hoveredPixel);
+  return (
+    sameViewCommit(a.view, b.view) &&
+    samePixel(a.hoveredPixel, b.hoveredPixel) &&
+    sameImageRoi(a.draftRoi, b.draftRoi)
+  );
 }
 
 function sameViewCommit(
@@ -784,4 +795,18 @@ function samePixel(
   }
 
   return a.ix === b.ix && a.iy === b.iy;
+}
+
+function sameImageRoi(
+  a: ViewerSessionState['roi'] | ViewerAppState['interactionState']['draftRoi'],
+  b: ViewerSessionState['roi'] | ViewerAppState['interactionState']['draftRoi']
+): boolean {
+  if (!a && !b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+
+  return a.x0 === b.x0 && a.y0 === b.y0 && a.x1 === b.x1 && a.y1 === b.y1;
 }

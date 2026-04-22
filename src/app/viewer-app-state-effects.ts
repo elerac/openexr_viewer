@@ -1,4 +1,4 @@
-import { samePixel, sameViewState } from '../view-state';
+import { samePixel, sameRoi, sameViewState } from '../view-state';
 import { ViewerInteractionCoordinator } from '../interaction-coordinator';
 import { ThumbnailService } from '../services/thumbnail-service';
 import { RenderCacheService } from '../services/render-cache-service';
@@ -45,7 +45,8 @@ export function syncInteractionCoordinator(
   const nextInteractionState = transition.state.interactionState;
   if (
     sameViewState(coordinatorState.view, nextInteractionState.view) &&
-    samePixel(coordinatorState.hoveredPixel, nextInteractionState.hoveredPixel)
+    samePixel(coordinatorState.hoveredPixel, nextInteractionState.hoveredPixel) &&
+    sameRoi(coordinatorState.draftRoi, nextInteractionState.draftRoi)
   ) {
     return;
   }

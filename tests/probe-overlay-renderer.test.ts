@@ -35,6 +35,33 @@ describe('probe overlay renderer', () => {
     expect(context.clearRect).toHaveBeenCalled();
     expect(context.strokeRect).not.toHaveBeenCalled();
   });
+
+  it('renders committed and draft ROI rectangles on the shared overlay', () => {
+    const { renderer, context } = createProbeOverlayHarness();
+
+    renderer.resize(128, 64);
+    renderer.setImagePresent(true);
+    renderer.render(createViewerState({
+      zoom: 16,
+      roi: { x0: 1, y0: 1, x1: 2, y1: 2 },
+      draftRoi: { x0: 0, y0: 0, x1: 1, y1: 1 }
+    }));
+
+    expect(context.strokeRect).toHaveBeenCalledTimes(2);
+  });
+
+  it('suppresses ROI drawing in panorama mode', () => {
+    const { renderer, context } = createProbeOverlayHarness();
+
+    renderer.resize(128, 64);
+    renderer.setImagePresent(true);
+    renderer.render(createViewerState({
+      viewerMode: 'panorama',
+      roi: { x0: 0, y0: 0, x1: 1, y1: 1 }
+    }));
+
+    expect(context.strokeRect).not.toHaveBeenCalled();
+  });
 });
 
 function createProbeOverlayHarness(): {

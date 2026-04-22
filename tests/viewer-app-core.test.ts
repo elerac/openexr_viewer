@@ -171,6 +171,49 @@ describe('viewer app core', () => {
     expect(core.getState().sessionState).toEqual(createInitialState());
   });
 
+  it('keeps ROI on layer switches and restores session-specific ROIs when switching sessions', () => {
+    const core = new ViewerAppCore();
+    const layeredDecoded: DecodedExrImage = {
+      width: 2,
+      height: 1,
+      layers: [
+        createLayerFromChannels({ R: [1, 0], G: [1, 0], B: [1, 0] }, 'beauty'),
+        createLayerFromChannels({ R: [0, 1], G: [0, 1], B: [0, 1] }, 'alt')
+      ]
+    };
+    const first = createSession('first', layeredDecoded);
+    const second = createSession('second');
+    core.dispatch({ type: 'sessionLoaded', session: first });
+    core.dispatch({ type: 'roiSet', roi: { x0: 0, y0: 0, x1: 1, y1: 0 } });
+    core.dispatch({ type: 'activeLayerSet', activeLayer: 1 });
+
+    expect(core.getState().sessionState.roi).toEqual({ x0: 0, y0: 0, x1: 1, y1: 0 });
+
+    core.dispatch({ type: 'sessionLoaded', session: second });
+    core.dispatch({ type: 'roiSet', roi: { x0: 1, y0: 0, x1: 1, y1: 0 } });
+    core.dispatch({ type: 'activeSessionSwitched', sessionId: first.id });
+
+    expect(core.getState().sessionState.roi).toEqual({ x0: 0, y0: 0, x1: 1, y1: 0 });
+
+    core.dispatch({ type: 'activeSessionSwitched', sessionId: second.id });
+
+    expect(core.getState().sessionState.roi).toEqual({ x0: 1, y0: 0, x1: 1, y1: 0 });
+  });
+
+  it('clears ROI on reset because reset rebuilds the active session state from defaults', () => {
+    const core = new ViewerAppCore();
+    const session = createSession('session-1');
+    core.dispatch({ type: 'sessionLoaded', session });
+    core.dispatch({ type: 'roiSet', roi: { x0: 0, y0: 0, x1: 1, y1: 0 } });
+
+    core.dispatch({
+      type: 'activeSessionReset',
+      viewport: { width: 640, height: 480 }
+    });
+
+    expect(core.getState().sessionState.roi).toBeNull();
+  });
+
   it('routes hover-only interaction publishes through the render lane without broad UI churn', () => {
     const core = new ViewerAppCore();
     const session = createSession('session-1');

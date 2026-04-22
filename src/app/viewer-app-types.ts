@@ -4,9 +4,11 @@ import type {
   DecodedLayer,
   DisplayLuminanceRange,
   ExrMetadataEntry,
+  ImageRoi,
   OpenedImageDropPlacement,
   OpenedImageSession,
   PixelSample,
+  RoiStats,
   ViewportInfo,
   ViewerInteractionState,
   ViewerRenderState,
@@ -32,6 +34,11 @@ export interface ProbeReadoutModel {
   sample: PixelSample | null;
   colorPreview: ProbeColorPreview | null;
   imageSize: { width: number; height: number } | null;
+}
+
+export interface RoiReadoutModel {
+  roi: ImageRoi | null;
+  stats: RoiStats | null;
 }
 
 export interface ViewerOpenedImageOption {
@@ -109,6 +116,7 @@ export type ViewerIntent =
   | { type: 'colormapZeroCenteredToggled' }
   | { type: 'stokesDegreeModulationToggled' }
   | { type: 'lockedPixelToggled'; pixel: ViewerSessionState['lockedPixel'] }
+  | { type: 'roiSet'; roi: ViewerSessionState['roi'] }
   | { type: 'interactionStatePublished'; interactionState: ViewerInteractionState }
   | { type: 'viewStateCommitted'; view: ViewerInteractionState['view'] }
   | { type: 'sessionLoaded'; session: OpenedImageSession }
@@ -180,6 +188,7 @@ export interface ViewerRenderSnapshot {
   renderState: ViewerRenderState;
   activeColormapLut: ColormapLut | null;
   probeReadout: ProbeReadoutModel;
+  roiReadout: RoiReadoutModel;
   resourceTarget: ViewerResourceTarget | null;
   displayRangeRequest: ViewerDisplayRangeRequest | null;
 }

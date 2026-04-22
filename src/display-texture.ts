@@ -7,11 +7,13 @@ import {
 } from './channel-storage';
 import {
   isStokesSelection,
+  selectionUsesImageAlpha,
   serializeDisplaySelectionKey,
   type DisplaySelection,
   type StokesSelection,
   type StokesParameter
 } from './display-model';
+import { clampImageRoiToBounds, getImageRoiHeight, getImageRoiPixelCount, getImageRoiWidth } from './roi';
 import {
   computeStokesDegreeModulationDisplayValue,
   computeStokesDegreeModulationValue,
@@ -29,7 +31,10 @@ import {
   type DecodedLayer,
   type DisplayLuminanceRange,
   type ImagePixel,
+  type ImageRoi,
   type PixelSample,
+  type RoiStats,
+  type RoiStatsChannelSummary,
   type ViewerState
 } from './types';
 
@@ -307,6 +312,53 @@ export function computeDisplaySelectionLuminanceRange(
   }
 
   return { min, max };
+}
+
+export function computeDisplaySelectionRoiStats(
+  layer: DecodedLayer,
+  width: number,
+  height: number,
+  roi: ImageRoi,
+  selection: DisplaySelection | null
+): RoiStats | null {
+  const clampedRoi = clampImageRoiToBounds(roi, width, height);
+  if (!clampedRoi) {
+    return null;
+  }
+
+  const evaluator = resolveDisplaySelectionEvaluator(layer, selection);
+  const accumulators = createRoiStatsAccumulators(evaluator, selection);
+  const pixelCount = getImageRoiPixelCount(clampedRoi);
+
+  for (let iy = clampedRoi.y0; iy <= clampedRoi.y1; iy += 1) {
+    const rowOffset = iy * width;
+    for (let ix = clampedRoi.x0; ix <= clampedRoi.x1; ix += 1) {
+      const pixelIndex = rowOffset + ix;
+      for (const accumulator of accumulators) {
+        const value = accumulator.read(pixelIndex);
+        if (!Number.isFinite(value)) {
+          continue;
+        }
+
+        accumulator.validPixelCount += 1;
+        accumulator.sum += value;
+        if (value < accumulator.min) {
+          accumulator.min = value;
+        }
+        if (value > accumulator.max) {
+          accumulator.max = value;
+        }
+      }
+    }
+  }
+
+  return {
+    roi: clampedRoi,
+    width: getImageRoiWidth(clampedRoi),
+    height: getImageRoiHeight(clampedRoi),
+    pixelCount,
+    channels: accumulators.map(toRoiStatsChannelSummary)
+  };
 }
 
 export function readDisplaySelectionPixelValues(
@@ -658,6 +710,203 @@ function computeRgbStokesMonoValues(
       readChannelValue(g.s3, pixelIndex),
       readChannelValue(b.s3, pixelIndex)
     )
+  };
+}
+
+interface RoiStatsAccumulator {
+  label: string;
+  min: number;
+  max: number;
+  sum: number;
+  validPixelCount: number;
+  read: (pixelIndex: number) => number;
+}
+
+function createRoiStatsAccumulators(
+  evaluator: DisplaySelectionEvaluator,
+  selection: DisplaySelection | null
+): RoiStatsAccumulator[] {
+  switch (evaluator.kind) {
+    case 'empty':
+      return [];
+    case 'channelRgb': {
+      const rows: RoiStatsAccumulator[] = [
+        createRoiStatsAccumulator('R', (pixelIndex) => readChannelValue(evaluator.r, pixelIndex)),
+        createRoiStatsAccumulator('G', (pixelIndex) => readChannelValue(evaluator.g, pixelIndex)),
+        createRoiStatsAccumulator('B', (pixelIndex) => readChannelValue(evaluator.b, pixelIndex))
+      ];
+      if (selectionUsesImageAlpha(selection) && evaluator.a) {
+        rows.push(createRoiStatsAccumulator('A', (pixelIndex) => readChannelValue(evaluator.a, pixelIndex)));
+      }
+      return rows;
+    }
+    case 'channelMono': {
+      const rows = [
+        createRoiStatsAccumulator('Mono', (pixelIndex) => readChannelValue(evaluator.channel, pixelIndex))
+      ];
+      if (selectionUsesImageAlpha(selection) && evaluator.a) {
+        rows.push(createRoiStatsAccumulator('A', (pixelIndex) => readChannelValue(evaluator.a, pixelIndex)));
+      }
+      return rows;
+    }
+    case 'stokesDirect':
+      return [
+        createRoiStatsAccumulator(
+          'Mono',
+          (pixelIndex) => {
+            const sample = readScalarStokesSample(evaluator.stokes, pixelIndex);
+            return computeRawStokesDisplayValue(
+              evaluator.parameter,
+              sample.s0,
+              sample.s1,
+              sample.s2,
+              sample.s3
+            );
+          }
+        )
+      ];
+    case 'stokesRgbLuminance':
+      return [
+        createRoiStatsAccumulator(
+          'Mono',
+          (pixelIndex) => {
+            const sample = computeRgbStokesMonoValues(evaluator.r, evaluator.g, evaluator.b, pixelIndex);
+            return computeRawStokesDisplayValue(
+              evaluator.parameter,
+              sample.s0,
+              sample.s1,
+              sample.s2,
+              sample.s3
+            );
+          }
+        )
+      ];
+  }
+}
+
+function createRoiStatsAccumulator(
+  label: string,
+  read: (pixelIndex: number) => number
+): RoiStatsAccumulator {
+  return {
+    label,
+    min: Number.POSITIVE_INFINITY,
+    max: Number.NEGATIVE_INFINITY,
+    sum: 0,
+    validPixelCount: 0,
+    read
+  };
+}
+
+function computeRawStokesDisplayValue(
+  parameter: StokesParameter,
+  s0: number,
+  s1: number,
+  s2: number,
+  s3: number
+): number {
+  switch (parameter) {
+    case 'aolp':
+      return computeRawStokesAolp(s1, s2);
+    case 'dolp':
+      return computeRawStokesDolp(s0, s1, s2);
+    case 'dop':
+      return computeRawStokesDop(s0, s1, s2, s3);
+    case 'docp':
+      return computeRawStokesDocp(s0, s3);
+    case 'cop':
+    case 'top':
+      return computeRawStokesEang(s1, s2, s3);
+    case 's1_over_s0':
+      return computeRawStokesNormalizedComponent(s0, s1);
+    case 's2_over_s0':
+      return computeRawStokesNormalizedComponent(s0, s2);
+    case 's3_over_s0':
+      return computeRawStokesNormalizedComponent(s0, s3);
+  }
+}
+
+function computeRawStokesAolp(s1: number, s2: number): number {
+  if (!Number.isFinite(s1) || !Number.isFinite(s2)) {
+    return Number.NaN;
+  }
+
+  const aolp = 0.5 * Math.atan2(s2, s1);
+  if (!Number.isFinite(aolp)) {
+    return Number.NaN;
+  }
+
+  return aolp < 0 ? aolp + Math.PI : aolp;
+}
+
+function computeRawStokesDolp(s0: number, s1: number, s2: number): number {
+  if (!Number.isFinite(s0) || !Number.isFinite(s1) || !Number.isFinite(s2) || s0 === 0) {
+    return Number.NaN;
+  }
+
+  const dolp = Math.sqrt(s1 ** 2 + s2 ** 2) / s0;
+  return Number.isFinite(dolp) ? dolp : Number.NaN;
+}
+
+function computeRawStokesDop(s0: number, s1: number, s2: number, s3: number): number {
+  if (
+    !Number.isFinite(s0) ||
+    !Number.isFinite(s1) ||
+    !Number.isFinite(s2) ||
+    !Number.isFinite(s3) ||
+    s0 === 0
+  ) {
+    return Number.NaN;
+  }
+
+  const dop = Math.sqrt(s1 ** 2 + s2 ** 2 + s3 ** 2) / s0;
+  return Number.isFinite(dop) ? dop : Number.NaN;
+}
+
+function computeRawStokesDocp(s0: number, s3: number): number {
+  if (!Number.isFinite(s0) || !Number.isFinite(s3) || s0 === 0) {
+    return Number.NaN;
+  }
+
+  const docp = Math.abs(s3) / s0;
+  return Number.isFinite(docp) ? docp : Number.NaN;
+}
+
+function computeRawStokesEang(s1: number, s2: number, s3: number): number {
+  if (!Number.isFinite(s1) || !Number.isFinite(s2) || !Number.isFinite(s3)) {
+    return Number.NaN;
+  }
+
+  const eang = 0.5 * Math.atan2(s3, Math.sqrt(s1 ** 2 + s2 ** 2));
+  return Number.isFinite(eang) ? eang : Number.NaN;
+}
+
+function computeRawStokesNormalizedComponent(s0: number, component: number): number {
+  if (!Number.isFinite(s0) || !Number.isFinite(component) || s0 === 0) {
+    return Number.NaN;
+  }
+
+  const normalized = component / s0;
+  return Number.isFinite(normalized) ? normalized : Number.NaN;
+}
+
+function toRoiStatsChannelSummary(accumulator: RoiStatsAccumulator): RoiStatsChannelSummary {
+  if (accumulator.validPixelCount === 0) {
+    return {
+      label: accumulator.label,
+      min: null,
+      mean: null,
+      max: null,
+      validPixelCount: 0
+    };
+  }
+
+  return {
+    label: accumulator.label,
+    min: accumulator.min,
+    mean: accumulator.sum / accumulator.validPixelCount,
+    max: accumulator.max,
+    validPixelCount: accumulator.validPixelCount
   };
 }
 

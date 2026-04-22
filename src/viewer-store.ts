@@ -24,7 +24,8 @@ const SESSION_STATE_KEYS = [
   'panoramaHfovDeg',
   'activeLayer',
   'displaySelection',
-  'lockedPixel'
+  'lockedPixel',
+  'roi'
 ] as const satisfies ReadonlyArray<keyof ViewerSessionState>;
 
 export function createInitialState(): ViewerSessionState {
@@ -45,7 +46,8 @@ export function createInitialState(): ViewerSessionState {
     panoramaHfovDeg: DEFAULT_PANORAMA_HFOV_DEG,
     activeLayer: 0,
     displaySelection: null,
-    lockedPixel: null
+    lockedPixel: null,
+    roi: null
   };
 }
 

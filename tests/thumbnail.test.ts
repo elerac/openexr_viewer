@@ -31,6 +31,7 @@ function createThumbnailState(
     activeLayer: 0,
     displaySelection: null,
     lockedPixel: null,
+    roi: null,
     ...overrides
   };
 }

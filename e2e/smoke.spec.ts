@@ -1495,6 +1495,63 @@ test('loads arbitrary scalar channels as grayscale display options', async ({ pa
   await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['Mono:', 'A:']);
 });
 
+test('creates ROI with shift-drag and keeps ROI editing disabled in panorama mode', async ({ page }) => {
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  await openGalleryCbox(page);
+
+  const viewer = page.locator('#viewer-container');
+  const roiEmptyState = page.locator('#roi-empty-state');
+  const roiDetails = page.locator('#roi-details');
+  const roiBounds = page.locator('#roi-bounds');
+
+  await expect(roiEmptyState).toBeVisible();
+
+  const box = await viewer.boundingBox();
+  if (!box) {
+    throw new Error('Viewer container is not visible.');
+  }
+
+  const start = {
+    x: box.x + box.width * 0.45,
+    y: box.y + box.height * 0.45
+  };
+  const end = {
+    x: box.x + box.width * 0.68,
+    y: box.y + box.height * 0.58
+  };
+
+  await page.keyboard.down('Shift');
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+
+  await expect(roiDetails).toBeVisible();
+  const initialBounds = (await roiBounds.textContent())?.trim() ?? '';
+  expect(initialBounds).toMatch(/^x \d+\.\.\d+  y \d+\.\.\d+$/);
+
+  await page.locator('#view-menu-button').click();
+  await page.locator('#panorama-viewer-menu-item').click();
+
+  await page.keyboard.down('Shift');
+  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.8, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+
+  await expect(roiBounds).toHaveText(initialBounds);
+});
+
 function buildScalarChannelExr(): Buffer {
   ensureExrEncoderInitialized();
 

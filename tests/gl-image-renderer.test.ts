@@ -121,7 +121,9 @@ describe('gl image renderer', () => {
     });
     const state = {
       ...createInitialState(),
-      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+      displaySelection: createChannelRgbSelection('R', 'G', 'B'),
+      hoveredPixel: null,
+      draftRoi: null
     };
 
     renderer.ensureLayerChannelsResident('session-1', 0, 2, 1, layer, ['R', 'G', 'B']);
@@ -156,7 +158,9 @@ describe('gl image renderer', () => {
     });
     const state = {
       ...createInitialState(),
-      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+      displaySelection: createChannelRgbSelection('R', 'G', 'B'),
+      hoveredPixel: null,
+      draftRoi: null
     };
 
     renderer.ensureLayerChannelsResident('session-1', 0, 2, 1, layer, ['R', 'G', 'B']);
@@ -204,7 +208,9 @@ describe('gl image renderer', () => {
     });
     const state = {
       ...createInitialState(),
-      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+      displaySelection: createChannelRgbSelection('R', 'G', 'B'),
+      hoveredPixel: null,
+      draftRoi: null
     };
 
     renderer.ensureLayerChannelsResident('session-1', 0, 2, 2, layer, ['R', 'G', 'B']);
@@ -245,7 +251,9 @@ describe('gl image renderer', () => {
     });
     const state = {
       ...createInitialState(),
-      displaySelection: createChannelRgbSelection('R', 'G', 'B', 'A')
+      displaySelection: createChannelRgbSelection('R', 'G', 'B', 'A'),
+      hoveredPixel: null,
+      draftRoi: null
     };
 
     renderer.ensureLayerChannelsResident('session-1', 0, 1, 1, layer, ['R', 'G', 'B', 'A']);
@@ -286,7 +294,9 @@ describe('gl image renderer', () => {
     });
     const state = {
       ...createInitialState(),
-      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+      displaySelection: createChannelRgbSelection('R', 'G', 'B'),
+      hoveredPixel: null,
+      draftRoi: null
     };
 
     renderer.ensureLayerChannelsResident('session-1', 0, 1, 1, layer, ['R', 'G', 'B']);

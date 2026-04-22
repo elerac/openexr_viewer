@@ -186,6 +186,33 @@
                 <div id="probe-values" class="probe-values"></div>
                 <div id="probe-metadata" class="probe-metadata hidden" aria-label="EXR metadata"></div>
               </section>
+
+              <section id="roi-panel" class="readout-block">
+                <h2>ROI</h2>
+                <p id="roi-empty-state" class="roi-empty-state">Shift-drag in Image viewer to create ROI.</p>
+                <div id="roi-details" class="roi-details hidden">
+                  <div class="roi-summary">
+                    <div class="roi-summary-row">
+                      <span class="roi-summary-label">Bounds</span>
+                      <span id="roi-bounds" class="roi-summary-value"></span>
+                    </div>
+                    <div class="roi-summary-row">
+                      <span class="roi-summary-label">Size</span>
+                      <span id="roi-size" class="roi-summary-value"></span>
+                    </div>
+                    <div class="roi-summary-row">
+                      <span class="roi-summary-label">Pixels</span>
+                      <span id="roi-pixel-count" class="roi-summary-value"></span>
+                    </div>
+                    <div class="roi-summary-row">
+                      <span class="roi-summary-label">Valid</span>
+                      <span id="roi-valid-count" class="roi-summary-value"></span>
+                    </div>
+                  </div>
+                  <div id="roi-stats" class="roi-stats" aria-label="ROI statistics"></div>
+                  <button id="clear-roi-button" type="button" disabled>Clear ROI</button>
+                </div>
+              </section>
             </div>
           </aside>
           <button

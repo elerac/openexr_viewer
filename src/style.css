@@ -1487,6 +1487,77 @@ body.is-resizing-panel-columns * {
   white-space: normal;
 }
 
+.roi-empty-state {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.roi-details {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.roi-summary {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.roi-summary-row {
+  display: grid;
+  grid-template-columns: minmax(3.8rem, auto) minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: baseline;
+}
+
+.roi-summary-label {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.roi-summary-value {
+  font-family: "IBM Plex Mono", "Cascadia Mono", monospace;
+  font-size: 0.82rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.roi-stats {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.35rem;
+  background: rgba(9, 13, 20, 0.54);
+}
+
+.roi-stats-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+  align-items: baseline;
+  font-family: "IBM Plex Mono", "Cascadia Mono", monospace;
+  font-size: 0.8rem;
+}
+
+.roi-stats-row--header {
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.roi-stats-cell {
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.roi-stats-cell--label {
+  text-align: left;
+}
+
 @media (max-width: 1280px) {
   .app-shell {
     padding-inline: 0.34rem;

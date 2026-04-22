@@ -5,6 +5,7 @@ import type {
   ViewerSessionState,
   ViewerViewState
 } from './types';
+import { sameImageRoi } from './roi';
 
 export function pickViewState(state: ViewerViewState): ViewerViewState {
   return {
@@ -20,7 +21,8 @@ export function pickViewState(state: ViewerViewState): ViewerViewState {
 export function createInteractionState(sessionState: ViewerSessionState): ViewerInteractionState {
   return {
     view: pickViewState(sessionState),
-    hoveredPixel: null
+    hoveredPixel: null,
+    draftRoi: null
   };
 }
 
@@ -31,7 +33,8 @@ export function mergeRenderState(
   return {
     ...sessionState,
     ...interactionState.view,
-    hoveredPixel: interactionState.hoveredPixel
+    hoveredPixel: interactionState.hoveredPixel,
+    draftRoi: interactionState.draftRoi
   };
 }
 
@@ -56,4 +59,8 @@ export function samePixel(a: ImagePixel | null | undefined, b: ImagePixel | null
   }
 
   return a.ix === b.ix && a.iy === b.iy;
+}
+
+export function sameRoi(a: ViewerSessionState['roi'] | ViewerInteractionState['draftRoi'], b: ViewerSessionState['roi'] | ViewerInteractionState['draftRoi']): boolean {
+  return sameImageRoi(a, b);
 }

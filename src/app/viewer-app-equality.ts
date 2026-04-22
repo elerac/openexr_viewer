@@ -1,10 +1,12 @@
 import { sameDisplayLuminanceRange } from '../colormap-range';
 import { sameDisplaySelection } from '../display-model';
+import { sameImageRoi } from '../roi';
 import type { ProbeColorPreview, ProbeDisplayValue } from '../probe';
 import type { PixelSample, ViewerSessionState } from '../types';
 import { samePixel, sameViewState } from '../view-state';
 import type {
   ProbeReadoutModel,
+  RoiReadoutModel,
   StokesDegreeModulationControlModel,
   ViewerDisplayRangeRequest,
   ViewerLayerOption,
@@ -28,6 +30,7 @@ export function sameViewerSessionState(a: ViewerSessionState, b: ViewerSessionSt
     a.activeLayer === b.activeLayer &&
     sameDisplaySelection(a.displaySelection, b.displaySelection) &&
     samePixel(a.lockedPixel, b.lockedPixel)
+    && sameImageRoi(a.roi, b.roi)
   );
 }
 
@@ -142,6 +145,10 @@ export function sameResourceTarget(a: ViewerResourceTarget | null, b: ViewerReso
   );
 }
 
+export function sameRoiReadout(a: RoiReadoutModel, b: RoiReadoutModel): boolean {
+  return sameImageRoi(a.roi, b.roi) && sameRoiStats(a.stats, b.stats);
+}
+
 export function sameDisplayRangeRequest(
   a: ViewerDisplayRangeRequest | null,
   b: ViewerDisplayRangeRequest | null
@@ -212,4 +219,36 @@ function sameImageSize(
   }
 
   return a.width === b.width && a.height === b.height;
+}
+
+function sameRoiStats(
+  a: RoiReadoutModel['stats'],
+  b: RoiReadoutModel['stats']
+): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+
+  if (
+    !sameImageRoi(a.roi, b.roi) ||
+    a.width !== b.width ||
+    a.height !== b.height ||
+    a.pixelCount !== b.pixelCount ||
+    a.channels.length !== b.channels.length
+  ) {
+    return false;
+  }
+
+  return a.channels.every((channel, index) => {
+    const other = b.channels[index];
+    return Boolean(other)
+      && channel.label === other.label
+      && channel.min === other.min
+      && channel.mean === other.mean
+      && channel.max === other.max
+      && channel.validPixelCount === other.validPixelCount;
+  });
 }
