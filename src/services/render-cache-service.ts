@@ -169,6 +169,7 @@ export class RenderCacheService implements Disposable {
     const requiredChannelNames = getDisplaySourceBindingChannelNames(binding).filter((channelName) => {
       return layer.channelStorage.channelIndexByName[channelName] !== undefined;
     });
+    const protectedBinding = this.createProtectedBinding(session.id, state.activeLayer, requiredChannelNames);
     const residentLayer = this.getOrCreateResidentLayerEntry(entry, state.activeLayer);
     const missingChannelNames = requiredChannelNames.filter((channelName) => {
       return !residentLayer.residentChannels.has(channelName);
@@ -179,11 +180,6 @@ export class RenderCacheService implements Disposable {
       this.boundTextureRevisionKey !== textureRevisionKey;
 
     if (missingChannelNames.length > 0) {
-      const protectedBinding: ProtectedBinding = {
-        sessionId: session.id,
-        layerIndex: state.activeLayer,
-        channelNames: new Set(requiredChannelNames)
-      };
       this.enforceResidencyBudget({
         reservedBytes: predictChannelTextureBytes(
           session.decoded.width,
@@ -226,12 +222,12 @@ export class RenderCacheService implements Disposable {
         textureRevisionKey,
         binding
       );
-      this.boundSessionId = session.id;
-      this.boundLayerIndex = state.activeLayer;
-      this.boundChannelNames = new Set(requiredChannelNames);
-      this.boundTextureRevisionKey = textureRevisionKey;
+      this.setBoundTextureTracking(protectedBinding, textureRevisionKey);
     }
 
+    this.enforceResidencyBudget({
+      protectedBinding
+    });
     this.syncDisplayCacheUsageUi();
 
     return {
@@ -549,6 +545,21 @@ export class RenderCacheService implements Disposable {
     }
   }
 
+  private createProtectedBinding(sessionId: string, layerIndex: number, channelNames: Iterable<string>): ProtectedBinding {
+    return {
+      sessionId,
+      layerIndex,
+      channelNames: new Set(channelNames)
+    };
+  }
+
+  private setBoundTextureTracking(protectedBinding: ProtectedBinding, textureRevisionKey: string): void {
+    this.boundSessionId = protectedBinding.sessionId;
+    this.boundLayerIndex = protectedBinding.layerIndex;
+    this.boundChannelNames = new Set(protectedBinding.channelNames);
+    this.boundTextureRevisionKey = textureRevisionKey;
+  }
+
   private getOrCreateResidentLayerEntry(entry: SessionResourceEntry, layerIndex: number): ResidentLayerResourceEntry {
     const existing = entry.residentLayers.get(layerIndex);
     if (existing) {
@@ -616,11 +627,7 @@ export class RenderCacheService implements Disposable {
       return null;
     }
 
-    return {
-      sessionId: this.boundSessionId,
-      layerIndex: this.boundLayerIndex,
-      channelNames: new Set(this.boundChannelNames)
-    };
+    return this.createProtectedBinding(this.boundSessionId, this.boundLayerIndex, this.boundChannelNames);
   }
 
   private getEvictionCandidates(

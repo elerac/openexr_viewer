@@ -14,19 +14,44 @@ function createDecodedImage(
   height = 1,
   fillByChannel: Record<string, number> = { R: 1, G: 0.5, B: 0 }
 ): DecodedExrImage {
-  const pixelCount = width * height;
-  const channelValues = Object.fromEntries(
-    Object.entries(fillByChannel).map(([channelName, value]) => {
-      return [channelName, new Float32Array(pixelCount).fill(value)];
-    })
-  );
-  const layer = createLayerFromChannels(channelValues, 'beauty');
+  const layer = createLayerFromChannels(createFilledChannelValues(width, height, fillByChannel), 'beauty');
 
   return {
     width,
     height,
     layers: [layer]
   };
+}
+
+function createMultiLayerDecodedImage(
+  width: number,
+  height: number,
+  fillByLayer: Array<Record<string, number>>
+): DecodedExrImage {
+  return {
+    width,
+    height,
+    layers: fillByLayer.map((fillByChannel, layerIndex) => {
+      return createLayerFromChannels(
+        createFilledChannelValues(width, height, fillByChannel),
+        `layer-${layerIndex}`
+      );
+    })
+  };
+}
+
+function createFilledChannelValues(
+  width: number,
+  height: number,
+  fillByChannel: Record<string, number>
+): Record<string, Float32Array> {
+  const pixelCount = width * height;
+
+  return Object.fromEntries(
+    Object.entries(fillByChannel).map(([channelName, value]) => {
+      return [channelName, new Float32Array(pixelCount).fill(value)];
+    })
+  );
 }
 
 function createSession(id: string, decoded = createDecodedImage()): OpenedImageSession {
@@ -320,6 +345,66 @@ describe('render cache service', () => {
     expect(ui.setDisplayCacheUsage).toHaveBeenLastCalledWith(240_000_000, 256 * MB);
   });
 
+  it('evicts older layers from the active session once they fall outside the bound channel set', () => {
+    const decoded = createMultiLayerDecodedImage(10_000, 1_000, [{ Z: 1 }, { Z: 2 }, { Z: 3 }, { Z: 4 }]);
+    const session = createSession('session-1', decoded);
+    const ui = createUiMock();
+    const renderer = createRendererMock();
+    const service = new RenderCacheService({
+      ui,
+      renderer,
+      getActiveSessionId: () => session.id
+    });
+
+    service.setBudgetMb(128);
+
+    const secondLayer = buildViewerStateForLayer(session.state, decoded, 1);
+    const thirdLayer = buildViewerStateForLayer(secondLayer, decoded, 2);
+    const fourthLayer = buildViewerStateForLayer(thirdLayer, decoded, 3);
+
+    service.prepareActiveSession(session, session.state);
+    expect(ui.setDisplayCacheUsage).toHaveBeenLastCalledWith(40_000_000, 128 * MB);
+
+    service.prepareActiveSession(session, secondLayer);
+    expect(ui.setDisplayCacheUsage).toHaveBeenLastCalledWith(80_000_000, 128 * MB);
+
+    service.prepareActiveSession(session, thirdLayer);
+    expect(ui.setDisplayCacheUsage).toHaveBeenLastCalledWith(120_000_000, 128 * MB);
+
+    service.prepareActiveSession(session, fourthLayer);
+
+    expect(renderer.discardChannelSourceTexture).toHaveBeenCalledTimes(1);
+    expect(renderer.discardChannelSourceTexture).toHaveBeenCalledWith(session.id, 0, 'Z');
+    expect([...getEntries(service).get(session.id)?.residentLayers.keys() ?? []]).toEqual([1, 2, 3]);
+    expect(ui.setDisplayCacheUsage).toHaveBeenLastCalledWith(120_000_000, 128 * MB);
+  });
+
+  it('keeps only the active bound layer resident when it alone exceeds the budget', () => {
+    const decoded = createMultiLayerDecodedImage(20_000, 1_000, [{ Z: 1 }, { Z: 2 }]);
+    const session = createSession('session-1', decoded);
+    const ui = createUiMock();
+    const renderer = createRendererMock();
+    const service = new RenderCacheService({
+      ui,
+      renderer,
+      getActiveSessionId: () => session.id
+    });
+
+    service.setBudgetMb(64);
+
+    const secondLayer = buildViewerStateForLayer(session.state, decoded, 1);
+
+    service.prepareActiveSession(session, session.state);
+    expect(ui.setDisplayCacheUsage).toHaveBeenLastCalledWith(80_000_000, 64 * MB);
+
+    service.prepareActiveSession(session, secondLayer);
+
+    expect(renderer.discardChannelSourceTexture).toHaveBeenCalledTimes(1);
+    expect(renderer.discardChannelSourceTexture).toHaveBeenCalledWith(session.id, 0, 'Z');
+    expect([...getEntries(service).get(session.id)?.residentLayers.keys() ?? []]).toEqual([1]);
+    expect(ui.setDisplayCacheUsage).toHaveBeenLastCalledWith(80_000_000, 64 * MB);
+  });
+
   it('evicts least recently used non-active channels immediately when the budget shrinks', () => {
     const first = createSession('first', createDecodedImage(20_000, 1_000, { Z: 1 }));
     const second = createSession('second', createDecodedImage(20_000, 1_000, { Z: 1 }));
@@ -378,6 +463,44 @@ describe('render cache service', () => {
     expect(getEntries(service).get(second.id)?.residentLayers.size).toBe(1);
     expect(getEntries(service).get(third.id)?.residentLayers.size).toBe(0);
     expect(ui.setDisplayCacheUsage).toHaveBeenLastCalledWith(160_000_000, 64 * MB);
+  });
+
+  it('reuploads evicted layers within one session while preserving cached luminance ranges', async () => {
+    const decoded = createMultiLayerDecodedImage(20_000, 1_000, [{ Z: 1 }, { Y: 2 }]);
+    const session = createSession('session-1', decoded);
+    const ui = createUiMock();
+    const renderer = createRendererMock();
+    const { windowLike, flush } = createRenderCacheWindowLike();
+    const service = new RenderCacheService({
+      ui,
+      renderer,
+      getActiveSessionId: () => session.id,
+      windowLike
+    });
+
+    service.setBudgetMb(64);
+
+    const secondLayer = buildViewerStateForLayer(session.state, decoded, 1);
+
+    service.prepareActiveSession(session, session.state);
+    expect(service.requestDisplayLuminanceRange(session, session.state)).toEqual({
+      displayLuminanceRange: null,
+      pending: true
+    });
+    await flush();
+    expect(service.getCachedLuminanceRange(session.id, session.state)).toEqual({ min: 1, max: 1 });
+
+    service.prepareActiveSession(session, secondLayer);
+
+    expect(renderer.discardChannelSourceTexture).toHaveBeenCalledWith(session.id, 0, 'Z');
+    expect(service.getCachedLuminanceRange(session.id, session.state)).toEqual({ min: 1, max: 1 });
+
+    const reuploaded = service.prepareActiveSession(session, session.state);
+    const stable = service.prepareActiveSession(session, session.state);
+
+    expect(reuploaded.textureDirty).toBe(true);
+    expect(stable.textureDirty).toBe(false);
+    expect(renderer.ensureLayerChannelsResident).toHaveBeenCalledTimes(3);
   });
 
   it('reuploads evicted channels while preserving cached luminance ranges', async () => {
