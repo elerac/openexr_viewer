@@ -73,8 +73,8 @@ export function sameColormapOptions(
 }
 
 export function sameExportTarget(
-  a: { filename: string; sourceWidth: number; sourceHeight: number } | null,
-  b: { filename: string; sourceWidth: number; sourceHeight: number } | null
+  a: { filename: string } | null,
+  b: { filename: string } | null
 ): boolean {
   if (!a && !b) {
     return true;
@@ -83,11 +83,7 @@ export function sameExportTarget(
     return false;
   }
 
-  return (
-    a.filename === b.filename &&
-    a.sourceWidth === b.sourceWidth &&
-    a.sourceHeight === b.sourceHeight
-  );
+  return a.filename === b.filename;
 }
 
 export function sameStokesControl(

@@ -143,9 +143,7 @@ describe('gl image renderer', () => {
     expect(() => renderer.readExportPixels({
       state,
       sourceWidth: 2,
-      sourceHeight: 1,
-      targetWidth: 2,
-      targetHeight: 1
+      sourceHeight: 1
     })).toThrow('No prepared image is active for export.');
   });
 
@@ -176,9 +174,7 @@ describe('gl image renderer', () => {
     const first = renderer.readExportPixels({
       state,
       sourceWidth: 2,
-      sourceHeight: 1,
-      targetWidth: 2,
-      targetHeight: 1
+      sourceHeight: 1
     });
     const framebuffersAfterFirst = gl.createFramebuffer.mock.calls.length;
     const texturesAfterFirst = gl.createTexture.mock.calls.length;
@@ -186,9 +182,7 @@ describe('gl image renderer', () => {
     const second = renderer.readExportPixels({
       state,
       sourceWidth: 2,
-      sourceHeight: 1,
-      targetWidth: 2,
-      targetHeight: 1
+      sourceHeight: 1
     });
 
     expect(first).toEqual({
@@ -201,7 +195,7 @@ describe('gl image renderer', () => {
     expect(gl.createTexture.mock.calls.length).toBe(texturesAfterFirst);
   });
 
-  it('uses filtered blits and reads only the target-sized export buffer when downscaling', () => {
+  it('reads the source-sized export buffer without resampling', () => {
     const { renderer, gl } = createHarness();
     const layer = createInterleavedLayerFromChannels({
       R: [1, 2, 3, 4],
@@ -222,24 +216,22 @@ describe('gl image renderer', () => {
       buildDisplaySourceBinding(layer, state.displaySelection)
     );
     gl.readPixels.mockImplementation((_x, _y, width, height, _format, _type, data: Uint8ClampedArray) => {
-      expect(width).toBe(1);
-      expect(height).toBe(1);
-      data.set([10, 20, 30, 255]);
+      expect(width).toBe(2);
+      expect(height).toBe(2);
+      data.set([10, 20, 30, 255, 40, 50, 60, 255, 70, 80, 90, 255, 100, 110, 120, 255]);
     });
 
     const pixels = renderer.readExportPixels({
       state,
       sourceWidth: 2,
-      sourceHeight: 2,
-      targetWidth: 1,
-      targetHeight: 1
+      sourceHeight: 2
     });
 
-    expect(gl.blitFramebuffer).toHaveBeenCalledWith(0, 0, 2, 2, 0, 0, 1, 1, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+    expect(gl.blitFramebuffer).not.toHaveBeenCalled();
     expect(pixels).toEqual({
-      width: 1,
-      height: 1,
-      data: new Uint8ClampedArray([10, 20, 30, 255])
+      width: 2,
+      height: 2,
+      data: new Uint8ClampedArray([70, 80, 90, 255, 100, 110, 120, 255, 10, 20, 30, 255, 40, 50, 60, 255])
     });
   });
 
@@ -278,9 +270,7 @@ describe('gl image renderer', () => {
     renderer.readExportPixels({
       state,
       sourceWidth: 1,
-      sourceHeight: 1,
-      targetWidth: 1,
-      targetHeight: 1
+      sourceHeight: 1
     });
 
     expect(lastUniform1iValue(gl, 'uCompositeCheckerboard')).toBe(0);
@@ -321,53 +311,10 @@ describe('gl image renderer', () => {
     renderer.readExportPixels({
       state,
       sourceWidth: 1,
-      sourceHeight: 1,
-      targetWidth: 1,
-      targetHeight: 1
+      sourceHeight: 1
     });
 
     expect(lastUniform2fValue(gl, 'uViewportOrigin')).toEqual([0, 0]);
-  });
-
-  it('unpremultiplies alpha after filtered export downscales', () => {
-    const { renderer, gl } = createHarness();
-    const layer = createInterleavedLayerFromChannels({
-      R: [1, 0, 0, 1],
-      G: [0, 1, 0, 0],
-      B: [0, 0, 1, 0],
-      A: [0.5, 0.5, 0.5, 0.5]
-    });
-    const state = {
-      ...createInitialState(),
-      displaySelection: createChannelRgbSelection('R', 'G', 'B', 'A')
-    };
-
-    renderer.ensureLayerChannelsResident('session-1', 0, 2, 2, layer, ['R', 'G', 'B', 'A']);
-    renderer.setDisplaySelectionBindings(
-      'session-1',
-      0,
-      2,
-      2,
-      buildDisplaySourceBinding(layer, state.displaySelection)
-    );
-    gl.readPixels.mockImplementation((_x, _y, _width, _height, _format, _type, data: Uint8ClampedArray) => {
-      data.set([64, 32, 16, 128]);
-    });
-
-    const pixels = renderer.readExportPixels({
-      state,
-      sourceWidth: 2,
-      sourceHeight: 2,
-      targetWidth: 1,
-      targetHeight: 1
-    });
-
-    expect(lastUniform1iValue(gl, 'uAlphaOutputMode')).toBe(2);
-    expect(pixels).toEqual({
-      width: 1,
-      height: 1,
-      data: new Uint8ClampedArray([128, 64, 32, 128])
-    });
   });
 });
 

@@ -134,7 +134,6 @@ interface TopMenuElements {
 }
 
 type TopMenuTrackingMode = 'inactive' | 'pointer';
-type ExportDialogDimensionField = 'width' | 'height';
 
 interface ProbeValueRowElements {
   row: HTMLDivElement;
@@ -281,7 +280,6 @@ export class ViewerUi implements Disposable {
   private exportDialogOpen = false;
   private exportDialogBusy = false;
   private exportDialogRestoreFocusTarget: HTMLElement | null = null;
-  private lastExportDimensionEdited: ExportDialogDimensionField = 'width';
   private topMenuTrackingMode: TopMenuTrackingMode = 'inactive';
   private hoverOpenedTopMenuButton: HTMLButtonElement | null = null;
   private readonly probeValueRows = new Map<string, ProbeValueRowElements>();
@@ -748,22 +746,10 @@ export class ViewerUi implements Disposable {
 
   private applyExportTargetToDialog(target: ExportImageTarget): void {
     this.elements.exportFilenameInput.value = target.filename;
-    this.elements.exportWidthInput.max = String(target.sourceWidth);
-    this.elements.exportHeightInput.max = String(target.sourceHeight);
-    this.elements.exportWidthInput.value = String(target.sourceWidth);
-    this.elements.exportHeightInput.value = String(target.sourceHeight);
-    this.elements.exportAspectLockInput.checked = true;
-    this.lastExportDimensionEdited = 'width';
   }
 
   private resetExportDialogInputs(): void {
     this.elements.exportFilenameInput.value = '';
-    this.elements.exportWidthInput.value = '';
-    this.elements.exportHeightInput.value = '';
-    this.elements.exportWidthInput.max = '';
-    this.elements.exportHeightInput.max = '';
-    this.elements.exportAspectLockInput.checked = true;
-    this.lastExportDimensionEdited = 'width';
   }
 
   private setExportDialogBusy(busy: boolean): void {
@@ -773,9 +759,6 @@ export class ViewerUi implements Disposable {
 
     this.exportDialogBusy = busy;
     this.elements.exportFilenameInput.disabled = busy;
-    this.elements.exportWidthInput.disabled = busy;
-    this.elements.exportHeightInput.disabled = busy;
-    this.elements.exportAspectLockInput.disabled = busy;
     this.elements.exportDialogCancelButton.disabled = busy;
     this.elements.exportDialogSubmitButton.disabled = busy;
     this.elements.exportDialogSubmitButton.textContent = busy ? 'Exporting...' : 'Export';
@@ -797,31 +780,6 @@ export class ViewerUi implements Disposable {
     this.elements.exportDialogError.textContent = message;
   }
 
-  private syncExportDialogDimensions(changedField: ExportDialogDimensionField): void {
-    if (this.disposed) {
-      return;
-    }
-
-    const target = this.exportTarget;
-    if (!target) {
-      return;
-    }
-
-    this.lastExportDimensionEdited = changedField;
-    if (!this.elements.exportAspectLockInput.checked) {
-      return;
-    }
-
-    const normalized = normalizeExportDimensions(
-      this.elements.exportWidthInput.value,
-      this.elements.exportHeightInput.value,
-      target,
-      changedField
-    );
-    this.elements.exportWidthInput.value = String(normalized.width);
-    this.elements.exportHeightInput.value = String(normalized.height);
-  }
-
   private async handleExportDialogSubmit(): Promise<void> {
     if (this.disposed) {
       return;
@@ -841,21 +799,14 @@ export class ViewerUi implements Disposable {
 
     const request = parseExportImageRequest({
       filename,
-      widthValue: this.elements.exportWidthInput.value,
-      heightValue: this.elements.exportHeightInput.value,
-      format: this.elements.exportFormatSelect.value,
-      target,
-      lockAspect: this.elements.exportAspectLockInput.checked,
-      preferredDimension: this.lastExportDimensionEdited
+      format: this.elements.exportFormatSelect.value
     });
     if (!request) {
-      this.setExportDialogError('Enter valid export dimensions.');
+      this.setExportDialogError('Export failed.');
       return;
     }
 
     this.elements.exportFilenameInput.value = request.filename;
-    this.elements.exportWidthInput.value = String(request.width);
-    this.elements.exportHeightInput.value = String(request.height);
     this.setExportDialogError(null);
     this.setExportDialogBusy(true);
 
@@ -1215,24 +1166,6 @@ export class ViewerUi implements Disposable {
     this.disposables.addEventListener(this.elements.exportDialogForm, 'submit', (event) => {
       event.preventDefault();
       void this.handleExportDialogSubmit();
-    });
-
-    this.disposables.addEventListener(this.elements.exportWidthInput, 'input', () => {
-      this.syncExportDialogDimensions('width');
-    });
-    this.disposables.addEventListener(this.elements.exportWidthInput, 'change', () => {
-      this.syncExportDialogDimensions('width');
-    });
-    this.disposables.addEventListener(this.elements.exportHeightInput, 'input', () => {
-      this.syncExportDialogDimensions('height');
-    });
-    this.disposables.addEventListener(this.elements.exportHeightInput, 'change', () => {
-      this.syncExportDialogDimensions('height');
-    });
-    this.disposables.addEventListener(this.elements.exportAspectLockInput, 'change', () => {
-      if (this.elements.exportAspectLockInput.checked) {
-        this.syncExportDialogDimensions(this.lastExportDimensionEdited);
-      }
     });
 
     this.disposables.addEventListener(document, 'keydown', (event) => {
@@ -1703,71 +1636,17 @@ function normalizeExportFilename(value: string): string {
   return trimmed.toLocaleLowerCase().endsWith('.png') ? trimmed : `${trimmed}.png`;
 }
 
-function normalizeExportDimensions(
-  widthValue: string,
-  heightValue: string,
-  target: ExportImageTarget,
-  preferredDimension: ExportDialogDimensionField
-): { width: number; height: number } {
-  const width = clampExportDimension(widthValue, target.sourceWidth);
-  const height = clampExportDimension(heightValue, target.sourceHeight);
-  if (preferredDimension === 'height') {
-    return {
-      width: clampExportDimension(
-        Math.round((height / Math.max(target.sourceHeight, 1)) * target.sourceWidth),
-        target.sourceWidth
-      ),
-      height
-    };
-  }
-
-  return {
-    width,
-    height: clampExportDimension(
-      Math.round((width / Math.max(target.sourceWidth, 1)) * target.sourceHeight),
-      target.sourceHeight
-    )
-  };
-}
-
-function clampExportDimension(value: string | number, max: number): number {
-  const numericValue = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(numericValue)) {
-    return 1;
-  }
-
-  return Math.min(Math.max(1, Math.round(numericValue)), Math.max(1, Math.floor(max)));
-}
-
 function parseExportImageRequest(args: {
   filename: string;
-  widthValue: string;
-  heightValue: string;
   format: string;
-  target: ExportImageTarget;
-  lockAspect: boolean;
-  preferredDimension: ExportDialogDimensionField;
 }): ExportImageRequest | null {
   if (args.format !== 'png') {
     return null;
   }
 
-  const dimensions = args.lockAspect
-    ? normalizeExportDimensions(args.widthValue, args.heightValue, args.target, args.preferredDimension)
-    : {
-        width: clampExportDimension(args.widthValue, args.target.sourceWidth),
-        height: clampExportDimension(args.heightValue, args.target.sourceHeight)
-      };
-
-  if (!Number.isInteger(dimensions.width) || !Number.isInteger(dimensions.height)) {
-    return null;
-  }
-
   return {
     filename: args.filename,
-    format: 'png',
-    width: dimensions.width,
-    height: dimensions.height
+    format: 'png'
   };
 }
 

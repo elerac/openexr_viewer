@@ -82,8 +82,6 @@ export interface ReadExportPixelsArgs {
   state: ViewerState;
   sourceWidth: number;
   sourceHeight: number;
-  targetWidth: number;
-  targetHeight: number;
 }
 
 const DEFAULT_RENDER_PASS_OPTIONS: RenderPassOptions = {
@@ -101,7 +99,6 @@ export class GlImageRenderer implements Disposable {
   private readonly panoramaProgram: ProgramBundle<PanoramaUniforms>;
   private readonly layerTexturesBySession = new Map<string, Map<number, LayerSourceTextures>>();
   private exportSourceSurface: ExportSurface | null = null;
-  private exportTargetSurface: ExportSurface | null = null;
   private viewport: ViewportInfo = { width: 1, height: 1 };
   private viewportOrigin = { left: 0, top: 0 };
   private imageSize: { width: number; height: number } | null = null;
@@ -428,9 +425,7 @@ export class GlImageRenderer implements Disposable {
   readExportPixels({
     state,
     sourceWidth,
-    sourceHeight,
-    targetWidth,
-    targetHeight
+    sourceHeight
   }: ReadExportPixelsArgs): ExportImagePixels {
     if (this.disposed) {
       throw new Error('Renderer has been disposed.');
@@ -438,7 +433,7 @@ export class GlImageRenderer implements Disposable {
     if (!this.imageSize || this.imageSize.width !== sourceWidth || this.imageSize.height !== sourceHeight) {
       throw new Error('No prepared image is active for export.');
     }
-    if (sourceWidth <= 0 || sourceHeight <= 0 || targetWidth <= 0 || targetHeight <= 0) {
+    if (sourceWidth <= 0 || sourceHeight <= 0) {
       throw new Error('Export dimensions must be positive.');
     }
 
@@ -446,7 +441,6 @@ export class GlImageRenderer implements Disposable {
     const sourceSurface = this.getOrCreateExportSurface(this.exportSourceSurface, sourceWidth, sourceHeight);
     this.exportSourceSurface = sourceSurface;
 
-    const needsResize = sourceWidth !== targetWidth || sourceHeight !== targetHeight;
     const preserveAlpha = this.activeBinding.usesImageAlpha;
     const exportState: ViewerState = {
       ...state,
@@ -461,53 +455,22 @@ export class GlImageRenderer implements Disposable {
       gl.viewport(0, 0, sourceWidth, sourceHeight);
       this.renderImagePass(exportState, {
         compositeCheckerboard: false,
-        alphaOutputMode: preserveAlpha && needsResize ? 'premultiplied' : preserveAlpha ? 'straight' : 'opaque',
+        alphaOutputMode: preserveAlpha ? 'straight' : 'opaque',
         viewportWidth: sourceWidth,
         viewportHeight: sourceHeight,
         viewportLeft: 0,
         viewportTop: 0
       });
 
-      let readFramebuffer = sourceSurface.framebuffer;
-      let readWidth = sourceWidth;
-      let readHeight = sourceHeight;
+      const data = new Uint8ClampedArray(sourceWidth * sourceHeight * 4);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, sourceSurface.framebuffer);
+      gl.readPixels(0, 0, sourceWidth, sourceHeight, gl.RGBA, gl.UNSIGNED_BYTE, data);
 
-      if (needsResize) {
-        const targetSurface = this.getOrCreateExportSurface(this.exportTargetSurface, targetWidth, targetHeight);
-        this.exportTargetSurface = targetSurface;
-
-        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, sourceSurface.framebuffer);
-        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, targetSurface.framebuffer);
-        gl.blitFramebuffer(
-          0,
-          0,
-          sourceWidth,
-          sourceHeight,
-          0,
-          0,
-          targetWidth,
-          targetHeight,
-          gl.COLOR_BUFFER_BIT,
-          gl.LINEAR
-        );
-
-        readFramebuffer = targetSurface.framebuffer;
-        readWidth = targetWidth;
-        readHeight = targetHeight;
-      }
-
-      const data = new Uint8ClampedArray(readWidth * readHeight * 4);
-      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, readFramebuffer);
-      gl.readPixels(0, 0, readWidth, readHeight, gl.RGBA, gl.UNSIGNED_BYTE, data);
-
-      flipRgbaRowsInPlace(data, readWidth, readHeight);
-      if (preserveAlpha && needsResize) {
-        unpremultiplyRgbaInPlace(data);
-      }
+      flipRgbaRowsInPlace(data, sourceWidth, sourceHeight);
 
       return {
-        width: readWidth,
-        height: readHeight,
+        width: sourceWidth,
+        height: sourceHeight,
         data
       };
     } finally {
@@ -545,9 +508,7 @@ export class GlImageRenderer implements Disposable {
     this.colormapEntryCount = 0;
     this.activeBinding = createEmptyDisplaySourceBinding();
     this.deleteExportSurface(this.exportSourceSurface);
-    this.deleteExportSurface(this.exportTargetSurface);
     this.exportSourceSurface = null;
-    this.exportTargetSurface = null;
     this.gl.bindVertexArray(null);
     this.gl.useProgram(null);
     for (let slotIndex = 0; slotIndex < REQUIRED_TEXTURE_UNITS; slotIndex += 1) {
@@ -861,20 +822,6 @@ function flipRgbaRowsInPlace(data: Uint8ClampedArray, width: number, height: num
     scratch.set(data.subarray(topOffset, topOffset + rowStride));
     data.copyWithin(topOffset, bottomOffset, bottomOffset + rowStride);
     data.set(scratch, bottomOffset);
-  }
-}
-
-function unpremultiplyRgbaInPlace(data: Uint8ClampedArray): void {
-  for (let offset = 0; offset < data.length; offset += 4) {
-    const alpha = data[offset + 3] ?? 0;
-    if (alpha <= 0 || alpha >= 255) {
-      continue;
-    }
-
-    const scale = 255 / alpha;
-    data[offset + 0] = Math.min(255, Math.round(data[offset + 0] * scale));
-    data[offset + 1] = Math.min(255, Math.round(data[offset + 1] * scale));
-    data[offset + 2] = Math.min(255, Math.round(data[offset + 2] * scale));
   }
 }
 

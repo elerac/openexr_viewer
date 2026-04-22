@@ -147,7 +147,7 @@ export interface ViewerUiSnapshot {
   isRgbViewLoading: boolean;
   activeSessionId: string | null;
   openedImageOptions: ViewerOpenedImageOption[];
-  exportTarget: { filename: string; sourceWidth: number; sourceHeight: number } | null;
+  exportTarget: { filename: string } | null;
   exposureEv: number;
   viewerMode: ViewerSessionState['viewerMode'];
   visualizationMode: ViewerSessionState['visualizationMode'];

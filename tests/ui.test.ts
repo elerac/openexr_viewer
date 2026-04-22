@@ -557,7 +557,7 @@ describe('view menu', () => {
     expect(exportButton.disabled).toBe(true);
 
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
-    ui.setExportTarget({ filename: 'image.png', sourceWidth: 640, sourceHeight: 320 });
+    ui.setExportTarget({ filename: 'image.png' });
     expect(exportButton.disabled).toBe(false);
 
     ui.setRgbViewLoading(true);
@@ -635,31 +635,23 @@ describe('view menu', () => {
     expect(openFolderButton.disabled).toBe(false);
   });
 
-  it('opens export dialog with defaults, syncs aspect ratio, and normalizes the filename', async () => {
+  it('opens export dialog with defaults and normalizes the filename', async () => {
     installUiFixture();
 
     const onExportImage = vi.fn(async () => undefined);
     const ui = new ViewerUi(createUiCallbacks({ onExportImage }));
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
-    ui.setExportTarget({ filename: 'image.png', sourceWidth: 640, sourceHeight: 320 });
+    ui.setExportTarget({ filename: 'image.png' });
 
     const exportButton = document.getElementById('export-image-button') as HTMLButtonElement;
     const dialogBackdrop = document.getElementById('export-dialog-backdrop') as HTMLDivElement;
     const filenameInput = document.getElementById('export-filename-input') as HTMLInputElement;
-    const widthInput = document.getElementById('export-width-input') as HTMLInputElement;
-    const heightInput = document.getElementById('export-height-input') as HTMLInputElement;
     const submitButton = document.getElementById('export-dialog-submit-button') as HTMLButtonElement;
 
     exportButton.click();
 
     expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
     expect(filenameInput.value).toBe('image.png');
-    expect(widthInput.value).toBe('640');
-    expect(heightInput.value).toBe('320');
-
-    widthInput.value = '320';
-    widthInput.dispatchEvent(new Event('input', { bubbles: true }));
-    expect(heightInput.value).toBe('160');
 
     filenameInput.value = 'graded-output';
     submitButton.click();
@@ -667,9 +659,7 @@ describe('view menu', () => {
 
     expect(onExportImage).toHaveBeenCalledWith({
       filename: 'graded-output.png',
-      format: 'png',
-      width: 320,
-      height: 160
+      format: 'png'
     });
     expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
   });
@@ -679,12 +669,12 @@ describe('view menu', () => {
 
     const deferred = createDeferred<void>();
     const onExportImage = vi
-      .fn<(_: { filename: string; format: 'png'; width: number; height: number }) => Promise<void>>()
+      .fn<(_: { filename: string; format: 'png' }) => Promise<void>>()
       .mockReturnValueOnce(deferred.promise)
       .mockRejectedValueOnce(new Error('Encode failed'));
     const ui = new ViewerUi(createUiCallbacks({ onExportImage }));
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
-    ui.setExportTarget({ filename: 'image.png', sourceWidth: 640, sourceHeight: 320 });
+    ui.setExportTarget({ filename: 'image.png' });
 
     const exportButton = document.getElementById('export-image-button') as HTMLButtonElement;
     const dialogBackdrop = document.getElementById('export-dialog-backdrop') as HTMLDivElement;
@@ -1136,7 +1126,7 @@ function createUiCallbacksBase() {
   return {
     onOpenFileClick: () => {},
     onOpenFolderClick: () => {},
-    onExportImage: async (_request: { filename: string; format: 'png'; width: number; height: number }) => {},
+    onExportImage: async (_request: { filename: string; format: 'png' }) => {},
     onFileSelected: () => {},
     onFolderSelected: () => {},
     onFilesDropped: () => {},

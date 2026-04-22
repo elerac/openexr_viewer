@@ -6,11 +6,7 @@ import {
 } from './colormaps';
 import { selectionUsesImageAlpha } from './display-model';
 import { isStokesDegreeModulationEnabled } from './stokes';
-import type {
-  DecodedExrImage,
-  ExportImageRequest,
-  ViewerSessionState
-} from './types';
+import type { ViewerSessionState } from './types';
 
 type ExportVisualizationState = Pick<
   ViewerSessionState,
@@ -28,14 +24,6 @@ export interface BuildExportImagePixelsArgs {
   width: number;
   height: number;
   state: ExportVisualizationState;
-  colormapLut: ColormapLut | null;
-}
-
-export interface CreateExportImageBlobArgs {
-  request: ExportImageRequest;
-  decoded: DecodedExrImage;
-  displayTexture: Float32Array;
-  state: ViewerSessionState;
   colormapLut: ColormapLut | null;
 }
 
@@ -102,45 +90,6 @@ export async function createPngBlobFromPixels(pixels: ExportImagePixels): Promis
   return await canvasToBlob(createCanvasFromPixels(pixels), 'image/png');
 }
 
-export async function createExportImageBlob({
-  request,
-  decoded,
-  displayTexture,
-  state,
-  colormapLut
-}: CreateExportImageBlobArgs): Promise<Blob> {
-  if (typeof document === 'undefined') {
-    throw new Error('Image export is only available in a browser environment.');
-  }
-  if (request.format !== 'png') {
-    throw new Error(`Unsupported export format: ${request.format}`);
-  }
-  if (state.visualizationMode === 'colormap' && !colormapLut) {
-    throw new Error('The active colormap is not ready for export.');
-  }
-  if (decoded.width <= 0 || decoded.height <= 0) {
-    throw new Error('No exportable image is active.');
-  }
-
-  const pixels = buildExportImagePixels({
-    displayTexture,
-    width: decoded.width,
-    height: decoded.height,
-    state,
-    colormapLut
-  });
-
-  const sourceCanvas = createCanvasFromPixels(pixels);
-
-  const targetWidth = clampRequestedDimension(request.width, pixels.width);
-  const targetHeight = clampRequestedDimension(request.height, pixels.height);
-  const exportCanvas = targetWidth === pixels.width && targetHeight === pixels.height
-    ? sourceCanvas
-    : resizeExportCanvas(sourceCanvas, targetWidth, targetHeight);
-
-  return await canvasToBlob(exportCanvas, 'image/png');
-}
-
 function createCanvasFromPixels(pixels: ExportImagePixels): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = pixels.width;
@@ -153,25 +102,6 @@ function createCanvasFromPixels(pixels: ExportImagePixels): HTMLCanvasElement {
 
   context.putImageData(new ImageData(pixels.data, pixels.width, pixels.height), 0, 0);
   return canvas;
-}
-
-function resizeExportCanvas(
-  sourceCanvas: HTMLCanvasElement,
-  width: number,
-  height: number
-): HTMLCanvasElement {
-  const resizedCanvas = document.createElement('canvas');
-  resizedCanvas.width = width;
-  resizedCanvas.height = height;
-  const resizedContext = resizedCanvas.getContext('2d');
-  if (!resizedContext) {
-    throw new Error('Unable to create a resized export canvas.');
-  }
-
-  resizedContext.imageSmoothingEnabled = true;
-  resizedContext.imageSmoothingQuality = 'high';
-  resizedContext.drawImage(sourceCanvas, 0, 0, width, height);
-  return resizedCanvas;
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement, type: 'image/png'): Promise<Blob> {
@@ -197,12 +127,4 @@ function clampAlpha(value: number): number {
   }
 
   return Math.min(1, Math.max(0, value));
-}
-
-function clampRequestedDimension(value: number, sourceSize: number): number {
-  if (!Number.isFinite(value)) {
-    return sourceSize;
-  }
-
-  return Math.min(Math.max(1, Math.round(value)), sourceSize);
 }

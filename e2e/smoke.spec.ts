@@ -496,8 +496,6 @@ test('exports the active image as a png download from the file menu', async ({ p
   const exportMenuItem = page.locator('#export-image-button');
   const exportDialog = page.locator('#export-dialog-form');
   const exportFilenameInput = page.locator('#export-filename-input');
-  const exportWidthInput = page.locator('#export-width-input');
-  const exportHeightInput = page.locator('#export-height-input');
   const exportSubmitButton = page.locator('#export-dialog-submit-button');
 
   await fileMenuButton.click();
@@ -505,8 +503,6 @@ test('exports the active image as a png download from the file menu', async ({ p
 
   await expect(exportDialog).toBeVisible();
   await expect(exportFilenameInput).toHaveValue('cbox_rgb.png');
-  await expect(exportWidthInput).toHaveValue('256');
-  await expect(exportHeightInput).toHaveValue('256');
 
   const downloadPromise = page.waitForEvent('download');
   await exportSubmitButton.click();

@@ -71,9 +71,7 @@ export async function bootstrapApp(): Promise<AppHandle> {
         const pixels = renderer!.readExportPixels({
           state: mergeRenderState(state.sessionState, state.interactionState),
           sourceWidth: activeSession.decoded.width,
-          sourceHeight: activeSession.decoded.height,
-          targetWidth: request.width,
-          targetHeight: request.height
+          sourceHeight: activeSession.decoded.height
         });
         const blob = await createPngBlobFromPixels(pixels);
         if (disposed) {

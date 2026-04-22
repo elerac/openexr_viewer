@@ -32,15 +32,13 @@ export function buildOpenedImageOptions(state: ViewerAppState): ViewerOpenedImag
 
 export function buildExportTarget(
   session: OpenedImageSession | null
-): { filename: string; sourceWidth: number; sourceHeight: number } | null {
+): { filename: string } | null {
   if (!session) {
     return null;
   }
 
   return {
-    filename: buildDefaultExportFilename(session.displayName),
-    sourceWidth: session.decoded.width,
-    sourceHeight: session.decoded.height
+    filename: buildDefaultExportFilename(session.displayName)
   };
 }
 

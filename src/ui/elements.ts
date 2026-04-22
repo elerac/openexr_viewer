@@ -29,9 +29,6 @@ export interface Elements {
   exportDialogForm: HTMLFormElement;
   exportFilenameInput: HTMLInputElement;
   exportFormatSelect: HTMLSelectElement;
-  exportWidthInput: HTMLInputElement;
-  exportHeightInput: HTMLInputElement;
-  exportAspectLockInput: HTMLInputElement;
   exportDialogError: HTMLElement;
   exportDialogCancelButton: HTMLButtonElement;
   exportDialogSubmitButton: HTMLButtonElement;
@@ -174,9 +171,6 @@ export function resolveElements(): Elements {
     exportDialogForm: requireElement('export-dialog-form', HTMLFormElement),
     exportFilenameInput: requireElement('export-filename-input', HTMLInputElement),
     exportFormatSelect: requireElement('export-format-select', HTMLSelectElement),
-    exportWidthInput: requireElement('export-width-input', HTMLInputElement),
-    exportHeightInput: requireElement('export-height-input', HTMLInputElement),
-    exportAspectLockInput: requireElement('export-aspect-lock-input', HTMLInputElement),
     exportDialogError: requireElement('export-dialog-error', HTMLElement),
     exportDialogCancelButton: requireElement('export-dialog-cancel-button', HTMLButtonElement),
     exportDialogSubmitButton: requireElement('export-dialog-submit-button', HTMLButtonElement),

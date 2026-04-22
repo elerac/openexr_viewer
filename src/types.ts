@@ -138,12 +138,8 @@ export type ExportImageFormat = 'png';
 export interface ExportImageRequest {
   filename: string;
   format: ExportImageFormat;
-  width: number;
-  height: number;
 }
 
 export interface ExportImageTarget {
   filename: string;
-  sourceWidth: number;
-  sourceHeight: number;
 }
