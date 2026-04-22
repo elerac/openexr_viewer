@@ -67,6 +67,7 @@ async function captureThumbnail() {
     await waitForAppReady(page);
     await openGallerySample(page);
     await waitForViewerReady(page);
+    await resetView(page);
 
     if (pageErrors.length > 0) {
       throw new Error(`The viewer raised a page error: ${pageErrors.join('\n')}`);
@@ -125,6 +126,11 @@ async function waitForAppReady(page) {
 async function openGallerySample(page) {
   await page.getByRole('button', { name: 'Gallery', exact: true }).click();
   await page.getByRole('menuitem', { name: 'cbox_rgb.exr', exact: true }).click();
+}
+
+async function resetView(page) {
+  await page.getByRole('button', { name: 'Reset', exact: true }).click();
+  await waitForNextPaint(page);
 }
 
 async function waitForViewerReady(page) {
