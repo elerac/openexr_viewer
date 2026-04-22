@@ -146,6 +146,10 @@ export function isStokesAngleSelection(selection: DisplaySelection | null): sele
   return Boolean(selection && selection.kind === 'stokesAngle');
 }
 
+export function isGroupedRgbStokesSelection(selection: DisplaySelection | null): selection is StokesSelection {
+  return Boolean(isStokesSelection(selection) && selection.source.kind === 'rgbLuminance');
+}
+
 export function isMonoSelection(selection: DisplaySelection | null): boolean {
   if (!selection) {
     return false;

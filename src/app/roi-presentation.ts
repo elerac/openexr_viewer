@@ -28,7 +28,8 @@ export function buildRoiReadoutModel(args: BuildRoiPresentationArgs): RoiReadout
       args.activeSession.decoded.width,
       args.activeSession.decoded.height,
       roi,
-      args.sessionState.displaySelection
+      args.sessionState.displaySelection,
+      args.sessionState.visualizationMode
     )
   };
 }

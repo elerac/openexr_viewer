@@ -65,6 +65,7 @@ interface RenderCacheRenderer {
     height: number,
     layer: DecodedLayer,
     selection: ViewerSessionState['displaySelection'],
+    visualizationMode: ViewerSessionState['visualizationMode'],
     textureRevisionKey: string,
     binding: ReturnType<typeof buildDisplaySourceBinding>
   ) => void;
@@ -100,6 +101,7 @@ interface PendingDisplayLuminanceRangeJob {
   sessionId: string;
   revisionKey: string;
   activeLayer: number;
+  visualizationMode: ViewerSessionState['visualizationMode'];
   displaySelection: DisplaySelection | null;
   width: number;
   height: number;
@@ -166,7 +168,7 @@ export class RenderCacheService implements Disposable {
 
     const entry = this.getOrCreateEntry(session.id);
     const textureRevisionKey = buildDisplayTextureRevisionKey(state);
-    const binding = buildDisplaySourceBinding(layer, state.displaySelection);
+    const binding = buildDisplaySourceBinding(layer, state.displaySelection, state.visualizationMode);
     const requiredChannelNames = getDisplaySourceBindingChannelNames(binding).filter((channelName) => {
       return layer.channelStorage.channelIndexByName[channelName] !== undefined;
     });
@@ -220,6 +222,7 @@ export class RenderCacheService implements Disposable {
         session.decoded.height,
         layer,
         state.displaySelection,
+        state.visualizationMode,
         textureRevisionKey,
         binding
       );
@@ -239,7 +242,7 @@ export class RenderCacheService implements Disposable {
 
   requestDisplayLuminanceRange(
     session: OpenedImageSession,
-    state: Pick<ViewerSessionState, 'activeLayer' | 'displaySelection'>,
+    state: Pick<ViewerSessionState, 'activeLayer' | 'displaySelection' | 'visualizationMode'>,
     requestId: number | null = null
   ): RequestDisplayLuminanceRangeResult {
     if (this.disposed) {
@@ -283,6 +286,7 @@ export class RenderCacheService implements Disposable {
       sessionId: session.id,
       revisionKey,
       activeLayer: state.activeLayer,
+      visualizationMode: state.visualizationMode,
       displaySelection: cloneDisplaySelection(state.displaySelection),
       width: session.decoded.width,
       height: session.decoded.height,
@@ -300,7 +304,7 @@ export class RenderCacheService implements Disposable {
 
   getCachedLuminanceRange(
     sessionId: string,
-    state: Pick<ViewerSessionState, 'activeLayer' | 'displaySelection'>
+    state: Pick<ViewerSessionState, 'activeLayer' | 'displaySelection' | 'visualizationMode'>
   ): DisplayLuminanceRange | null {
     if (this.disposed) {
       return null;
@@ -430,7 +434,8 @@ export class RenderCacheService implements Disposable {
             job.layer,
             job.width,
             job.height,
-            job.displaySelection
+            job.displaySelection,
+            job.visualizationMode
           );
 
           if (!this.hasPendingDisplayLuminanceRangeJob(job)) {
@@ -683,9 +688,10 @@ export class RenderCacheService implements Disposable {
     layer: DecodedLayer,
     width: number,
     height: number,
-    selection: DisplaySelection | null
+    selection: DisplaySelection | null,
+    visualizationMode: ViewerSessionState['visualizationMode']
   ): DisplayLuminanceRange | null {
-    const selectionKey = serializeDisplaySelectionLuminanceKey(selection);
+    const selectionKey = serializeDisplaySelectionLuminanceKey(selection, visualizationMode);
     if (Object.prototype.hasOwnProperty.call(layer.analysis.displayLuminanceRangeBySelectionKey, selectionKey)) {
       return layer.analysis.displayLuminanceRangeBySelectionKey[selectionKey] ?? null;
     }
@@ -699,7 +705,7 @@ export class RenderCacheService implements Disposable {
         layer.analysis.finiteRangeByChannel[selection.channel] = range;
       }
     } else {
-      range = computeDisplaySelectionLuminanceRange(layer, width, height, selection);
+      range = computeDisplaySelectionLuminanceRange(layer, width, height, selection, visualizationMode);
     }
 
     layer.analysis.displayLuminanceRangeBySelectionKey[selectionKey] = range;

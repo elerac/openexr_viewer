@@ -47,7 +47,7 @@ export function applyRenderEffects(
     snapshot.displayRangeRequest
   ) {
     const requestId = core.issueRequestId();
-    const result = renderCache.requestDisplayLuminanceRange(activeSession, state.sessionState, requestId);
+    const result = renderCache.requestDisplayLuminanceRange(activeSession, snapshot.displayRangeRequest, requestId);
     if (result.pending) {
       core.dispatch({
         type: 'displayRangeRequestStarted',

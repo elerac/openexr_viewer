@@ -770,8 +770,10 @@ function resolveDisplaySourceModeUniformValue(mode: DisplaySourceMode): number {
       return 2;
     case 'stokesDirect':
       return 3;
-    case 'stokesRgbLuminance':
+    case 'stokesRgb':
       return 4;
+    case 'stokesRgbLuminance':
+      return 5;
   }
 }
 

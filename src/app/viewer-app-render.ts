@@ -219,6 +219,7 @@ function createResourceTargetSelector(): (
       ? {
           sessionId: activeSession.id,
           activeLayer: state.sessionState.activeLayer,
+          visualizationMode: state.sessionState.visualizationMode,
           displaySelection: state.sessionState.displaySelection,
           decodedRef: activeSession.decoded
         }
@@ -241,6 +242,7 @@ function createRoiReadoutSelector(): (
   let previousLayer: ViewerRenderSnapshot['activeLayer'] = null;
   let previousRoi: ViewerAppState['sessionState']['roi'] = null;
   let previousDisplaySelection: ViewerAppState['sessionState']['displaySelection'] = null;
+  let previousVisualizationMode: ViewerAppState['sessionState']['visualizationMode'] = 'rgb';
   let previousResult = buildRoiReadoutModel({
     activeSession: null,
     activeLayer: null,
@@ -253,6 +255,7 @@ function createRoiReadoutSelector(): (
       sessionId === previousSessionId &&
       activeLayer === previousLayer &&
       sameRoi(state.sessionState.roi, previousRoi) &&
+      state.sessionState.visualizationMode === previousVisualizationMode &&
       sameDisplaySelection(state.sessionState.displaySelection, previousDisplaySelection)
     ) {
       return previousResult;
@@ -261,6 +264,7 @@ function createRoiReadoutSelector(): (
     previousSessionId = sessionId;
     previousLayer = activeLayer;
     previousRoi = state.sessionState.roi;
+    previousVisualizationMode = state.sessionState.visualizationMode;
     previousDisplaySelection = state.sessionState.displaySelection;
     previousResult = buildRoiReadoutModel({
       activeSession,
@@ -280,13 +284,21 @@ function createDisplayRangeRequestSelector(): (
   return (state, activeSession, activeLayer) => {
     const shouldRequest = state.pendingColormapActivation
       || (state.sessionState.visualizationMode === 'colormap' && state.sessionState.colormapRangeMode === 'alwaysAuto');
+    const effectiveVisualizationMode = state.pendingColormapActivation
+      ? 'colormap'
+      : state.sessionState.visualizationMode;
     const nextResult = activeSession && activeLayer && shouldRequest
       ? {
           sessionId: activeSession.id,
           activeLayer: state.sessionState.activeLayer,
+          visualizationMode: effectiveVisualizationMode,
           displaySelection: state.sessionState.displaySelection,
           decodedRef: activeSession.decoded,
-          requestKey: `${activeSession.id}:${buildDisplayLuminanceRevisionKey(state.sessionState)}`
+          requestKey: `${activeSession.id}:${buildDisplayLuminanceRevisionKey({
+            activeLayer: state.sessionState.activeLayer,
+            displaySelection: state.sessionState.displaySelection,
+            visualizationMode: effectiveVisualizationMode
+          })}`
         }
       : null;
     if (sameDisplayRangeRequest(previousResult, nextResult)) {

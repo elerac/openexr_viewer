@@ -66,6 +66,18 @@ describe('display texture', () => {
       activeLayer: 1,
       displaySelection: createStokesSelection('aolp', 'stokesRgb', 'G')
     })).toBe('1:stokesAngle:aolp:rgbComponent:G');
+
+    expect(buildDisplayTextureRevisionKey({
+      activeLayer: 2,
+      displaySelection: createStokesSelection('dolp', 'stokesRgb'),
+      visualizationMode: 'rgb'
+    })).toBe('2:stokesScalar:dolp:rgbLuminance:rgb');
+
+    expect(buildDisplayTextureRevisionKey({
+      activeLayer: 2,
+      displaySelection: createStokesSelection('dolp', 'stokesRgb'),
+      visualizationMode: 'colormap'
+    })).toBe('2:stokesScalar:dolp:rgbLuminance:colormap');
   });
 
   it('builds luminance revision keys that ignore alpha-only channel changes', () => {
@@ -78,6 +90,18 @@ describe('display texture', () => {
       activeLayer: 2,
       displaySelection: createChannelMonoSelection('Y', 'A')
     })).toBe('2:channelMono:Y');
+
+    expect(buildDisplayLuminanceRevisionKey({
+      activeLayer: 3,
+      displaySelection: createStokesSelection('aolp', 'stokesRgb'),
+      visualizationMode: 'rgb'
+    })).toBe('3:stokesAngle:aolp:rgbLuminance:rgb');
+
+    expect(buildDisplayLuminanceRevisionKey({
+      activeLayer: 3,
+      displaySelection: createStokesSelection('aolp', 'stokesRgb'),
+      visualizationMode: 'colormap'
+    })).toBe('3:stokesAngle:aolp:rgbLuminance:colormap');
   });
 
   it('builds scalar Stokes AoLP display textures with values duplicated across RGB', () => {
@@ -112,7 +136,7 @@ describe('display texture', () => {
     expect(texture[12]).toBe(0);
   });
 
-  it('builds grouped and split RGB Stokes display textures', () => {
+  it('builds grouped RGB Stokes display textures for None and Colormap, plus split RGB textures', () => {
     const layer = createLayerFromChannels({
       'S0.R': [1],
       'S0.G': [2],
@@ -129,9 +153,19 @@ describe('display texture', () => {
     }, 'stokes-rgb');
 
     const grouped = buildSelectedDisplayTexture(layer, 1, 1, createStokesSelection('dolp', 'stokesRgb'));
+    const groupedColormap = buildSelectedDisplayTexture(
+      layer,
+      1,
+      1,
+      createStokesSelection('dolp', 'stokesRgb'),
+      'colormap'
+    );
     const split = buildSelectedDisplayTexture(layer, 1, 1, createStokesSelection('aolp', 'stokesRgb', 'G'));
 
-    expect(grouped[0]).toBeCloseTo(
+    expect(grouped[0]).toBeCloseTo(1, 6);
+    expect(grouped[1]).toBeCloseTo(1, 6);
+    expect(grouped[2]).toBeCloseTo(0.5, 6);
+    expect(groupedColormap[0]).toBeCloseTo(
       Math.sqrt(
         computeRec709Luminance(1, 1, 2) ** 2 +
         computeRec709Luminance(0, Math.sqrt(3), 0) ** 2
@@ -179,10 +213,26 @@ describe('display texture', () => {
       samplePixelValuesForDisplay(scalarLayer, 1, 1, { ix: 0, iy: 0 }, createStokesSelection('aolp'))?.values.AoLP
     ).toBeCloseTo(Math.PI / 4, 6);
     expect(
-      samplePixelValuesForDisplay(rgbLayer, 1, 1, { ix: 0, iy: 0 }, createStokesSelection('aolp', 'stokesRgb'))?.values.AoLP
+      samplePixelValuesForDisplay(rgbLayer, 1, 1, { ix: 0, iy: 0 }, createStokesSelection('aolp', 'stokesRgb'))?.values['AoLP.R']
+    ).toBeCloseTo(Math.PI / 4, 6);
+    expect(
+      samplePixelValuesForDisplay(rgbLayer, 1, 1, { ix: 0, iy: 0 }, createStokesSelection('aolp', 'stokesRgb'))?.values['AoLP.G']
+    ).toBeCloseTo(Math.PI / 4, 6);
+    expect(
+      samplePixelValuesForDisplay(rgbLayer, 1, 1, { ix: 0, iy: 0 }, createStokesSelection('aolp', 'stokesRgb'))?.values['AoLP.B']
     ).toBeCloseTo(Math.PI / 4, 6);
     expect(
       samplePixelValuesForDisplay(rgbLayer, 1, 1, { ix: 0, iy: 0 }, createStokesSelection('aolp', 'stokesRgb', 'B'))?.values['AoLP.B']
+    ).toBeCloseTo(Math.PI / 4, 6);
+    expect(
+      samplePixelValuesForDisplay(
+        rgbLayer,
+        1,
+        1,
+        { ix: 0, iy: 0 },
+        createStokesSelection('aolp', 'stokesRgb'),
+        'colormap'
+      )?.values.AoLP
     ).toBeCloseTo(Math.PI / 4, 6);
   });
 
@@ -217,6 +267,11 @@ describe('display texture', () => {
     const rgbBinding = buildDisplaySourceBinding(channelLayer, createChannelRgbSelection('R', 'G', 'B', 'A'));
     const monoBinding = buildDisplaySourceBinding(channelLayer, createChannelMonoSelection('G', 'A'));
     const stokesBinding = buildDisplaySourceBinding(stokesLayer, createStokesSelection('dop', 'stokesRgb'));
+    const stokesColormapBinding = buildDisplaySourceBinding(
+      stokesLayer,
+      createStokesSelection('dop', 'stokesRgb'),
+      'colormap'
+    );
 
     expect(rgbBinding.mode).toBe('channelRgb');
     expect(rgbBinding.slots.slice(0, 4)).toEqual(['R', 'G', 'B', 'A']);
@@ -228,7 +283,7 @@ describe('display texture', () => {
     expect(monoBinding.usesImageAlpha).toBe(true);
     expect(monoBinding.stokesParameter).toBeNull();
 
-    expect(stokesBinding.mode).toBe('stokesRgbLuminance');
+    expect(stokesBinding.mode).toBe('stokesRgb');
     expect(stokesBinding.slots).toEqual([
       'S0.R', 'S1.R', 'S2.R', 'S3.R',
       'S0.G', 'S1.G', 'S2.G', 'S3.G',
@@ -236,6 +291,8 @@ describe('display texture', () => {
     ]);
     expect(stokesBinding.usesImageAlpha).toBe(false);
     expect(stokesBinding.stokesParameter).toBe('dop');
+    expect(stokesColormapBinding.mode).toBe('stokesRgbLuminance');
+    expect(stokesColormapBinding.slots).toEqual(stokesBinding.slots);
   });
 
   it('computes display luminance ranges directly from decoded source channels', () => {
@@ -315,6 +372,59 @@ describe('display texture', () => {
         mean: (0 + Math.PI / 4 + (3 * Math.PI) / 4) / 3,
         max: (3 * Math.PI) / 4,
         validPixelCount: 3
+      }
+    ]);
+  });
+
+  it('computes grouped RGB Stokes ROI stats in RGB mode and mono stats in Colormap mode', () => {
+    const layer = createLayerFromChannels({
+      'S0.R': [1],
+      'S0.G': [2],
+      'S0.B': [4],
+      'S1.R': [1],
+      'S1.G': [1],
+      'S1.B': [2],
+      'S2.R': [0],
+      'S2.G': [Math.sqrt(3)],
+      'S2.B': [0],
+      'S3.R': [0],
+      'S3.G': [0],
+      'S3.B': [0]
+    }, 'stokes-rgb');
+
+    const rgbStats = computeDisplaySelectionRoiStats(
+      layer,
+      1,
+      1,
+      { x0: 0, y0: 0, x1: 0, y1: 0 },
+      createStokesSelection('dolp', 'stokesRgb')
+    );
+    const colormapStats = computeDisplaySelectionRoiStats(
+      layer,
+      1,
+      1,
+      { x0: 0, y0: 0, x1: 0, y1: 0 },
+      createStokesSelection('dolp', 'stokesRgb'),
+      'colormap'
+    );
+    const expectedG = Math.sqrt(1 + Math.fround(Math.sqrt(3)) ** 2) / 2;
+    const expectedMono = Math.sqrt(
+      computeRec709Luminance(1, 1, 2) ** 2 +
+      computeRec709Luminance(0, Math.fround(Math.sqrt(3)), 0) ** 2
+    ) / computeRec709Luminance(1, 2, 4);
+
+    expect(rgbStats?.channels).toEqual([
+      { label: 'R', min: 1, mean: 1, max: 1, validPixelCount: 1 },
+      { label: 'G', min: expectedG, mean: expectedG, max: expectedG, validPixelCount: 1 },
+      { label: 'B', min: 0.5, mean: 0.5, max: 0.5, validPixelCount: 1 }
+    ]);
+    expect(colormapStats?.channels).toEqual([
+      {
+        label: 'Mono',
+        min: expectedMono,
+        mean: expectedMono,
+        max: expectedMono,
+        validPixelCount: 1
       }
     ]);
   });

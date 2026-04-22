@@ -215,16 +215,39 @@ describe('probe helpers', () => {
 
   it('uses grouped RGB Stokes derived values for probe preview', () => {
     const preview = buildProbeColorPreview(
-      { x: 0, y: 0, values: { DoLP: 0.5 } },
+      {
+        x: 0,
+        y: 0,
+        values: {
+          'DoLP.R': 0.25,
+          'DoLP.G': 0.5,
+          'DoLP.B': 0.75
+        }
+      },
       createStokesSelection('dolp', 'stokesRgb'),
       0
     );
 
     expect(preview?.displayValues).toEqual([
-      { label: 'R', value: '0.500' },
+      { label: 'R', value: '0.250' },
       { label: 'G', value: '0.500' },
-      { label: 'B', value: '0.500' }
+      { label: 'B', value: '0.750' }
     ]);
+  });
+
+  it('keeps grouped RGB Stokes colormap probe previews mono-valued', () => {
+    const preview = buildProbeColorPreview(
+      { x: 0, y: 0, values: { DoLP: 0.5 } },
+      createStokesSelection('dolp', 'stokesRgb'),
+      0,
+      {
+        mode: 'colormap',
+        colormapRange: { min: 0, max: 1 },
+        colormapLut: redBlackGreenLut
+      }
+    );
+
+    expect(preview?.displayValues).toEqual([{ label: 'Mono', value: '0.500' }]);
   });
 
   it('uses one mono display value for split RGB Stokes probe preview', () => {

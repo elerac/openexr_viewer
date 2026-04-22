@@ -64,6 +64,7 @@ export class WebGlExrRenderer implements Disposable {
     height: number,
     layer: DecodedLayer,
     selection: ViewerState['displaySelection'],
+    visualizationMode: ViewerState['visualizationMode'],
     _textureRevisionKey: string,
     binding: DisplaySourceBinding
   ): void {
@@ -72,7 +73,7 @@ export class WebGlExrRenderer implements Disposable {
     }
 
     this.imageRenderer.setDisplaySelectionBindings(sessionId, layerIndex, width, height, binding);
-    this.overlayRenderer.setDisplaySelectionContext(width, height, layer, selection);
+    this.overlayRenderer.setDisplaySelectionContext(width, height, layer, selection, visualizationMode);
     this.probeOverlayRenderer.setImagePresent(true);
   }
 

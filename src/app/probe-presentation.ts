@@ -59,7 +59,8 @@ export function buildProbeReadoutModel(args: BuildProbePresentationArgs): ProbeR
     args.activeSession.decoded.width,
     args.activeSession.decoded.height,
     targetPixel,
-    args.sessionState.displaySelection
+    args.sessionState.displaySelection,
+    args.sessionState.visualizationMode
   );
 
   return {

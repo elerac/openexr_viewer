@@ -63,6 +63,7 @@ export interface StokesDegreeModulationControlModel {
 export interface ViewerResourceTarget {
   sessionId: string;
   activeLayer: number;
+  visualizationMode: ViewerSessionState['visualizationMode'];
   displaySelection: ViewerSessionState['displaySelection'];
   decodedRef: OpenedImageSession['decoded'];
 }

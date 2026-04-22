@@ -26,7 +26,8 @@ const int DISPLAY_MODE_EMPTY = 0;
 const int DISPLAY_MODE_CHANNEL_RGB = 1;
 const int DISPLAY_MODE_CHANNEL_MONO = 2;
 const int DISPLAY_MODE_STOKES_DIRECT = 3;
-const int DISPLAY_MODE_STOKES_RGB_LUMINANCE = 4;
+const int DISPLAY_MODE_STOKES_RGB = 4;
+const int DISPLAY_MODE_STOKES_RGB_LUMINANCE = 5;
 const int ALPHA_OUTPUT_OPAQUE = 0;
 const int ALPHA_OUTPUT_STRAIGHT = 1;
 const int ALPHA_OUTPUT_PREMULTIPLIED = 2;
@@ -375,6 +376,17 @@ vec4 readRgbLuminanceStokesSample(ivec2 pixel) {
   );
 }
 
+vec3 readRgbStokesDisplaySample(ivec2 pixel) {
+  vec4 stokesR = vec4(readSource0(pixel), readSource1(pixel), readSource2(pixel), readSource3(pixel));
+  vec4 stokesG = vec4(readSource4(pixel), readSource5(pixel), readSource6(pixel), readSource7(pixel));
+  vec4 stokesB = vec4(readSource8(pixel), readSource9(pixel), readSource10(pixel), readSource11(pixel));
+  return vec3(
+    computeStokesDisplayValue(uStokesParameter, stokesR.x, stokesR.y, stokesR.z, stokesR.w),
+    computeStokesDisplayValue(uStokesParameter, stokesG.x, stokesG.y, stokesG.z, stokesG.w),
+    computeStokesDisplayValue(uStokesParameter, stokesB.x, stokesB.y, stokesB.z, stokesB.w)
+  );
+}
+
 DisplaySample createEmptySample() {
   return DisplaySample(vec3(0.0), 1.0, vec4(0.0));
 }
@@ -405,6 +417,10 @@ DisplaySample readDisplaySample(ivec2 pixel) {
     vec4 stokes = readDirectStokesSample(pixel);
     float value = computeStokesDisplayValue(uStokesParameter, stokes.x, stokes.y, stokes.z, stokes.w);
     return DisplaySample(vec3(value), 1.0, stokes);
+  }
+
+  if (uDisplayMode == DISPLAY_MODE_STOKES_RGB) {
+    return DisplaySample(readRgbStokesDisplaySample(pixel), 1.0, vec4(0.0));
   }
 
   if (uDisplayMode == DISPLAY_MODE_STOKES_RGB_LUMINANCE) {

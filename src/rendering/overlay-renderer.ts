@@ -46,14 +46,15 @@ export class OverlayRenderer implements Disposable {
     width: number,
     height: number,
     layer: DecodedLayer,
-    selection: ViewerState['displaySelection']
+    selection: ViewerState['displaySelection'],
+    visualizationMode: ViewerState['visualizationMode']
   ): void {
     if (this.disposed) {
       return;
     }
 
     this.imageSize = { width, height };
-    this.displayEvaluator = resolveDisplaySelectionEvaluator(layer, selection);
+    this.displayEvaluator = resolveDisplaySelectionEvaluator(layer, selection, visualizationMode);
   }
 
   clearImage(): void {

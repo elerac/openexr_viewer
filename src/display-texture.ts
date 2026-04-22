@@ -6,6 +6,7 @@ import {
   type ChannelReadView
 } from './channel-storage';
 import {
+  isGroupedRgbStokesSelection,
   isStokesSelection,
   selectionUsesImageAlpha,
   serializeDisplaySelectionKey,
@@ -35,6 +36,7 @@ import {
   type PixelSample,
   type RoiStats,
   type RoiStatsChannelSummary,
+  type VisualizationMode,
   type ViewerState
 } from './types';
 
@@ -45,6 +47,7 @@ export type DisplaySourceMode =
   | 'channelRgb'
   | 'channelMono'
   | 'stokesDirect'
+  | 'stokesRgb'
   | 'stokesRgbLuminance';
 
 export interface DisplaySourceBinding {
@@ -94,6 +97,14 @@ export type DisplaySelectionEvaluator =
       stokes: ResolvedScalarStokesChannels;
     }
   | {
+      kind: 'stokesRgb';
+      binding: DisplaySourceBinding;
+      parameter: StokesParameter;
+      r: ResolvedScalarStokesChannels;
+      g: ResolvedScalarStokesChannels;
+      b: ResolvedScalarStokesChannels;
+    }
+  | {
       kind: 'stokesRgbLuminance';
       binding: DisplaySourceBinding;
       parameter: StokesParameter;
@@ -106,7 +117,24 @@ const EMPTY_DISPLAY_SLOTS = Object.freeze(
   Array.from({ length: DISPLAY_SOURCE_SLOT_COUNT }, () => null as string | null)
 );
 
-export function serializeDisplaySelectionLuminanceKey(selection: DisplaySelection | null): string {
+function serializeDisplaySelectionRevisionKey(
+  selection: DisplaySelection | null,
+  visualizationMode: VisualizationMode
+): string {
+  if (!selection) {
+    return 'none';
+  }
+
+  const baseKey = serializeDisplaySelectionKey(selection);
+  return isGroupedRgbStokesSelection(selection)
+    ? `${baseKey}:${visualizationMode}`
+    : baseKey;
+}
+
+export function serializeDisplaySelectionLuminanceKey(
+  selection: DisplaySelection | null,
+  visualizationMode: VisualizationMode = 'rgb'
+): string {
   if (!selection) {
     return 'none';
   }
@@ -118,23 +146,25 @@ export function serializeDisplaySelectionLuminanceKey(selection: DisplaySelectio
       return `channelMono:${selection.channel}`;
     case 'stokesScalar':
     case 'stokesAngle':
-      return serializeDisplaySelectionKey(selection);
+      return serializeDisplaySelectionRevisionKey(selection, visualizationMode);
   }
 }
 
-export function buildDisplayTextureRevisionKey(state: Pick<ViewerState, 'activeLayer' | 'displaySelection'>): string {
+export function buildDisplayTextureRevisionKey(
+  state: Pick<ViewerState, 'activeLayer' | 'displaySelection'> & Partial<Pick<ViewerState, 'visualizationMode'>>
+): string {
   return [
     state.activeLayer,
-    serializeDisplaySelectionKey(state.displaySelection)
+    serializeDisplaySelectionRevisionKey(state.displaySelection, state.visualizationMode ?? 'rgb')
   ].join(':');
 }
 
 export function buildDisplayLuminanceRevisionKey(
-  state: Pick<ViewerState, 'activeLayer' | 'displaySelection'>
+  state: Pick<ViewerState, 'activeLayer' | 'displaySelection'> & Partial<Pick<ViewerState, 'visualizationMode'>>
 ): string {
   return [
     state.activeLayer,
-    serializeDisplaySelectionLuminanceKey(state.displaySelection)
+    serializeDisplaySelectionLuminanceKey(state.displaySelection, state.visualizationMode ?? 'rgb')
   ].join(':');
 }
 
@@ -149,7 +179,8 @@ export function createEmptyDisplaySourceBinding(): DisplaySourceBinding {
 
 export function resolveDisplaySelectionEvaluator(
   layer: DecodedLayer,
-  selection: DisplaySelection | null
+  selection: DisplaySelection | null,
+  visualizationMode: VisualizationMode = 'rgb'
 ): DisplaySelectionEvaluator {
   if (!selection) {
     return {
@@ -187,15 +218,16 @@ export function resolveDisplaySelectionEvaluator(
       };
     case 'stokesScalar':
     case 'stokesAngle':
-      return resolveStokesDisplaySelectionEvaluator(layer, selection);
+      return resolveStokesDisplaySelectionEvaluator(layer, selection, visualizationMode);
   }
 }
 
 export function buildDisplaySourceBinding(
   layer: DecodedLayer,
-  selection: DisplaySelection | null
+  selection: DisplaySelection | null,
+  visualizationMode: VisualizationMode = 'rgb'
 ): DisplaySourceBinding {
-  return resolveDisplaySelectionEvaluator(layer, selection).binding;
+  return resolveDisplaySelectionEvaluator(layer, selection, visualizationMode).binding;
 }
 
 export function getDisplaySourceBindingChannelNames(binding: DisplaySourceBinding): string[] {
@@ -251,6 +283,7 @@ export function buildSelectedDisplayTexture(
   width: number,
   height: number,
   selection: DisplaySelection | null,
+  visualizationMode: VisualizationMode = 'rgb',
   output?: Float32Array
 ): Float32Array {
   const pixelCount = width * height;
@@ -259,7 +292,11 @@ export function buildSelectedDisplayTexture(
     ? output
     : new Float32Array(requiredLength);
 
-  return fillDisplayTextureFromEvaluator(resolveDisplaySelectionEvaluator(layer, selection), pixelCount, out);
+  return fillDisplayTextureFromEvaluator(
+    resolveDisplaySelectionEvaluator(layer, selection, visualizationMode),
+    pixelCount,
+    out
+  );
 }
 
 export function buildStokesDisplayTexture(
@@ -267,6 +304,7 @@ export function buildStokesDisplayTexture(
   width: number,
   height: number,
   selection: StokesSelection,
+  visualizationMode: VisualizationMode = 'rgb',
   output?: Float32Array
 ): Float32Array {
   const pixelCount = width * height;
@@ -275,17 +313,22 @@ export function buildStokesDisplayTexture(
     ? output
     : new Float32Array(requiredLength);
 
-  return fillDisplayTextureFromEvaluator(resolveDisplaySelectionEvaluator(layer, selection), pixelCount, out);
+  return fillDisplayTextureFromEvaluator(
+    resolveDisplaySelectionEvaluator(layer, selection, visualizationMode),
+    pixelCount,
+    out
+  );
 }
 
 export function computeDisplaySelectionLuminanceRange(
   layer: DecodedLayer,
   width: number,
   height: number,
-  selection: DisplaySelection | null
+  selection: DisplaySelection | null,
+  visualizationMode: VisualizationMode = 'rgb'
 ): DisplayLuminanceRange | null {
   const pixelCount = width * height;
-  const evaluator = resolveDisplaySelectionEvaluator(layer, selection);
+  const evaluator = resolveDisplaySelectionEvaluator(layer, selection, visualizationMode);
   const values = createDisplayPixelValues();
   let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
@@ -319,14 +362,15 @@ export function computeDisplaySelectionRoiStats(
   width: number,
   height: number,
   roi: ImageRoi,
-  selection: DisplaySelection | null
+  selection: DisplaySelection | null,
+  visualizationMode: VisualizationMode = 'rgb'
 ): RoiStats | null {
   const clampedRoi = clampImageRoiToBounds(roi, width, height);
   if (!clampedRoi) {
     return null;
   }
 
-  const evaluator = resolveDisplaySelectionEvaluator(layer, selection);
+  const evaluator = resolveDisplaySelectionEvaluator(layer, selection, visualizationMode);
   const accumulators = createRoiStatsAccumulators(evaluator, selection);
   const pixelCount = getImageRoiPixelCount(clampedRoi);
 
@@ -367,6 +411,7 @@ export function readDisplaySelectionPixelValues(
   height: number,
   pixel: ImagePixel,
   selection: DisplaySelection | null,
+  visualizationMode: VisualizationMode = 'rgb',
   output?: DisplayPixelValues
 ): DisplayPixelValues | null {
   if (pixel.ix < 0 || pixel.iy < 0 || pixel.ix >= width || pixel.iy >= height) {
@@ -374,7 +419,7 @@ export function readDisplaySelectionPixelValues(
   }
 
   return readDisplaySelectionPixelValuesAtIndex(
-    resolveDisplaySelectionEvaluator(layer, selection),
+    resolveDisplaySelectionEvaluator(layer, selection, visualizationMode),
     pixel.iy * width + pixel.ix,
     output
   );
@@ -413,6 +458,15 @@ export function readDisplaySelectionPixelValuesAtIndex(
         out,
         evaluator.parameter,
         readScalarStokesSample(evaluator.stokes, pixelIndex)
+      );
+    case 'stokesRgb':
+      return writeRgbStokesDisplayPixel(
+        out,
+        evaluator.parameter,
+        evaluator.r,
+        evaluator.g,
+        evaluator.b,
+        pixelIndex
       );
     case 'stokesRgbLuminance':
       return writeStokesDisplayPixel(
@@ -468,7 +522,8 @@ export function samplePixelValuesForDisplay(
   width: number,
   height: number,
   pixel: ImagePixel,
-  selection: DisplaySelection | null
+  selection: DisplaySelection | null,
+  visualizationMode: VisualizationMode = 'rgb'
 ): PixelSample | null {
   const sample = samplePixelValues(layer, width, height, pixel);
   if (!sample || !isStokesSelection(selection) || !isStokesDisplayAvailable(layer.channelNames, selection)) {
@@ -476,13 +531,14 @@ export function samplePixelValuesForDisplay(
   }
 
   const flatIndex = pixel.iy * width + pixel.ix;
-  appendStokesSampleValues(layer, flatIndex, selection, sample.values);
+  appendStokesSampleValues(layer, flatIndex, selection, sample.values, visualizationMode);
   return sample;
 }
 
 function resolveStokesDisplaySelectionEvaluator(
   layer: DecodedLayer,
-  selection: StokesSelection
+  selection: StokesSelection,
+  visualizationMode: VisualizationMode
 ): DisplaySelectionEvaluator {
   if (!isStokesDisplayAvailable(layer.channelNames, selection)) {
     return {
@@ -536,10 +592,13 @@ function resolveStokesDisplaySelectionEvaluator(
     };
   }
 
+  const mode: 'stokesRgb' | 'stokesRgbLuminance' = visualizationMode === 'colormap'
+    ? 'stokesRgbLuminance'
+    : 'stokesRgb';
   return {
-    kind: 'stokesRgbLuminance',
+    kind: mode,
     binding: createDisplaySourceBinding(
-      'stokesRgbLuminance',
+      mode,
       [
         channels.r.s0, channels.r.s1, channels.r.s2, channels.r.s3,
         channels.g.s0, channels.g.s1, channels.g.s2, channels.g.s3,
@@ -607,6 +666,17 @@ function fillDisplayTextureFromEvaluator(
         writeStokesSnapshotPixel(output, outIndex, evaluator.parameter, sample);
         break;
       }
+      case 'stokesRgb':
+        writeRgbStokesSnapshotPixel(
+          output,
+          outIndex,
+          evaluator.parameter,
+          evaluator.r,
+          evaluator.g,
+          evaluator.b,
+          pixelIndex
+        );
+        break;
       case 'stokesRgbLuminance': {
         const sample = computeRgbStokesMonoValues(evaluator.r, evaluator.g, evaluator.b, pixelIndex);
         writeStokesSnapshotPixel(output, outIndex, evaluator.parameter, sample);
@@ -645,6 +715,23 @@ function writeStokesDisplayPixel(
   return setDisplayPixelValues(output, value, value, value, 1);
 }
 
+function writeRgbStokesDisplayPixel(
+  output: DisplayPixelValues,
+  parameter: StokesParameter,
+  r: ResolvedScalarStokesChannels,
+  g: ResolvedScalarStokesChannels,
+  b: ResolvedScalarStokesChannels,
+  pixelIndex: number
+): DisplayPixelValues {
+  return setDisplayPixelValues(
+    output,
+    computeStokesDisplayValueForChannels(parameter, r, pixelIndex),
+    computeStokesDisplayValueForChannels(parameter, g, pixelIndex),
+    computeStokesDisplayValueForChannels(parameter, b, pixelIndex),
+    1
+  );
+}
+
 function writeStokesSnapshotPixel(
   output: Float32Array,
   outIndex: number,
@@ -657,6 +744,21 @@ function writeStokesSnapshotPixel(
   output[outIndex + 1] = value;
   output[outIndex + 2] = value;
   output[outIndex + 3] = modulation ?? 1;
+}
+
+function writeRgbStokesSnapshotPixel(
+  output: Float32Array,
+  outIndex: number,
+  parameter: StokesParameter,
+  r: ResolvedScalarStokesChannels,
+  g: ResolvedScalarStokesChannels,
+  b: ResolvedScalarStokesChannels,
+  pixelIndex: number
+): void {
+  output[outIndex + 0] = computeStokesDisplayValueForChannels(parameter, r, pixelIndex);
+  output[outIndex + 1] = computeStokesDisplayValueForChannels(parameter, g, pixelIndex);
+  output[outIndex + 2] = computeStokesDisplayValueForChannels(parameter, b, pixelIndex);
+  output[outIndex + 3] = 1;
 }
 
 function resolveStokesChannelArrays(
@@ -681,6 +783,24 @@ function readScalarStokesSample(
     s2: readChannelValue(channels.s2, pixelIndex),
     s3: readChannelValue(channels.s3, pixelIndex)
   };
+}
+
+function computeStokesDisplayValueForChannels(
+  parameter: StokesParameter,
+  channels: ResolvedScalarStokesChannels,
+  pixelIndex: number
+): number {
+  const sample = readScalarStokesSample(channels, pixelIndex);
+  return sanitizeDisplayValue(computeStokesDisplayValue(parameter, sample.s0, sample.s1, sample.s2, sample.s3));
+}
+
+function computeRawStokesDisplayValueForChannels(
+  parameter: StokesParameter,
+  channels: ResolvedScalarStokesChannels,
+  pixelIndex: number
+): number {
+  const sample = readScalarStokesSample(channels, pixelIndex);
+  return computeRawStokesDisplayValue(parameter, sample.s0, sample.s1, sample.s2, sample.s3);
 }
 
 function computeRgbStokesMonoValues(
@@ -764,6 +884,24 @@ function createRoiStatsAccumulators(
             );
           }
         )
+      ];
+    case 'stokesRgb':
+      return [
+        createRoiStatsAccumulator('R', (pixelIndex) => computeRawStokesDisplayValueForChannels(
+          evaluator.parameter,
+          evaluator.r,
+          pixelIndex
+        )),
+        createRoiStatsAccumulator('G', (pixelIndex) => computeRawStokesDisplayValueForChannels(
+          evaluator.parameter,
+          evaluator.g,
+          pixelIndex
+        )),
+        createRoiStatsAccumulator('B', (pixelIndex) => computeRawStokesDisplayValueForChannels(
+          evaluator.parameter,
+          evaluator.b,
+          pixelIndex
+        ))
       ];
     case 'stokesRgbLuminance':
       return [
@@ -914,7 +1052,8 @@ function appendStokesSampleValues(
   layer: DecodedLayer,
   flatIndex: number,
   selection: StokesSelection,
-  values: Record<string, number>
+  values: Record<string, number>,
+  visualizationMode: VisualizationMode
 ): void {
   const label = getStokesParameterLabel(selection.parameter);
 
@@ -952,6 +1091,25 @@ function appendStokesSampleValues(
   const r = resolveStokesChannelArrays(layer, channels.r);
   const g = resolveStokesChannelArrays(layer, channels.g);
   const b = resolveStokesChannelArrays(layer, channels.b);
+  if (visualizationMode === 'rgb') {
+    const componentSamples: Array<[RgbStokesComponent, { s0: number; s1: number; s2: number; s3: number }]> = [
+      ['R', readScalarStokesSample(r, flatIndex)],
+      ['G', readScalarStokesSample(g, flatIndex)],
+      ['B', readScalarStokesSample(b, flatIndex)]
+    ];
+    for (const [component, sample] of componentSamples) {
+      values[`${label}.${component}`] = computeStokesDisplayValue(
+        selection.parameter,
+        sample.s0,
+        sample.s1,
+        sample.s2,
+        sample.s3
+      );
+      appendStokesDegreeModulationSampleValue(selection.parameter, sample, values, component);
+    }
+    return;
+  }
+
   const sample = computeRgbStokesMonoValues(r, g, b, flatIndex);
   values[label] = computeStokesDisplayValue(selection.parameter, sample.s0, sample.s1, sample.s2, sample.s3);
   appendStokesDegreeModulationSampleValue(selection.parameter, sample, values);

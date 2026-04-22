@@ -4,6 +4,7 @@ import {
   getDisplaySelectionDegreeModulationValueLabel,
   getDisplaySelectionValueLabel,
   getSelectionAlpha,
+  isGroupedRgbStokesSelection,
   isMonoSelection,
   isStokesSelection,
   type DisplaySelection,
@@ -77,7 +78,7 @@ export function buildProbeColorPreview(
     return null;
   }
 
-  const [rawR, rawG, rawB] = readProbeDisplayValues(sample, selection);
+  const [rawR, rawG, rawB] = readProbeDisplayValues(sample, selection, visualization.mode);
   const rawA = readProbeDisplayAlpha(sample, selection);
   const exposureScale = 2 ** exposureEv;
   let bytes: [number, number, number];
@@ -126,12 +127,25 @@ export function buildProbeColorPreview(
   };
 }
 
-function readProbeDisplayValues(sample: PixelSample, selection: DisplaySelection | null): [number, number, number] {
+function readProbeDisplayValues(
+  sample: PixelSample,
+  selection: DisplaySelection | null,
+  visualizationMode: VisualizationMode
+): [number, number, number] {
   if (!selection) {
     return [0, 0, 0];
   }
 
   if (isStokesSelection(selection)) {
+    if (visualizationMode === 'rgb' && isGroupedRgbStokesSelection(selection)) {
+      const label = getStokesParameterLabel(selection.parameter);
+      return [
+        readFirstProbeChannel(sample, [`${label}.R`, label]),
+        readFirstProbeChannel(sample, [`${label}.G`, label]),
+        readFirstProbeChannel(sample, [`${label}.B`, label])
+      ];
+    }
+
     const value = readFirstProbeChannel(sample, [
       getDisplaySelectionValueLabel(selection),
       getStokesParameterLabel(selection.parameter)
