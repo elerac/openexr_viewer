@@ -49,6 +49,7 @@ interface ProgramBundle<TUniforms extends CommonUniforms> {
 interface LayerSourceTextures {
   width: number;
   height: number;
+  textureBytes: number;
   textureByChannel: Map<string, WebGLTexture>;
 }
 
@@ -172,9 +173,9 @@ export class GlImageRenderer implements Disposable {
     width: number,
     height: number,
     layer: DecodedLayer
-  ): void {
+  ): number {
     if (this.disposed) {
-      return;
+      return 0;
     }
 
     let sessionLayers = this.layerTexturesBySession.get(sessionId);
@@ -183,8 +184,9 @@ export class GlImageRenderer implements Disposable {
       this.layerTexturesBySession.set(sessionId, sessionLayers);
     }
 
-    if (sessionLayers.has(layerIndex)) {
-      return;
+    const existingLayerTextures = sessionLayers.get(layerIndex);
+    if (existingLayerTextures) {
+      return existingLayerTextures.textureBytes;
     }
 
     const textureByChannel = new Map<string, WebGLTexture>();
@@ -222,11 +224,15 @@ export class GlImageRenderer implements Disposable {
       textureByChannel.set(channelName, texture);
     }
 
+    const textureBytes =
+      width * height * textureByChannel.size * Float32Array.BYTES_PER_ELEMENT;
     sessionLayers.set(layerIndex, {
       width,
       height,
+      textureBytes,
       textureByChannel
     });
+    return textureBytes;
   }
 
   setDisplaySelectionBindings(
@@ -316,13 +322,34 @@ export class GlImageRenderer implements Disposable {
       return;
     }
 
-    for (const layerTextures of sessionLayers.values()) {
-      for (const texture of layerTextures.textureByChannel.values()) {
-        this.gl.deleteTexture(texture);
-      }
+    for (const layerIndex of [...sessionLayers.keys()]) {
+      this.discardLayerSourceTextures(sessionId, layerIndex);
+    }
+  }
+
+  discardLayerSourceTextures(sessionId: string, layerIndex: number): void {
+    if (this.disposed) {
+      return;
     }
 
-    this.layerTexturesBySession.delete(sessionId);
+    const sessionLayers = this.layerTexturesBySession.get(sessionId);
+    if (!sessionLayers) {
+      return;
+    }
+
+    const layerTextures = sessionLayers.get(layerIndex);
+    if (!layerTextures) {
+      return;
+    }
+
+    for (const texture of layerTextures.textureByChannel.values()) {
+      this.gl.deleteTexture(texture);
+    }
+
+    sessionLayers.delete(layerIndex);
+    if (sessionLayers.size === 0) {
+      this.layerTexturesBySession.delete(sessionId);
+    }
   }
 
   clearImage(): void {

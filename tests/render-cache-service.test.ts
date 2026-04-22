@@ -4,6 +4,8 @@ import { DecodedExrImage, OpenedImageSession } from '../src/types';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
 import { createChannelMonoSelection, createLayerFromChannels } from './helpers/state-fixtures';
 
+const MB = 1024 * 1024;
+
 function createDecodedImage(width = 2, height = 1): DecodedExrImage {
   const pixelCount = width * height;
   const layer = createLayerFromChannels({
@@ -40,17 +42,17 @@ function createUiMock() {
 
 function createRendererMock() {
   return {
-    ensureLayerSourceTextures: vi.fn(),
+    ensureLayerSourceTextures: vi.fn(() => 24),
     setDisplaySelectionBindings: vi.fn(),
+    discardLayerSourceTextures: vi.fn(),
     discardSessionTextures: vi.fn()
   };
 }
 
 function getEntries(service: RenderCacheService): Map<string, {
-  decodedBytes: number;
-  layerUploads: Set<number>;
+  pinned: boolean;
+  residentLayers: Map<number, { textureBytes: number; lastAccessToken: number }>;
   luminanceRangeByRevision: Map<string, { min: number; max: number } | null>;
-  activeTextureRevisionKey: string;
 }> {
   return (service as unknown as { entries: Map<string, never> }).entries as never;
 }
@@ -128,17 +130,21 @@ describe('render cache service', () => {
     expect(service.getCachedLuminanceRange(session.id, monoState)).toEqual({ min: 1, max: 1 });
   });
 
-  it('tracks decoded session bytes in the usage UI and tears down session resources on discard and clear', () => {
+  it('tracks resident texture bytes in the usage UI and tears down session resources on discard and clear', () => {
     const localStorage = {
       getItem: vi.fn(() => null),
       setItem: vi.fn()
     };
     vi.stubGlobal('window', { localStorage });
 
-    const first = createSession('first', createDecodedImage(2, 1));
-    const second = createSession('second', createDecodedImage(4, 1));
+    const first = createSession('first');
+    const second = createSession('second');
     const ui = createUiMock();
     const renderer = createRendererMock();
+    renderer.ensureLayerSourceTextures
+      .mockReturnValueOnce(24)
+      .mockReturnValueOnce(48);
+
     const service = new RenderCacheService({
       ui,
       renderer
@@ -148,11 +154,7 @@ describe('render cache service', () => {
     service.prepareActiveSession(second, second.state);
     service.setBudgetMb(128);
 
-    expect(ui.setDisplayCacheUsage).toHaveBeenLastCalledWith(
-      first.decoded.layers[0]!.channelStorage.pixels.byteLength +
-        second.decoded.layers[0]!.channelStorage.pixels.byteLength,
-      128 * 1024 * 1024
-    );
+    expect(ui.setDisplayCacheUsage).toHaveBeenLastCalledWith(72, 128 * MB);
     expect(localStorage.setItem).toHaveBeenCalledWith('openexr-viewer:display-cache-budget-mb:v1', '128');
 
     service.discard(first.id);
@@ -161,6 +163,109 @@ describe('render cache service', () => {
     expect(renderer.discardSessionTextures).toHaveBeenNthCalledWith(1, first.id);
     expect(renderer.discardSessionTextures).toHaveBeenNthCalledWith(2, second.id);
     expect(getEntries(service).size).toBe(0);
+  });
+
+  it('evicts least recently used non-active layers immediately when the budget shrinks', () => {
+    const first = createSession('first');
+    const second = createSession('second');
+    const ui = createUiMock();
+    const renderer = createRendererMock();
+    renderer.ensureLayerSourceTextures
+      .mockReturnValueOnce(80 * MB)
+      .mockReturnValueOnce(80 * MB);
+
+    let activeSessionId: string | null = first.id;
+    const service = new RenderCacheService({
+      ui,
+      renderer,
+      getActiveSessionId: () => activeSessionId
+    });
+
+    service.prepareActiveSession(first, first.state);
+    activeSessionId = second.id;
+    service.prepareActiveSession(second, second.state);
+    service.setBudgetMb(64);
+
+    expect(renderer.discardLayerSourceTextures).toHaveBeenCalledTimes(1);
+    expect(renderer.discardLayerSourceTextures).toHaveBeenCalledWith(first.id, 0);
+    expect(getEntries(service).get(first.id)?.residentLayers.size).toBe(0);
+    expect(getEntries(service).get(second.id)?.residentLayers.size).toBe(1);
+    expect(ui.setDisplayCacheUsage).toHaveBeenLastCalledWith(80 * MB, 64 * MB);
+  });
+
+  it('keeps pinned sessions exempt and evicts other layers first when protected residency exceeds the budget', () => {
+    const first = createSession('first');
+    const second = createSession('second');
+    const third = createSession('third');
+    const ui = createUiMock();
+    const renderer = createRendererMock();
+    renderer.ensureLayerSourceTextures
+      .mockReturnValueOnce(80 * MB)
+      .mockReturnValueOnce(80 * MB)
+      .mockReturnValueOnce(80 * MB);
+
+    let activeSessionId: string | null = first.id;
+    const service = new RenderCacheService({
+      ui,
+      renderer,
+      getActiveSessionId: () => activeSessionId
+    });
+
+    service.prepareActiveSession(first, first.state);
+    activeSessionId = second.id;
+    service.prepareActiveSession(second, second.state);
+    activeSessionId = third.id;
+    service.prepareActiveSession(third, third.state);
+
+    service.setSessionPinned(first.id, true);
+    expect(service.isSessionPinned(first.id)).toBe(true);
+
+    activeSessionId = second.id;
+    service.setBudgetMb(64);
+
+    expect(renderer.discardLayerSourceTextures).toHaveBeenCalledTimes(1);
+    expect(renderer.discardLayerSourceTextures).toHaveBeenCalledWith(third.id, 0);
+    expect(getEntries(service).get(first.id)?.residentLayers.size).toBe(1);
+    expect(getEntries(service).get(second.id)?.residentLayers.size).toBe(1);
+    expect(getEntries(service).get(third.id)?.residentLayers.size).toBe(0);
+    expect(ui.setDisplayCacheUsage).toHaveBeenLastCalledWith(160 * MB, 64 * MB);
+  });
+
+  it('reuploads evicted layers while preserving cached luminance ranges', () => {
+    const first = createSession('first');
+    const second = createSession('second');
+    const ui = createUiMock();
+    const renderer = createRendererMock();
+    renderer.ensureLayerSourceTextures
+      .mockReturnValueOnce(80 * MB)
+      .mockReturnValueOnce(80 * MB)
+      .mockReturnValueOnce(80 * MB);
+
+    let activeSessionId: string | null = first.id;
+    const service = new RenderCacheService({
+      ui,
+      renderer,
+      getActiveSessionId: () => activeSessionId
+    });
+
+    const initial = service.prepareActiveSession(first, first.state);
+    expect(initial.luminanceRangeDirty).toBe(true);
+
+    activeSessionId = second.id;
+    service.prepareActiveSession(second, second.state);
+    service.setBudgetMb(64);
+
+    expect(renderer.discardLayerSourceTextures).toHaveBeenCalledWith(first.id, 0);
+    expect(service.getCachedLuminanceRange(first.id, first.state)).toEqual({ min: 0.5702, max: 0.5702 });
+
+    activeSessionId = first.id;
+    const reuploaded = service.prepareActiveSession(first, first.state);
+    const stable = service.prepareActiveSession(first, first.state);
+
+    expect(reuploaded.textureDirty).toBe(true);
+    expect(reuploaded.luminanceRangeDirty).toBe(false);
+    expect(stable.textureDirty).toBe(false);
+    expect(renderer.ensureLayerSourceTextures).toHaveBeenCalledTimes(3);
   });
 
   it('returns snapshot textures without retaining CPU display buffers', () => {

@@ -115,7 +115,9 @@ function pickSessionStatePatch(patch: Partial<ViewerSessionState>): Partial<View
   const nextPatch: Partial<ViewerSessionState> = {};
   for (const key of SESSION_STATE_KEYS) {
     if (key in patch) {
-      nextPatch[key] = patch[key];
+      Object.assign(nextPatch, {
+        [key]: patch[key]
+      });
     }
   }
   return nextPatch;

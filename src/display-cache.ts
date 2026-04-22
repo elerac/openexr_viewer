@@ -8,35 +8,43 @@ export const MAX_DISPLAY_CACHE_BUDGET_MB =
 export const DEFAULT_DISPLAY_CACHE_BUDGET_MB = 256;
 export const BYTES_PER_MEGABYTE = 1024 * 1024;
 
-export interface SessionResourceEntry {
-  id: string;
-  decodedBytes: number;
-  layerUploads: Set<number>;
-  luminanceRangeByRevision: Map<string, DisplayLuminanceRange | null>;
-  activeTextureRevisionKey: string;
+export interface ResidentLayerResourceEntry {
+  textureBytes: number;
+  lastAccessToken: number;
 }
 
-export function createSessionResourceEntry(id: string, decodedBytes = 0): SessionResourceEntry {
+export interface SessionResourceEntry {
+  id: string;
+  pinned: boolean;
+  residentLayers: Map<number, ResidentLayerResourceEntry>;
+  luminanceRangeByRevision: Map<string, DisplayLuminanceRange | null>;
+}
+
+export function createSessionResourceEntry(id: string): SessionResourceEntry {
   return {
     id,
-    decodedBytes: Math.max(0, Math.floor(decodedBytes)),
-    layerUploads: new Set<number>(),
-    luminanceRangeByRevision: new Map<string, DisplayLuminanceRange | null>(),
-    activeTextureRevisionKey: ''
+    pinned: false,
+    residentLayers: new Map<number, ResidentLayerResourceEntry>(),
+    luminanceRangeByRevision: new Map<string, DisplayLuminanceRange | null>()
   };
 }
 
 export function clearSessionResources(entry: SessionResourceEntry): void {
-  entry.decodedBytes = 0;
-  entry.layerUploads.clear();
+  entry.pinned = false;
+  entry.residentLayers.clear();
   entry.luminanceRangeByRevision.clear();
-  entry.activeTextureRevisionKey = '';
 }
 
-export function getTrackedSessionCpuBytes(
-  sessions: Array<Pick<SessionResourceEntry, 'decodedBytes'>>
+export function getTrackedResidentTextureBytes(
+  sessions: Array<Pick<SessionResourceEntry, 'residentLayers'>>
 ): number {
-  return sessions.reduce((total, session) => total + Math.max(0, session.decodedBytes), 0);
+  return sessions.reduce((total, session) => {
+    let sessionBytes = 0;
+    for (const layer of session.residentLayers.values()) {
+      sessionBytes += Math.max(0, Math.floor(layer.textureBytes));
+    }
+    return total + sessionBytes;
+  }, 0);
 }
 
 export function clampDisplayCacheBudgetMb(value: number): number {

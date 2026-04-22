@@ -85,8 +85,9 @@ function createRendererMock() {
     renderValueOverlay: vi.fn(),
     renderProbeOverlay: vi.fn(),
     setColormapTexture: vi.fn(),
-    ensureLayerSourceTextures: vi.fn(),
+    ensureLayerSourceTextures: vi.fn(() => 0),
     setDisplaySelectionBindings: vi.fn(),
+    discardLayerSourceTextures: vi.fn(),
     discardSessionTextures: vi.fn()
   };
 }

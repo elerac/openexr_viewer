@@ -7,33 +7,35 @@ import {
   clampDisplayCacheBudgetMb,
   clearSessionResources,
   createSessionResourceEntry,
-  getTrackedSessionCpuBytes,
+  getTrackedResidentTextureBytes,
   parseDisplayCacheBudgetStorageValue
 } from '../src/display-cache';
 
 describe('display cache resource accounting', () => {
-  it('tracks CPU bytes from decoded sessions', () => {
+  it('tracks resident GPU texture bytes across session layers', () => {
     const sessions = [
-      createSessionResourceEntry('a', 24),
-      createSessionResourceEntry('b', 8),
-      createSessionResourceEntry('c', 0)
+      createSessionResourceEntry('a'),
+      createSessionResourceEntry('b'),
+      createSessionResourceEntry('c')
     ];
+    sessions[0].residentLayers.set(0, { textureBytes: 24, lastAccessToken: 1 });
+    sessions[1].residentLayers.set(0, { textureBytes: 8, lastAccessToken: 2 });
+    sessions[1].residentLayers.set(1, { textureBytes: 4, lastAccessToken: 3 });
 
-    expect(getTrackedSessionCpuBytes(sessions)).toBe(32);
+    expect(getTrackedResidentTextureBytes(sessions)).toBe(36);
   });
 
-  it('clears uploaded layers, cached ranges, and active revision metadata', () => {
-    const session = createSessionResourceEntry('a', 24);
-    session.layerUploads.add(0);
+  it('clears pinned state, resident layers, and cached ranges', () => {
+    const session = createSessionResourceEntry('a');
+    session.pinned = true;
+    session.residentLayers.set(0, { textureBytes: 24, lastAccessToken: 7 });
     session.luminanceRangeByRevision.set('rev', { min: 0, max: 1 });
-    session.activeTextureRevisionKey = 'rev';
 
     clearSessionResources(session);
 
-    expect(session.decodedBytes).toBe(0);
-    expect(session.layerUploads.size).toBe(0);
+    expect(session.pinned).toBe(false);
+    expect(session.residentLayers.size).toBe(0);
     expect(session.luminanceRangeByRevision.size).toBe(0);
-    expect(session.activeTextureRevisionKey).toBe('');
   });
 });
 

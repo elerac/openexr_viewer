@@ -46,12 +46,12 @@ export class WebGlExrRenderer implements Disposable {
     width: number,
     height: number,
     layer: DecodedLayer
-  ): void {
+  ): number {
     if (this.disposed) {
-      return;
+      return 0;
     }
 
-    this.imageRenderer.ensureLayerSourceTextures(sessionId, layerIndex, width, height, layer);
+    return this.imageRenderer.ensureLayerSourceTextures(sessionId, layerIndex, width, height, layer);
   }
 
   setDisplaySelectionBindings(
@@ -87,6 +87,14 @@ export class WebGlExrRenderer implements Disposable {
     }
 
     this.imageRenderer.discardSessionTextures(sessionId);
+  }
+
+  discardLayerSourceTextures(sessionId: string, layerIndex: number): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.imageRenderer.discardLayerSourceTextures(sessionId, layerIndex);
   }
 
   clearImage(): void {

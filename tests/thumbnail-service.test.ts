@@ -3,7 +3,7 @@ import { __debugGetMaterializedChannelCount } from '../src/channel-storage';
 import { buildSelectedDisplayTexture } from '../src/display-texture';
 import { serializeDisplaySelectionKey } from '../src/display-model';
 import { ThumbnailService } from '../src/services/thumbnail-service';
-import { DecodedExrImage, OpenedImageSession, ViewerState } from '../src/types';
+import { DecodedExrImage, OpenedImageSession, ViewerSessionState } from '../src/types';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
 import { createChannelMonoSelection, createChannelRgbSelection, createLayerFromChannels } from './helpers/state-fixtures';
 
@@ -57,8 +57,8 @@ describe('thumbnail service', () => {
       createThumbnailDataUrl: ({ stateSnapshot }) => serializeDisplaySelectionKey(stateSnapshot.displaySelection)
     });
 
-    const firstState: ViewerState = { ...session.state, displaySelection: createChannelMonoSelection('first') };
-    const secondState: ViewerState = { ...session.state, displaySelection: createChannelMonoSelection('second') };
+    const firstState: ViewerSessionState = { ...session.state, displaySelection: createChannelMonoSelection('first') };
+    const secondState: ViewerSessionState = { ...session.state, displaySelection: createChannelMonoSelection('second') };
 
     const first = service.enqueue(session.id, firstState);
     const second = service.enqueue(session.id, secondState);
@@ -135,7 +135,7 @@ describe('thumbnail service', () => {
     await service.enqueue(session.id, session.state);
     service.discard(session.id, { preserveDataUrl: true });
 
-    const reloadedState: ViewerState = {
+    const reloadedState: ViewerSessionState = {
       ...session.state,
       displaySelection: createChannelMonoSelection('reload')
     };

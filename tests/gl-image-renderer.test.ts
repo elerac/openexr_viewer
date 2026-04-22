@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe('gl image renderer', () => {
-  it('uploads source textures once per session layer and rebinds selections without re-uploading', () => {
+  it('uploads source textures once per session layer, returns texture bytes, and rebinds selections without re-uploading', () => {
     const { renderer, gl } = createHarness();
     const layer = createLayerFromChannels({
       R: [1, 2],
@@ -22,7 +22,7 @@ describe('gl image renderer', () => {
       B: [5, 6]
     });
 
-    renderer.ensureLayerSourceTextures('session-1', 0, 2, 1, layer);
+    const firstUploadBytes = renderer.ensureLayerSourceTextures('session-1', 0, 2, 1, layer);
     renderer.setDisplaySelectionBindings(
       'session-1',
       0,
@@ -33,7 +33,7 @@ describe('gl image renderer', () => {
 
     const texImageCallsAfterFirstUpload = gl.texImage2D.mock.calls.length;
 
-    renderer.ensureLayerSourceTextures('session-1', 0, 2, 1, layer);
+    const secondUploadBytes = renderer.ensureLayerSourceTextures('session-1', 0, 2, 1, layer);
     renderer.setDisplaySelectionBindings(
       'session-1',
       0,
@@ -42,9 +42,34 @@ describe('gl image renderer', () => {
       buildDisplaySourceBinding(layer, createChannelMonoSelection('G'))
     );
 
+    expect(firstUploadBytes).toBe(2 * 1 * 3 * Float32Array.BYTES_PER_ELEMENT);
+    expect(secondUploadBytes).toBe(firstUploadBytes);
     expect(texImageCallsAfterFirstUpload).toBe(5);
     expect(gl.texImage2D).toHaveBeenCalledTimes(5);
     expect(gl.createTexture).toHaveBeenCalledTimes(5);
+  });
+
+  it('discards one resident layer at a time and prunes empty session containers', () => {
+    const { renderer, gl } = createHarness();
+    const layer = createLayerFromChannels({
+      R: [1, 2],
+      G: [3, 4],
+      B: [5, 6]
+    });
+
+    renderer.ensureLayerSourceTextures('session-1', 0, 2, 1, layer);
+    renderer.ensureLayerSourceTextures('session-1', 1, 2, 1, layer);
+
+    renderer.discardLayerSourceTextures('session-1', 0);
+
+    expect(gl.deleteTexture).toHaveBeenCalledTimes(3);
+    expect(getLayerTexturesBySession(renderer).get('session-1')?.has(0)).toBe(false);
+    expect(getLayerTexturesBySession(renderer).get('session-1')?.has(1)).toBe(true);
+
+    renderer.discardLayerSourceTextures('session-1', 1);
+
+    expect(gl.deleteTexture).toHaveBeenCalledTimes(6);
+    expect(getLayerTexturesBySession(renderer).has('session-1')).toBe(false);
   });
 
   it('deletes owned GL resources exactly once', () => {
@@ -82,6 +107,10 @@ function createHarness(): {
     renderer: new GlImageRenderer(canvas),
     gl
   };
+}
+
+function getLayerTexturesBySession(renderer: GlImageRenderer): Map<string, Map<number, unknown>> {
+  return (renderer as unknown as { layerTexturesBySession: Map<string, Map<number, unknown>> }).layerTexturesBySession;
 }
 
 function createWebGlContextMock(): WebGL2RenderingContext & {

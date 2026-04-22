@@ -621,6 +621,17 @@ describe('display cache UI helpers', () => {
       overBudget: true
     });
   });
+
+  it('describes the usage tooltip as retained GPU texture residency', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setDisplayCacheUsage(64 * 1024 * 1024, 256 * 1024 * 1024);
+
+    expect(document.getElementById('display-cache-usage')?.getAttribute('title')).toBe(
+      'Retained GPU texture residency: 64.0 MB / 256.0 MB'
+    );
+  });
 });
 
 describe('opened files actions', () => {
