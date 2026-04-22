@@ -160,6 +160,30 @@ describe('display controller shim', () => {
     expect(core.getState().loadedColormapId).toBe('2');
   });
 
+  it('persists the requested colormap before the lut resolves', async () => {
+    const deferred = createDeferred<(typeof luts)['1']>();
+    colormapMocks.loadColormapLut.mockImplementation((_registry: unknown, id: string) => {
+      if (id === '0') {
+        return Promise.resolve(luts['0']);
+      }
+      return deferred.promise;
+    });
+
+    const { controller, core } = createController();
+    await controller.initialize();
+
+    const pending = controller.setActiveColormap('1');
+
+    expect(core.getState().sessionState.activeColormapId).toBe('1');
+    expect(core.getState().loadedColormapId).toBe('0');
+
+    deferred.resolve(luts['1']);
+    await pending;
+
+    expect(core.getState().sessionState.activeColormapId).toBe('1');
+    expect(core.getState().loadedColormapId).toBe('1');
+  });
+
   it('applies stokes selection through the core and restores the previous non-stokes visualization state', async () => {
     const decoded = createDecodedImage(['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3']);
     const { controller, core } = createController(createSession(decoded));
@@ -194,6 +218,7 @@ describe('display controller shim', () => {
     deferred.resolve(luts['1']);
 
     await expect(pending).resolves.toBeUndefined();
-    expect(core.getState().sessionState.activeColormapId).toBe('0');
+    expect(core.getState().sessionState.activeColormapId).toBe('1');
+    expect(core.getState().loadedColormapId).toBe('0');
   });
 });

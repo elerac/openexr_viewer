@@ -142,6 +142,10 @@ describe('session controller shim', () => {
       displaySelection: createStokesSelection('aolp', 'stokesRgb', 'R')
     });
     core.dispatch({
+      type: 'activeColormapSet',
+      colormapId: '2'
+    });
+    core.dispatch({
       type: 'colormapLoadResolved',
       requestId: null as never,
       colormapId: '2',
@@ -151,6 +155,39 @@ describe('session controller shim', () => {
         entryCount: 2,
         rgba8: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255])
       }
+    });
+    core.dispatch({
+      type: 'colormapRangeSet',
+      range: { min: 0.1, max: 0.9 }
+    });
+
+    await controller.enqueueFiles([createFile('stokes-second.exr')]);
+
+    expect(controller.getActiveSession()?.filename).toBe('stokes-second.exr');
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'colormap',
+      activeColormapId: '2',
+      colormapRange: { min: 0.1, max: 0.9 },
+      colormapRangeMode: 'oneTime',
+      displaySelection: createStokesSelection('aolp', 'stokesRgb', 'R')
+    });
+  });
+
+  it('keeps the requested split Stokes colormap while a colormap load is still in flight', async () => {
+    const decodeBytes = vi
+      .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
+      .mockResolvedValueOnce(createRgbStokesDecodedImage(6, 6))
+      .mockResolvedValueOnce(createRgbStokesDecodedImage(6, 6));
+    const { controller, core } = createController({ decodeBytes });
+
+    await controller.enqueueFiles([createFile('stokes-first.exr')]);
+    core.dispatch({
+      type: 'displaySelectionSet',
+      displaySelection: createStokesSelection('aolp', 'stokesRgb', 'R')
+    });
+    core.dispatch({
+      type: 'activeColormapSet',
+      colormapId: '2'
     });
     core.dispatch({
       type: 'colormapRangeSet',

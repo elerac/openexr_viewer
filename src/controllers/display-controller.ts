@@ -114,6 +114,11 @@ export class DisplayController implements Disposable {
           return;
         }
 
+        this.core.dispatch({
+          type: 'activeColormapSet',
+          colormapId
+        });
+
         const colormapRequestId = this.core.issueRequestId();
         this.core.dispatch({
           type: 'colormapLoadStarted',
@@ -172,9 +177,17 @@ export class DisplayController implements Disposable {
       return;
     }
 
-    if (state.sessionState.activeColormapId === colormapId) {
+    if (
+      state.sessionState.activeColormapId === colormapId &&
+      (state.pendingColormapRequestId !== null || state.loadedColormapId === colormapId)
+    ) {
       return;
     }
+
+    this.core.dispatch({
+      type: 'activeColormapSet',
+      colormapId
+    });
 
     const requestId = this.core.issueRequestId();
     this.core.dispatch({

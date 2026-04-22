@@ -87,6 +87,10 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         ...state,
         pendingColormapRequestId: intent.requestId
       };
+    case 'activeColormapSet':
+      return patchSessionState(state, {
+        activeColormapId: intent.colormapId
+      });
     case 'colormapLoadResolved':
       if (intent.requestId !== null && state.pendingColormapRequestId !== intent.requestId) {
         return state;
@@ -95,15 +99,7 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         ...state,
         pendingColormapRequestId: null,
         activeColormapLut: intent.lut,
-        loadedColormapId: intent.colormapId,
-        sessionState: {
-          ...state.sessionState,
-          activeColormapId: intent.colormapId
-        },
-        sessions: updateActiveSessionStoredState(state.sessions, state.activeSessionId, {
-          ...state.sessionState,
-          activeColormapId: intent.colormapId
-        })
+        loadedColormapId: intent.colormapId
       };
     case 'colormapLoadFailed':
       if (intent.requestId !== null && state.pendingColormapRequestId !== intent.requestId) {
@@ -270,8 +266,6 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         }
       };
     }
-    case 'activeColormapSet':
-      return state.sessionState.activeColormapId === intent.colormapId ? state : state;
     case 'colormapRangeSet': {
       const activeSession = selectActiveSession(state);
       if (!activeSession || !Number.isFinite(intent.range.min) || !Number.isFinite(intent.range.max)) {
