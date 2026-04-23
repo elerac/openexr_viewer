@@ -753,11 +753,11 @@ describe('panel split sizing', () => {
     expect(rightButton.getAttribute('aria-expanded')).toBe('true');
     expect(bottomButton.getAttribute('aria-expanded')).toBe('false');
     expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('220px');
-    expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('320px');
+    expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('280px');
     expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
     expect(JSON.parse(window.localStorage.getItem('openexr-viewer:panel-splits:v1') ?? '{}')).toEqual({
       imagePanelWidth: 220,
-      rightPanelWidth: 320,
+      rightPanelWidth: 280,
       bottomPanelHeight: 120,
       imagePanelCollapsed: false,
       rightPanelCollapsed: false,
@@ -1424,7 +1424,7 @@ function mockDesktopLayoutGeometry(
     top: 0,
     bottom: args.mainHeight ?? 800,
     height: args.mainHeight ?? 800,
-    width: args.rightWidth ?? 320
+    width: args.rightWidth ?? 280
   });
   mockDomRect(document.getElementById('bottom-panel-content') as HTMLElement, {
     top: 0,

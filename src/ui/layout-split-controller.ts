@@ -30,7 +30,7 @@ const VIEWER_MIN_WIDTH = 360;
 const VIEWER_MIN_HEIGHT = 240;
 const DEFAULT_PANEL_SPLIT_SIZES: PanelSplitSizes = {
   imagePanelWidth: 220,
-  rightPanelWidth: 320,
+  rightPanelWidth: 280,
   bottomPanelHeight: 120
 };
 const DEFAULT_PANEL_COLLAPSE_STATE: PanelCollapseState = {
