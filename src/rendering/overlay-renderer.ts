@@ -7,7 +7,8 @@ import type { Disposable } from '../lifecycle';
 import type { DecodedLayer, ViewerState, ViewportInfo } from '../types';
 import { buildOverlayValueLines } from './overlay-value-lines';
 
-const VALUE_LABEL_MIN_SCREEN_SIZE = 28;
+const VALUE_LABEL_FADE_START_ZOOM = 24;
+const VALUE_LABEL_FULL_OPACITY_ZOOM = 32;
 const MAX_VALUE_LABELS = 1800;
 
 export class OverlayRenderer implements Disposable {
@@ -88,12 +89,13 @@ export class OverlayRenderer implements Disposable {
       return;
     }
 
-    if (state.zoom >= VALUE_LABEL_MIN_SCREEN_SIZE) {
-      this.drawPixelValues(state, imageSize.width, imageSize.height);
+    const labelOpacity = resolveValueLabelOpacity(state.zoom);
+    if (labelOpacity > 0) {
+      this.drawPixelValues(state, imageSize.width, imageSize.height, labelOpacity);
     }
   }
 
-  private drawPixelValues(state: ViewerState, imageWidth: number, imageHeight: number): void {
+  private drawPixelValues(state: ViewerState, imageWidth: number, imageHeight: number, opacity: number): void {
     const evaluator = this.displayEvaluator;
     if (!evaluator) {
       return;
@@ -116,27 +118,31 @@ export class OverlayRenderer implements Disposable {
 
     const ctx = this.overlayContext;
     prepareValueLabelContext(ctx);
+    ctx.globalAlpha = opacity;
+    try {
+      const halfViewWidth = this.viewport.width * 0.5;
+      const halfViewHeight = this.viewport.height * 0.5;
+      const values = { r: 0, g: 0, b: 0, a: 1 };
 
-    const halfViewWidth = this.viewport.width * 0.5;
-    const halfViewHeight = this.viewport.height * 0.5;
-    const values = { r: 0, g: 0, b: 0, a: 1 };
+      for (let y = startY; y <= endY; y += 1) {
+        for (let x = startX; x <= endX; x += 1) {
+          const pixelIndex = y * imageWidth + x;
+          readDisplaySelectionPixelValuesAtIndex(evaluator, pixelIndex, values);
+          const valueLines = buildOverlayValueLines(
+            state,
+            values.r,
+            values.g,
+            values.b,
+            values.a
+          );
 
-    for (let y = startY; y <= endY; y += 1) {
-      for (let x = startX; x <= endX; x += 1) {
-        const pixelIndex = y * imageWidth + x;
-        readDisplaySelectionPixelValuesAtIndex(evaluator, pixelIndex, values);
-        const valueLines = buildOverlayValueLines(
-          state,
-          values.r,
-          values.g,
-          values.b,
-          values.a
-        );
-
-        const centerX = (x + 0.5 - state.panX) * state.zoom + halfViewWidth;
-        const centerY = (y + 0.5 - state.panY) * state.zoom + halfViewHeight;
-        drawValueLines(ctx, valueLines, centerX, centerY, state.zoom, state.zoom);
+          const centerX = (x + 0.5 - state.panX) * state.zoom + halfViewWidth;
+          const centerY = (y + 0.5 - state.panY) * state.zoom + halfViewHeight;
+          drawValueLines(ctx, valueLines, centerX, centerY, state.zoom, state.zoom);
+        }
       }
+    } finally {
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -210,6 +216,18 @@ function resolveValueLabelFontSize(
   }
 
   return Math.floor(fontSize);
+}
+
+function resolveValueLabelOpacity(zoom: number): number {
+  if (zoom <= VALUE_LABEL_FADE_START_ZOOM) {
+    return 0;
+  }
+
+  if (zoom >= VALUE_LABEL_FULL_OPACITY_ZOOM) {
+    return 1;
+  }
+
+  return (zoom - VALUE_LABEL_FADE_START_ZOOM) / (VALUE_LABEL_FULL_OPACITY_ZOOM - VALUE_LABEL_FADE_START_ZOOM);
 }
 
 function visibleBounds(state: ViewerState, viewport: ViewportInfo): {

@@ -24,7 +24,45 @@ describe('overlay renderer', () => {
     expect(context.fillText).not.toHaveBeenCalled();
   });
 
-  it('keeps image-viewer value labels working unchanged', () => {
+  it('does not render value labels below the fade start zoom', () => {
+    const { renderer, context } = createOverlayHarness();
+    const layer = createDisplayLayer(2);
+
+    renderer.resize(128, 64);
+    renderer.setDisplaySelectionContext(2, 1, layer, createChannelRgbSelection('R', 'G', 'B'));
+    renderer.render(createViewerState({
+      viewerMode: 'image',
+      zoom: 24,
+      panX: 1,
+      panY: 0.5,
+      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+    }));
+
+    expect(context.fillText).not.toHaveBeenCalled();
+    expect(context.alphaHistory).toEqual([]);
+    expect(context.globalAlpha).toBe(1);
+  });
+
+  it('fades value labels in with partial transparency inside the zoom ramp', () => {
+    const { renderer, context } = createOverlayHarness();
+    const layer = createDisplayLayer(2);
+
+    renderer.resize(128, 64);
+    renderer.setDisplaySelectionContext(2, 1, layer, createChannelRgbSelection('R', 'G', 'B'));
+    renderer.render(createViewerState({
+      viewerMode: 'image',
+      zoom: 28,
+      panX: 1,
+      panY: 0.5,
+      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+    }));
+
+    expect(context.fillText).toHaveBeenCalled();
+    expect(context.alphaHistory).toEqual([0.5, 1]);
+    expect(context.globalAlpha).toBe(1);
+  });
+
+  it('renders value labels at full opacity at and above the full-opacity zoom', () => {
     const { renderer, context } = createOverlayHarness();
     const layer = createDisplayLayer(2);
 
@@ -39,12 +77,15 @@ describe('overlay renderer', () => {
     }));
 
     expect(context.fillText).toHaveBeenCalled();
+    expect(context.alphaHistory).toEqual([1, 1]);
+    expect(context.globalAlpha).toBe(1);
   });
 });
 
 function createOverlayHarness(): {
   renderer: OverlayRenderer;
   context: CanvasRenderingContext2D & {
+    alphaHistory: number[];
     clearRect: ReturnType<typeof vi.fn>;
     measureText: ReturnType<typeof vi.fn>;
     strokeText: ReturnType<typeof vi.fn>;
@@ -52,7 +93,10 @@ function createOverlayHarness(): {
     strokeRect: ReturnType<typeof vi.fn>;
   };
 } {
+  let globalAlpha = 1;
+  const alphaHistory: number[] = [];
   const context = {
+    alphaHistory,
     clearRect: vi.fn(),
     measureText: vi.fn(() => ({ width: 40 })),
     strokeText: vi.fn(),
@@ -66,12 +110,23 @@ function createOverlayHarness(): {
     strokeStyle: '',
     fillStyle: ''
   } as unknown as CanvasRenderingContext2D & {
+    alphaHistory: number[];
     clearRect: ReturnType<typeof vi.fn>;
     measureText: ReturnType<typeof vi.fn>;
     strokeText: ReturnType<typeof vi.fn>;
     fillText: ReturnType<typeof vi.fn>;
     strokeRect: ReturnType<typeof vi.fn>;
   };
+
+  Object.defineProperty(context, 'globalAlpha', {
+    configurable: true,
+    enumerable: true,
+    get: () => globalAlpha,
+    set: (value: number) => {
+      globalAlpha = value;
+      alphaHistory.push(value);
+    }
+  });
 
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((contextId) => {
     if (contextId === '2d') {
