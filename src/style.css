@@ -1073,9 +1073,9 @@ body.is-resizing-panel-rows * {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(6.6rem, 7.4rem);
-  gap: 0.55rem;
+  gap: 0.4rem;
   align-items: stretch;
-  padding: 0.65rem 0.8rem 0.8rem;
+  padding: 0.45rem 0.55rem 0.55rem;
   overflow-x: auto;
   overflow-y: hidden;
 }
@@ -1089,12 +1089,12 @@ body.is-resizing-panel-rows * {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 0.38rem;
+  gap: 0.24rem;
   justify-items: stretch;
   align-content: start;
   border: 1px solid color-mix(in srgb, var(--panel-border) 92%, transparent);
   border-radius: 0.55rem;
-  padding: 0.45rem;
+  padding: 0.32rem;
   background: color-mix(in srgb, var(--panel) 92%, #000);
   color: var(--text);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
