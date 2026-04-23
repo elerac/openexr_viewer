@@ -238,9 +238,7 @@ export class ChannelThumbnailStrip implements Disposable {
           borderBottom
       );
       const previewHeight = Math.max(0, tileContentHeight - paddingTop - paddingBottom - rowGap - labelHeight);
-      const previewWidth = previewHeight * resolveThumbnailAspectRatioValue(
-        refs.preview.style.getPropertyValue('--thumbnail-aspect-ratio')
-      );
+      const previewWidth = previewHeight;
       const tileWidth = previewWidth + paddingLeft + paddingRight + borderLeft + borderRight;
 
       tile.style.setProperty('--channel-thumbnail-tile-width', formatPixels(tileWidth));
@@ -287,7 +285,7 @@ function updateChannelThumbnailTile(
   tile.disabled = options.disabled;
   tile.title = item.label;
 
-  const nextPreview = createChannelThumbnailPreview(item.thumbnailDataUrl, item.thumbnailAspectRatio);
+  const nextPreview = createChannelThumbnailPreview(item.thumbnailDataUrl);
   if (!samePreview(refs.preview, nextPreview)) {
     tile.replaceChild(nextPreview, refs.preview);
     refs.preview = nextPreview;
@@ -296,12 +294,10 @@ function updateChannelThumbnailTile(
 }
 
 function createChannelThumbnailPreview(
-  thumbnailDataUrl: string | null,
-  thumbnailAspectRatio: number | null
+  thumbnailDataUrl: string | null
 ): HTMLElement {
   const preview = document.createElement('span');
   preview.className = 'channel-thumbnail-tile-preview';
-  preview.style.setProperty('--thumbnail-aspect-ratio', resolveThumbnailAspectRatioStyleValue(thumbnailAspectRatio));
 
   if (!thumbnailDataUrl) {
     const placeholder = document.createElement('span');
@@ -322,11 +318,7 @@ function createChannelThumbnailPreview(
 }
 
 function samePreview(current: HTMLElement, next: HTMLElement): boolean {
-  if (
-    current.tagName !== next.tagName ||
-    current.className !== next.className ||
-    current.style.getPropertyValue('--thumbnail-aspect-ratio') !== next.style.getPropertyValue('--thumbnail-aspect-ratio')
-  ) {
+  if (current.tagName !== next.tagName || current.className !== next.className) {
     return false;
   }
 
@@ -347,11 +339,6 @@ function samePreview(current: HTMLElement, next: HTMLElement): boolean {
   return currentChild.className === nextChild.className;
 }
 
-function resolveThumbnailAspectRatioStyleValue(thumbnailAspectRatio: number | null): string {
-  const aspectRatio = resolveThumbnailAspectRatioValue(thumbnailAspectRatio);
-  return aspectRatio === 1 ? '1 / 1' : aspectRatio.toString();
-}
-
 function getEnabledTiles(container: HTMLElement): HTMLButtonElement[] {
   return Array.from(container.querySelectorAll<HTMLButtonElement>('.channel-thumbnail-tile')).filter((tile) => !tile.disabled);
 }
@@ -359,34 +346,6 @@ function getEnabledTiles(container: HTMLElement): HTMLButtonElement[] {
 function focusSelectedTile(container: HTMLElement): void {
   const selectedTile = getEnabledTiles(container).find((tile) => tile.getAttribute('aria-selected') === 'true');
   selectedTile?.focus();
-}
-
-function resolveThumbnailAspectRatioValue(value: number | string | null): number {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) && value > 0 ? value : 1;
-  }
-
-  if (typeof value !== 'string') {
-    return 1;
-  }
-
-  const normalized = value.trim();
-  if (!normalized) {
-    return 1;
-  }
-
-  if (normalized.includes('/')) {
-    const [numeratorText, denominatorText] = normalized.split('/', 2).map((part) => part.trim());
-    const numerator = Number(numeratorText);
-    const denominator = Number(denominatorText);
-    if (Number.isFinite(numerator) && Number.isFinite(denominator) && numerator > 0 && denominator > 0) {
-      return numerator / denominator;
-    }
-    return 1;
-  }
-
-  const aspectRatio = Number(normalized);
-  return Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1;
 }
 
 function readCssPixels(value: string, fallback: number): number {

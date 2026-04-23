@@ -2078,8 +2078,7 @@ describe('channel thumbnail strip', () => {
     const baseItems = buildChannelViewItems(channelNames);
     const channelThumbnailItems = baseItems.map((item) => ({
       ...item,
-      thumbnailDataUrl: null,
-      thumbnailAspectRatio: 2
+      thumbnailDataUrl: null
     }));
     const selected = {
       kind: 'channelRgb' as const,
@@ -2095,7 +2094,7 @@ describe('channel thumbnail strip', () => {
     const depthItem = channelThumbnailItems.find((item) => item.value === 'channel:depth.Z');
     expect(tiles).toHaveLength(2);
     expect(document.querySelectorAll('#channel-thumbnail-strip .channel-thumbnail-placeholder')).toHaveLength(2);
-    expect(Array.from(document.querySelectorAll<HTMLElement>('#channel-thumbnail-strip .channel-thumbnail-tile-preview')).map((preview) => preview.style.getPropertyValue('--thumbnail-aspect-ratio'))).toEqual(['2', '2']);
+    expect(Array.from(document.querySelectorAll<HTMLElement>('#channel-thumbnail-strip .channel-thumbnail-tile-preview')).map((preview) => preview.style.getPropertyValue('--thumbnail-aspect-ratio'))).toEqual(['', '']);
     expect(document.querySelectorAll('#channel-thumbnail-strip .channel-thumbnail-tile-meta')).toHaveLength(0);
     expect(depthItem).toBeTruthy();
 
@@ -2131,8 +2130,7 @@ describe('channel thumbnail strip', () => {
     const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'beauty.A', 'depth.Z'];
     const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
       ...item,
-      thumbnailDataUrl: 'data:image/png;base64,AAAA',
-      thumbnailAspectRatio: 2
+      thumbnailDataUrl: 'data:image/png;base64,AAAA'
     }));
     const strip = document.getElementById('channel-thumbnail-strip') as HTMLElement;
 
@@ -2163,9 +2161,9 @@ describe('channel thumbnail strip', () => {
     const firstLabel = firstTile.querySelector('.channel-thumbnail-tile-label') as HTMLElement;
 
     expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-height')).toBe('77px');
-    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-width')).toBe('154px');
-    expect(firstTile.style.getPropertyValue('--channel-thumbnail-tile-width')).toBe('164px');
-    expect(firstLabel.style.getPropertyValue('--channel-thumbnail-label-max-width')).toBe('154px');
+    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-width')).toBe('77px');
+    expect(firstTile.style.getPropertyValue('--channel-thumbnail-tile-width')).toBe('87px');
+    expect(firstLabel.style.getPropertyValue('--channel-thumbnail-label-max-width')).toBe('77px');
   });
 
   it('recomputes thumbnail sizes when the strip height changes', () => {
@@ -2176,8 +2174,7 @@ describe('channel thumbnail strip', () => {
     const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'beauty.A', 'depth.Z'];
     const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
       ...item,
-      thumbnailDataUrl: 'data:image/png;base64,AAAA',
-      thumbnailAspectRatio: 2
+      thumbnailDataUrl: 'data:image/png;base64,AAAA'
     }));
     const strip = document.getElementById('channel-thumbnail-strip') as HTMLElement;
 
@@ -2205,15 +2202,75 @@ describe('channel thumbnail strip', () => {
     const firstPreview = firstTile.querySelector('.channel-thumbnail-tile-preview') as HTMLElement;
 
     expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-height')).toBe('77px');
-    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-width')).toBe('154px');
-    expect(firstTile.style.getPropertyValue('--channel-thumbnail-tile-width')).toBe('164px');
+    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-width')).toBe('77px');
+    expect(firstTile.style.getPropertyValue('--channel-thumbnail-tile-width')).toBe('87px');
 
     mockChannelThumbnailStripGeometry({ stripHeight: 160, tileHeight: 146, labelHeight: 18 });
     triggerResizeObserversForElement(strip);
 
     expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-height')).toBe('115px');
-    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-width')).toBe('230px');
-    expect(firstTile.style.getPropertyValue('--channel-thumbnail-tile-width')).toBe('240px');
+    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-width')).toBe('115px');
+    expect(firstTile.style.getPropertyValue('--channel-thumbnail-tile-width')).toBe('125px');
+  });
+
+  it('keeps thumbnail frame sizing stable when the strip rerenders for another image', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'beauty.A', 'depth.Z'];
+    const strip = document.getElementById('channel-thumbnail-strip') as HTMLElement;
+    const selected = {
+      kind: 'channelRgb' as const,
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: 'beauty.A'
+    };
+
+    ui.setRgbGroupOptions(channelNames, selected, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: 'data:image/png;base64,AAAA'
+    })));
+
+    strip.style.paddingTop = '6px';
+    strip.style.paddingBottom = '8px';
+
+    let tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
+    for (const tile of tiles) {
+      tile.style.padding = '4px';
+      tile.style.rowGap = '3px';
+      tile.style.border = '1px solid transparent';
+    }
+
+    mockChannelThumbnailStripGeometry({ stripHeight: 120, tileHeight: 106, labelHeight: 16 });
+    triggerResizeObserversForElement(strip);
+
+    const firstTile = tiles[0]!;
+    const firstPreview = firstTile.querySelector('.channel-thumbnail-tile-preview') as HTMLElement;
+    const initialPreviewWidth = firstPreview.style.getPropertyValue('--channel-thumbnail-preview-width');
+    const initialTileWidth = firstTile.style.getPropertyValue('--channel-thumbnail-tile-width');
+
+    ui.setRgbGroupOptions(channelNames, selected, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: 'data:image/png;base64,BBBB'
+    })));
+
+    tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
+    for (const tile of tiles) {
+      tile.style.padding = '4px';
+      tile.style.rowGap = '3px';
+      tile.style.border = '1px solid transparent';
+    }
+
+    mockChannelThumbnailStripGeometry({ stripHeight: 120, tileHeight: 106, labelHeight: 16 });
+    triggerResizeObserversForElement(strip);
+
+    const rerenderedTile = tiles[0]!;
+    const rerenderedPreview = rerenderedTile.querySelector('.channel-thumbnail-tile-preview') as HTMLElement;
+
+    expect(rerenderedPreview.style.getPropertyValue('--channel-thumbnail-preview-width')).toBe(initialPreviewWidth);
+    expect(rerenderedTile.style.getPropertyValue('--channel-thumbnail-tile-width')).toBe(initialTileWidth);
   });
 
   it('preserves focus across repeated horizontal keyboard navigation in the bottom strip', () => {
@@ -2225,8 +2282,7 @@ describe('channel thumbnail strip', () => {
     const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
     const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
       ...item,
-      thumbnailDataUrl: null,
-      thumbnailAspectRatio: 2
+      thumbnailDataUrl: null
     }));
     const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
     const channelSelect = document.getElementById('rgb-group-select') as HTMLSelectElement;
@@ -2301,7 +2357,10 @@ describe('channel thumbnail strip', () => {
       kind: 'channelMono',
       channel: 'mask',
       alpha: 'A'
-    }, buildChannelViewItems(channelNames));
+    }, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    })));
 
     expect(Array.from(channelSelect.selectedOptions).map((option) => option.textContent)).toEqual(['mask,A']);
 
@@ -2324,8 +2383,7 @@ describe('channel thumbnail strip', () => {
     const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'beauty.A', 'depth.Z'];
     const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
       ...item,
-      thumbnailDataUrl: 'data:image/png;base64,AAAA',
-      thumbnailAspectRatio: 2
+      thumbnailDataUrl: 'data:image/png;base64,AAAA'
     }));
     const strip = document.getElementById('channel-thumbnail-strip') as HTMLElement;
 

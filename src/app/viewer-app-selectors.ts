@@ -72,8 +72,6 @@ export function buildChannelThumbnailItems(state: ViewerAppState): ViewerChannel
     return [];
   }
 
-  const thumbnailAspectRatio = resolveThumbnailAspectRatio(session.decoded.width, session.decoded.height);
-
   return buildChannelViewItems(layer.channelNames).map((item) => {
     const requestKey = serializeChannelThumbnailRequestKey({
       sessionId: session.id,
@@ -97,8 +95,7 @@ export function buildChannelThumbnailItems(state: ViewerAppState): ViewerChannel
 
     return {
       ...item,
-      thumbnailDataUrl: exactThumbnailDataUrl ?? fallbackThumbnailDataUrl,
-      thumbnailAspectRatio
+      thumbnailDataUrl: exactThumbnailDataUrl ?? fallbackThumbnailDataUrl
     };
   });
 }

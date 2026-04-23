@@ -1201,7 +1201,6 @@ body.is-resizing-panel-rows * {
   height: var(--channel-thumbnail-preview-height, auto);
   min-width: 0;
   min-height: 0;
-  aspect-ratio: var(--thumbnail-aspect-ratio, 1 / 1);
   border-radius: 0.4rem;
   overflow: hidden;
   background: #12171f;

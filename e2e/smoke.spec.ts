@@ -648,7 +648,7 @@ test('keeps the previous thumbnail visible until reload thumbnails are regenerat
   await expect.poll(async () => await getPendingIdleCallbackCount(page)).toBe(0);
 });
 
-test('renders aspect-aware bottom-panel channel thumbnails and syncs them with the channel selector', async ({ page }) => {
+test('keeps bottom-panel channel thumbnail frames stable across image selection changes and syncs them with the channel selector', async ({ page }) => {
   await installIdleCallbackController(page);
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
   await page.waitForTimeout(1500);
@@ -662,10 +662,10 @@ test('renders aspect-aware bottom-panel channel thumbnails and syncs them with t
   const bottomPanelButton = page.locator('#bottom-panel-collapse-button');
   const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
   const channelSelect = page.locator('#rgb-group-select');
-  const openedFileRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'landscape_rgb.exr' });
-  const openedFileThumbnail = openedFileRow.locator('.opened-file-thumbnail');
+  const landscapeRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'landscape_rgb.exr' });
+  const portraitRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'portrait_rgb.exr' });
   const thumbnailTiles = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile');
-  const thumbnailImages = page.locator('#channel-thumbnail-strip .channel-thumbnail-image');
+  const firstThumbnailPreview = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile-preview').first();
   const greenRow = page.locator('#channel-view-list .channel-view-row').filter({ hasText: /^G/ });
 
   await page.setInputFiles('#file-input', {
@@ -673,7 +673,7 @@ test('renders aspect-aware bottom-panel channel thumbnails and syncs them with t
     mimeType: 'image/exr',
     buffer: buildLandscapeRgbExr()
   });
-  await expect(openedFileRow).toHaveCount(1);
+  await expect(landscapeRow).toHaveCount(1);
   await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'true');
   await rgbSplitToggleButton.click();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
@@ -684,23 +684,29 @@ test('renders aspect-aware bottom-panel channel thumbnails and syncs them with t
 
   await flushAllIdleCallbacks(page);
 
-  await expect
-    .poll(async () => await openedFileThumbnail.evaluate((image) => ({
-      width: image instanceof HTMLImageElement ? image.naturalWidth : 0,
-      height: image instanceof HTMLImageElement ? image.naturalHeight : 0
-    })))
-    .toEqual({ width: 40, height: 20 });
-  await expect(thumbnailImages).toHaveCount(3);
-  await expect
-    .poll(async () => await thumbnailImages.evaluateAll((images) => images.map((image) => ({
-      width: image instanceof HTMLImageElement ? image.naturalWidth : 0,
-      height: image instanceof HTMLImageElement ? image.naturalHeight : 0
-    }))))
-    .toEqual([
-      { width: 128, height: 64 },
-      { width: 128, height: 64 },
-      { width: 128, height: 64 }
-    ]);
+  const readPreviewRect = async (): Promise<{ width: number; height: number }> => (
+    await firstThumbnailPreview.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        width: rect.width,
+        height: rect.height
+      };
+    })
+  );
+  const landscapePreviewRect = await readPreviewRect();
+
+  await page.setInputFiles('#file-input', {
+    name: 'portrait_rgb.exr',
+    mimeType: 'image/exr',
+    buffer: buildPortraitRgbExr()
+  });
+  await expect(portraitRow).toHaveCount(1);
+  await expect.poll(async () => await getPendingIdleCallbackCount(page)).not.toBe(0);
+  await flushAllIdleCallbacks(page);
+
+  const portraitPreviewRect = await readPreviewRect();
+  expect(Math.abs(portraitPreviewRect.width - landscapePreviewRect.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(portraitPreviewRect.height - landscapePreviewRect.height)).toBeLessThanOrEqual(1);
 
   await thumbnailTiles.nth(1).click();
   await expect(channelSelect.locator('option:checked')).toHaveText('G');
@@ -2223,6 +2229,27 @@ function buildLandscapeRgbExr(): Buffer {
   ensureExrEncoderInitialized();
 
   const encoder = new ExrEncoder(2, 1);
+  try {
+    encoder.addLayer(
+      null,
+      ['R', 'G', 'B'],
+      new Float32Array([
+        0, 0, 0,
+        1, 1, 1
+      ]),
+      SamplePrecision.F32,
+      CompressionMethod.None
+    );
+    return Buffer.from(encoder.encode());
+  } finally {
+    encoder.free();
+  }
+}
+
+function buildPortraitRgbExr(): Buffer {
+  ensureExrEncoderInitialized();
+
+  const encoder = new ExrEncoder(1, 2);
   try {
     encoder.addLayer(
       null,
