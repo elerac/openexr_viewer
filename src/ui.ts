@@ -71,6 +71,7 @@ export interface UiCallbacks {
   onColormapZeroCenterToggle: () => void;
   onStokesDegreeModulationToggle: () => void;
   onClearRoi: () => void;
+  onResetSettings: () => void;
   onResetView: () => void;
 }
 
@@ -1209,6 +1210,11 @@ export class ViewerUi implements Disposable {
 
     this.disposables.addEventListener(this.elements.resetViewButton, 'click', () => {
       this.callbacks.onResetView();
+    });
+
+    this.disposables.addEventListener(this.elements.resetSettingsButton, 'click', () => {
+      this.layoutSplitController.resetToDefaults();
+      this.callbacks.onResetSettings();
     });
 
     this.disposables.addEventListener(this.elements.clearRoiButton, 'click', () => {

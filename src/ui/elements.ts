@@ -21,6 +21,7 @@ export interface Elements {
   galleryMenu: HTMLElement;
   settingsMenuButton: HTMLButtonElement;
   settingsMenu: HTMLElement;
+  resetSettingsButton: HTMLButtonElement;
   imageViewerMenuItem: HTMLButtonElement;
   panoramaViewerMenuItem: HTMLButtonElement;
   galleryCboxRgbButton: HTMLButtonElement;
@@ -186,6 +187,7 @@ export function resolveElements(): Elements {
     galleryMenu: requireElement('gallery-menu', HTMLElement),
     settingsMenuButton: requireElement('settings-menu-button', HTMLButtonElement),
     settingsMenu: requireElement('settings-menu', HTMLElement),
+    resetSettingsButton: requireElement('reset-settings-button', HTMLButtonElement),
     imageViewerMenuItem: requireElement('image-viewer-menu-item', HTMLButtonElement),
     panoramaViewerMenuItem: requireElement('panorama-viewer-menu-item', HTMLButtonElement),
     galleryCboxRgbButton: requireElement('gallery-cbox-rgb-button', HTMLButtonElement),

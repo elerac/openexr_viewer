@@ -770,6 +770,159 @@ test('persists the cache budget and keeps open-file actions limited to reload an
   await expect(page.getByRole('button', { name: /Pin cache|Unpin cache/ })).toHaveCount(0);
 });
 
+test('resets settings back to the default budget and panel layout', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  const settingsMenuButton = page.getByRole('button', { name: 'Settings', exact: true });
+  const settingsMenu = page.locator('#settings-menu');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  const budgetInput = page.locator('#display-cache-budget-input');
+  const usageReadout = page.locator('#display-cache-usage');
+  const resetSettingsButton = page.getByRole('menuitem', { name: 'Reset Settings', exact: true });
+  const imageResizer = page.locator('#image-panel-resizer');
+  const rightResizer = page.locator('#right-panel-resizer');
+  const bottomResizer = page.locator('#bottom-panel-resizer');
+  const imageCollapseButton = page.locator('#image-panel-collapse-button');
+  const rightCollapseButton = page.locator('#right-panel-collapse-button');
+  const bottomCollapseButton = page.locator('#bottom-panel-collapse-button');
+
+  const readLayout = async () => {
+    return await page.evaluate(() => {
+      const imagePanelContent = document.querySelector('#image-panel-content');
+      const inspectorPanel = document.querySelector('#inspector-panel');
+      const bottomPanelContent = document.querySelector('#bottom-panel-content');
+      const imageCollapseButton = document.querySelector('#image-panel-collapse-button');
+      const rightCollapseButton = document.querySelector('#right-panel-collapse-button');
+      const bottomCollapseButton = document.querySelector('#bottom-panel-collapse-button');
+      if (
+        !(imagePanelContent instanceof HTMLElement) ||
+        !(inspectorPanel instanceof HTMLElement) ||
+        !(bottomPanelContent instanceof HTMLElement) ||
+        !(imageCollapseButton instanceof HTMLButtonElement) ||
+        !(rightCollapseButton instanceof HTMLButtonElement) ||
+        !(bottomCollapseButton instanceof HTMLButtonElement)
+      ) {
+        throw new Error('Missing layout elements.');
+      }
+
+      return {
+        imageWidth: imagePanelContent.getBoundingClientRect().width,
+        rightWidth: inspectorPanel.getBoundingClientRect().width,
+        bottomHeight: bottomPanelContent.getBoundingClientRect().height,
+        imageExpanded: imageCollapseButton.getAttribute('aria-expanded'),
+        rightExpanded: rightCollapseButton.getAttribute('aria-expanded'),
+        bottomExpanded: bottomCollapseButton.getAttribute('aria-expanded'),
+        storedBudget: window.localStorage.getItem('openexr-viewer:display-cache-budget-mb:v1'),
+        storedPanel: window.localStorage.getItem('openexr-viewer:panel-splits:v1')
+      };
+    });
+  };
+
+  const dragBy = async (locator: Locator, dx: number, dy: number) => {
+    const box = await locator.boundingBox();
+    if (!box) {
+      throw new Error('Resizer is not visible.');
+    }
+
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx, y + dy, { steps: 4 });
+    await page.mouse.up();
+    await page.waitForTimeout(100);
+  };
+
+  await settingsMenuButton.click();
+  await expect(settingsMenu).toBeVisible();
+  await budgetInput.selectOption('128');
+  await expect(budgetInput).toHaveValue('128');
+  await expect(usageReadout).toContainText('/ 128 MB');
+  await page.keyboard.press('Escape');
+  await expect(settingsMenu).toBeHidden();
+
+  await dragBy(imageResizer, 48, 0);
+  await dragBy(rightResizer, -48, 0);
+  await dragBy(bottomResizer, 0, -48);
+  await imageCollapseButton.click();
+  await rightCollapseButton.click();
+  await bottomCollapseButton.click();
+  await page.waitForTimeout(100);
+
+  const mutated = await readLayout();
+  expect(mutated.imageWidth).toBeLessThan(2);
+  expect(mutated.rightWidth).toBeLessThan(2);
+  expect(mutated.bottomHeight).toBeLessThan(2);
+  expect(mutated.imageExpanded).toBe('false');
+  expect(mutated.rightExpanded).toBe('false');
+  expect(mutated.bottomExpanded).toBe('false');
+  expect(mutated.storedBudget).toBe('128');
+
+  await settingsMenuButton.click();
+  await expect(settingsMenu).toBeVisible();
+  await expect(budgetInput).toHaveValue('128');
+  await resetSettingsButton.click();
+
+  await expect(settingsMenu).toBeVisible();
+  await expect(settingsMenuButton).toHaveAttribute('aria-expanded', 'true');
+  await expect(budgetInput).toHaveValue('256');
+  await expect(usageReadout).toContainText('/ 256 MB');
+
+  const afterReset = await readLayout();
+  expect(Math.abs(afterReset.imageWidth - 220)).toBeLessThanOrEqual(2);
+  expect(Math.abs(afterReset.rightWidth - 320)).toBeLessThanOrEqual(2);
+  expect(Math.abs(afterReset.bottomHeight - 120)).toBeLessThanOrEqual(2);
+  expect(afterReset.imageExpanded).toBe('true');
+  expect(afterReset.rightExpanded).toBe('true');
+  expect(afterReset.bottomExpanded).toBe('true');
+  expect(afterReset.storedBudget).toBe('256');
+  expect(JSON.parse(afterReset.storedPanel ?? '{}')).toEqual({
+    imagePanelWidth: 220,
+    rightPanelWidth: 320,
+    bottomPanelHeight: 120,
+    imagePanelCollapsed: false,
+    rightPanelCollapsed: false,
+    bottomPanelCollapsed: false
+  });
+
+  await page.reload();
+  await page.waitForTimeout(1500);
+
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  await settingsMenuButton.click();
+  await expect(settingsMenu).toBeVisible();
+  await expect(budgetInput).toHaveValue('256');
+  await expect(usageReadout).toContainText('/ 256 MB');
+
+  const afterReload = await readLayout();
+  expect(Math.abs(afterReload.imageWidth - 220)).toBeLessThanOrEqual(2);
+  expect(Math.abs(afterReload.rightWidth - 320)).toBeLessThanOrEqual(2);
+  expect(Math.abs(afterReload.bottomHeight - 120)).toBeLessThanOrEqual(2);
+  expect(afterReload.imageExpanded).toBe('true');
+  expect(afterReload.rightExpanded).toBe('true');
+  expect(afterReload.bottomExpanded).toBe('true');
+  expect(afterReload.storedBudget).toBe('256');
+  expect(JSON.parse(afterReload.storedPanel ?? '{}')).toEqual({
+    imagePanelWidth: 220,
+    rightPanelWidth: 320,
+    bottomPanelHeight: 120,
+    imagePanelCollapsed: false,
+    rightPanelCollapsed: false,
+    bottomPanelCollapsed: false
+  });
+});
+
 test('resizes desktop panel splits and persists them', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');

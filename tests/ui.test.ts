@@ -718,6 +718,56 @@ describe('panel split sizing', () => {
     expect(bottomResizer.tabIndex).toBe(0);
     expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('226px');
   });
+
+  it('resets stored panel layout defaults and dispatches reset-settings callbacks', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry({ imageWidth: 280, rightWidth: 340, bottomHeight: 210 });
+    window.localStorage.setItem(
+      'openexr-viewer:panel-splits:v1',
+      JSON.stringify({
+        imagePanelWidth: 280,
+        rightPanelWidth: 340,
+        bottomPanelHeight: 210,
+        imagePanelCollapsed: true,
+        rightPanelCollapsed: true,
+        bottomPanelCollapsed: true
+      })
+    );
+
+    const onResetSettings = vi.fn();
+    new ViewerUi(createUiCallbacks({ onResetSettings }));
+
+    const resetSettingsButton = document.getElementById('reset-settings-button') as HTMLButtonElement;
+    const imageButton = document.getElementById('image-panel-collapse-button') as HTMLButtonElement;
+    const rightButton = document.getElementById('right-panel-collapse-button') as HTMLButtonElement;
+    const bottomButton = document.getElementById('bottom-panel-collapse-button') as HTMLButtonElement;
+    const mainLayout = document.getElementById('main-layout') as HTMLElement;
+
+    expect(imageButton.getAttribute('aria-expanded')).toBe('false');
+    expect(rightButton.getAttribute('aria-expanded')).toBe('false');
+    expect(bottomButton.getAttribute('aria-expanded')).toBe('false');
+    expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('0px');
+    expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('0px');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
+
+    resetSettingsButton.click();
+
+    expect(onResetSettings).toHaveBeenCalledTimes(1);
+    expect(imageButton.getAttribute('aria-expanded')).toBe('true');
+    expect(rightButton.getAttribute('aria-expanded')).toBe('true');
+    expect(bottomButton.getAttribute('aria-expanded')).toBe('true');
+    expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('220px');
+    expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('320px');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('120px');
+    expect(JSON.parse(window.localStorage.getItem('openexr-viewer:panel-splits:v1') ?? '{}')).toEqual({
+      imagePanelWidth: 220,
+      rightPanelWidth: 320,
+      bottomPanelHeight: 120,
+      imagePanelCollapsed: false,
+      rightPanelCollapsed: false,
+      bottomPanelCollapsed: false
+    });
+  });
 });
 
 describe('view menu', () => {
@@ -733,6 +783,16 @@ describe('view menu', () => {
 
     const labels = Array.from(document.querySelectorAll('.app-menu-tab')).map((item) => item.textContent?.trim());
     expect(labels).toEqual(['File', 'View', 'Gallery', 'Settings']);
+  });
+
+  it('renders Reset Settings in the settings menu', () => {
+    installUiFixture();
+
+    const resetSettingsButton = document.getElementById('reset-settings-button') as HTMLButtonElement;
+
+    expect(resetSettingsButton).not.toBeNull();
+    expect(resetSettingsButton.textContent?.trim()).toBe('Reset Settings');
+    expect(resetSettingsButton.getAttribute('role')).toBe('menuitem');
   });
 
   it('keeps viewer mode items disabled until an image is active', () => {
@@ -831,6 +891,27 @@ describe('view menu', () => {
 
     expectTopMenuClosed('file-menu-button', 'file-menu');
     expect(document.activeElement).toBe(fileButton);
+  });
+
+  it('focuses the settings controls in select-then-reset order from the keyboard', () => {
+    installUiFixture();
+
+    new ViewerUi(createUiCallbacks());
+    const settingsButton = document.getElementById('settings-menu-button') as HTMLButtonElement;
+    const budgetInput = document.getElementById('display-cache-budget-input') as HTMLSelectElement;
+    const resetSettingsButton = document.getElementById('reset-settings-button') as HTMLButtonElement;
+
+    settingsButton.focus();
+    settingsButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+
+    expectTopMenuOpen('settings-menu-button', 'settings-menu');
+    expect(document.activeElement).toBe(budgetInput);
+
+    settingsButton.focus();
+    settingsButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+
+    expectTopMenuOpen('settings-menu-button', 'settings-menu');
+    expect(document.activeElement).toBe(resetSettingsButton);
   });
 
   it('keeps export disabled until an image is active and blocks it during rgb-view loading', () => {
@@ -1442,6 +1523,7 @@ function createUiCallbacksBase() {
     onColormapZeroCenterToggle: () => {},
     onStokesDegreeModulationToggle: () => {},
     onClearRoi: () => {},
+    onResetSettings: () => {},
     onResetView: () => {}
   };
 }

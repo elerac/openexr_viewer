@@ -200,6 +200,10 @@ output {
   color: #ffb0aa;
 }
 
+.app-menu-setting-action {
+  margin-top: 0.2rem;
+}
+
 button,
 select {
   background: #202838;

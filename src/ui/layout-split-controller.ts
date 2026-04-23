@@ -98,6 +98,25 @@ export class LayoutSplitController implements Disposable {
     this.disposables.dispose();
   }
 
+  resetToDefaults(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.finishPanelResize();
+    const defaultState: PanelLayoutState = {
+      ...DEFAULT_PANEL_SPLIT_SIZES,
+      ...DEFAULT_PANEL_COLLAPSE_STATE
+    };
+
+    if (!this.isDesktopPanelLayout()) {
+      this.setPanelLayoutState(defaultState, true);
+      return;
+    }
+
+    this.applyPanelLayoutState(defaultState, null, true);
+  }
+
   private initializePanelSplits(): void {
     const currentSizes = this.readCurrentPanelSplitSizes();
     const storedState = readStoredPanelSplitState();

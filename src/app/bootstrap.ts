@@ -10,6 +10,7 @@ import { createPngBlobFromPixels } from '../export-image';
 import { LoadQueueService } from '../services/load-queue';
 import { ThumbnailService } from '../services/thumbnail-service';
 import { RenderCacheService } from '../services/render-cache-service';
+import { DEFAULT_DISPLAY_CACHE_BUDGET_MB } from '../display-cache';
 import { mergeRenderState } from '../view-state';
 import { ViewerAppCore } from './viewer-app-core';
 import { applyRenderEffects } from './viewer-app-render-effects';
@@ -156,6 +157,9 @@ export async function bootstrapApp(): Promise<AppHandle> {
         type: 'roiSet',
         roi: null
       });
+    },
+    onResetSettings: () => {
+      renderCache.setBudgetMb(DEFAULT_DISPLAY_CACHE_BUDGET_MB);
     },
     onResetView: () => {
       sessionController.resetActiveSessionState();
