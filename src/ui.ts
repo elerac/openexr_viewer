@@ -39,6 +39,8 @@ import type {
   ExportImageTarget,
   ImageRoi,
   OpenedImageDropPlacement,
+  PanoramaKeyboardOrbitDirection,
+  PanoramaKeyboardOrbitInput,
   PixelSample,
   RoiStats,
   ViewerMode,
@@ -86,6 +88,7 @@ export interface UiCallbacks {
   ) => void;
   onDisplayCacheBudgetChange: (mb: number) => void;
   onExposureChange: (value: number) => void;
+  onPanoramaKeyboardOrbitInputChange: (input: PanoramaKeyboardOrbitInput) => void;
   onViewerModeChange: (mode: ViewerMode) => void;
   onLayerChange: (layerIndex: number) => void;
   onRgbGroupChange: (mapping: DisplaySelection) => void;
@@ -325,6 +328,8 @@ export class ViewerUi implements Disposable {
   private channelThumbnailItems: ChannelThumbnailOptionItem[] = [];
   private rgbGroupChannelNames: string[] = [];
   private currentChannelSelection: DisplaySelection | null = null;
+  private viewerMode: ViewerMode = 'image';
+  private panoramaKeyboardOrbitInput = createPanoramaKeyboardOrbitInput();
   private verticalNavigationTarget: VerticalNavigationTarget = 'openedFiles';
   private hasActiveChannelImage = false;
   private exportTarget: ExportImageTarget | null = null;
@@ -454,6 +459,7 @@ export class ViewerUi implements Disposable {
       return;
     }
 
+    this.clearPanoramaKeyboardOrbitInput();
     this.closeExportDialog(false);
     this.closeExportColormapDialog(false);
     this.closeAllTopMenus(false);
@@ -484,6 +490,9 @@ export class ViewerUi implements Disposable {
     }
 
     this.isLoading = loading;
+    if (loading) {
+      this.clearPanoramaKeyboardOrbitInput();
+    }
     this.elements.openFileButton.disabled = loading;
     this.elements.openFolderButton.disabled = loading;
     this.elements.galleryCboxRgbButton.disabled = loading;
@@ -543,6 +552,10 @@ export class ViewerUi implements Disposable {
       return;
     }
 
+    if (mode !== 'panorama') {
+      this.clearPanoramaKeyboardOrbitInput();
+    }
+    this.viewerMode = mode;
     this.elements.imageViewerMenuItem.setAttribute('aria-checked', mode === 'image' ? 'true' : 'false');
     this.elements.panoramaViewerMenuItem.setAttribute('aria-checked', mode === 'panorama' ? 'true' : 'false');
   }
@@ -614,6 +627,9 @@ export class ViewerUi implements Disposable {
       return;
     }
 
+    if (items.length === 0) {
+      this.clearPanoramaKeyboardOrbitInput();
+    }
     this.openedImageCount = items.length;
     this.openedImagesPanel.setOpenedImageOptions(items, activeId);
     this.colormapPanel.setOpenedImageCount(this.openedImagesPanel.getOpenedImageCount());
@@ -1012,6 +1028,7 @@ export class ViewerUi implements Disposable {
       return;
     }
 
+    this.clearPanoramaKeyboardOrbitInput();
     this.closeExportColormapDialog(false);
     this.closeAllTopMenus();
     this.exportDialogRestoreFocusTarget = this.elements.fileMenuButton;
@@ -1183,6 +1200,7 @@ export class ViewerUi implements Disposable {
       return;
     }
 
+    this.clearPanoramaKeyboardOrbitInput();
     this.closeExportDialog(false);
     this.closeAllTopMenus();
     this.exportColormapDialogRestoreFocusTarget = this.elements.fileMenuButton;
@@ -1440,6 +1458,7 @@ export class ViewerUi implements Disposable {
     focusTarget: 'first' | 'last' | null = null,
     trackingMode: TopMenuTrackingMode | null = null
   ): void {
+    this.clearPanoramaKeyboardOrbitInput();
     this.closeAllTopMenus(false, menu);
     menu.menu.classList.remove('hidden');
     menu.button.setAttribute('aria-expanded', 'true');
@@ -1905,6 +1924,10 @@ export class ViewerUi implements Disposable {
         return;
       }
 
+      if (this.handleGlobalPanoramaKeyboardOrbitKeyDown(event)) {
+        return;
+      }
+
       if (this.handleGlobalPanelNavigationKeyDown(event)) {
         return;
       }
@@ -1919,6 +1942,20 @@ export class ViewerUi implements Disposable {
       ) {
         event.preventDefault();
         void this.setFullScreenPreviewEnabled(!this.fullScreenPreviewActive);
+      }
+    });
+
+    this.disposables.addEventListener(document, 'keyup', (event) => {
+      this.handleGlobalPanoramaKeyboardOrbitKeyUp(event);
+    });
+
+    this.disposables.addEventListener(window, 'blur', () => {
+      this.clearPanoramaKeyboardOrbitInput();
+    });
+
+    this.disposables.addEventListener(document, 'visibilitychange', () => {
+      if (document.visibilityState !== 'visible') {
+        this.clearPanoramaKeyboardOrbitInput();
       }
     });
 
@@ -1997,6 +2034,80 @@ export class ViewerUi implements Disposable {
     }
 
     return false;
+  }
+
+  private handleGlobalPanoramaKeyboardOrbitKeyDown(event: KeyboardEvent): boolean {
+    if (
+      event.defaultPrevented ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      isEditableKeyboardEvent(event) ||
+      this.exportDialogOpen ||
+      this.exportColormapDialogOpen ||
+      this.viewerMode !== 'panorama' ||
+      this.openedImageCount === 0 ||
+      this.getTopMenus().some((menu) => this.isTopMenuOpen(menu))
+    ) {
+      return false;
+    }
+
+    const direction = getPanoramaKeyboardOrbitDirection(event.key);
+    if (!direction) {
+      return false;
+    }
+
+    event.preventDefault();
+    if (event.repeat) {
+      return true;
+    }
+
+    this.setPanoramaKeyboardOrbitDirectionPressed(direction, true);
+    return true;
+  }
+
+  private handleGlobalPanoramaKeyboardOrbitKeyUp(event: KeyboardEvent): boolean {
+    if (event.defaultPrevented) {
+      return false;
+    }
+
+    const direction = getPanoramaKeyboardOrbitDirection(event.key);
+    if (!direction || !this.panoramaKeyboardOrbitInput[direction]) {
+      return false;
+    }
+
+    event.preventDefault();
+    this.setPanoramaKeyboardOrbitDirectionPressed(direction, false);
+    return true;
+  }
+
+  private setPanoramaKeyboardOrbitDirectionPressed(
+    direction: PanoramaKeyboardOrbitDirection,
+    pressed: boolean
+  ): void {
+    if (this.panoramaKeyboardOrbitInput[direction] === pressed) {
+      return;
+    }
+
+    this.panoramaKeyboardOrbitInput = {
+      ...this.panoramaKeyboardOrbitInput,
+      [direction]: pressed
+    };
+    this.callbacks.onPanoramaKeyboardOrbitInputChange({
+      ...this.panoramaKeyboardOrbitInput
+    });
+  }
+
+  private clearPanoramaKeyboardOrbitInput(): void {
+    if (!hasPanoramaKeyboardOrbitInput(this.panoramaKeyboardOrbitInput)) {
+      return;
+    }
+
+    this.panoramaKeyboardOrbitInput = createPanoramaKeyboardOrbitInput();
+    this.callbacks.onPanoramaKeyboardOrbitInputChange({
+      ...this.panoramaKeyboardOrbitInput
+    });
   }
 
   private routeGlobalVerticalNavigation(delta: -1 | 1): boolean {
@@ -2236,6 +2347,38 @@ function isEditableKeyboardEvent(event: KeyboardEvent): boolean {
   }
 
   return typeof event.composedPath === 'function' && event.composedPath().some((target) => isEditableEventTarget(target));
+}
+
+function createPanoramaKeyboardOrbitInput(): PanoramaKeyboardOrbitInput {
+  return {
+    up: false,
+    left: false,
+    down: false,
+    right: false
+  };
+}
+
+function hasPanoramaKeyboardOrbitInput(input: PanoramaKeyboardOrbitInput): boolean {
+  return input.up || input.left || input.down || input.right;
+}
+
+function getPanoramaKeyboardOrbitDirection(key: string): PanoramaKeyboardOrbitDirection | null {
+  switch (key) {
+    case 'w':
+    case 'W':
+      return 'up';
+    case 'a':
+    case 'A':
+      return 'left';
+    case 's':
+    case 'S':
+      return 'down';
+    case 'd':
+    case 'D':
+      return 'right';
+    default:
+      return null;
+  }
 }
 
 export function formatProbeCoordinates(

@@ -835,6 +835,41 @@ test('moves open files and channel view selections with arrow keys', async ({ pa
   await expect(greenRow).toBeFocused();
 });
 
+test('orbits panorama view with global w/a/s/d keys while keeping the probe in sync', async ({ page }) => {
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  await openGalleryCbox(page);
+
+  const viewer = page.locator('#viewer-container');
+  const probeCoords = page.locator('#probe-coords');
+
+  await page.locator('#view-menu-button').click();
+  await page.locator('#panorama-viewer-menu-item').click();
+
+  await viewer.hover();
+  await expect.poll(async () => await probeCoords.evaluate((element) => element.textContent ?? '')).toMatch(/^x +\d+ {3}y +\d+$/);
+  const initialCoords = (await probeCoords.textContent())?.trim() ?? '';
+
+  await page.keyboard.down('d');
+  await page.waitForTimeout(100);
+  await page.keyboard.up('d');
+  await expect.poll(async () => ((await probeCoords.textContent())?.trim() ?? '') === initialCoords).toBe(false);
+  const afterRightCoords = (await probeCoords.textContent())?.trim() ?? '';
+
+  await page.keyboard.down('a');
+  await page.waitForTimeout(100);
+  await page.keyboard.up('a');
+  await expect.poll(async () => (await probeCoords.textContent())?.trim() ?? '').toBe(initialCoords);
+  expect(afterRightCoords).not.toBe(initialCoords);
+});
+
 test('carries exposure when opening and switching files', async ({ page }) => {
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
   await page.waitForTimeout(1500);

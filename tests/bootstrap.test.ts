@@ -56,6 +56,7 @@ const mocks = vi.hoisted(() => {
   const uiDispose = vi.fn();
   const rendererDispose = vi.fn();
   const interactionDestroy = vi.fn();
+  const interactionSetPanoramaKeyboardOrbitInput = vi.fn();
   const interactionCoordinatorDispose = vi.fn();
   const sessionDispose = vi.fn();
   const displayDispose = vi.fn();
@@ -118,6 +119,7 @@ const mocks = vi.hoisted(() => {
     uiDispose,
     rendererDispose,
     interactionDestroy,
+    interactionSetPanoramaKeyboardOrbitInput,
     interactionCoordinatorDispose,
     sessionDispose,
     displayDispose,
@@ -242,6 +244,7 @@ vi.mock('../src/interaction', () => ({
   })),
   ViewerInteraction: class {
     readonly destroy = mocks.interactionDestroy;
+    readonly setPanoramaKeyboardOrbitInput = mocks.interactionSetPanoramaKeyboardOrbitInput;
   }
 }));
 
@@ -413,6 +416,46 @@ describe('bootstrap app lifecycle', () => {
     expect(mocks.interactionCoordinatorEnqueueViewPatch).toHaveBeenCalledWith({
       panX: 12.5,
       panY: 25
+    });
+
+    app.dispose();
+  });
+
+  it('routes panorama keyboard orbit callbacks to the live interaction instance', async () => {
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
+      observe(): void {}
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+    const { bootstrapApp } = await import('../src/app/bootstrap');
+    const app = await bootstrapApp();
+    const callbacks = mocks.getUiCallbacks() as {
+      onPanoramaKeyboardOrbitInputChange: (input: {
+        up: boolean;
+        left: boolean;
+        down: boolean;
+        right: boolean;
+      }) => void;
+    };
+
+    callbacks.onPanoramaKeyboardOrbitInputChange({
+      up: false,
+      left: false,
+      down: false,
+      right: true
+    });
+
+    expect(mocks.interactionSetPanoramaKeyboardOrbitInput).toHaveBeenCalledWith({
+      up: false,
+      left: false,
+      down: false,
+      right: true
     });
 
     app.dispose();

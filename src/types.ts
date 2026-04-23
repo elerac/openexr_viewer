@@ -8,6 +8,14 @@ export type VisualizationMode = 'rgb' | 'colormap';
 export type ColormapRangeMode = 'alwaysAuto' | 'oneTime';
 export type ViewerMode = 'image' | 'panorama';
 export type OpenedImageDropPlacement = 'before' | 'after';
+export type PanoramaKeyboardOrbitDirection = 'up' | 'left' | 'down' | 'right';
+
+export interface PanoramaKeyboardOrbitInput {
+  up: boolean;
+  left: boolean;
+  down: boolean;
+  right: boolean;
+}
 
 export type {
   ChannelMonoSelection,

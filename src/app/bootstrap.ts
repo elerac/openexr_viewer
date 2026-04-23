@@ -211,6 +211,9 @@ export async function bootstrapApp(): Promise<AppHandle> {
     onExposureChange: (value) => {
       core.dispatch({ type: 'exposureSet', exposureEv: value });
     },
+    onPanoramaKeyboardOrbitInputChange: (input) => {
+      interaction?.setPanoramaKeyboardOrbitInput(input);
+    },
     onViewerModeChange: (mode) => {
       displayController.setViewerMode(mode);
     },

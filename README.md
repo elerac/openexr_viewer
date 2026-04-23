@@ -47,7 +47,7 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
 - Pan with left mouse drag.
 - Panorama viewer:
   - Projects the current display texture onto a sphere using equirectangular sampling.
-  - Left drag orbits the camera; mouse wheel changes horizontal FOV from `1` to `120` degrees.
+  - Left drag orbits the camera; `W/A/S/D` also orbit yaw/pitch; mouse wheel changes horizontal FOV from `1` to `120` degrees.
   - The Inspector probe remains available through panorama ray-to-pixel lookup.
   - Existing ROIs remain stored but cannot be created or edited until you return to `Image viewer`.
   - Panorama mode does not draw on-canvas pixel value overlays.
@@ -154,7 +154,7 @@ npm run test:e2e
 - `File > Close All`: close all opened image entries.
 - Mouse wheel: zoom around cursor.
 - Left drag: pan.
-- In `Panorama viewer`, mouse wheel changes horizontal FOV and left drag orbits yaw/pitch.
+- In `Panorama viewer`, mouse wheel changes horizontal FOV, left drag orbits yaw/pitch, and `W/A/S/D` also orbit yaw/pitch.
 - Hover: live probe sample.
 - Left click: lock/unlock probe.
 - `Shift` + left drag in `Image viewer`: create or replace the current ROI.

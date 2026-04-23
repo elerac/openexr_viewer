@@ -1,5 +1,12 @@
 import { createImageRoiFromPixels, getImageRoiPixelCount } from './roi';
-import { ImagePixel, type ViewerViewState, ViewerState, ViewportInfo } from './types';
+import {
+  ImagePixel,
+  type PanoramaKeyboardOrbitDirection,
+  type PanoramaKeyboardOrbitInput,
+  type ViewerViewState,
+  ViewerState,
+  ViewportInfo
+} from './types';
 
 export const MIN_ZOOM = 0.125;
 export const MAX_ZOOM = 512;
@@ -7,6 +14,9 @@ export const MIN_PANORAMA_HFOV_DEG = 1;
 export const MAX_PANORAMA_HFOV_DEG = 120;
 export const DEFAULT_PANORAMA_HFOV_DEG = 100;
 export const MAX_PANORAMA_PITCH_DEG = 89;
+const PANORAMA_KEYBOARD_ORBIT_STEP_RATIO = 0.05;
+const PANORAMA_KEYBOARD_ORBIT_SPEED_PER_SECOND = 1.5;
+const PANORAMA_KEYBOARD_ORBIT_MAX_FRAME_MS = 50;
 const PANORAMA_MAX_PROJECTED_ASPECT_RATIO = 4;
 const PANORAMA_MIN_SEED_SEARCH_RADIUS = 4;
 const PANORAMA_MAX_SEED_SEARCH_RADIUS = 128;
@@ -831,6 +841,11 @@ export interface InteractionCallbacks {
   onCommitRoi: (roi: ViewerState['roi']) => void;
 }
 
+export interface InteractionDependencies {
+  scheduleFrame?: (callback: FrameRequestCallback) => number;
+  cancelFrame?: (id: number) => void;
+}
+
 interface PointerPosition {
   x: number;
   y: number;
@@ -839,15 +854,27 @@ interface PointerPosition {
 export class ViewerInteraction {
   private readonly element: HTMLElement;
   private readonly callbacks: InteractionCallbacks;
+  private readonly scheduleFrame: NonNullable<InteractionDependencies['scheduleFrame']>;
+  private readonly cancelFrame: NonNullable<InteractionDependencies['cancelFrame']>;
   private dragging = false;
   private movedDuringDrag = false;
   private dragMode: 'pan' | 'roi' | null = null;
   private previousPointer: PointerPosition | null = null;
+  private lastPointerInElement: PointerPosition | null = null;
   private roiAnchorPixel: ImagePixel | null = null;
+  private panoramaKeyboardOrbitInput = createPanoramaKeyboardOrbitInput();
+  private panoramaKeyboardOrbitFrameId: number | null = null;
+  private panoramaKeyboardOrbitLastFrameTime: number | null = null;
 
-  constructor(element: HTMLElement, callbacks: InteractionCallbacks) {
+  constructor(
+    element: HTMLElement,
+    callbacks: InteractionCallbacks,
+    dependencies: InteractionDependencies = {}
+  ) {
     this.element = element;
     this.callbacks = callbacks;
+    this.scheduleFrame = dependencies.scheduleFrame ?? window.requestAnimationFrame.bind(window);
+    this.cancelFrame = dependencies.cancelFrame ?? window.cancelAnimationFrame.bind(window);
 
     this.element.addEventListener('wheel', this.onWheel, { passive: false });
     this.element.addEventListener('pointerdown', this.onPointerDown);
@@ -862,7 +889,133 @@ export class ViewerInteraction {
     this.element.removeEventListener('pointermove', this.onPointerMove);
     this.element.removeEventListener('pointerup', this.onPointerUp);
     this.element.removeEventListener('pointerleave', this.onPointerLeave);
+    this.cancelPanoramaKeyboardOrbitFrame();
+    this.panoramaKeyboardOrbitInput = createPanoramaKeyboardOrbitInput();
+    this.panoramaKeyboardOrbitLastFrameTime = null;
   }
+
+  handlePanoramaKeyboardOrbit(direction: PanoramaKeyboardOrbitDirection): void {
+    this.applyPanoramaKeyboardOrbitInput(createPanoramaKeyboardOrbitInput(direction), PANORAMA_KEYBOARD_ORBIT_STEP_RATIO);
+  }
+
+  setPanoramaKeyboardOrbitInput(input: PanoramaKeyboardOrbitInput): void {
+    const previousInput = this.panoramaKeyboardOrbitInput;
+    const nextInput = clonePanoramaKeyboardOrbitInput(input);
+    if (samePanoramaKeyboardOrbitInput(previousInput, nextInput)) {
+      if (hasPanoramaKeyboardOrbitInput(nextInput)) {
+        this.ensurePanoramaKeyboardOrbitFrame();
+      } else {
+        this.cancelPanoramaKeyboardOrbitFrame();
+        this.panoramaKeyboardOrbitLastFrameTime = null;
+      }
+      return;
+    }
+
+    this.panoramaKeyboardOrbitInput = nextInput;
+    const newlyPressedInput = getNewlyPressedPanoramaKeyboardOrbitInput(previousInput, nextInput);
+    if (hasPanoramaKeyboardOrbitInput(newlyPressedInput)) {
+      this.applyPanoramaKeyboardOrbitInput(newlyPressedInput, PANORAMA_KEYBOARD_ORBIT_STEP_RATIO);
+    }
+
+    if (hasPanoramaKeyboardOrbitInput(nextInput)) {
+      if (!hasPanoramaKeyboardOrbitInput(previousInput)) {
+        this.panoramaKeyboardOrbitLastFrameTime = null;
+      }
+      this.ensurePanoramaKeyboardOrbitFrame();
+      return;
+    }
+
+    this.cancelPanoramaKeyboardOrbitFrame();
+    this.panoramaKeyboardOrbitLastFrameTime = null;
+  }
+
+  private applyPanoramaKeyboardOrbitInput(
+    input: PanoramaKeyboardOrbitInput,
+    viewportStepRatio: number
+  ): void {
+    const imageSize = this.callbacks.getImageSize();
+    if (!imageSize) {
+      return;
+    }
+
+    const state = this.callbacks.getState();
+    if (state.viewerMode !== 'panorama') {
+      return;
+    }
+
+    const viewport = this.callbacks.getViewport();
+    if (viewport.width <= 0 || viewport.height <= 0) {
+      return;
+    }
+
+    const { horizontalStep, verticalStep } = getPanoramaKeyboardOrbitStepSizes(
+      state.panoramaHfovDeg,
+      viewport,
+      viewportStepRatio
+    );
+    const { deltaScreenX, deltaScreenY } = getPanoramaKeyboardOrbitDeltaForInput(
+      input,
+      horizontalStep,
+      verticalStep
+    );
+    if (deltaScreenX === 0 && deltaScreenY === 0) {
+      return;
+    }
+
+    const nextView = orbitPanorama(state, viewport, deltaScreenX, deltaScreenY);
+    if (
+      nextView.panoramaYawDeg === state.panoramaYawDeg &&
+      nextView.panoramaPitchDeg === state.panoramaPitchDeg &&
+      nextView.panoramaHfovDeg === state.panoramaHfovDeg
+    ) {
+      return;
+    }
+
+    const nextState = { ...state, ...nextView };
+    this.callbacks.onViewChange(nextView);
+    this.callbacks.onHoverPixel(this.resolveHoverPixel(nextState, viewport, imageSize));
+  }
+
+  private ensurePanoramaKeyboardOrbitFrame(): void {
+    if (this.panoramaKeyboardOrbitFrameId !== null || !hasPanoramaKeyboardOrbitInput(this.panoramaKeyboardOrbitInput)) {
+      return;
+    }
+
+    this.panoramaKeyboardOrbitFrameId = this.scheduleFrame(this.onPanoramaKeyboardOrbitFrame);
+  }
+
+  private cancelPanoramaKeyboardOrbitFrame(): void {
+    if (this.panoramaKeyboardOrbitFrameId === null) {
+      return;
+    }
+
+    this.cancelFrame(this.panoramaKeyboardOrbitFrameId);
+    this.panoramaKeyboardOrbitFrameId = null;
+  }
+
+  private onPanoramaKeyboardOrbitFrame = (timestamp: number): void => {
+    this.panoramaKeyboardOrbitFrameId = null;
+    if (!hasPanoramaKeyboardOrbitInput(this.panoramaKeyboardOrbitInput)) {
+      this.panoramaKeyboardOrbitLastFrameTime = null;
+      return;
+    }
+
+    if (this.panoramaKeyboardOrbitLastFrameTime !== null) {
+      const elapsedMs = Math.min(
+        PANORAMA_KEYBOARD_ORBIT_MAX_FRAME_MS,
+        Math.max(0, timestamp - this.panoramaKeyboardOrbitLastFrameTime)
+      );
+      if (elapsedMs > 0) {
+        this.applyPanoramaKeyboardOrbitInput(
+          this.panoramaKeyboardOrbitInput,
+          PANORAMA_KEYBOARD_ORBIT_SPEED_PER_SECOND * (elapsedMs / 1000)
+        );
+      }
+    }
+
+    this.panoramaKeyboardOrbitLastFrameTime = timestamp;
+    this.ensurePanoramaKeyboardOrbitFrame();
+  };
 
   private onWheel = (event: WheelEvent): void => {
     event.preventDefault();
@@ -914,6 +1067,8 @@ export class ViewerInteraction {
       return;
     }
 
+    const point = this.getLocalPoint(event);
+    this.lastPointerInElement = point;
     const imageSize = this.callbacks.getImageSize();
     if (!imageSize) {
       return;
@@ -921,10 +1076,9 @@ export class ViewerInteraction {
 
     const state = this.callbacks.getState();
     if (state.viewerMode === 'image' && event.shiftKey) {
-      const anchorPoint = this.getLocalPoint(event);
       const anchorPixel = screenToImage(
-        anchorPoint.x,
-        anchorPoint.y,
+        point.x,
+        point.y,
         state,
         this.callbacks.getViewport(),
         imageSize.width,
@@ -938,7 +1092,7 @@ export class ViewerInteraction {
       this.dragMode = 'roi';
       this.movedDuringDrag = false;
       this.roiAnchorPixel = anchorPixel;
-      this.previousPointer = anchorPoint;
+      this.previousPointer = point;
       this.callbacks.onDraftRoi(createImageRoiFromPixels(anchorPixel, anchorPixel));
       this.element.setPointerCapture(event.pointerId);
       return;
@@ -947,12 +1101,13 @@ export class ViewerInteraction {
     this.dragging = true;
     this.dragMode = 'pan';
     this.movedDuringDrag = false;
-    this.previousPointer = this.getLocalPoint(event);
+    this.previousPointer = point;
     this.element.setPointerCapture(event.pointerId);
   };
 
   private onPointerMove = (event: PointerEvent): void => {
     const point = this.getLocalPoint(event);
+    this.lastPointerInElement = point;
     const imageSize = this.callbacks.getImageSize();
     if (!imageSize) {
       this.callbacks.onHoverPixel(null);
@@ -1029,6 +1184,7 @@ export class ViewerInteraction {
     }
 
     const point = this.getLocalPoint(event);
+    this.lastPointerInElement = point;
     const imageSize = this.callbacks.getImageSize();
     if (!imageSize) {
       this.clearDrag(event.pointerId);
@@ -1081,6 +1237,7 @@ export class ViewerInteraction {
   };
 
   private onPointerLeave = (): void => {
+    this.lastPointerInElement = null;
     this.callbacks.onHoverPixel(null);
   };
 
@@ -1102,4 +1259,108 @@ export class ViewerInteraction {
       y: event.clientY - rect.top
     };
   }
+
+  private resolveHoverPixel(
+    state: ViewerState,
+    viewport: ViewportInfo,
+    imageSize: { width: number; height: number }
+  ): ImagePixel | null {
+    if (!this.lastPointerInElement) {
+      return null;
+    }
+
+    return state.viewerMode === 'panorama'
+      ? screenToPanoramaPixel(
+          this.lastPointerInElement.x,
+          this.lastPointerInElement.y,
+          state,
+          viewport,
+          imageSize.width,
+          imageSize.height
+        )
+      : screenToImage(
+          this.lastPointerInElement.x,
+          this.lastPointerInElement.y,
+          state,
+          viewport,
+          imageSize.width,
+          imageSize.height
+        );
+  }
+}
+
+function getPanoramaKeyboardOrbitDeltaForInput(
+  input: PanoramaKeyboardOrbitInput,
+  horizontalStep: number,
+  verticalStep: number
+): { deltaScreenX: number; deltaScreenY: number } {
+  const horizontalDirection = (input.left ? 1 : 0) - (input.right ? 1 : 0);
+  const verticalDirection = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+
+  return {
+    deltaScreenX: horizontalStep * horizontalDirection,
+    deltaScreenY: verticalStep * verticalDirection
+  };
+}
+
+function getPanoramaKeyboardOrbitStepSizes(
+  horizontalFovDeg: number,
+  viewport: ViewportInfo,
+  viewportStepRatio: number
+): { horizontalStep: number; verticalStep: number } {
+  const verticalFovDeg = getPanoramaVerticalFovDeg(horizontalFovDeg, viewport);
+  return {
+    horizontalStep: horizontalFovDeg === 0
+      ? 0
+      : viewport.width * viewportStepRatio * (verticalFovDeg / horizontalFovDeg),
+    verticalStep: viewport.height * viewportStepRatio
+  };
+}
+
+function createPanoramaKeyboardOrbitInput(
+  direction: PanoramaKeyboardOrbitDirection | null = null
+): PanoramaKeyboardOrbitInput {
+  return {
+    up: direction === 'up',
+    left: direction === 'left',
+    down: direction === 'down',
+    right: direction === 'right'
+  };
+}
+
+function clonePanoramaKeyboardOrbitInput(input: PanoramaKeyboardOrbitInput): PanoramaKeyboardOrbitInput {
+  return {
+    up: input.up,
+    left: input.left,
+    down: input.down,
+    right: input.right
+  };
+}
+
+function getNewlyPressedPanoramaKeyboardOrbitInput(
+  previousInput: PanoramaKeyboardOrbitInput,
+  nextInput: PanoramaKeyboardOrbitInput
+): PanoramaKeyboardOrbitInput {
+  return {
+    up: nextInput.up && !previousInput.up,
+    left: nextInput.left && !previousInput.left,
+    down: nextInput.down && !previousInput.down,
+    right: nextInput.right && !previousInput.right
+  };
+}
+
+function hasPanoramaKeyboardOrbitInput(input: PanoramaKeyboardOrbitInput): boolean {
+  return input.up || input.left || input.down || input.right;
+}
+
+function samePanoramaKeyboardOrbitInput(
+  a: PanoramaKeyboardOrbitInput,
+  b: PanoramaKeyboardOrbitInput
+): boolean {
+  return (
+    a.up === b.up &&
+    a.left === b.left &&
+    a.down === b.down &&
+    a.right === b.right
+  );
 }
