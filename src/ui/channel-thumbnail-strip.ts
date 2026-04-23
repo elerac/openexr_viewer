@@ -140,10 +140,9 @@ export class ChannelThumbnailStrip implements Disposable {
     this.elements.channelThumbnailStrip.classList.toggle('is-disabled', disabled);
 
     if (this.items.length === 0) {
-      const message = this.hasActiveImage
-        ? 'No channels'
-        : 'Open an image to browse channel thumbnails.';
-      this.elements.channelThumbnailStrip.replaceChildren(createEmptyListMessage(message));
+      this.elements.channelThumbnailStrip.replaceChildren(
+        createEmptyListMessage(this.hasActiveImage ? 'No channels' : '')
+      );
       return;
     }
 
