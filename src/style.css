@@ -44,6 +44,27 @@ output {
   padding: 0.4rem 0.4rem 0.08rem;
 }
 
+.app-shell.is-window-preview {
+  gap: 0;
+  padding: 0;
+}
+
+.app-shell.is-window-preview .app-menu-bar,
+.app-shell.is-window-preview .error-banner,
+.app-shell.is-window-preview .image-panel-shell,
+.app-shell.is-window-preview .right-stack,
+.app-shell.is-window-preview .bottom-panel-shell,
+.app-shell.is-window-preview .layout-resizer {
+  display: none !important;
+}
+
+.app-shell.is-window-preview .main-layout {
+  display: block;
+  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+}
+
 .app-menu-bar {
   grid-row: 1;
   position: relative;
@@ -610,6 +631,21 @@ body.is-resizing-panel-rows * {
   border-radius: 0.5rem;
   overflow: hidden;
   background: #0b0f15;
+}
+
+.viewer-container:fullscreen {
+  border: 0;
+  border-radius: 0;
+  background: #000;
+}
+
+.app-shell.is-window-preview .viewer-container {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  border: 0;
+  border-radius: 0;
+  background: #000;
 }
 
 #gl-canvas,

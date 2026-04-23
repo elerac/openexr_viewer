@@ -1,4 +1,5 @@
 export interface Elements {
+  appShell: HTMLElement;
   appMenuBar: HTMLElement;
   mainLayout: HTMLElement;
   rightStack: HTMLElement;
@@ -18,6 +19,8 @@ export interface Elements {
   fileMenu: HTMLElement;
   viewMenuButton: HTMLButtonElement;
   viewMenu: HTMLElement;
+  windowMenuButton: HTMLButtonElement;
+  windowMenu: HTMLElement;
   galleryMenuButton: HTMLButtonElement;
   galleryMenu: HTMLElement;
   settingsMenuButton: HTMLButtonElement;
@@ -25,6 +28,8 @@ export interface Elements {
   resetSettingsButton: HTMLButtonElement;
   imageViewerMenuItem: HTMLButtonElement;
   panoramaViewerMenuItem: HTMLButtonElement;
+  windowNormalMenuItem: HTMLButtonElement;
+  windowFullScreenPreviewMenuItem: HTMLButtonElement;
   galleryCboxRgbButton: HTMLButtonElement;
   openFileButton: HTMLButtonElement;
   openFolderButton: HTMLButtonElement;
@@ -182,6 +187,7 @@ export type LayoutSplitElements = Pick<
 
 export function resolveElements(): Elements {
   return {
+    appShell: requireElement('app', HTMLElement),
     appMenuBar: requireElement('app-menu-bar', HTMLElement),
     mainLayout: requireElement('main-layout', HTMLElement),
     rightStack: requireElement('right-stack', HTMLElement),
@@ -201,6 +207,8 @@ export function resolveElements(): Elements {
     fileMenu: requireElement('file-menu', HTMLElement),
     viewMenuButton: requireElement('view-menu-button', HTMLButtonElement),
     viewMenu: requireElement('view-menu', HTMLElement),
+    windowMenuButton: requireElement('window-menu-button', HTMLButtonElement),
+    windowMenu: requireElement('window-menu', HTMLElement),
     galleryMenuButton: requireElement('gallery-menu-button', HTMLButtonElement),
     galleryMenu: requireElement('gallery-menu', HTMLElement),
     settingsMenuButton: requireElement('settings-menu-button', HTMLButtonElement),
@@ -208,6 +216,8 @@ export function resolveElements(): Elements {
     resetSettingsButton: requireElement('reset-settings-button', HTMLButtonElement),
     imageViewerMenuItem: requireElement('image-viewer-menu-item', HTMLButtonElement),
     panoramaViewerMenuItem: requireElement('panorama-viewer-menu-item', HTMLButtonElement),
+    windowNormalMenuItem: requireElement('window-normal-menu-item', HTMLButtonElement),
+    windowFullScreenPreviewMenuItem: requireElement('window-full-screen-preview-menu-item', HTMLButtonElement),
     galleryCboxRgbButton: requireElement('gallery-cbox-rgb-button', HTMLButtonElement),
     openFileButton: requireElement('open-file-button', HTMLButtonElement),
     openFolderButton: requireElement('open-folder-button', HTMLButtonElement),

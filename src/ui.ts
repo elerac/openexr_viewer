@@ -57,6 +57,7 @@ const DEFAULT_COLORMAP_EXPORT_HEIGHT = 16;
 const DEFAULT_COLORMAP_EXPORT_ORIENTATION: ExportColormapOrientation = 'horizontal';
 const COLORMAP_EXPORT_PREVIEW_LOADING_MESSAGE = 'Loading preview...';
 const COLORMAP_EXPORT_PREVIEW_INVALID_MESSAGE = 'Enter a valid width and height to preview.';
+const WINDOW_PREVIEW_CLASS = 'is-window-preview';
 
 export type LoadingOverlayPhase = 'hidden' | 'subtle' | 'darkening' | 'message';
 
@@ -339,6 +340,8 @@ export class ViewerUi implements Disposable {
   private exportColormapPreviewRequestToken = 0;
   private topMenuTrackingMode: TopMenuTrackingMode = 'inactive';
   private hoverOpenedTopMenuButton: HTMLButtonElement | null = null;
+  private fullScreenPreviewActive = false;
+  private fullScreenPreviewFallbackActive = false;
   private readonly probeValueRows = new Map<string, ProbeValueRowElements>();
   private readonly probeDisplayValueRows = new Map<string, ProbeColorRowElements>();
   private disposed = false;
@@ -417,6 +420,7 @@ export class ViewerUi implements Disposable {
     this.clearImageBrowserPanels();
     this.setViewerMode('image');
     this.updateViewerModeMenuItemsDisabled();
+    this.updateWindowPreviewMenuItems();
     this.updateFileMenuItemsDisabled();
     this.bindEvents();
   }
@@ -446,6 +450,7 @@ export class ViewerUi implements Disposable {
     this.closeExportColormapDialog(false);
     this.closeAllTopMenus(false);
     this.showDropOverlay(false);
+    this.setWindowPreviewFallback(false);
     this.disposed = true;
     this.disposables.dispose();
   }
@@ -605,7 +610,11 @@ export class ViewerUi implements Disposable {
     this.openedImagesPanel.setOpenedImageOptions(items, activeId);
     this.colormapPanel.setOpenedImageCount(this.openedImagesPanel.getOpenedImageCount());
     this.updateViewerModeMenuItemsDisabled();
+    this.updateWindowPreviewMenuItems();
     this.updateFileMenuItemsDisabled();
+    if (items.length === 0 && this.fullScreenPreviewActive) {
+      void this.exitFullScreenPreview();
+    }
     if (items.length === 0) {
       this.setViewerMode('image');
     }
@@ -874,6 +883,7 @@ export class ViewerUi implements Disposable {
     return [
       { button: this.elements.fileMenuButton, menu: this.elements.fileMenu },
       { button: this.elements.viewMenuButton, menu: this.elements.viewMenu },
+      { button: this.elements.windowMenuButton, menu: this.elements.windowMenu },
       { button: this.elements.galleryMenuButton, menu: this.elements.galleryMenu },
       { button: this.elements.settingsMenuButton, menu: this.elements.settingsMenu }
     ];
@@ -887,6 +897,99 @@ export class ViewerUi implements Disposable {
     const disabled = this.isLoading || this.openedImageCount === 0;
     this.elements.imageViewerMenuItem.disabled = disabled;
     this.elements.panoramaViewerMenuItem.disabled = disabled;
+  }
+
+  private updateWindowPreviewMenuItems(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.elements.windowNormalMenuItem.disabled = false;
+    this.elements.windowNormalMenuItem.setAttribute('aria-checked', this.fullScreenPreviewActive ? 'false' : 'true');
+    this.elements.windowFullScreenPreviewMenuItem.disabled = this.openedImageCount === 0;
+    this.elements.windowFullScreenPreviewMenuItem.setAttribute(
+      'aria-checked',
+      this.fullScreenPreviewActive ? 'true' : 'false'
+    );
+  }
+
+  private syncFullScreenPreviewState(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.fullScreenPreviewActive =
+      document.fullscreenElement === this.elements.viewerContainer || this.fullScreenPreviewFallbackActive;
+    if (!this.fullScreenPreviewActive) {
+      this.setWindowPreviewFallback(false);
+    }
+    this.updateWindowPreviewMenuItems();
+  }
+
+  private async enterFullScreenPreview(): Promise<void> {
+    if (this.disposed || this.openedImageCount === 0) {
+      return;
+    }
+
+    if (this.fullScreenPreviewActive || document.fullscreenElement === this.elements.viewerContainer) {
+      this.syncFullScreenPreviewState();
+      return;
+    }
+
+    const requestFullscreen = this.elements.viewerContainer.requestFullscreen;
+    if (typeof requestFullscreen === 'function') {
+      try {
+        await requestFullscreen.call(this.elements.viewerContainer);
+        this.syncFullScreenPreviewState();
+        return;
+      } catch {
+        // Fall back to the in-window preview mode when the browser fullscreen API is unavailable.
+      }
+    }
+
+    this.setWindowPreviewFallback(true);
+    this.syncFullScreenPreviewState();
+  }
+
+  private async exitFullScreenPreview(): Promise<void> {
+    if (
+      this.disposed ||
+      (!this.fullScreenPreviewActive &&
+        !this.fullScreenPreviewFallbackActive &&
+        document.fullscreenElement !== this.elements.viewerContainer)
+    ) {
+      return;
+    }
+
+    if (this.fullScreenPreviewFallbackActive) {
+      this.setWindowPreviewFallback(false);
+      this.syncFullScreenPreviewState();
+      return;
+    }
+
+    if (document.fullscreenElement === this.elements.viewerContainer && typeof document.exitFullscreen === 'function') {
+      try {
+        await document.exitFullscreen();
+      } catch {
+        // If the browser blocks exit, keep the current state and let fullscreenchange reconcile later.
+      }
+    }
+
+    this.syncFullScreenPreviewState();
+  }
+
+  private async setFullScreenPreviewEnabled(enabled: boolean): Promise<void> {
+    if (enabled) {
+      await this.enterFullScreenPreview();
+      return;
+    }
+
+    await this.exitFullScreenPreview();
+  }
+
+  private setWindowPreviewFallback(active: boolean): void {
+    this.fullScreenPreviewFallbackActive = active;
+    this.elements.appShell.classList.toggle(WINDOW_PREVIEW_CLASS, active);
   }
 
   private openExportDialog(): void {
@@ -1562,6 +1665,10 @@ export class ViewerUi implements Disposable {
       this.closeAllTopMenus();
     });
 
+    this.disposables.addEventListener(document, 'fullscreenchange', () => {
+      this.syncFullScreenPreviewState();
+    });
+
     this.disposables.addEventListener(window, 'dragover', (event) => {
       if (!hasDroppedFiles(event)) {
         return;
@@ -1645,6 +1752,20 @@ export class ViewerUi implements Disposable {
 
       this.closeAllTopMenus();
       this.callbacks.onViewerModeChange('panorama');
+    });
+
+    this.disposables.addEventListener(this.elements.windowNormalMenuItem, 'click', () => {
+      this.closeAllTopMenus();
+      void this.setFullScreenPreviewEnabled(false);
+    });
+
+    this.disposables.addEventListener(this.elements.windowFullScreenPreviewMenuItem, 'click', () => {
+      if (this.elements.windowFullScreenPreviewMenuItem.disabled) {
+        return;
+      }
+
+      this.closeAllTopMenus();
+      void this.setFullScreenPreviewEnabled(true);
     });
 
     this.disposables.addEventListener(this.elements.fileInput, 'change', (event) => {
@@ -1764,6 +1885,25 @@ export class ViewerUi implements Disposable {
       if (event.key === 'Escape' && this.exportColormapDialogOpen && !this.exportColormapDialogBusy) {
         event.preventDefault();
         this.closeExportColormapDialog(true);
+        return;
+      }
+
+      if (event.key === 'Escape' && this.fullScreenPreviewActive) {
+        event.preventDefault();
+        void this.exitFullScreenPreview();
+        return;
+      }
+
+      if (
+        (event.key === 'f' || event.key === 'F') &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !isEditableKeyboardEvent(event) &&
+        this.openedImageCount > 0
+      ) {
+        event.preventDefault();
+        void this.setFullScreenPreviewEnabled(!this.fullScreenPreviewActive);
       }
     });
 
@@ -1938,6 +2078,33 @@ function syncRowOrder(container: HTMLElement, orderedRows: HTMLElement[]): void 
 
 function getReadoutSectionName(toggle: HTMLButtonElement): string {
   return toggle.closest('.readout-block')?.querySelector('h2')?.textContent?.trim() ?? 'readout';
+}
+
+function isEditableEventTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Node)) {
+    return false;
+  }
+
+  const element = target instanceof HTMLElement ? target : target.parentElement;
+  if (!element) {
+    return false;
+  }
+
+  return (
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLTextAreaElement ||
+    element instanceof HTMLSelectElement ||
+    element.isContentEditable ||
+    element.closest('[contenteditable], [contenteditable="true"], [contenteditable="plaintext-only"]') !== null
+  );
+}
+
+function isEditableKeyboardEvent(event: KeyboardEvent): boolean {
+  if (isEditableEventTarget(event.target) || isEditableEventTarget(document.activeElement)) {
+    return true;
+  }
+
+  return typeof event.composedPath === 'function' && event.composedPath().some((target) => isEditableEventTarget(target));
 }
 
 export function formatProbeCoordinates(

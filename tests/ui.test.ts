@@ -808,11 +808,18 @@ describe('view menu', () => {
     expect(labels).toEqual(['Open...', 'Open Folder...', 'Export...', 'Export Colormap...', 'Reload All', 'Close All']);
   });
 
-  it('renders the top menu tabs in file-view-gallery-settings order', () => {
+  it('renders the top menu tabs in file-view-window-gallery-settings order', () => {
     installUiFixture();
 
     const labels = Array.from(document.querySelectorAll('.app-menu-tab')).map((item) => item.textContent?.trim());
-    expect(labels).toEqual(['File', 'View', 'Gallery', 'Settings']);
+    expect(labels).toEqual(['File', 'View', 'Window', 'Gallery', 'Settings']);
+  });
+
+  it('renders the Window menu items in normal-full-screen-preview order', () => {
+    installUiFixture();
+
+    const labels = Array.from(document.querySelectorAll('#window-menu .app-menu-item')).map((item) => item.textContent?.trim());
+    expect(labels).toEqual(['Normal', 'Full Screen Preview']);
   });
 
   it('renders Reset Settings in the settings menu', () => {
@@ -841,6 +848,22 @@ describe('view menu', () => {
     expect(panoramaItem.disabled).toBe(false);
   });
 
+  it('keeps full screen preview disabled until an image is active', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const normalItem = document.getElementById('window-normal-menu-item') as HTMLButtonElement;
+    const previewItem = document.getElementById('window-full-screen-preview-menu-item') as HTMLButtonElement;
+
+    expect(normalItem.disabled).toBe(false);
+    expect(normalItem.getAttribute('aria-checked')).toBe('true');
+    expect(previewItem.disabled).toBe(true);
+
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    expect(previewItem.disabled).toBe(false);
+  });
+
   it('tracks checked state and dispatches panorama mode changes', () => {
     installUiFixture();
 
@@ -856,6 +879,224 @@ describe('view menu', () => {
 
     panoramaItem.click();
     expect(onViewerModeChange).toHaveBeenCalledWith('panorama');
+  });
+
+  it('requests browser fullscreen and updates checked state when full screen preview is selected', async () => {
+    installUiFixture();
+
+    const { requestFullscreen, getFullscreenElement } = installFullscreenApiMock();
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    const normalItem = document.getElementById('window-normal-menu-item') as HTMLButtonElement;
+    const previewItem = document.getElementById('window-full-screen-preview-menu-item') as HTMLButtonElement;
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+
+    previewItem.click();
+    await flushMicrotasks();
+
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(getFullscreenElement()).toBe(viewerContainer);
+    expect(normalItem.getAttribute('aria-checked')).toBe('false');
+    expect(previewItem.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('selecting Normal exits full screen preview and restores checked state', async () => {
+    installUiFixture();
+
+    const { exitFullscreen, getFullscreenElement } = installFullscreenApiMock();
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    const normalItem = document.getElementById('window-normal-menu-item') as HTMLButtonElement;
+    const previewItem = document.getElementById('window-full-screen-preview-menu-item') as HTMLButtonElement;
+
+    previewItem.click();
+    await flushMicrotasks();
+
+    normalItem.click();
+    await flushMicrotasks();
+
+    expect(exitFullscreen).toHaveBeenCalledTimes(1);
+    expect(getFullscreenElement()).toBeNull();
+    expect(normalItem.getAttribute('aria-checked')).toBe('true');
+    expect(previewItem.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('syncs the Window menu when fullscreenchange exits preview outside the menu handlers', async () => {
+    installUiFixture();
+
+    const { setFullscreenElement } = installFullscreenApiMock();
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    const normalItem = document.getElementById('window-normal-menu-item') as HTMLButtonElement;
+    const previewItem = document.getElementById('window-full-screen-preview-menu-item') as HTMLButtonElement;
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+
+    previewItem.click();
+    await flushMicrotasks();
+
+    setFullscreenElement(viewerContainer);
+    setFullscreenElement(null);
+
+    expect(normalItem.getAttribute('aria-checked')).toBe('true');
+    expect(previewItem.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('toggles full screen preview with the F shortcut when focus is not in an editable control', async () => {
+    installUiFixture();
+
+    const { requestFullscreen, exitFullscreen } = installFullscreenApiMock();
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', bubbles: true }));
+    await flushMicrotasks();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'F', bubbles: true }));
+    await flushMicrotasks();
+
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(exitFullscreen).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores the F shortcut while a text input is focused', async () => {
+    installUiFixture();
+
+    const { requestFullscreen } = installFullscreenApiMock();
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    const filenameInput = document.createElement('input');
+    document.body.append(filenameInput);
+
+    filenameInput.focus();
+    expect(document.activeElement).toBe(filenameInput);
+
+    filenameInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', bubbles: true }));
+    await flushMicrotasks();
+
+    expect(requestFullscreen).not.toHaveBeenCalled();
+  });
+
+  it('uses Escape for dialogs before exiting full screen preview', async () => {
+    installUiFixture();
+
+    const { exitFullscreen } = installFullscreenApiMock();
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const previewItem = document.getElementById('window-full-screen-preview-menu-item') as HTMLButtonElement;
+    const exportButton = document.getElementById('export-image-button') as HTMLButtonElement;
+    const dialogBackdrop = document.getElementById('export-dialog-backdrop') as HTMLDivElement;
+
+    previewItem.click();
+    await flushMicrotasks();
+
+    exportButton.click();
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await flushMicrotasks();
+
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
+    expect(exitFullscreen).not.toHaveBeenCalled();
+    expect(previewItem.getAttribute('aria-checked')).toBe('true');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await flushMicrotasks();
+
+    expect(exitFullscreen).toHaveBeenCalledTimes(1);
+    expect(previewItem.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('keeps panel widths and stored layout unchanged across full screen preview enter and exit', async () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry({ imageWidth: 280, rightWidth: 340, bottomHeight: 210 });
+    window.localStorage.setItem(
+      'openexr-viewer:panel-splits:v1',
+      JSON.stringify({
+        imagePanelWidth: 280,
+        rightPanelWidth: 340,
+        bottomPanelHeight: 210,
+        imagePanelCollapsed: false,
+        rightPanelCollapsed: false,
+        bottomPanelCollapsed: false
+      })
+    );
+    installFullscreenApiMock();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    const normalItem = document.getElementById('window-normal-menu-item') as HTMLButtonElement;
+    const previewItem = document.getElementById('window-full-screen-preview-menu-item') as HTMLButtonElement;
+    const mainLayout = document.getElementById('main-layout') as HTMLElement;
+    const beforeStorage = window.localStorage.getItem('openexr-viewer:panel-splits:v1');
+
+    expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('280px');
+    expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('340px');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('210px');
+
+    previewItem.click();
+    await flushMicrotasks();
+    normalItem.click();
+    await flushMicrotasks();
+
+    expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('280px');
+    expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('340px');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('210px');
+    expect(window.localStorage.getItem('openexr-viewer:panel-splits:v1')).toBe(beforeStorage);
+  });
+
+  it('falls back to an immersive in-window preview when the fullscreen API is unavailable', async () => {
+    installUiFixture();
+
+    const { exitFullscreen } = installFullscreenApiMock({ requestBehavior: 'missing' });
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    const appShell = document.getElementById('app') as HTMLElement;
+    const normalItem = document.getElementById('window-normal-menu-item') as HTMLButtonElement;
+    const previewItem = document.getElementById('window-full-screen-preview-menu-item') as HTMLButtonElement;
+
+    previewItem.click();
+    await flushMicrotasks();
+
+    expect(appShell.classList.contains('is-window-preview')).toBe(true);
+    expect(normalItem.getAttribute('aria-checked')).toBe('false');
+    expect(previewItem.getAttribute('aria-checked')).toBe('true');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await flushMicrotasks();
+
+    expect(exitFullscreen).not.toHaveBeenCalled();
+    expect(appShell.classList.contains('is-window-preview')).toBe(false);
+    expect(normalItem.getAttribute('aria-checked')).toBe('true');
+    expect(previewItem.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('returns to Normal when the last open image is closed during preview', async () => {
+    installUiFixture();
+
+    const { exitFullscreen } = installFullscreenApiMock();
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    const normalItem = document.getElementById('window-normal-menu-item') as HTMLButtonElement;
+    const previewItem = document.getElementById('window-full-screen-preview-menu-item') as HTMLButtonElement;
+
+    previewItem.click();
+    await flushMicrotasks();
+
+    ui.setOpenedImageOptions([], null);
+    await flushMicrotasks();
+
+    expect(exitFullscreen).toHaveBeenCalledTimes(1);
+    expect(normalItem.getAttribute('aria-checked')).toBe('true');
+    expect(previewItem.getAttribute('aria-checked')).toBe('false');
+    expect(previewItem.disabled).toBe(true);
   });
 
   it('temporarily closes top menus over non-tab top-bar space and reopens on tab hover', () => {
@@ -2306,6 +2547,51 @@ function expectTopMenuClosed(buttonId: string, menuId: string): void {
   const menu = document.getElementById(menuId) as HTMLElement;
   expect(button.getAttribute('aria-expanded')).toBe('false');
   expect(menu.classList.contains('hidden')).toBe(true);
+}
+
+function installFullscreenApiMock(options: { requestBehavior?: 'resolve' | 'reject' | 'missing' } = {}) {
+  const behavior = options.requestBehavior ?? 'resolve';
+  const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+  let fullscreenElement: Element | null = null;
+
+  Object.defineProperty(document, 'fullscreenElement', {
+    configurable: true,
+    get: () => fullscreenElement
+  });
+
+  const requestFullscreen = vi.fn(async function(this: HTMLElement) {
+    if (behavior === 'reject') {
+      throw new Error('Fullscreen request failed.');
+    }
+
+    fullscreenElement = this;
+    document.dispatchEvent(new Event('fullscreenchange'));
+  });
+
+  const exitFullscreen = vi.fn(async () => {
+    fullscreenElement = null;
+    document.dispatchEvent(new Event('fullscreenchange'));
+  });
+
+  Object.defineProperty(document, 'exitFullscreen', {
+    configurable: true,
+    value: exitFullscreen
+  });
+
+  Object.defineProperty(viewerContainer, 'requestFullscreen', {
+    configurable: true,
+    value: behavior === 'missing' ? undefined : requestFullscreen
+  });
+
+  return {
+    requestFullscreen,
+    exitFullscreen,
+    getFullscreenElement: () => fullscreenElement,
+    setFullscreenElement: (element: Element | null) => {
+      fullscreenElement = element;
+      document.dispatchEvent(new Event('fullscreenchange'));
+    }
+  };
 }
 
 function createUiCallbacks(overrides: Partial<ReturnType<typeof createUiCallbacksBase>> = {}) {
