@@ -28,6 +28,24 @@ async function openGalleryCbox(page: Page): Promise<void> {
   await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr', { timeout: 30000 });
 }
 
+interface ProbeCoords {
+  x: number;
+  y: number;
+}
+
+async function readProbeCoords(probeCoords: Locator): Promise<ProbeCoords | null> {
+  const text = (await probeCoords.textContent())?.trim() ?? '';
+  const match = /^x +(\d+) {3}y +(\d+)$/.exec(text);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    x: Number(match[1]),
+    y: Number(match[2])
+  };
+}
+
 async function setExposureValue(exposureValue: Locator, value: string): Promise<void> {
   await exposureValue.evaluate((element, nextValue) => {
     const input = element as HTMLInputElement;
@@ -854,20 +872,28 @@ test('orbits panorama view with global w/a/s/d keys while keeping the probe in s
   await page.locator('#panorama-viewer-menu-item').click();
 
   await viewer.hover();
-  await expect.poll(async () => await probeCoords.evaluate((element) => element.textContent ?? '')).toMatch(/^x +\d+ {3}y +\d+$/);
-  const initialCoords = (await probeCoords.textContent())?.trim() ?? '';
+  await expect.poll(async () => await readProbeCoords(probeCoords)).not.toBeNull();
+  const initialCoords = await readProbeCoords(probeCoords);
+  if (!initialCoords) {
+    throw new Error('Expected probe coordinates after hovering the viewer.');
+  }
 
-  await page.keyboard.down('d');
-  await page.waitForTimeout(100);
-  await page.keyboard.up('d');
-  await expect.poll(async () => ((await probeCoords.textContent())?.trim() ?? '') === initialCoords).toBe(false);
-  const afterRightCoords = (await probeCoords.textContent())?.trim() ?? '';
+  await page.keyboard.press('d');
+  await expect.poll(async () => {
+    const coords = await readProbeCoords(probeCoords);
+    return coords
+      ? coords.x !== initialCoords.x || coords.y !== initialCoords.y
+      : false;
+  }).toBe(true);
 
-  await page.keyboard.down('a');
-  await page.waitForTimeout(100);
-  await page.keyboard.up('a');
-  await expect.poll(async () => (await probeCoords.textContent())?.trim() ?? '').toBe(initialCoords);
-  expect(afterRightCoords).not.toBe(initialCoords);
+  const afterRightCoords = await readProbeCoords(probeCoords);
+  if (!afterRightCoords) {
+    throw new Error('Expected probe coordinates after orbiting right.');
+  }
+  expect(afterRightCoords.x).not.toBe(initialCoords.x);
+
+  await page.keyboard.press('a');
+  await expect.poll(async () => await readProbeCoords(probeCoords)).toEqual(initialCoords);
 });
 
 test('carries exposure when opening and switching files', async ({ page }) => {
