@@ -674,9 +674,7 @@ test('renders aspect-aware bottom-panel channel thumbnails and syncs them with t
     buffer: buildLandscapeRgbExr()
   });
   await expect(openedFileRow).toHaveCount(1);
-  await bottomPanelButton.click();
   await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.getByRole('heading', { name: 'Channel Thumbnails' })).toHaveCount(0);
   await rgbSplitToggleButton.click();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
   await expect(channelSelect.locator('option:checked')).toHaveText('R');
@@ -725,7 +723,6 @@ test('moves bottom-panel thumbnail selections with left and right arrow keys', a
   const thumbnailTiles = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile');
 
   await openGalleryCbox(page);
-  await bottomPanelButton.click();
   await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'true');
   await rgbSplitToggleButton.click();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
@@ -1006,8 +1003,6 @@ test('resets settings back to the default budget and panel layout', async ({ pag
 
   await dragBy(imageResizer, 48, 0);
   await dragBy(rightResizer, -48, 0);
-  await bottomCollapseButton.click();
-  await page.waitForTimeout(100);
   await expect(bottomCollapseButton).toHaveAttribute('aria-expanded', 'true');
   await expect(bottomResizer).toBeVisible();
   await dragBy(bottomResizer, 0, -48);
@@ -1038,10 +1033,10 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   const afterReset = await readLayout();
   expect(Math.abs(afterReset.imageWidth - 220)).toBeLessThanOrEqual(2);
   expect(Math.abs(afterReset.rightWidth - 280)).toBeLessThanOrEqual(2);
-  expect(afterReset.bottomHeight).toBeLessThanOrEqual(2);
+  expect(Math.abs(afterReset.bottomHeight - 120)).toBeLessThanOrEqual(2);
   expect(afterReset.imageExpanded).toBe('true');
   expect(afterReset.rightExpanded).toBe('true');
-  expect(afterReset.bottomExpanded).toBe('false');
+  expect(afterReset.bottomExpanded).toBe('true');
   expect(afterReset.storedBudget).toBe('256');
   expect(JSON.parse(afterReset.storedPanel ?? '{}')).toEqual({
     imagePanelWidth: 220,
@@ -1049,7 +1044,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
     bottomPanelHeight: 120,
     imagePanelCollapsed: false,
     rightPanelCollapsed: false,
-    bottomPanelCollapsed: true
+    bottomPanelCollapsed: false
   });
 
   await page.reload();
@@ -1068,10 +1063,10 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   const afterReload = await readLayout();
   expect(Math.abs(afterReload.imageWidth - 220)).toBeLessThanOrEqual(2);
   expect(Math.abs(afterReload.rightWidth - 280)).toBeLessThanOrEqual(2);
-  expect(afterReload.bottomHeight).toBeLessThanOrEqual(2);
+  expect(Math.abs(afterReload.bottomHeight - 120)).toBeLessThanOrEqual(2);
   expect(afterReload.imageExpanded).toBe('true');
   expect(afterReload.rightExpanded).toBe('true');
-  expect(afterReload.bottomExpanded).toBe('false');
+  expect(afterReload.bottomExpanded).toBe('true');
   expect(afterReload.storedBudget).toBe('256');
   expect(JSON.parse(afterReload.storedPanel ?? '{}')).toEqual({
     imagePanelWidth: 220,
@@ -1079,7 +1074,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
     bottomPanelHeight: 120,
     imagePanelCollapsed: false,
     rightPanelCollapsed: false,
-    bottomPanelCollapsed: true
+    bottomPanelCollapsed: false
   });
 });
 
@@ -1107,7 +1102,7 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
 
   await expect(imageResizer).toBeVisible();
   await expect(rightResizer).toBeVisible();
-  await expect(bottomResizer).toBeHidden();
+  await expect(bottomResizer).toBeVisible();
   await expect(imageCollapseButton).toBeVisible();
   await expect(rightCollapseButton).toBeVisible();
   await expect(bottomCollapseButton).toBeVisible();
@@ -1215,7 +1210,8 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
   expect(Math.abs(initial.bottomButtonWidth - initial.bottomShellWidth)).toBeLessThan(3);
   expect(Math.abs(initial.bottomButtonBottom - initial.bottomShellBottom)).toBeLessThan(2);
   expect(Math.abs(initial.bottomShellWidth - initial.mainWidth)).toBeLessThan(3);
-  expect(initial.bottomHeight).toBeLessThanOrEqual(2);
+  expect(initial.bottomHeight).toBeGreaterThanOrEqual(110);
+  expect(initial.bottomHeight).toBeLessThanOrEqual(120);
 
   await dragBy(imageResizer, 48, 0);
   const afterImageResize = await readLayout();
@@ -1228,21 +1224,15 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
   expect(afterRightResize.canvasWidth).toBeGreaterThan(0);
   expect(afterRightResize.canvasHeight).toBeGreaterThan(0);
 
-  await bottomCollapseButton.click();
-  await page.waitForTimeout(100);
   await expect(bottomCollapseButton).toHaveAttribute('aria-expanded', 'true');
   await expect(bottomResizer).toBeVisible();
-
-  const afterBottomOpen = await readLayout();
-  expect(afterBottomOpen.bottomHeight).toBeGreaterThanOrEqual(110);
-  expect(afterBottomOpen.bottomHeight).toBeLessThan(120);
 
   await dragBy(bottomResizer, 0, 160);
   const afterBottomResize = await readLayout();
   expect(afterBottomResize.bottomHeight).toBeLessThan(120);
   expect(afterBottomResize.bottomHeight).toBeGreaterThanOrEqual(68);
   expect(afterBottomResize.bottomHeight).toBeLessThanOrEqual(74);
-  expect(afterBottomResize.viewerHeight).toBeGreaterThan(afterBottomOpen.viewerHeight + 30);
+  expect(afterBottomResize.viewerHeight).toBeGreaterThan(afterRightResize.viewerHeight + 30);
 
   expect(afterBottomResize.stored).not.toBeNull();
 
@@ -1780,7 +1770,6 @@ test('renders default-colormapped Stokes thumbnails in the bottom panel', async 
   }
 
   const bottomPanelButton = page.locator('#bottom-panel-collapse-button');
-  await bottomPanelButton.click();
   await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'true');
 
   await page.setInputFiles('#file-input', {
