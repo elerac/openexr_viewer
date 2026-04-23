@@ -881,7 +881,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
 
   const afterReset = await readLayout();
   expect(Math.abs(afterReset.imageWidth - 220)).toBeLessThanOrEqual(2);
-  expect(Math.abs(afterReset.rightWidth - 320)).toBeLessThanOrEqual(2);
+  expect(Math.abs(afterReset.rightWidth - 280)).toBeLessThanOrEqual(2);
   expect(afterReset.bottomHeight).toBeLessThanOrEqual(2);
   expect(afterReset.imageExpanded).toBe('true');
   expect(afterReset.rightExpanded).toBe('true');
@@ -889,7 +889,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   expect(afterReset.storedBudget).toBe('256');
   expect(JSON.parse(afterReset.storedPanel ?? '{}')).toEqual({
     imagePanelWidth: 220,
-    rightPanelWidth: 320,
+    rightPanelWidth: 280,
     bottomPanelHeight: 120,
     imagePanelCollapsed: false,
     rightPanelCollapsed: false,
@@ -911,7 +911,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
 
   const afterReload = await readLayout();
   expect(Math.abs(afterReload.imageWidth - 220)).toBeLessThanOrEqual(2);
-  expect(Math.abs(afterReload.rightWidth - 320)).toBeLessThanOrEqual(2);
+  expect(Math.abs(afterReload.rightWidth - 280)).toBeLessThanOrEqual(2);
   expect(afterReload.bottomHeight).toBeLessThanOrEqual(2);
   expect(afterReload.imageExpanded).toBe('true');
   expect(afterReload.rightExpanded).toBe('true');
@@ -919,7 +919,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   expect(afterReload.storedBudget).toBe('256');
   expect(JSON.parse(afterReload.storedPanel ?? '{}')).toEqual({
     imagePanelWidth: 220,
-    rightPanelWidth: 320,
+    rightPanelWidth: 280,
     bottomPanelHeight: 120,
     imagePanelCollapsed: false,
     rightPanelCollapsed: false,
