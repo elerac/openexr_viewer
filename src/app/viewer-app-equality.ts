@@ -47,7 +47,8 @@ export function sameOpenedImageOptions(a: ViewerOpenedImageOption[], b: ViewerOp
       && item.label === other.label
       && item.sizeBytes === other.sizeBytes
       && item.sourceDetail === other.sourceDetail
-      && item.thumbnailDataUrl === other.thumbnailDataUrl;
+      && item.thumbnailDataUrl === other.thumbnailDataUrl
+      && item.thumbnailAspectRatio === other.thumbnailAspectRatio;
   });
 }
 
@@ -79,6 +80,7 @@ export function sameChannelThumbnailItems(a: ViewerChannelThumbnailItem[], b: Vi
       && item.label === other.label
       && item.meta === other.meta
       && item.thumbnailDataUrl === other.thumbnailDataUrl
+      && item.thumbnailAspectRatio === other.thumbnailAspectRatio
       && item.mergedOrder === other.mergedOrder
       && item.splitOrder === other.splitOrder
       && sameStringArray(item.swatches, other.swatches);

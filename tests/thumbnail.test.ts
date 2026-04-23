@@ -67,8 +67,10 @@ describe('thumbnail rendering', () => {
       })
     );
 
-    expect(readPixel(thumbnail.data, thumbnail.width, 5, 20)).toEqual([0, 0, 0, 255]);
-    expect(readPixel(thumbnail.data, thumbnail.width, 35, 20)).toEqual([255, 255, 255, 255]);
+    expect(thumbnail.width).toBe(40);
+    expect(thumbnail.height).toBe(20);
+    expect(readPixel(thumbnail.data, thumbnail.width, 5, 10)).toEqual([0, 0, 0, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 35, 10)).toEqual([255, 255, 255, 255]);
   });
 
   it('applies rgb max scaling and exposure before sRGB encoding', () => {
@@ -116,7 +118,7 @@ describe('thumbnail rendering', () => {
     expect(readPixel(thumbnail.data, thumbnail.width, 0, 0)).toEqual([255, 0, 0, 64]);
   });
 
-  it('contain-fits wide images into the 40x40 thumbnail bounds', () => {
+  it('renders wide thumbnails without transparent padding', () => {
     const layer = createLayerFromChannels({
       R: [0, 1],
       G: [0, 1],
@@ -132,12 +134,15 @@ describe('thumbnail rendering', () => {
       })
     );
 
-    expect(readPixel(thumbnail.data, thumbnail.width, 20, 0)).toEqual([0, 0, 0, 0]);
-    expect(readPixel(thumbnail.data, thumbnail.width, 5, 20)).toEqual([0, 0, 0, 255]);
-    expect(readPixel(thumbnail.data, thumbnail.width, 35, 20)).toEqual([255, 255, 255, 255]);
+    expect(thumbnail.width).toBe(40);
+    expect(thumbnail.height).toBe(20);
+    expect(readPixel(thumbnail.data, thumbnail.width, 0, 5)).toEqual([0, 0, 0, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 39, 15)).toEqual([255, 255, 255, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 5, 0)).toEqual([0, 0, 0, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 35, 19)).toEqual([255, 255, 255, 255]);
   });
 
-  it('renders higher-resolution channel thumbnails while keeping the same contain-fit behavior', () => {
+  it('renders higher-resolution wide channel thumbnails without transparent padding', () => {
     const layer = createLayerFromChannels({
       R: [0, 1],
       G: [0, 1],
@@ -154,10 +159,55 @@ describe('thumbnail rendering', () => {
     );
 
     expect(thumbnail.width).toBe(128);
+    expect(thumbnail.height).toBe(64);
+    expect(readPixel(thumbnail.data, thumbnail.width, 0, 16)).toEqual([0, 0, 0, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 127, 48)).toEqual([255, 255, 255, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 16, 0)).toEqual([0, 0, 0, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 112, 63)).toEqual([255, 255, 255, 255]);
+  });
+
+  it('renders tall thumbnails using the max edge as the limiting dimension', () => {
+    const layer = createLayerFromChannels({
+      R: [0, 1],
+      G: [0, 1],
+      B: [0, 1]
+    }, 'beauty');
+
+    const thumbnail = buildOpenedImageThumbnailPixels(
+      layer,
+      1,
+      2,
+      createThumbnailState({
+        displaySelection: createChannelRgbSelection('R', 'G', 'B')
+      })
+    );
+
+    expect(thumbnail.width).toBe(20);
+    expect(thumbnail.height).toBe(40);
+    expect(readPixel(thumbnail.data, thumbnail.width, 0, 5)).toEqual([0, 0, 0, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 19, 35)).toEqual([255, 255, 255, 255]);
+  });
+
+  it('renders higher-resolution tall channel thumbnails using the max edge as the limiting dimension', () => {
+    const layer = createLayerFromChannels({
+      R: [0, 1],
+      G: [0, 1],
+      B: [0, 1]
+    }, 'beauty');
+
+    const thumbnail = buildDisplaySelectionThumbnailPixels(
+      layer,
+      1,
+      2,
+      createThumbnailState(),
+      createChannelRgbSelection('R', 'G', 'B'),
+      128
+    );
+
+    expect(thumbnail.width).toBe(64);
     expect(thumbnail.height).toBe(128);
-    expect(readPixel(thumbnail.data, thumbnail.width, 64, 0)).toEqual([0, 0, 0, 0]);
-    expect(readPixel(thumbnail.data, thumbnail.width, 16, 64)).toEqual([0, 0, 0, 255]);
-    expect(readPixel(thumbnail.data, thumbnail.width, 112, 64)).toEqual([255, 255, 255, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 0, 16)).toEqual([0, 0, 0, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 63, 112)).toEqual([255, 255, 255, 255]);
   });
 
   it('does not materialize interleaved channels while sampling the thumbnail', () => {
@@ -197,8 +247,8 @@ describe('thumbnail rendering', () => {
       createStokesSelection('s1_over_s0')
     );
 
-    expect(readPixel(thumbnail.data, thumbnail.width, 5, 20)).toEqual([0, 0, 0, 255]);
-    expect(readPixel(thumbnail.data, thumbnail.width, 35, 20)).toEqual([255, 255, 255, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 5, 10)).toEqual([0, 0, 0, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 35, 10)).toEqual([255, 255, 255, 255]);
   });
 
   it('renders registered scalar stokes previews through the supplied colormap', () => {
@@ -224,8 +274,8 @@ describe('thumbnail rendering', () => {
       }
     );
 
-    expect(readPixel(thumbnail.data, thumbnail.width, 5, 20)).toEqual([0, 255, 0, 255]);
-    expect(readPixel(thumbnail.data, thumbnail.width, 35, 20)).toEqual([255, 0, 0, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 5, 10)).toEqual([0, 255, 0, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 35, 10)).toEqual([255, 0, 0, 255]);
   });
 
   it('preserves source alpha in colormap thumbnail previews', () => {

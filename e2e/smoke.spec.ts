@@ -648,7 +648,7 @@ test('keeps the previous thumbnail visible until reload thumbnails are regenerat
   await expect.poll(async () => await getPendingIdleCallbackCount(page)).toBe(0);
 });
 
-test('renders bottom-panel channel thumbnails and syncs them with the channel selector', async ({ page }) => {
+test('renders aspect-aware bottom-panel channel thumbnails and syncs them with the channel selector', async ({ page }) => {
   await installIdleCallbackController(page);
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
   await page.waitForTimeout(1500);
@@ -662,11 +662,18 @@ test('renders bottom-panel channel thumbnails and syncs them with the channel se
   const bottomPanelButton = page.locator('#bottom-panel-collapse-button');
   const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
   const channelSelect = page.locator('#rgb-group-select');
+  const openedFileRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'landscape_rgb.exr' });
+  const openedFileThumbnail = openedFileRow.locator('.opened-file-thumbnail');
   const thumbnailTiles = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile');
   const thumbnailImages = page.locator('#channel-thumbnail-strip .channel-thumbnail-image');
   const greenRow = page.locator('#channel-view-list .channel-view-row').filter({ hasText: /^G/ });
 
-  await openGalleryCbox(page);
+  await page.setInputFiles('#file-input', {
+    name: 'landscape_rgb.exr',
+    mimeType: 'image/exr',
+    buffer: buildLandscapeRgbExr()
+  });
+  await expect(openedFileRow).toHaveCount(1);
   await bottomPanelButton.click();
   await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByRole('heading', { name: 'Channel Thumbnails' })).toHaveCount(0);
@@ -679,6 +686,12 @@ test('renders bottom-panel channel thumbnails and syncs them with the channel se
 
   await flushAllIdleCallbacks(page);
 
+  await expect
+    .poll(async () => await openedFileThumbnail.evaluate((image) => ({
+      width: image instanceof HTMLImageElement ? image.naturalWidth : 0,
+      height: image instanceof HTMLImageElement ? image.naturalHeight : 0
+    })))
+    .toEqual({ width: 40, height: 20 });
   await expect(thumbnailImages).toHaveCount(3);
   await expect
     .poll(async () => await thumbnailImages.evaluateAll((images) => images.map((image) => ({
@@ -686,9 +699,9 @@ test('renders bottom-panel channel thumbnails and syncs them with the channel se
       height: image instanceof HTMLImageElement ? image.naturalHeight : 0
     }))))
     .toEqual([
-      { width: 128, height: 128 },
-      { width: 128, height: 128 },
-      { width: 128, height: 128 }
+      { width: 128, height: 64 },
+      { width: 128, height: 64 },
+      { width: 128, height: 64 }
     ]);
 
   await thumbnailTiles.nth(1).click();
@@ -2199,6 +2212,27 @@ function buildScalarStokesExr(): Buffer {
         1, 0, 1, 0,
         1, -1, 0, 0,
         1, 0, -1, 0
+      ]),
+      SamplePrecision.F32,
+      CompressionMethod.None
+    );
+    return Buffer.from(encoder.encode());
+  } finally {
+    encoder.free();
+  }
+}
+
+function buildLandscapeRgbExr(): Buffer {
+  ensureExrEncoderInitialized();
+
+  const encoder = new ExrEncoder(2, 1);
+  try {
+    encoder.addLayer(
+      null,
+      ['R', 'G', 'B'],
+      new Float32Array([
+        0, 0, 0,
+        1, 1, 1
       ]),
       SamplePrecision.F32,
       CompressionMethod.None

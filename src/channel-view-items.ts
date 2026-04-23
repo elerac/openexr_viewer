@@ -16,6 +16,7 @@ export interface ChannelViewItem {
 
 export interface ChannelViewThumbnailItem extends ChannelViewItem {
   thumbnailDataUrl: string | null;
+  thumbnailAspectRatio: number | null;
 }
 
 export function buildChannelViewItems(channelNames: string[]): ChannelViewItem[] {

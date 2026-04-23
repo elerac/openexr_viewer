@@ -32,7 +32,8 @@ export function buildOpenedImageOptions(state: ViewerAppState): ViewerOpenedImag
     label: session.displayName,
     sizeBytes: session.fileSizeBytes,
     sourceDetail: getSessionSourceDetail(session),
-    thumbnailDataUrl: state.thumbnailsBySessionId[session.id] ?? null
+    thumbnailDataUrl: state.thumbnailsBySessionId[session.id] ?? null,
+    thumbnailAspectRatio: resolveThumbnailAspectRatio(session.decoded.width, session.decoded.height)
   }));
 }
 
@@ -71,6 +72,8 @@ export function buildChannelThumbnailItems(state: ViewerAppState): ViewerChannel
     return [];
   }
 
+  const thumbnailAspectRatio = resolveThumbnailAspectRatio(session.decoded.width, session.decoded.height);
+
   return buildChannelViewItems(layer.channelNames).map((item) => {
     const requestKey = serializeChannelThumbnailRequestKey({
       sessionId: session.id,
@@ -94,7 +97,8 @@ export function buildChannelThumbnailItems(state: ViewerAppState): ViewerChannel
 
     return {
       ...item,
-      thumbnailDataUrl: exactThumbnailDataUrl ?? fallbackThumbnailDataUrl
+      thumbnailDataUrl: exactThumbnailDataUrl ?? fallbackThumbnailDataUrl,
+      thumbnailAspectRatio
     };
   });
 }
@@ -142,6 +146,14 @@ export function getSessionSourceDetail(session: OpenedImageSession): string {
 
   const relativePath = session.source.file.webkitRelativePath.trim();
   return relativePath || session.source.file.name || session.filename;
+}
+
+function resolveThumbnailAspectRatio(width: number, height: number): number | null {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return null;
+  }
+
+  return width / height;
 }
 
 function buildDefaultExportFilename(displayName: string): string {

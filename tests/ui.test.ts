@@ -1247,9 +1247,15 @@ describe('opened files actions', () => {
     installUiFixture();
 
     const ui = new ViewerUi(createUiCallbacks());
-    ui.setOpenedImageOptions([{ id: 'session-1', label: 'beauty.exr' }], 'session-1');
+    ui.setOpenedImageOptions([{
+      id: 'session-1',
+      label: 'beauty.exr',
+      thumbnailDataUrl: 'data:image/png;base64,AAAA',
+      thumbnailAspectRatio: 2
+    }], 'session-1');
 
     const openedFilesList = document.getElementById('opened-files-list') as HTMLDivElement;
+    const firstRow = openedFilesList.querySelector('.opened-file-row') as HTMLDivElement;
     const actionLabels = Array.from(
       document.querySelectorAll('#opened-files-list .opened-file-action-button')
     ).map((button) => button.getAttribute('aria-label'));
@@ -1257,6 +1263,8 @@ describe('opened files actions', () => {
     expect(openedFilesList.getAttribute('aria-describedby')).toBe('opened-files-reorder-hint');
     expect(document.getElementById('opened-files-reorder-hint')?.textContent).toBe('Drag rows to reorder open files.');
     expect(openedFilesList.querySelector('.opened-file-grip')).toBeInstanceOf(HTMLSpanElement);
+    expect(openedFilesList.querySelector('.opened-file-thumbnail')).toBeInstanceOf(HTMLImageElement);
+    expect(firstRow.childElementCount).toBe(4);
     expect(actionLabels).toEqual(['Reload beauty.exr', 'Close beauty.exr']);
     expect(openedFilesList.querySelectorAll('button')).toHaveLength(2);
     expect(document.querySelector('[aria-label=\"Pin cache for beauty.exr\"]')).toBeNull();
@@ -1406,7 +1414,8 @@ describe('channel thumbnail strip', () => {
     const baseItems = buildChannelViewItems(channelNames);
     const channelThumbnailItems = baseItems.map((item) => ({
       ...item,
-      thumbnailDataUrl: null
+      thumbnailDataUrl: null,
+      thumbnailAspectRatio: 2
     }));
     const selected = {
       kind: 'channelRgb' as const,
@@ -1422,6 +1431,7 @@ describe('channel thumbnail strip', () => {
     const depthItem = channelThumbnailItems.find((item) => item.value === 'channel:depth.Z');
     expect(tiles).toHaveLength(2);
     expect(document.querySelectorAll('#channel-thumbnail-strip .channel-thumbnail-placeholder')).toHaveLength(2);
+    expect(Array.from(document.querySelectorAll<HTMLElement>('#channel-thumbnail-strip .channel-thumbnail-tile-preview')).map((preview) => preview.style.getPropertyValue('--thumbnail-aspect-ratio'))).toEqual(['2', '2']);
     expect(document.querySelectorAll('#channel-thumbnail-strip .channel-thumbnail-tile-meta')).toHaveLength(0);
     expect(depthItem).toBeTruthy();
 
@@ -1458,7 +1468,8 @@ describe('channel thumbnail strip', () => {
     const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
     const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
       ...item,
-      thumbnailDataUrl: null
+      thumbnailDataUrl: null,
+      thumbnailAspectRatio: 2
     }));
     const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
     const channelSelect = document.getElementById('rgb-group-select') as HTMLSelectElement;
@@ -1528,7 +1539,8 @@ describe('channel thumbnail strip', () => {
     const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'beauty.A', 'depth.Z'];
     const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
       ...item,
-      thumbnailDataUrl: 'data:image/png;base64,AAAA'
+      thumbnailDataUrl: 'data:image/png;base64,AAAA',
+      thumbnailAspectRatio: 2
     }));
     const strip = document.getElementById('channel-thumbnail-strip') as HTMLElement;
 

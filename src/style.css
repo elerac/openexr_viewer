@@ -1014,13 +1014,15 @@ body.is-resizing-panel-rows * {
 }
 
 .opened-file-thumbnail {
-  width: 1.75rem;
-  height: 1.75rem;
   display: block;
+  width: auto;
+  height: auto;
+  max-width: 1.75rem;
+  max-height: 1.75rem;
   justify-self: center;
+  align-self: center;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 0.2rem;
-  object-fit: cover;
   background: #171b21;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
 }
@@ -1112,23 +1114,26 @@ body.is-resizing-panel-rows * {
     0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
-.channel-thumbnail-tile-preview,
-.channel-thumbnail-placeholder,
-.channel-thumbnail-image {
+.channel-thumbnail-tile-preview {
   display: block;
   width: 100%;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: var(--thumbnail-aspect-ratio, 1 / 1);
   border-radius: 0.4rem;
-}
-
-.channel-thumbnail-tile-preview {
   overflow: hidden;
   background: #12171f;
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
+.channel-thumbnail-placeholder,
 .channel-thumbnail-image {
-  object-fit: cover;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.channel-thumbnail-image {
+  object-fit: contain;
   background: #12171f;
 }
 

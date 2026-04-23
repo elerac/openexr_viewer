@@ -117,16 +117,15 @@ export function buildDisplaySelectionThumbnailPixels(
   height: number,
   state: ViewerSessionState,
   selection: DisplaySelection | null,
-  outputSize = OPENED_IMAGE_THUMBNAIL_SIZE,
+  maxEdge = OPENED_IMAGE_THUMBNAIL_SIZE,
   preview: ThumbnailPreviewOptions | null = null
 ): OpenedImageThumbnailPixels {
-  const thumbnailSize = Math.max(1, Math.round(outputSize));
-  const thumbnailData = new Uint8ClampedArray(thumbnailSize * thumbnailSize * 4);
-  const fitScale = Math.min(thumbnailSize / width, thumbnailSize / height);
-  const fittedWidth = Math.max(1, Math.round(width * fitScale));
-  const fittedHeight = Math.max(1, Math.round(height * fitScale));
-  const offsetX = Math.floor((thumbnailSize - fittedWidth) / 2);
-  const offsetY = Math.floor((thumbnailSize - fittedHeight) / 2);
+  const { width: thumbnailWidth, height: thumbnailHeight } = resolveThumbnailDimensions(
+    width,
+    height,
+    maxEdge
+  );
+  const thumbnailData = new Uint8ClampedArray(thumbnailWidth * thumbnailHeight * 4);
   const effectiveSelection = cloneDisplaySelection(selection);
   const scalarThumbnail = isMonoSelection(effectiveSelection);
   const useColormapPreview = Boolean(
@@ -150,26 +149,17 @@ export function buildDisplaySelectionThumbnailPixels(
   const useStokesDegreeModulation = useColormapPreview &&
     isStokesDegreeModulationEnabled(effectiveSelection, colormapPreview!.stokesDegreeModulation);
 
-  for (let y = 0; y < thumbnailSize; y += 1) {
-    for (let x = 0; x < thumbnailSize; x += 1) {
-      const outIndex = (y * thumbnailSize + x) * 4;
-
-      if (
-        x < offsetX ||
-        y < offsetY ||
-        x >= offsetX + fittedWidth ||
-        y >= offsetY + fittedHeight
-      ) {
-        continue;
-      }
+  for (let y = 0; y < thumbnailHeight; y += 1) {
+    for (let x = 0; x < thumbnailWidth; x += 1) {
+      const outIndex = (y * thumbnailWidth + x) * 4;
 
       const sourceX = Math.min(
         width - 1,
-        Math.max(0, Math.floor(((x - offsetX + 0.5) / fittedWidth) * width))
+        Math.max(0, Math.floor(((x + 0.5) / thumbnailWidth) * width))
       );
       const sourceY = Math.min(
         height - 1,
-        Math.max(0, Math.floor(((y - offsetY + 0.5) / fittedHeight) * height))
+        Math.max(0, Math.floor(((y + 0.5) / thumbnailHeight) * height))
       );
       const sourceIndex = sourceY * width + sourceX;
 
@@ -222,8 +212,8 @@ export function buildDisplaySelectionThumbnailPixels(
   }
 
   return {
-    width: thumbnailSize,
-    height: thumbnailSize,
+    width: thumbnailWidth,
+    height: thumbnailHeight,
     data: thumbnailData
   };
 }
@@ -287,6 +277,25 @@ function computeThumbnailStats(
     scalarMin: Number.isFinite(scalarMin) ? scalarMin : 0,
     scalarMax: Number.isFinite(scalarMax) ? scalarMax : 0,
     rgbMax: Math.max(rgbMax, 1e-6)
+  };
+}
+
+function resolveThumbnailDimensions(
+  width: number,
+  height: number,
+  maxEdge: number
+): { width: number; height: number } {
+  const resolvedMaxEdge = Math.max(1, Math.round(maxEdge));
+  if (width >= height) {
+    return {
+      width: resolvedMaxEdge,
+      height: Math.max(1, Math.round((resolvedMaxEdge * height) / width))
+    };
+  }
+
+  return {
+    width: Math.max(1, Math.round((resolvedMaxEdge * width) / height)),
+    height: resolvedMaxEdge
   };
 }
 

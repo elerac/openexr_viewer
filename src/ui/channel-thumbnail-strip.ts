@@ -225,7 +225,7 @@ function updateChannelThumbnailTile(
   tile.disabled = options.disabled;
   tile.title = item.label;
 
-  const nextPreview = createChannelThumbnailPreview(item.thumbnailDataUrl);
+  const nextPreview = createChannelThumbnailPreview(item.thumbnailDataUrl, item.thumbnailAspectRatio);
   if (!samePreview(refs.preview, nextPreview)) {
     tile.replaceChild(nextPreview, refs.preview);
     refs.preview = nextPreview;
@@ -233,12 +233,20 @@ function updateChannelThumbnailTile(
   refs.label.textContent = item.label;
 }
 
-function createChannelThumbnailPreview(thumbnailDataUrl: string | null): HTMLElement {
+function createChannelThumbnailPreview(
+  thumbnailDataUrl: string | null,
+  thumbnailAspectRatio: number | null
+): HTMLElement {
+  const preview = document.createElement('span');
+  preview.className = 'channel-thumbnail-tile-preview';
+  preview.style.setProperty('--thumbnail-aspect-ratio', resolveThumbnailAspectRatioStyleValue(thumbnailAspectRatio));
+
   if (!thumbnailDataUrl) {
     const placeholder = document.createElement('span');
     placeholder.className = 'channel-thumbnail-placeholder';
     placeholder.setAttribute('aria-hidden', 'true');
-    return placeholder;
+    preview.append(placeholder);
+    return preview;
   }
 
   const image = document.createElement('img');
@@ -247,19 +255,42 @@ function createChannelThumbnailPreview(thumbnailDataUrl: string | null): HTMLEle
   image.alt = '';
   image.draggable = false;
   image.setAttribute('aria-hidden', 'true');
-  return image;
+  preview.append(image);
+  return preview;
 }
 
 function samePreview(current: HTMLElement, next: HTMLElement): boolean {
-  if (current.tagName !== next.tagName) {
+  if (
+    current.tagName !== next.tagName ||
+    current.className !== next.className ||
+    current.style.getPropertyValue('--thumbnail-aspect-ratio') !== next.style.getPropertyValue('--thumbnail-aspect-ratio')
+  ) {
     return false;
   }
 
-  if (current instanceof HTMLImageElement && next instanceof HTMLImageElement) {
-    return current.src === next.src;
+  const currentChild = current.firstElementChild;
+  const nextChild = next.firstElementChild;
+  if (!currentChild || !nextChild) {
+    return currentChild === nextChild;
   }
 
-  return current.className === next.className;
+  if (currentChild.tagName !== nextChild.tagName) {
+    return false;
+  }
+
+  if (currentChild instanceof HTMLImageElement && nextChild instanceof HTMLImageElement) {
+    return currentChild.src === nextChild.src;
+  }
+
+  return currentChild.className === nextChild.className;
+}
+
+function resolveThumbnailAspectRatioStyleValue(thumbnailAspectRatio: number | null): string {
+  if (!thumbnailAspectRatio || !Number.isFinite(thumbnailAspectRatio) || thumbnailAspectRatio <= 0) {
+    return '1 / 1';
+  }
+
+  return thumbnailAspectRatio.toString();
 }
 
 function getEnabledTiles(container: HTMLElement): HTMLButtonElement[] {

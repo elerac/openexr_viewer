@@ -48,6 +48,7 @@ export interface ViewerOpenedImageOption {
   sizeBytes: number | null;
   sourceDetail: string;
   thumbnailDataUrl: string | null;
+  thumbnailAspectRatio: number | null;
 }
 
 export type ViewerChannelThumbnailItem = ChannelViewThumbnailItem;
