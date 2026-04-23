@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { __debugGetMaterializedChannelCount } from '../src/channel-storage';
-import { linearToSrgbByte } from '../src/color';
+import { computeRec709Luminance, linearToSrgbByte } from '../src/color';
+import {
+  mapValueToColormapRgbBytes,
+  type ColormapLut
+} from '../src/colormaps';
 import { buildDisplaySelectionThumbnailPixels, buildOpenedImageThumbnailPixels } from '../src/thumbnail';
 import { createDefaultStokesDegreeModulation } from '../src/stokes';
 import {
@@ -36,6 +40,17 @@ function createThumbnailState(
     ...overrides
   };
 }
+
+const redBlackGreenLut: ColormapLut = {
+  id: 'preview',
+  label: 'Red / Black / Green',
+  entryCount: 3,
+  rgba8: new Uint8Array([
+    255, 0, 0, 255,
+    0, 0, 0, 255,
+    0, 255, 0, 255
+  ])
+};
 
 describe('thumbnail rendering', () => {
   it('normalizes mono thumbnails from sampled min and max', () => {
@@ -184,6 +199,111 @@ describe('thumbnail rendering', () => {
 
     expect(readPixel(thumbnail.data, thumbnail.width, 5, 20)).toEqual([0, 0, 0, 255]);
     expect(readPixel(thumbnail.data, thumbnail.width, 35, 20)).toEqual([255, 255, 255, 255]);
+  });
+
+  it('renders registered scalar stokes previews through the supplied colormap', () => {
+    const layer = createLayerFromChannels({
+      S0: [1, 1],
+      S1: [1, -1],
+      S2: [0, 0],
+      S3: [0, 0]
+    }, 'stokes');
+
+    const thumbnail = buildDisplaySelectionThumbnailPixels(
+      layer,
+      2,
+      1,
+      createThumbnailState(),
+      createStokesSelection('s1_over_s0'),
+      40,
+      {
+        visualizationMode: 'colormap',
+        colormapRange: { min: -1, max: 1 },
+        colormapLut: redBlackGreenLut,
+        stokesDegreeModulation: createDefaultStokesDegreeModulation()
+      }
+    );
+
+    expect(readPixel(thumbnail.data, thumbnail.width, 5, 20)).toEqual([0, 255, 0, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 35, 20)).toEqual([255, 0, 0, 255]);
+  });
+
+  it('uses the grouped rgb stokes mono path for colormap thumbnail previews', () => {
+    const layer = createLayerFromChannels({
+      'S0.R': [1],
+      'S0.G': [1],
+      'S0.B': [1],
+      'S1.R': [1],
+      'S1.G': [0],
+      'S1.B': [0],
+      'S2.R': [0],
+      'S2.G': [0],
+      'S2.B': [0],
+      'S3.R': [0],
+      'S3.G': [0],
+      'S3.B': [0]
+    }, 'stokesRgb');
+
+    const thumbnail = buildDisplaySelectionThumbnailPixels(
+      layer,
+      1,
+      1,
+      createThumbnailState(),
+      createStokesSelection('s1_over_s0', 'stokesRgb'),
+      40,
+      {
+        visualizationMode: 'colormap',
+        colormapRange: { min: 0, max: 1 },
+        colormapLut: redBlackGreenLut,
+        stokesDegreeModulation: createDefaultStokesDegreeModulation()
+      }
+    );
+
+    expect(readPixel(thumbnail.data, thumbnail.width, 20, 20)).toEqual([
+      ...mapValueToColormapRgbBytes(computeRec709Luminance(1, 0, 0), { min: 0, max: 1 }, redBlackGreenLut),
+      255
+    ]);
+  });
+
+  it('modulates stokes angle thumbnail previews with the paired degree value', () => {
+    const layer = createLayerFromChannels({
+      S0: [2],
+      S1: [1],
+      S2: [0],
+      S3: [0]
+    }, 'stokes');
+
+    const unmodulated = buildDisplaySelectionThumbnailPixels(
+      layer,
+      1,
+      1,
+      createThumbnailState(),
+      createStokesSelection('aolp'),
+      40,
+      {
+        visualizationMode: 'colormap',
+        colormapRange: { min: 0, max: 1 },
+        colormapLut: redBlackGreenLut,
+        stokesDegreeModulation: { aolp: false, cop: true, top: true }
+      }
+    );
+    const modulated = buildDisplaySelectionThumbnailPixels(
+      layer,
+      1,
+      1,
+      createThumbnailState(),
+      createStokesSelection('aolp'),
+      40,
+      {
+        visualizationMode: 'colormap',
+        colormapRange: { min: 0, max: 1 },
+        colormapLut: redBlackGreenLut,
+        stokesDegreeModulation: { aolp: true, cop: true, top: true }
+      }
+    );
+
+    expect(readPixel(unmodulated.data, unmodulated.width, 20, 20)).toEqual([255, 0, 0, 255]);
+    expect(readPixel(modulated.data, modulated.width, 20, 20)).toEqual([128, 0, 0, 255]);
   });
 });
 

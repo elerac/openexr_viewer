@@ -1,12 +1,30 @@
-import { linearToSrgbByte } from './color';
-import { cloneDisplaySelection, type DisplaySelection } from './display-model';
-import { isMonoSelection } from './display-model';
+import { computeRec709Luminance, linearToSrgbByte } from './color';
+import {
+  mapValueToColormapRgbBytes,
+  modulateRgbBytesValue,
+  type ColormapLut
+} from './colormaps';
+import {
+  cloneDisplaySelection,
+  isMonoSelection,
+  selectionUsesImageAlpha,
+  type DisplaySelection,
+  type StokesDegreeModulationState
+} from './display-model';
 import {
   readDisplaySelectionPixelValuesAtIndex,
+  readDisplaySelectionSnapshotPixelValuesAtIndex,
   resolveDisplaySelectionEvaluator,
   type DisplayPixelValues
 } from './display-texture';
-import { DecodedExrImage, DecodedLayer, ViewerSessionState } from './types';
+import { isStokesDegreeModulationEnabled } from './stokes';
+import {
+  DecodedExrImage,
+  DecodedLayer,
+  DisplayLuminanceRange,
+  ViewerSessionState,
+  VisualizationMode
+} from './types';
 
 const OPENED_IMAGE_THUMBNAIL_SIZE = 40;
 const CHANNEL_VIEW_THUMBNAIL_SIZE = 128;
@@ -18,6 +36,13 @@ export interface OpenedImageThumbnailPixels {
   width: number;
   height: number;
   data: Uint8ClampedArray;
+}
+
+export interface ThumbnailPreviewOptions {
+  visualizationMode: VisualizationMode;
+  colormapRange: DisplayLuminanceRange | null;
+  colormapLut: ColormapLut | null;
+  stokesDegreeModulation: StokesDegreeModulationState;
 }
 
 export function createOpenedImageThumbnailDataUrl(
@@ -60,7 +85,8 @@ export function buildOpenedImageThumbnailPixels(
 export function createChannelViewThumbnailDataUrl(
   decoded: DecodedExrImage,
   state: ViewerSessionState,
-  selection: DisplaySelection
+  selection: DisplaySelection,
+  preview: ThumbnailPreviewOptions | null = null
 ): string | null {
   if (typeof document === 'undefined') {
     return null;
@@ -78,7 +104,8 @@ export function createChannelViewThumbnailDataUrl(
       decoded.height,
       state,
       selection,
-      CHANNEL_VIEW_THUMBNAIL_SIZE
+      CHANNEL_VIEW_THUMBNAIL_SIZE,
+      preview
     );
     return createOpenedImageThumbnailDataUrlFromPixels(pixels);
   } catch {
@@ -92,7 +119,8 @@ export function buildDisplaySelectionThumbnailPixels(
   height: number,
   state: ViewerSessionState,
   selection: DisplaySelection | null,
-  outputSize = OPENED_IMAGE_THUMBNAIL_SIZE
+  outputSize = OPENED_IMAGE_THUMBNAIL_SIZE,
+  preview: ThumbnailPreviewOptions | null = null
 ): OpenedImageThumbnailPixels {
   const thumbnailSize = Math.max(1, Math.round(outputSize));
   const thumbnailData = new Uint8ClampedArray(thumbnailSize * thumbnailSize * 4);
@@ -103,10 +131,26 @@ export function buildDisplaySelectionThumbnailPixels(
   const offsetY = Math.floor((thumbnailSize - fittedHeight) / 2);
   const effectiveSelection = cloneDisplaySelection(selection);
   const scalarThumbnail = isMonoSelection(effectiveSelection);
-  const evaluator = resolveDisplaySelectionEvaluator(layer, effectiveSelection);
+  const useColormapPreview = Boolean(
+    preview?.visualizationMode === 'colormap' &&
+    preview.colormapRange &&
+    preview.colormapRange.max > preview.colormapRange.min &&
+    preview.colormapLut
+  );
+  const colormapPreview = useColormapPreview ? preview : null;
+  const evaluator = resolveDisplaySelectionEvaluator(
+    layer,
+    effectiveSelection,
+    useColormapPreview ? 'colormap' : 'rgb'
+  );
   const sample = createThumbnailSample();
-  const stats = computeThumbnailStats(evaluator, width, height, scalarThumbnail, sample);
+  const stats = useColormapPreview
+    ? null
+    : computeThumbnailStats(evaluator, width, height, scalarThumbnail, sample);
   const exposureScale = Math.pow(2, state.exposureEv);
+  const useImageAlpha = selectionUsesImageAlpha(effectiveSelection);
+  const useStokesDegreeModulation = useColormapPreview &&
+    isStokesDegreeModulationEnabled(effectiveSelection, colormapPreview!.stokesDegreeModulation);
 
   for (let y = 0; y < thumbnailSize; y += 1) {
     for (let x = 0; x < thumbnailSize; x += 1) {
@@ -137,32 +181,50 @@ export function buildDisplaySelectionThumbnailPixels(
         Math.max(0, Math.floor(((y - offsetY + 0.5) / fittedHeight) * height))
       );
       const sourceIndex = sourceY * width + sourceX;
-      readDisplaySelectionPixelValuesAtIndex(evaluator, sourceIndex, sample);
-      const alpha = clamp01(sample.a);
 
-      let r = sample.r;
-      let g = sample.g;
-      let b = sample.b;
+      if (colormapPreview?.colormapRange && colormapPreview.colormapLut) {
+        readDisplaySelectionSnapshotPixelValuesAtIndex(evaluator, sourceIndex, sample);
+        let rgb = mapValueToColormapRgbBytes(
+          computeRec709Luminance(sample.r, sample.g, sample.b),
+          colormapPreview.colormapRange,
+          colormapPreview.colormapLut
+        );
+        if (useStokesDegreeModulation) {
+          rgb = modulateRgbBytesValue(rgb, sample.a);
+        }
 
-      if (scalarThumbnail && stats.scalarMax > stats.scalarMin) {
-        const value = clamp01((r - stats.scalarMin) / (stats.scalarMax - stats.scalarMin));
-        r = value;
-        g = value;
-        b = value;
+        const alpha = useImageAlpha ? clamp01(sample.a) : 1;
+        thumbnailData[outIndex + 0] = Math.round(rgb[0] * alpha + checker * (1 - alpha));
+        thumbnailData[outIndex + 1] = Math.round(rgb[1] * alpha + checker * (1 - alpha));
+        thumbnailData[outIndex + 2] = Math.round(rgb[2] * alpha + checker * (1 - alpha));
       } else {
-        const scale = (stats.rgbMax > 1 ? 1 / stats.rgbMax : 1) * exposureScale;
-        r *= scale;
-        g *= scale;
-        b *= scale;
+        readDisplaySelectionPixelValuesAtIndex(evaluator, sourceIndex, sample);
+        const alpha = clamp01(sample.a);
+
+        let r = sample.r;
+        let g = sample.g;
+        let b = sample.b;
+
+        if (scalarThumbnail && stats && stats.scalarMax > stats.scalarMin) {
+          const value = clamp01((r - stats.scalarMin) / (stats.scalarMax - stats.scalarMin));
+          r = value;
+          g = value;
+          b = value;
+        } else if (stats) {
+          const scale = (stats.rgbMax > 1 ? 1 / stats.rgbMax : 1) * exposureScale;
+          r *= scale;
+          g *= scale;
+          b *= scale;
+        }
+
+        const srgbR = linearToSrgbByte(r);
+        const srgbG = linearToSrgbByte(g);
+        const srgbB = linearToSrgbByte(b);
+
+        thumbnailData[outIndex + 0] = Math.round(srgbR * alpha + checker * (1 - alpha));
+        thumbnailData[outIndex + 1] = Math.round(srgbG * alpha + checker * (1 - alpha));
+        thumbnailData[outIndex + 2] = Math.round(srgbB * alpha + checker * (1 - alpha));
       }
-
-      const srgbR = linearToSrgbByte(r);
-      const srgbG = linearToSrgbByte(g);
-      const srgbB = linearToSrgbByte(b);
-
-      thumbnailData[outIndex + 0] = Math.round(srgbR * alpha + checker * (1 - alpha));
-      thumbnailData[outIndex + 1] = Math.round(srgbG * alpha + checker * (1 - alpha));
-      thumbnailData[outIndex + 2] = Math.round(srgbB * alpha + checker * (1 - alpha));
       thumbnailData[outIndex + 3] = 255;
     }
   }

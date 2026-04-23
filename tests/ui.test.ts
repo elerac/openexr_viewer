@@ -1448,6 +1448,46 @@ describe('channel thumbnail strip', () => {
 
     expect(document.querySelectorAll('#channel-thumbnail-strip .channel-thumbnail-image')).toHaveLength(2);
   });
+
+  it('preserves horizontal scroll when selecting a thumbnail from a scrolled strip', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onRgbGroupChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onRgbGroupChange }));
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'beauty.A', 'depth.Z'];
+    const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: 'data:image/png;base64,AAAA'
+    }));
+    const strip = document.getElementById('channel-thumbnail-strip') as HTMLElement;
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: 'beauty.A'
+    }, channelThumbnailItems);
+
+    strip.scrollLeft = 96;
+
+    const replaceChildren = strip.replaceChildren.bind(strip) as (...nodes: Array<Node | string>) => void;
+    vi.spyOn(strip, 'replaceChildren').mockImplementation((...nodes: Array<Node | string>) => {
+      replaceChildren(...nodes);
+      strip.scrollLeft = 0;
+    });
+
+    const secondTile = document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile')[1];
+    secondTile?.click();
+
+    expect(strip.scrollLeft).toBe(96);
+    expect(onRgbGroupChange).toHaveBeenLastCalledWith({
+      kind: 'channelMono',
+      channel: 'depth.Z',
+      alpha: null
+    });
+  });
 });
 
 function installUiFixture(): void {

@@ -233,6 +233,7 @@ export async function bootstrapApp(): Promise<AppHandle> {
       getSession: (sessionId) => {
         return core.getState().sessions.find((session) => session.id === sessionId) ?? null;
       },
+      getColormapRegistry: () => core.getState().colormapRegistry,
       onThumbnailReady: (event) => {
         core.dispatch({
           type: 'channelThumbnailReady',

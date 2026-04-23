@@ -29,6 +29,8 @@ export function renderKeyedChildren<T>(
   getKey: (item: T) => string,
   renderItem: (item: T, existing: HTMLElement | null) => HTMLElement
 ): void {
+  const previousScrollLeft = container.scrollLeft;
+  const previousScrollTop = container.scrollTop;
   const existingChildren = new Map<string, HTMLElement>();
   for (const child of Array.from(container.children)) {
     if (!(child instanceof HTMLElement)) {
@@ -56,6 +58,12 @@ export function renderKeyedChildren<T>(
   });
 
   container.replaceChildren(...nextChildren);
+  if (container.scrollLeft !== previousScrollLeft) {
+    container.scrollLeft = previousScrollLeft;
+  }
+  if (container.scrollTop !== previousScrollTop) {
+    container.scrollTop = previousScrollTop;
+  }
 }
 
 export function applyListboxRowSizing(

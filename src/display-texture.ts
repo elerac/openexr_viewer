@@ -477,6 +477,58 @@ export function readDisplaySelectionPixelValuesAtIndex(
   }
 }
 
+export function readDisplaySelectionSnapshotPixelValuesAtIndex(
+  evaluator: DisplaySelectionEvaluator,
+  pixelIndex: number,
+  output?: DisplayPixelValues
+): DisplayPixelValues {
+  const out = output ?? createDisplayPixelValues();
+
+  switch (evaluator.kind) {
+    case 'empty':
+      return setDisplayPixelValues(out, 0, 0, 0, 1);
+    case 'channelRgb':
+      return setDisplayPixelValues(
+        out,
+        sanitizeDisplayValue(readChannelValue(evaluator.r, pixelIndex)),
+        sanitizeDisplayValue(readChannelValue(evaluator.g, pixelIndex)),
+        sanitizeDisplayValue(readChannelValue(evaluator.b, pixelIndex)),
+        evaluator.a ? sanitizeAlphaValue(readChannelValue(evaluator.a, pixelIndex)) : 1
+      );
+    case 'channelMono': {
+      const value = sanitizeDisplayValue(readChannelValue(evaluator.channel, pixelIndex));
+      return setDisplayPixelValues(
+        out,
+        value,
+        value,
+        value,
+        evaluator.a ? sanitizeAlphaValue(readChannelValue(evaluator.a, pixelIndex)) : 1
+      );
+    }
+    case 'stokesDirect':
+      return writeStokesSnapshotDisplayPixel(
+        out,
+        evaluator.parameter,
+        readScalarStokesSample(evaluator.stokes, pixelIndex)
+      );
+    case 'stokesRgb':
+      return writeRgbStokesSnapshotDisplayPixel(
+        out,
+        evaluator.parameter,
+        evaluator.r,
+        evaluator.g,
+        evaluator.b,
+        pixelIndex
+      );
+    case 'stokesRgbLuminance':
+      return writeStokesSnapshotDisplayPixel(
+        out,
+        evaluator.parameter,
+        computeRgbStokesMonoValues(evaluator.r, evaluator.g, evaluator.b, pixelIndex)
+      );
+  }
+}
+
 export function sanitizeDisplayValue(value: number): number {
   return Number.isFinite(value) ? value : 0;
 }
@@ -716,6 +768,39 @@ function writeStokesDisplayPixel(
 }
 
 function writeRgbStokesDisplayPixel(
+  output: DisplayPixelValues,
+  parameter: StokesParameter,
+  r: ResolvedScalarStokesChannels,
+  g: ResolvedScalarStokesChannels,
+  b: ResolvedScalarStokesChannels,
+  pixelIndex: number
+): DisplayPixelValues {
+  return setDisplayPixelValues(
+    output,
+    computeStokesDisplayValueForChannels(parameter, r, pixelIndex),
+    computeStokesDisplayValueForChannels(parameter, g, pixelIndex),
+    computeStokesDisplayValueForChannels(parameter, b, pixelIndex),
+    1
+  );
+}
+
+function writeStokesSnapshotDisplayPixel(
+  output: DisplayPixelValues,
+  parameter: StokesParameter,
+  sample: { s0: number; s1: number; s2: number; s3: number }
+): DisplayPixelValues {
+  const value = computeStokesDisplayValue(parameter, sample.s0, sample.s1, sample.s2, sample.s3);
+  const modulation = computeStokesDegreeModulationDisplayValue(
+    parameter,
+    sample.s0,
+    sample.s1,
+    sample.s2,
+    sample.s3
+  );
+  return setDisplayPixelValues(output, value, value, value, modulation ?? 1);
+}
+
+function writeRgbStokesSnapshotDisplayPixel(
   output: DisplayPixelValues,
   parameter: StokesParameter,
   r: ResolvedScalarStokesChannels,

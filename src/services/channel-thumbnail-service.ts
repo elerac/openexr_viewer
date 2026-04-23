@@ -1,7 +1,17 @@
 import { cloneDisplayLuminanceRange } from '../colormap-range';
+import {
+  findColormapIdByLabel,
+  loadColormapLut,
+  type ColormapLut,
+  type ColormapRegistry
+} from '../colormaps';
 import { cloneDisplaySelection, type DisplaySelection } from '../display-model';
 import { createAbortError, isAbortError, throwIfAborted, type Disposable } from '../lifecycle';
-import { createChannelViewThumbnailDataUrl } from '../thumbnail';
+import {
+  createChannelViewThumbnailDataUrl,
+  type ThumbnailPreviewOptions
+} from '../thumbnail';
+import { getStokesDisplayColormapDefault } from '../stokes';
 import type { DecodedLayer, OpenedImageSession, ViewerSessionState } from '../types';
 import type { ThumbnailWindowLike } from './thumbnail-service';
 
@@ -23,9 +33,11 @@ interface IdleDeadlineLike {
 }
 
 type IdleCallbackLike = (deadline: IdleDeadlineLike) => void;
+type MaybePromise<T> = T | Promise<T>;
 
 export interface ChannelThumbnailServiceDependencies {
   getSession: (sessionId: string) => OpenedImageSession | null;
+  getColormapRegistry?: () => ColormapRegistry | null;
   onThumbnailReady: (event: {
     sessionId: string;
     requestKey: string;
@@ -39,11 +51,16 @@ export interface ChannelThumbnailServiceDependencies {
     layer: DecodedLayer;
     stateSnapshot: ViewerSessionState;
     selection: DisplaySelection;
-  }) => string | null;
+    colormapRegistry: ColormapRegistry | null;
+    abortSignal: AbortSignal;
+  }) => MaybePromise<string | null>;
+  findColormapIdByLabel?: typeof findColormapIdByLabel;
+  loadColormapLut?: typeof loadColormapLut;
 }
 
 export class ChannelThumbnailService implements Disposable {
   private readonly getSession: ChannelThumbnailServiceDependencies['getSession'];
+  private readonly getColormapRegistry: () => ColormapRegistry | null;
   private readonly onThumbnailReady: ChannelThumbnailServiceDependencies['onThumbnailReady'];
   private readonly windowLike: ThumbnailWindowLike | null;
   private readonly createThumbnailDataUrl: NonNullable<ChannelThumbnailServiceDependencies['createThumbnailDataUrl']>;
@@ -55,9 +72,14 @@ export class ChannelThumbnailService implements Disposable {
 
   constructor(dependencies: ChannelThumbnailServiceDependencies) {
     this.getSession = dependencies.getSession;
+    this.getColormapRegistry = dependencies.getColormapRegistry ?? (() => null);
     this.onThumbnailReady = dependencies.onThumbnailReady;
     this.windowLike = dependencies.windowLike ?? resolveWindowLike();
-    this.createThumbnailDataUrl = dependencies.createThumbnailDataUrl ?? defaultCreateThumbnailDataUrl;
+    this.createThumbnailDataUrl = dependencies.createThumbnailDataUrl ?? ((args) => defaultCreateThumbnailDataUrl({
+      ...args,
+      findColormapIdByLabel: dependencies.findColormapIdByLabel ?? findColormapIdByLabel,
+      loadColormapLut: dependencies.loadColormapLut ?? loadColormapLut
+    }));
   }
 
   enqueue(job: ChannelThumbnailJob): Promise<void> {
@@ -131,7 +153,7 @@ export class ChannelThumbnailService implements Disposable {
               return;
             }
 
-            const thumbnailDataUrl = this.createThumbnailDataUrlForJob(job);
+            const thumbnailDataUrl = await this.createThumbnailDataUrlForJob(job);
             if (thumbnailDataUrl === null) {
               return;
             }
@@ -166,7 +188,7 @@ export class ChannelThumbnailService implements Disposable {
     return this.processingPromise;
   }
 
-  private createThumbnailDataUrlForJob(job: ChannelThumbnailJob): string | null {
+  private async createThumbnailDataUrlForJob(job: ChannelThumbnailJob): Promise<string | null> {
     if (this.disposed) {
       return null;
     }
@@ -183,11 +205,13 @@ export class ChannelThumbnailService implements Disposable {
     }
 
     try {
-      return this.createThumbnailDataUrl({
+      return await this.createThumbnailDataUrl({
         session,
         layer,
         stateSnapshot: job.stateSnapshot,
-        selection: job.selection
+        selection: job.selection,
+        colormapRegistry: this.getColormapRegistry(),
+        abortSignal: this.abortController.signal
       });
     } catch {
       return null;
@@ -289,14 +313,63 @@ export class ChannelThumbnailService implements Disposable {
 function defaultCreateThumbnailDataUrl({
   session,
   stateSnapshot,
-  selection
+  selection,
+  colormapRegistry,
+  abortSignal,
+  findColormapIdByLabel: resolveColormapId,
+  loadColormapLut: resolveColormapLut
 }: {
   session: OpenedImageSession;
   layer: DecodedLayer;
   stateSnapshot: ViewerSessionState;
   selection: DisplaySelection;
-}): string | null {
-  return createChannelViewThumbnailDataUrl(session.decoded, stateSnapshot, selection);
+  colormapRegistry: ColormapRegistry | null;
+  abortSignal: AbortSignal;
+  findColormapIdByLabel: typeof findColormapIdByLabel;
+  loadColormapLut: typeof loadColormapLut;
+}): MaybePromise<string | null> {
+  return createChannelViewThumbnailDataUrlWithPreview({
+    session,
+    stateSnapshot,
+    selection,
+    colormapRegistry,
+    abortSignal,
+    findColormapIdByLabel: resolveColormapId,
+    loadColormapLut: resolveColormapLut
+  });
+}
+
+async function createChannelViewThumbnailDataUrlWithPreview({
+  session,
+  stateSnapshot,
+  selection,
+  colormapRegistry,
+  abortSignal,
+  findColormapIdByLabel: resolveColormapId,
+  loadColormapLut: resolveColormapLut
+}: {
+  session: OpenedImageSession;
+  stateSnapshot: ViewerSessionState;
+  selection: DisplaySelection;
+  colormapRegistry: ColormapRegistry | null;
+  abortSignal: AbortSignal;
+  findColormapIdByLabel: typeof findColormapIdByLabel;
+  loadColormapLut: typeof loadColormapLut;
+}): Promise<string | null> {
+  const preview = await resolveChannelThumbnailPreview({
+    selection,
+    stateSnapshot,
+    colormapRegistry,
+    abortSignal,
+    findColormapIdByLabel: resolveColormapId,
+    loadColormapLut: resolveColormapLut
+  });
+  return createChannelViewThumbnailDataUrl(
+    session.decoded,
+    stateSnapshot,
+    selection,
+    preview
+  );
 }
 
 function resolveWindowLike(): ThumbnailWindowLike | null {
@@ -326,5 +399,38 @@ function cloneViewerState(state: ViewerSessionState): ViewerSessionState {
     colormapRange: cloneDisplayLuminanceRange(state.colormapRange),
     stokesDegreeModulation: { ...state.stokesDegreeModulation },
     lockedPixel: state.lockedPixel ? { ...state.lockedPixel } : null
+  };
+}
+
+async function resolveChannelThumbnailPreview(args: {
+  selection: DisplaySelection;
+  stateSnapshot: ViewerSessionState;
+  colormapRegistry: ColormapRegistry | null;
+  abortSignal: AbortSignal;
+  findColormapIdByLabel: typeof findColormapIdByLabel;
+  loadColormapLut: typeof loadColormapLut;
+}): Promise<ThumbnailPreviewOptions | null> {
+  const stokesDefaults = getStokesDisplayColormapDefault(args.selection);
+  if (!stokesDefaults || !args.colormapRegistry) {
+    return null;
+  }
+
+  const colormapId = args.findColormapIdByLabel(args.colormapRegistry, stokesDefaults.colormapLabel);
+  if (!colormapId) {
+    return null;
+  }
+
+  let colormapLut: ColormapLut | null = null;
+  try {
+    colormapLut = await args.loadColormapLut(args.colormapRegistry, colormapId, args.abortSignal);
+  } catch {
+    return null;
+  }
+
+  return {
+    visualizationMode: 'colormap',
+    colormapRange: cloneDisplayLuminanceRange(stokesDefaults.range),
+    colormapLut,
+    stokesDegreeModulation: { ...args.stateSnapshot.stokesDegreeModulation }
   };
 }

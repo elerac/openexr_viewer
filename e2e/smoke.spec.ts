@@ -139,6 +139,46 @@ async function flushAllIdleCallbacks(page: Page): Promise<void> {
   }
 }
 
+async function readImagePixel(
+  image: Locator,
+  x: number,
+  y: number
+): Promise<[number, number, number, number]> {
+  return await image.evaluate(async (node, point) => {
+    const element = node as HTMLImageElement;
+    if (!element.complete || element.naturalWidth === 0 || element.naturalHeight === 0) {
+      await new Promise<void>((resolve, reject) => {
+        const onLoad = () => {
+          cleanup();
+          resolve();
+        };
+        const onError = () => {
+          cleanup();
+          reject(new Error('Failed to load thumbnail image.'));
+        };
+        const cleanup = () => {
+          element.removeEventListener('load', onLoad);
+          element.removeEventListener('error', onError);
+        };
+
+        element.addEventListener('load', onLoad, { once: true });
+        element.addEventListener('error', onError, { once: true });
+      });
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = element.naturalWidth;
+    canvas.height = element.naturalHeight;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Unable to create a 2D canvas context.');
+    }
+
+    context.drawImage(element, 0, 0);
+    return Array.from(context.getImageData(point.x, point.y, 1, 1).data) as [number, number, number, number];
+  }, { x, y });
+}
+
 test('boots empty, opens the gallery demo image, and keeps core controls stable', async ({ page }) => {
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
   await expect(page.locator('#inspector-panel')).toBeVisible();
@@ -1666,6 +1706,54 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   await expect(exposureControl).toBeHidden();
   await expect(colormapRangeControl).toBeVisible();
   await expect(colormapSelect).toHaveValue(previousColormapId);
+});
+
+test('renders default-colormapped Stokes thumbnails in the bottom panel', async ({ page }) => {
+  await installIdleCallbackController(page);
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  const bottomPanelButton = page.locator('#bottom-panel-collapse-button');
+  await bottomPanelButton.click();
+  await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'true');
+
+  await page.setInputFiles('#file-input', {
+    name: 'stokes_scalar.exr',
+    mimeType: 'image/exr',
+    buffer: buildScalarStokesExr()
+  });
+
+  const scalarAolpTile = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile').filter({
+    hasText: /^Stokes AoLP$/
+  });
+  await expect.poll(async () => await getPendingIdleCallbackCount(page)).not.toBe(0);
+  await flushAllIdleCallbacks(page);
+  await expect(scalarAolpTile.locator('.channel-thumbnail-image')).toHaveCount(1);
+
+  const scalarPixel = await readImagePixel(scalarAolpTile.locator('.channel-thumbnail-image'), 96, 96);
+  expect(new Set(scalarPixel.slice(0, 3)).size).toBeGreaterThan(1);
+
+  await page.setInputFiles('#file-input', {
+    name: 'stokes_rgb.exr',
+    mimeType: 'image/exr',
+    buffer: buildRgbStokesExr()
+  });
+
+  const groupedAolpTile = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile').filter({
+    hasText: /^AoLP\.RGB$/
+  });
+  await expect.poll(async () => await getPendingIdleCallbackCount(page)).not.toBe(0);
+  await flushAllIdleCallbacks(page);
+  await expect(groupedAolpTile.locator('.channel-thumbnail-image')).toHaveCount(1);
+
+  const groupedPixel = await readImagePixel(groupedAolpTile.locator('.channel-thumbnail-image'), 96, 96);
+  expect(new Set(groupedPixel.slice(0, 3)).size).toBeGreaterThan(1);
 });
 
 test('keeps the selected split RGB Stokes channel when opening another matching image', async ({ page }) => {
