@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { __debugGetMaterializedChannelCount } from '../src/channel-storage';
 import { linearToSrgbByte } from '../src/color';
-import { buildOpenedImageThumbnailPixels } from '../src/thumbnail';
+import { buildDisplaySelectionThumbnailPixels, buildOpenedImageThumbnailPixels } from '../src/thumbnail';
 import { createDefaultStokesDegreeModulation } from '../src/stokes';
 import {
   createChannelMonoSelection,
   createChannelRgbSelection,
   createInterleavedLayerFromChannels,
-  createLayerFromChannels
+  createLayerFromChannels,
+  createStokesSelection
 } from './helpers/state-fixtures';
 
 function createThumbnailState(
@@ -140,6 +141,26 @@ describe('thumbnail rendering', () => {
     );
 
     expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
+  });
+
+  it('renders stokes selections through the shared display-selection thumbnail path', () => {
+    const layer = createLayerFromChannels({
+      S0: [1, 1],
+      S1: [0, 1],
+      S2: [0, 0],
+      S3: [0, 0]
+    }, 'stokes');
+
+    const thumbnail = buildDisplaySelectionThumbnailPixels(
+      layer,
+      2,
+      1,
+      createThumbnailState(),
+      createStokesSelection('s1_over_s0')
+    );
+
+    expect(readPixel(thumbnail.data, thumbnail.width, 5, 20)).toEqual([0, 0, 0, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 35, 20)).toEqual([255, 255, 255, 255]);
   });
 });
 

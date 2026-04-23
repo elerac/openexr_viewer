@@ -1,4 +1,14 @@
-import { ChannelPanel, getChannelViewSwatches } from './ui/channel-panel';
+import {
+  findSelectedChannelViewItem,
+  getChannelViewSwatches,
+  hasSplitChannelViewItems,
+  selectVisibleChannelViewItems,
+  type ChannelViewThumbnailItem
+} from './channel-view-items';
+import { findMergedSelectionForSplitDisplay, findSplitSelectionForMergedDisplay } from './display-selection';
+import { cloneDisplaySelection, sameDisplaySelection } from './display-model';
+import { ChannelPanel } from './ui/channel-panel';
+import { ChannelThumbnailStrip } from './ui/channel-thumbnail-strip';
 import { ColormapPanel } from './ui/colormap-panel';
 import { resolveElements, type Elements } from './ui/elements';
 import {
@@ -97,6 +107,8 @@ export interface LayerOptionItem {
   channelCount?: number;
   selectable?: boolean;
 }
+
+export type ChannelThumbnailOptionItem = ChannelViewThumbnailItem;
 
 export interface PanelSplitSizes {
   imagePanelWidth: number;
@@ -286,11 +298,17 @@ export class ViewerUi implements Disposable {
   private readonly openedImagesPanel: OpenedImagesPanel;
   private readonly layerPanel: LayerPanel;
   private readonly channelPanel: ChannelPanel;
+  private readonly channelThumbnailStrip: ChannelThumbnailStrip;
   private readonly colormapPanel: ColormapPanel;
   private readonly layoutSplitController: LayoutSplitController;
   private isLoading = false;
   private isRgbViewLoading = false;
   private openedImageCount = 0;
+  private includeSplitRgbChannels = false;
+  private channelThumbnailItems: ChannelThumbnailOptionItem[] = [];
+  private rgbGroupChannelNames: string[] = [];
+  private currentChannelSelection: DisplaySelection | null = null;
+  private hasActiveChannelImage = false;
   private exportTarget: ExportImageTarget | null = null;
   private exportDialogOpen = false;
   private exportDialogBusy = false;
@@ -329,8 +347,16 @@ export class ViewerUi implements Disposable {
       }
     });
     this.channelPanel = new ChannelPanel(this.elements, {
-      onRgbGroupChange: (mapping) => {
-        this.callbacks.onRgbGroupChange(mapping);
+      onChannelViewChange: (value) => {
+        this.handleChannelViewValueChange(value);
+      },
+      onSplitToggle: (includeSplitRgbChannels) => {
+        this.handleRgbSplitToggle(includeSplitRgbChannels);
+      }
+    });
+    this.channelThumbnailStrip = new ChannelThumbnailStrip(this.elements, {
+      onChannelViewChange: (value) => {
+        this.handleChannelViewValueChange(value);
       }
     });
     this.colormapPanel = new ColormapPanel(this.elements, {
@@ -361,8 +387,10 @@ export class ViewerUi implements Disposable {
     this.disposables.addDisposable(this.openedImagesPanel);
     this.disposables.addDisposable(this.layerPanel);
     this.disposables.addDisposable(this.channelPanel);
+    this.disposables.addDisposable(this.channelThumbnailStrip);
     this.disposables.addDisposable(this.colormapPanel);
     this.disposables.addDisposable(this.layoutSplitController);
+    this.clearImageBrowserPanels();
     this.setViewerMode('image');
     this.updateViewerModeMenuItemsDisabled();
     this.updateFileMenuItemsDisabled();
@@ -425,6 +453,7 @@ export class ViewerUi implements Disposable {
     this.openedImagesPanel.setLoading(loading);
     this.layerPanel.setLoading(loading);
     this.channelPanel.setLoading(loading);
+    this.channelThumbnailStrip.setLoading(loading);
     this.colormapPanel.setLoading(loading);
     this.updateFileMenuItemsDisabled();
     this.updateViewerModeMenuItemsDisabled();
@@ -441,6 +470,7 @@ export class ViewerUi implements Disposable {
 
     this.isRgbViewLoading = loading;
     this.channelPanel.setRgbViewLoading(loading);
+    this.renderChannelViewControls();
     this.updateFileMenuItemsDisabled();
     this.updateLoadingOverlayVisibility();
   }
@@ -566,8 +596,13 @@ export class ViewerUi implements Disposable {
       return;
     }
 
+    this.hasActiveChannelImage = false;
+    this.rgbGroupChannelNames = [];
+    this.channelThumbnailItems = [];
+    this.currentChannelSelection = null;
     this.layerPanel.clearForNoImage();
     this.channelPanel.clearForNoImage();
+    this.channelThumbnailStrip.clearForNoImage();
   }
 
   setLayerOptions(items: LayerOptionItem[], activeIndex: number): void {
@@ -578,7 +613,11 @@ export class ViewerUi implements Disposable {
     this.layerPanel.setLayerOptions(items, activeIndex);
   }
 
-  setRgbGroupOptions(channelNames: string[], selected: DisplaySelection | null): void {
+  setRgbGroupOptions(
+    channelNames: string[],
+    selected: DisplaySelection | null,
+    channelThumbnailItems: ChannelThumbnailOptionItem[] = []
+  ): void {
     if (this.disposed) {
       return;
     }
@@ -586,7 +625,73 @@ export class ViewerUi implements Disposable {
     if (!this.layerPanel.hasMultipleLayers()) {
       this.layerPanel.setFallbackPartLayerItemsFromChannelNames(channelNames);
     }
-    this.channelPanel.setRgbGroupOptions(channelNames, selected);
+    this.hasActiveChannelImage = true;
+    this.rgbGroupChannelNames = [...channelNames];
+    this.channelThumbnailItems = [...channelThumbnailItems];
+
+    const remappedSelection = this.includeSplitRgbChannels
+      ? findSplitSelectionForMergedDisplay(channelNames, selected)
+      : findMergedSelectionForSplitDisplay(channelNames, selected);
+    const shouldNotifyRemap = Boolean(
+      remappedSelection && !sameDisplaySelection(remappedSelection, this.currentChannelSelection)
+    );
+    this.currentChannelSelection = cloneDisplaySelection(remappedSelection ?? selected);
+    this.renderChannelViewControls();
+
+    if (shouldNotifyRemap && remappedSelection) {
+      this.callbacks.onRgbGroupChange(remappedSelection);
+    }
+  }
+
+  private handleChannelViewValueChange(value: string): void {
+    const item = this.channelThumbnailItems.find((entry) => entry.value === value);
+    if (!item) {
+      return;
+    }
+
+    this.currentChannelSelection = cloneDisplaySelection(item.selection);
+    this.renderChannelViewControls();
+    this.callbacks.onRgbGroupChange(item.selection);
+  }
+
+  private handleRgbSplitToggle(includeSplitRgbChannels: boolean): void {
+    if (this.includeSplitRgbChannels === includeSplitRgbChannels) {
+      return;
+    }
+
+    this.includeSplitRgbChannels = includeSplitRgbChannels;
+    const remappedSelection = includeSplitRgbChannels
+      ? findSplitSelectionForMergedDisplay(this.rgbGroupChannelNames, this.currentChannelSelection)
+      : findMergedSelectionForSplitDisplay(this.rgbGroupChannelNames, this.currentChannelSelection);
+    if (remappedSelection) {
+      this.currentChannelSelection = cloneDisplaySelection(remappedSelection);
+    }
+    this.renderChannelViewControls();
+
+    if (remappedSelection) {
+      this.callbacks.onRgbGroupChange(remappedSelection);
+    }
+  }
+
+  private renderChannelViewControls(): void {
+    const visibleItems = selectVisibleChannelViewItems(this.channelThumbnailItems, this.includeSplitRgbChannels);
+    const selectedItem = findSelectedChannelViewItem(visibleItems, this.currentChannelSelection) ?? visibleItems[0] ?? null;
+    const selectedValue = selectedItem?.value ?? '';
+    if (!findSelectedChannelViewItem(visibleItems, this.currentChannelSelection) && selectedItem) {
+      this.currentChannelSelection = cloneDisplaySelection(selectedItem.selection);
+    }
+
+    this.channelPanel.setSplitToggleState(
+      this.includeSplitRgbChannels,
+      hasSplitChannelViewItems(this.channelThumbnailItems)
+    );
+    this.channelPanel.setChannelViewItems(visibleItems, selectedValue);
+
+    if (this.hasActiveChannelImage) {
+      this.channelThumbnailStrip.setChannelViewItems(visibleItems, selectedValue);
+    } else {
+      this.channelThumbnailStrip.clearForNoImage();
+    }
   }
 
   setProbeReadout(

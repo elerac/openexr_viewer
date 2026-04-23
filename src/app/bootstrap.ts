@@ -7,6 +7,7 @@ import { WebGlExrRenderer } from '../renderer';
 import { DisplayController } from '../controllers/display-controller';
 import { SessionController } from '../controllers/session-controller';
 import { createPngBlobFromPixels } from '../export-image';
+import { ChannelThumbnailService } from '../services/channel-thumbnail-service';
 import { LoadQueueService } from '../services/load-queue';
 import { ThumbnailService } from '../services/thumbnail-service';
 import { RenderCacheService } from '../services/render-cache-service';
@@ -15,7 +16,11 @@ import { mergeRenderState } from '../view-state';
 import { ViewerAppCore } from './viewer-app-core';
 import { applyRenderEffects } from './viewer-app-render-effects';
 import { selectActiveSession } from './viewer-app-selectors';
-import { applySessionResourceEffects, syncInteractionCoordinator } from './viewer-app-state-effects';
+import {
+  applyChannelThumbnailEffects,
+  applySessionResourceEffects,
+  syncInteractionCoordinator
+} from './viewer-app-state-effects';
 import { applyUiEffects } from './viewer-app-ui-effects';
 
 export interface AppHandle {
@@ -30,6 +35,7 @@ export async function bootstrapApp(): Promise<AppHandle> {
   let renderCache!: RenderCacheService;
   let renderer: WebGlExrRenderer | null = null;
   let thumbnailService: ThumbnailService | null = null;
+  let channelThumbnailService: ChannelThumbnailService | null = null;
   let interactionCoordinator!: ViewerInteractionCoordinator;
   let interaction: ViewerInteraction | null = null;
   let resizeObserver: ResizeObserver | null = null;
@@ -184,6 +190,7 @@ export async function bootstrapApp(): Promise<AppHandle> {
       displayController?.dispose();
       sessionController?.dispose();
       thumbnailService?.dispose();
+      channelThumbnailService?.dispose();
       renderCache?.dispose();
       loadQueue.dispose();
       renderer?.dispose();
@@ -217,6 +224,21 @@ export async function bootstrapApp(): Promise<AppHandle> {
         core.dispatch({
           type: 'thumbnailReady',
           sessionId: event.sessionId,
+          token: event.token,
+          thumbnailDataUrl: event.thumbnailDataUrl
+        });
+      }
+    });
+    channelThumbnailService = new ChannelThumbnailService({
+      getSession: (sessionId) => {
+        return core.getState().sessions.find((session) => session.id === sessionId) ?? null;
+      },
+      onThumbnailReady: (event) => {
+        core.dispatch({
+          type: 'channelThumbnailReady',
+          sessionId: event.sessionId,
+          requestKey: event.requestKey,
+          contextKey: event.contextKey,
           token: event.token,
           thumbnailDataUrl: event.thumbnailDataUrl
         });
@@ -262,6 +284,7 @@ export async function bootstrapApp(): Promise<AppHandle> {
 
       syncInteractionCoordinator(interactionCoordinator, transition);
       applySessionResourceEffects(transition, core, renderCache, thumbnailService!);
+      applyChannelThumbnailEffects(transition, core, channelThumbnailService!);
     }));
     unsubscribers.push(core.subscribeUi((transition) => {
       if (disposed) {

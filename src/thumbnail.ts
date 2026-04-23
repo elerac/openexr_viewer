@@ -1,4 +1,5 @@
 import { linearToSrgbByte } from './color';
+import { cloneDisplaySelection, type DisplaySelection } from './display-model';
 import { isMonoSelection } from './display-model';
 import {
   readDisplaySelectionPixelValuesAtIndex,
@@ -32,11 +33,12 @@ export function createOpenedImageThumbnailDataUrl(
   }
 
   try {
-    const pixels = buildOpenedImageThumbnailPixels(
+    const pixels = buildDisplaySelectionThumbnailPixels(
       layer,
       decoded.width,
       decoded.height,
-      state
+      state,
+      state.displaySelection
     );
 
     return createOpenedImageThumbnailDataUrlFromPixels(pixels);
@@ -51,6 +53,44 @@ export function buildOpenedImageThumbnailPixels(
   height: number,
   state: ViewerSessionState
 ): OpenedImageThumbnailPixels {
+  return buildDisplaySelectionThumbnailPixels(layer, width, height, state, state.displaySelection);
+}
+
+export function createChannelViewThumbnailDataUrl(
+  decoded: DecodedExrImage,
+  state: ViewerSessionState,
+  selection: DisplaySelection
+): string | null {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const layer = decoded.layers[state.activeLayer] ?? null;
+  if (!layer || decoded.width <= 0 || decoded.height <= 0) {
+    return null;
+  }
+
+  try {
+    const pixels = buildDisplaySelectionThumbnailPixels(
+      layer,
+      decoded.width,
+      decoded.height,
+      state,
+      selection
+    );
+    return createOpenedImageThumbnailDataUrlFromPixels(pixels);
+  } catch {
+    return null;
+  }
+}
+
+export function buildDisplaySelectionThumbnailPixels(
+  layer: DecodedLayer,
+  width: number,
+  height: number,
+  state: ViewerSessionState,
+  selection: DisplaySelection | null
+): OpenedImageThumbnailPixels {
   const thumbnailSize = OPENED_IMAGE_THUMBNAIL_SIZE;
   const thumbnailData = new Uint8ClampedArray(thumbnailSize * thumbnailSize * 4);
   const fitScale = Math.min(thumbnailSize / width, thumbnailSize / height);
@@ -58,8 +98,9 @@ export function buildOpenedImageThumbnailPixels(
   const fittedHeight = Math.max(1, Math.round(height * fitScale));
   const offsetX = Math.floor((thumbnailSize - fittedWidth) / 2);
   const offsetY = Math.floor((thumbnailSize - fittedHeight) / 2);
-  const scalarThumbnail = isMonoSelection(state.displaySelection);
-  const evaluator = resolveDisplaySelectionEvaluator(layer, state.displaySelection);
+  const effectiveSelection = cloneDisplaySelection(selection);
+  const scalarThumbnail = isMonoSelection(effectiveSelection);
+  const evaluator = resolveDisplaySelectionEvaluator(layer, effectiveSelection);
   const sample = createThumbnailSample();
   const stats = computeThumbnailStats(evaluator, width, height, scalarThumbnail, sample);
   const exposureScale = Math.pow(2, state.exposureEv);

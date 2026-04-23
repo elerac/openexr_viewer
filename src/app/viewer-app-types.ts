@@ -1,3 +1,4 @@
+import type { ChannelViewThumbnailItem } from '../channel-view-items';
 import type { ColormapLut, ColormapRegistry } from '../colormaps';
 import type { ProbeColorPreview } from '../probe';
 import type {
@@ -49,6 +50,8 @@ export interface ViewerOpenedImageOption {
   thumbnailDataUrl: string | null;
 }
 
+export type ViewerChannelThumbnailItem = ChannelViewThumbnailItem;
+
 export interface ViewerLayerOption {
   index: number;
   label: string;
@@ -91,6 +94,9 @@ export interface ViewerAppState {
   pendingDisplayRangeRequestKey: string | null;
   pendingThumbnailTokensBySessionId: Record<string, number>;
   thumbnailsBySessionId: Record<string, string | null>;
+  pendingChannelThumbnailTokensByRequestKey: Record<string, number>;
+  channelThumbnailsByRequestKey: Record<string, string | null>;
+  channelThumbnailLatestRequestKeyByContextKey: Record<string, string>;
   stokesDisplayRestoreStates: Record<string, RestorableVisualizationState>;
 }
 
@@ -135,6 +141,15 @@ export type ViewerIntent =
   | { type: 'activeSessionReset'; viewport: ViewportInfo }
   | { type: 'thumbnailRequested'; sessionId: string; token: number }
   | { type: 'thumbnailReady'; sessionId: string; token: number; thumbnailDataUrl: string | null }
+  | { type: 'channelThumbnailRequested'; requestKey: string; token: number }
+  | {
+      type: 'channelThumbnailReady';
+      sessionId: string;
+      requestKey: string;
+      contextKey: string;
+      token: number;
+      thumbnailDataUrl: string | null;
+    }
   | { type: 'displayRangeRequestStarted'; requestId: number; requestKey: string }
   | {
       type: 'displayLuminanceRangeResolved';
@@ -175,6 +190,7 @@ export interface ViewerUiSnapshot {
   metadata: ExrMetadataEntry[] | null;
   displaySelection: ViewerSessionState['displaySelection'];
   rgbGroupChannelNames: string[];
+  channelThumbnailItems: ViewerChannelThumbnailItem[];
   shouldClearImageBrowserPanels: boolean;
 }
 

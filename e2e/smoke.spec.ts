@@ -123,6 +123,22 @@ async function flushIdleCallbacks(page: Page, count?: number): Promise<number> {
   }, count);
 }
 
+async function flushAllIdleCallbacks(page: Page): Promise<void> {
+  for (let iteration = 0; iteration < 20; iteration += 1) {
+    const pending = await getPendingIdleCallbackCount(page);
+    if (pending === 0) {
+      await page.waitForTimeout(50);
+      if ((await getPendingIdleCallbackCount(page)) === 0) {
+        return;
+      }
+      continue;
+    }
+
+    await flushIdleCallbacks(page, pending);
+    await page.waitForTimeout(50);
+  }
+}
+
 test('boots empty, opens the gallery demo image, and keeps core controls stable', async ({ page }) => {
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
   await expect(page.locator('#inspector-panel')).toBeVisible();
@@ -542,9 +558,9 @@ test('defers opened-file thumbnails until idle time after first render', async (
   await expect(openedFileRow).toHaveCount(1);
   await expect(openedFileRow.locator('.file-row-icon')).toHaveCount(1);
   await expect(openedFileRow.locator('.opened-file-thumbnail')).toHaveCount(0);
-  await expect.poll(async () => await getPendingIdleCallbackCount(page)).toBe(1);
+  await expect.poll(async () => await getPendingIdleCallbackCount(page)).not.toBe(0);
 
-  await flushIdleCallbacks(page, 1);
+  await flushAllIdleCallbacks(page);
 
   await expect(openedFileRow.locator('.opened-file-thumbnail')).toHaveAttribute('src', /^data:image\/png;base64,/);
   await expect(openedFileRow.locator('.file-row-icon')).toHaveCount(0);
@@ -569,8 +585,8 @@ test('keeps the previous thumbnail visible until reload thumbnails are regenerat
 
   await openGalleryCbox(page);
   await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
-  await expect.poll(async () => await getPendingIdleCallbackCount(page)).toBe(1);
-  await flushIdleCallbacks(page, 1);
+  await expect.poll(async () => await getPendingIdleCallbackCount(page)).not.toBe(0);
+  await flushAllIdleCallbacks(page);
 
   const thumbnail = openedFileRow.locator('.opened-file-thumbnail');
   await expect(thumbnail).toHaveAttribute('src', /^data:image\/png;base64,/);
@@ -581,15 +597,51 @@ test('keeps the previous thumbnail visible until reload thumbnails are regenerat
   await expect(exposureValue).toHaveValue('2.0');
 
   await reloadOpenedFileButton.click();
-  await expect.poll(async () => await getPendingIdleCallbackCount(page)).toBe(1);
+  await expect.poll(async () => await getPendingIdleCallbackCount(page)).not.toBe(0);
   await expect(thumbnail).toHaveAttribute('src', initialThumbnailSrc ?? '');
   await expect(openedFileRow.locator('.file-row-icon')).toHaveCount(0);
 
-  await flushIdleCallbacks(page, 1);
+  await flushAllIdleCallbacks(page);
 
   await expect(thumbnail).toHaveAttribute('src', /^data:image\/png;base64,/);
   await expect.poll(async () => await thumbnail.getAttribute('src')).not.toBe(initialThumbnailSrc);
   await expect.poll(async () => await getPendingIdleCallbackCount(page)).toBe(0);
+});
+
+test('renders bottom-panel channel thumbnails and syncs them with the channel selector', async ({ page }) => {
+  await installIdleCallbackController(page);
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  const bottomPanelButton = page.locator('#bottom-panel-collapse-button');
+  const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
+  const channelSelect = page.locator('#rgb-group-select');
+  const thumbnailTiles = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile');
+  const greenRow = page.locator('#channel-view-list .channel-view-row').filter({ hasText: /^G/ });
+
+  await openGalleryCbox(page);
+  await bottomPanelButton.click();
+  await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'true');
+  await rgbSplitToggleButton.click();
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(channelSelect.locator('option:checked')).toHaveText('R');
+  await expect(thumbnailTiles).toHaveCount(3);
+  await expect(page.locator('#channel-thumbnail-strip .channel-thumbnail-placeholder')).toHaveCount(3);
+  await expect.poll(async () => await getPendingIdleCallbackCount(page)).not.toBe(0);
+
+  await flushAllIdleCallbacks(page);
+
+  await expect(page.locator('#channel-thumbnail-strip .channel-thumbnail-image')).toHaveCount(3);
+
+  await thumbnailTiles.nth(1).click();
+  await expect(channelSelect.locator('option:checked')).toHaveText('G');
+  await expect(greenRow).toHaveAttribute('aria-selected', 'true');
 });
 
 test('moves open files and channel view selections with arrow keys', async ({ page }) => {

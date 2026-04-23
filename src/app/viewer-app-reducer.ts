@@ -1,4 +1,5 @@
 import { DEFAULT_COLORMAP_ID } from '../colormaps';
+import { buildChannelThumbnailSessionPrefix } from '../channel-thumbnail-keys';
 import {
   buildZeroCenteredColormapRange,
   cloneDisplayLuminanceRange,
@@ -57,6 +58,9 @@ export function createInitialViewerAppState(): ViewerAppState {
     pendingDisplayRangeRequestKey: null,
     pendingThumbnailTokensBySessionId: {},
     thumbnailsBySessionId: {},
+    pendingChannelThumbnailTokensByRequestKey: {},
+    channelThumbnailsByRequestKey: {},
+    channelThumbnailLatestRequestKeyByContextKey: {},
     stokesDisplayRestoreStates: {}
   };
 }
@@ -387,16 +391,19 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
       }
 
       const sessions = state.sessions.map((session) => (session.id === intent.sessionId ? intent.session : session));
+      const channelThumbnailState = pruneChannelThumbnailStateForSession(state, intent.sessionId);
       if (state.activeSessionId !== intent.sessionId) {
         return {
           ...state,
-          sessions
+          sessions,
+          ...channelThumbnailState
         };
       }
 
       return {
         ...state,
         sessions,
+        ...channelThumbnailState,
         sessionState: cloneViewerSessionState(intent.session.state),
         interactionState: createInteractionState(intent.session.state),
         activeDisplayLuminanceRange: null,
@@ -477,6 +484,7 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         [intent.sessionId]: _removedRestore,
         ...stokesDisplayRestoreStates
       } = state.stokesDisplayRestoreStates;
+      const channelThumbnailState = pruneChannelThumbnailStateForSession(state, intent.sessionId);
 
       if (!removingActive) {
         return {
@@ -484,6 +492,7 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
           sessions: remainingSessions,
           thumbnailsBySessionId,
           pendingThumbnailTokensBySessionId,
+          ...channelThumbnailState,
           stokesDisplayRestoreStates
         };
       }
@@ -502,6 +511,7 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
           pendingDisplayRangeRequestKey: null,
           thumbnailsBySessionId,
           pendingThumbnailTokensBySessionId,
+          ...channelThumbnailState,
           stokesDisplayRestoreStates
         };
       }
@@ -529,6 +539,7 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         pendingDisplayRangeRequestKey: null,
         thumbnailsBySessionId,
         pendingThumbnailTokensBySessionId,
+        ...channelThumbnailState,
         stokesDisplayRestoreStates
       };
     }
@@ -546,6 +557,9 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         pendingDisplayRangeRequestKey: null,
         pendingThumbnailTokensBySessionId: {},
         thumbnailsBySessionId: {},
+        pendingChannelThumbnailTokensByRequestKey: {},
+        channelThumbnailsByRequestKey: {},
+        channelThumbnailLatestRequestKeyByContextKey: {},
         stokesDisplayRestoreStates: {}
       };
     }
@@ -579,6 +593,29 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         thumbnailsBySessionId: {
           ...state.thumbnailsBySessionId,
           [intent.sessionId]: intent.thumbnailDataUrl
+        }
+      };
+    case 'channelThumbnailRequested':
+      return {
+        ...state,
+        pendingChannelThumbnailTokensByRequestKey: {
+          ...state.pendingChannelThumbnailTokensByRequestKey,
+          [intent.requestKey]: intent.token
+        }
+      };
+    case 'channelThumbnailReady':
+      if (state.pendingChannelThumbnailTokensByRequestKey[intent.requestKey] !== intent.token) {
+        return state;
+      }
+      return {
+        ...state,
+        channelThumbnailsByRequestKey: {
+          ...state.channelThumbnailsByRequestKey,
+          [intent.requestKey]: intent.thumbnailDataUrl
+        },
+        channelThumbnailLatestRequestKeyByContextKey: {
+          ...state.channelThumbnailLatestRequestKeyByContextKey,
+          [intent.contextKey]: intent.requestKey
         }
       };
     case 'displayRangeRequestStarted':
@@ -809,4 +846,38 @@ function sameImageRoi(
   }
 
   return a.x0 === b.x0 && a.y0 === b.y0 && a.x1 === b.x1 && a.y1 === b.y1;
+}
+
+function pruneChannelThumbnailStateForSession(
+  state: Pick<
+    ViewerAppState,
+    | 'pendingChannelThumbnailTokensByRequestKey'
+    | 'channelThumbnailsByRequestKey'
+    | 'channelThumbnailLatestRequestKeyByContextKey'
+  >,
+  sessionId: string
+): Pick<
+  ViewerAppState,
+  | 'pendingChannelThumbnailTokensByRequestKey'
+  | 'channelThumbnailsByRequestKey'
+  | 'channelThumbnailLatestRequestKeyByContextKey'
+> {
+  const sessionPrefix = buildChannelThumbnailSessionPrefix(sessionId);
+  const pendingChannelThumbnailTokensByRequestKey = Object.fromEntries(
+    Object.entries(state.pendingChannelThumbnailTokensByRequestKey).filter(([requestKey]) => !requestKey.startsWith(sessionPrefix))
+  );
+  const channelThumbnailsByRequestKey = Object.fromEntries(
+    Object.entries(state.channelThumbnailsByRequestKey).filter(([requestKey]) => !requestKey.startsWith(sessionPrefix))
+  );
+  const channelThumbnailLatestRequestKeyByContextKey = Object.fromEntries(
+    Object.entries(state.channelThumbnailLatestRequestKeyByContextKey)
+      .filter(([contextKey]) => !contextKey.startsWith(sessionPrefix))
+      .filter(([, requestKey]) => !requestKey.startsWith(sessionPrefix))
+  );
+
+  return {
+    pendingChannelThumbnailTokensByRequestKey,
+    channelThumbnailsByRequestKey,
+    channelThumbnailLatestRequestKeyByContextKey
+  };
 }

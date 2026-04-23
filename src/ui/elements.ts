@@ -5,6 +5,7 @@ export interface Elements {
   sidePanel: HTMLElement;
   bottomPanel: HTMLElement;
   bottomPanelContent: HTMLElement;
+  channelThumbnailStrip: HTMLElement;
   imagePanel: HTMLElement;
   imagePanelContent: HTMLElement;
   imagePanelCollapseButton: HTMLButtonElement;
@@ -126,6 +127,8 @@ export type ChannelPanelElements = Pick<
   'rgbSplitToggleButton' | 'rgbGroupSelect' | 'channelViewList' | 'channelViewCount'
 >;
 
+export type ChannelThumbnailStripElements = Pick<Elements, 'channelThumbnailStrip'>;
+
 export type ColormapPanelElements = Pick<
   Elements,
   | 'visualizationNoneButton'
@@ -171,6 +174,7 @@ export function resolveElements(): Elements {
     sidePanel: requireElement('inspector-panel', HTMLElement),
     bottomPanel: requireElement('bottom-panel', HTMLElement),
     bottomPanelContent: requireElement('bottom-panel-content', HTMLElement),
+    channelThumbnailStrip: requireElement('channel-thumbnail-strip', HTMLElement),
     imagePanel: requireElement('image-panel', HTMLElement),
     imagePanelContent: requireElement('image-panel-content', HTMLElement),
     imagePanelCollapseButton: requireElement('image-panel-collapse-button', HTMLButtonElement),

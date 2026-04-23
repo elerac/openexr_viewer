@@ -1,17 +1,12 @@
-import { cloneDisplaySelection } from '../display-model';
+import {
+  buildChannelViewItems,
+  findSelectedChannelViewItem,
+  hasSplitChannelViewItems,
+  selectVisibleChannelViewItems,
+  type ChannelViewItem
+} from '../channel-view-items';
 import { DisposableBag, type Disposable } from '../lifecycle';
-import {
-  buildChannelDisplayOptions,
-  extractRgbChannelGroups,
-  findMergedSelectionForSplitDisplay,
-  findSelectedChannelDisplayOption,
-  findSplitSelectionForMergedDisplay
-} from '../display-selection';
-import {
-  findSelectedStokesDisplayOption,
-  getStokesDisplayOptions
-} from '../stokes';
-import type { DisplayChannelMapping, DisplaySelection } from '../types';
+import type { DisplaySelection } from '../types';
 import type { ChannelPanelElements } from './elements';
 import {
   applyListboxRowSizing,
@@ -27,30 +22,21 @@ import {
 const CHANNEL_OPTIONS_MAX_VISIBLE_ROWS = 10;
 
 interface ChannelPanelCallbacks {
-  onRgbGroupChange: (mapping: DisplaySelection) => void;
-}
-
-interface ChannelViewRowItem {
-  value: string;
-  label: string;
-  meta: string;
-  swatches: string[];
+  onChannelViewChange: (value: string) => void;
+  onSplitToggle: (includeSplitRgbChannels: boolean) => void;
 }
 
 export class ChannelPanel implements Disposable {
   private readonly disposables = new DisposableBag();
-  private readonly rgbGroupMappings = new Map<string, DisplaySelection>();
   private isLoading = false;
   private isRgbViewLoading = false;
   private hasActiveImage = false;
   private restoreRgbGroupFocusAfterLoading = false;
   private restoreChannelViewFocusAfterLoading = false;
-  private hasRgbGroups = false;
-  private hasRgbSplitOptions = false;
+  private hasSplitChannelViews = false;
   private includeSplitRgbChannels = false;
-  private currentRgbChannelNames: string[] = [];
-  private currentRgbSelection: DisplaySelection | null = null;
-  private channelViewItems: ChannelViewRowItem[] = [];
+  private channelViewItems: ChannelViewItem[] = [];
+  private selectedValue = '';
   private disposed = false;
 
   constructor(
@@ -65,15 +51,7 @@ export class ChannelPanel implements Disposable {
         return;
       }
 
-      this.includeSplitRgbChannels = !this.includeSplitRgbChannels;
-      this.updateRgbSplitToggleState();
-
-      const selection = this.currentRgbSelection;
-      if (!selection) {
-        return;
-      }
-
-      this.setRgbGroupOptions(this.currentRgbChannelNames, selection);
+      this.callbacks.onSplitToggle(!this.includeSplitRgbChannels);
     });
 
     const onRgbGroupSelect = (event: Event): void => {
@@ -116,13 +94,7 @@ export class ChannelPanel implements Disposable {
 
       event.preventDefault();
       this.elements.rgbGroupSelect.selectedIndex = nextIndex;
-      const mapping = this.rgbGroupMappings.get(this.elements.rgbGroupSelect.value);
-      if (!mapping) {
-        return;
-      }
-      this.currentRgbSelection = cloneDisplaySelection(mapping);
-      this.renderChannelViewRows();
-      this.callbacks.onRgbGroupChange(mapping);
+      this.chooseChannelViewValue(this.elements.rgbGroupSelect.value);
     });
 
     this.disposables.addEventListener(this.elements.channelViewList, 'click', (event) => {
@@ -163,7 +135,7 @@ export class ChannelPanel implements Disposable {
     }
 
     this.isLoading = loading;
-    this.elements.rgbGroupSelect.disabled = loading || !this.hasRgbGroups;
+    this.elements.rgbGroupSelect.disabled = loading || this.channelViewItems.length === 0;
     this.renderChannelViewRows();
     this.updateRgbSplitToggleState();
 
@@ -188,92 +160,52 @@ export class ChannelPanel implements Disposable {
     this.updateRgbSplitToggleState();
   }
 
-  setRgbGroupOptions(channelNames: string[], selected: DisplaySelection | null): void {
+  setSplitToggleState(includeSplitRgbChannels: boolean, hasSplitChannelViews: boolean): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.includeSplitRgbChannels = includeSplitRgbChannels;
+    this.hasSplitChannelViews = hasSplitChannelViews;
+    this.updateRgbSplitToggleState();
+  }
+
+  setChannelViewItems(items: ChannelViewItem[], selectedValue: string): void {
     if (this.disposed) {
       return;
     }
 
     this.hasActiveImage = true;
     const hadFocus = document.activeElement === this.elements.rgbGroupSelect;
-    const nextChannelNames = [...channelNames];
-    const expandedSelection = this.includeSplitRgbChannels
-      ? findSplitSelectionForMergedDisplay(nextChannelNames, selected)
-      : null;
-    const collapsedSelection = !this.includeSplitRgbChannels
-      ? findMergedSelectionForSplitDisplay(nextChannelNames, selected)
-      : null;
-    const effectiveSelected = expandedSelection ?? collapsedSelection ?? selected;
-    const rgbGroups = extractRgbChannelGroups(nextChannelNames);
-    const channelOptions = buildChannelDisplayOptions(nextChannelNames, {
-      includeRgbGroups: !this.includeSplitRgbChannels,
-      includeSplitChannels: this.includeSplitRgbChannels
-    });
-    const stokesOptions = getStokesDisplayOptions(nextChannelNames, {
-      includeRgbGroups: !this.includeSplitRgbChannels,
-      includeSplitChannels: this.includeSplitRgbChannels
-    });
-    const selectedChannelOption = findSelectedChannelDisplayOption(channelOptions, effectiveSelected);
-    const selectedStokesOption = findSelectedStokesDisplayOption(stokesOptions, effectiveSelected);
-    const optionCount = channelOptions.length + stokesOptions.length;
+    this.channelViewItems = [...items];
+    this.selectedValue = this.channelViewItems.some((item) => item.value === selectedValue)
+      ? selectedValue
+      : (this.channelViewItems[0]?.value ?? '');
 
-    this.currentRgbChannelNames = nextChannelNames;
-    this.currentRgbSelection = cloneDisplaySelection(effectiveSelected);
-    this.hasRgbGroups = optionCount > 0;
-    this.hasRgbSplitOptions = rgbGroups.length > 0;
-    this.updateRgbSplitToggleState();
-    this.rgbGroupMappings.clear();
-    this.channelViewItems = [];
-    applyListboxRowSizing(this.elements.rgbGroupSelect, optionCount, CHANNEL_OPTIONS_MAX_VISIBLE_ROWS);
-
-    let selectedValue = '';
-    const selectOptions: Array<{ value: string; label: string }> = [];
-
-    channelOptions.forEach((channelOption, index) => {
-      const value = `channels-${index}`;
-      this.rgbGroupMappings.set(value, channelOption.selection);
-      selectOptions.push({
-        value,
-        label: channelOption.label
-      });
-      this.channelViewItems.push(createChannelViewRowItem(value, channelOption.label, channelOption.mapping));
-
-      if (selectedChannelOption && selectedChannelOption.key === channelOption.key) {
-        selectedValue = value;
-      }
-      if (!selectedValue) {
-        selectedValue = value;
-      }
-    });
-
-    stokesOptions.forEach((stokesOption, index) => {
-      const value = `stokes-${index}`;
-      this.rgbGroupMappings.set(value, stokesOption.selection);
-      selectOptions.push({
-        value,
-        label: stokesOption.label
-      });
-      this.channelViewItems.push(createChannelViewRowItem(value, stokesOption.label, stokesOption.mapping));
-
-      if (selectedStokesOption && selectedStokesOption.key === stokesOption.key) {
-        selectedValue = value;
-      }
-      if (!selectedValue) {
-        selectedValue = value;
-      }
-    });
-
-    syncSelectOptions(this.elements.rgbGroupSelect, selectOptions);
-    this.elements.rgbGroupSelect.value = selectedValue;
-    this.elements.rgbGroupSelect.disabled = this.isLoading || !this.hasRgbGroups;
+    syncSelectOptions(this.elements.rgbGroupSelect, this.channelViewItems.map((item) => ({
+      value: item.value,
+      label: item.label
+    })));
+    applyListboxRowSizing(this.elements.rgbGroupSelect, this.channelViewItems.length, CHANNEL_OPTIONS_MAX_VISIBLE_ROWS);
+    this.elements.rgbGroupSelect.value = this.selectedValue;
+    this.elements.rgbGroupSelect.disabled = this.isLoading || this.channelViewItems.length === 0;
     this.renderChannelViewRows();
+
     if (hadFocus && !this.elements.rgbGroupSelect.disabled) {
       this.elements.rgbGroupSelect.focus();
     }
+  }
 
-    const remappedSelection = expandedSelection ?? collapsedSelection;
-    if (remappedSelection) {
-      this.callbacks.onRgbGroupChange(remappedSelection);
+  setRgbGroupOptions(channelNames: string[], selected: DisplaySelection | null): void {
+    if (this.disposed) {
+      return;
     }
+
+    const allItems = buildChannelViewItems(channelNames);
+    const visibleItems = selectVisibleChannelViewItems(allItems, this.includeSplitRgbChannels);
+    const selectedItem = findSelectedChannelViewItem(visibleItems, selected) ?? visibleItems[0] ?? null;
+    this.setSplitToggleState(this.includeSplitRgbChannels, hasSplitChannelViewItems(allItems));
+    this.setChannelViewItems(visibleItems, selectedItem?.value ?? '');
   }
 
   clearForNoImage(): void {
@@ -282,12 +214,9 @@ export class ChannelPanel implements Disposable {
     }
 
     this.hasActiveImage = false;
-    this.hasRgbGroups = false;
-    this.hasRgbSplitOptions = false;
-    this.currentRgbChannelNames = [];
-    this.currentRgbSelection = null;
     this.channelViewItems = [];
-    this.rgbGroupMappings.clear();
+    this.selectedValue = '';
+    this.hasSplitChannelViews = false;
     syncSelectOptions(this.elements.rgbGroupSelect, []);
     applyListboxRowSizing(this.elements.rgbGroupSelect, 0, CHANNEL_OPTIONS_MAX_VISIBLE_ROWS);
     this.elements.rgbGroupSelect.disabled = true;
@@ -296,7 +225,7 @@ export class ChannelPanel implements Disposable {
   }
 
   private renderChannelViewRows(): void {
-    const disabled = this.isLoading || !this.hasRgbGroups;
+    const disabled = this.isLoading || this.channelViewItems.length === 0;
     const shouldRestoreFocus = !disabled && isFocusWithinElement(this.elements.channelViewList);
     this.elements.channelViewCount.textContent = String(this.channelViewItems.length);
     this.elements.channelViewList.classList.toggle('is-disabled', disabled);
@@ -310,7 +239,6 @@ export class ChannelPanel implements Disposable {
       return;
     }
 
-    const selectedValue = this.elements.rgbGroupSelect.value;
     renderKeyedChildren(
       this.elements.channelViewList,
       this.channelViewItems,
@@ -326,7 +254,7 @@ export class ChannelPanel implements Disposable {
           label: item.label,
           meta: item.meta,
           swatches: item.swatches,
-          selected: item.value === selectedValue,
+          selected: item.value === this.selectedValue,
           disabled
         });
         return row;
@@ -347,21 +275,20 @@ export class ChannelPanel implements Disposable {
       return;
     }
 
-    const mapping = this.rgbGroupMappings.get(value);
-    if (!mapping) {
+    if (!this.channelViewItems.some((item) => item.value === value)) {
       return;
     }
 
+    this.selectedValue = value;
     this.elements.rgbGroupSelect.value = value;
-    this.currentRgbSelection = cloneDisplaySelection(mapping);
     this.renderChannelViewRows();
-    this.callbacks.onRgbGroupChange(mapping);
+    this.callbacks.onChannelViewChange(value);
   }
 
   private updateRgbSplitToggleState(): void {
-    this.elements.rgbSplitToggleButton.classList.toggle('hidden', !this.hasRgbSplitOptions);
+    this.elements.rgbSplitToggleButton.classList.toggle('hidden', !this.hasSplitChannelViews);
     this.elements.rgbSplitToggleButton.disabled =
-      this.isLoading || this.isRgbViewLoading || !this.hasRgbSplitOptions;
+      this.isLoading || this.isRgbViewLoading || !this.hasSplitChannelViews;
     this.elements.rgbSplitToggleButton.setAttribute(
       'aria-pressed',
       this.includeSplitRgbChannels ? 'true' : 'false'
@@ -410,7 +337,12 @@ function updateChannelViewRow(
   const meta = row.querySelector<HTMLElement>('.image-browser-row-meta');
 
   if (icon) {
-    icon.replaceChildren(...buildChannelViewSwatches(options.swatches));
+    icon.replaceChildren(...options.swatches.map((swatchColor) => {
+      const swatch = document.createElement('span');
+      swatch.className = 'channel-view-swatch';
+      swatch.style.backgroundColor = swatchColor;
+      return swatch;
+    }));
   }
   if (label) {
     label.textContent = options.label;
@@ -420,106 +352,4 @@ function updateChannelViewRow(
   }
 }
 
-function buildChannelViewSwatches(swatches: string[]): HTMLElement[] {
-  const colors = swatches.length > 0 ? swatches.slice(0, 3) : ['#9aa4b4'];
-  return colors.map((swatchColor) => {
-    const swatch = document.createElement('span');
-    swatch.className = 'channel-view-swatch';
-    swatch.style.backgroundColor = swatchColor;
-    return swatch;
-  });
-}
-
-function createChannelViewRowItem(
-  value: string,
-  label: string,
-  mapping: DisplayChannelMapping
-): ChannelViewRowItem {
-  const precisionCount = getDisplayMappingChannelCount(mapping);
-  return {
-    value,
-    label: formatChannelViewLabel(label),
-    meta: precisionCount > 1 ? `32f x ${precisionCount}` : '32f',
-    swatches: getChannelViewSwatches(mapping)
-  };
-}
-
-function formatChannelViewLabel(label: string): string {
-  if (label === 'R,G,B,A') {
-    return 'RGBA';
-  }
-  if (label === 'R,G,B') {
-    return 'RGB';
-  }
-
-  return label
-    .replace(/\.\(R,G,B,A\)/g, '.RGBA')
-    .replace(/\.\(R,G,B\)/g, '.RGB');
-}
-
-function getDisplayMappingChannelCount(mapping: DisplayChannelMapping): number {
-  return new Set([
-    mapping.displayR,
-    mapping.displayG,
-    mapping.displayB,
-    ...(mapping.displayA ? [mapping.displayA] : [])
-  ]).size;
-}
-
-export function getChannelViewSwatches(mapping: DisplayChannelMapping): string[] {
-  const displayChannels = [mapping.displayR, mapping.displayG, mapping.displayB];
-  if (displayChannels.every((channelName) => channelName === mapping.displayR)) {
-    const swatches = [getRepresentativeChannelColor(mapping.displayR)];
-    if (mapping.displayA && mapping.displayA !== mapping.displayR) {
-      swatches.push(getRepresentativeChannelColor(mapping.displayA));
-    }
-    return swatches;
-  }
-
-  const channels = [
-    ...displayChannels,
-    ...(mapping.displayA ? [mapping.displayA] : [])
-  ];
-  const uniqueChannels = Array.from(new Set(channels));
-  return uniqueChannels.slice(0, 3).map(getRepresentativeChannelColor);
-}
-
-function getRepresentativeChannelColor(channelName: string): string {
-  const suffix = channelName.includes('.') ? channelName.slice(channelName.lastIndexOf('.') + 1) : channelName;
-  const normalized = suffix.toUpperCase();
-  if (normalized === 'R') {
-    return '#ff6570';
-  }
-  if (normalized === 'G') {
-    return '#6bd66f';
-  }
-  if (normalized === 'B') {
-    return '#51aefe';
-  }
-  if (normalized === 'A') {
-    return '#c6cbd2';
-  }
-  if (normalized === 'Z') {
-    return '#8f83e6';
-  }
-  if (normalized === 'Y' || normalized === 'L') {
-    return '#d7dde8';
-  }
-  if (normalized === 'V') {
-    return '#11bfb8';
-  }
-  if (normalized === 'X' || normalized === 'U') {
-    return '#f0b85a';
-  }
-
-  const palette = ['#11bfb8', '#b48cf2', '#f0719a', '#8bd36f', '#f0b85a', '#7aa7ff'];
-  return palette[Math.abs(hashString(channelName)) % palette.length] ?? '#9aa4b4';
-}
-
-function hashString(value: string): number {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) | 0;
-  }
-  return hash;
-}
+export { getChannelViewSwatches } from '../channel-view-items';

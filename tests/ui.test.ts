@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildChannelViewItems } from '../src/channel-view-items';
 import {
   buildPartLayerItemsFromChannelNames,
   clampPanelSplitSizes,
@@ -1382,6 +1383,69 @@ describe('channel view icons', () => {
       displayB: 'G',
       displayA: null
     })).toEqual(['#6bd66f']);
+  });
+});
+
+describe('channel thumbnail strip', () => {
+  it('shows a no-image message by default', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    new ViewerUi(createUiCallbacks());
+
+    expect(document.getElementById('channel-thumbnail-strip')?.textContent).toContain('Open an image');
+  });
+
+  it('renders placeholder thumbnails, syncs click selection, and supports horizontal keyboard navigation', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onRgbGroupChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onRgbGroupChange }));
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'beauty.A', 'depth.Z'];
+    const baseItems = buildChannelViewItems(channelNames);
+    const channelThumbnailItems = baseItems.map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    }));
+    const selected = {
+      kind: 'channelRgb' as const,
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: 'beauty.A'
+    };
+
+    ui.setRgbGroupOptions(channelNames, selected, channelThumbnailItems);
+
+    const tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
+    const depthItem = channelThumbnailItems.find((item) => item.value === 'channel:depth.Z');
+    expect(tiles).toHaveLength(2);
+    expect(document.querySelectorAll('#channel-thumbnail-strip .channel-thumbnail-placeholder')).toHaveLength(2);
+    expect(depthItem).toBeTruthy();
+
+    const firstTile = tiles[0]!;
+    firstTile.focus();
+    firstTile.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+
+    expect(onRgbGroupChange).toHaveBeenLastCalledWith({
+      kind: 'channelMono',
+      channel: 'depth.Z',
+      alpha: null
+    });
+    expect((document.getElementById('rgb-group-select') as HTMLSelectElement).value).toBe(depthItem?.value);
+
+    const nextItems = channelThumbnailItems.map((item) => ({
+      ...item,
+      thumbnailDataUrl: 'data:image/png;base64,AAAA'
+    }));
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelMono',
+      channel: 'depth.Z',
+      alpha: null
+    }, nextItems);
+
+    expect(document.querySelectorAll('#channel-thumbnail-strip .channel-thumbnail-image')).toHaveLength(2);
   });
 });
 

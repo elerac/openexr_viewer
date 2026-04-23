@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialViewerAppState } from '../src/app/viewer-app-core';
+import { buildChannelViewItems } from '../src/channel-view-items';
+import {
+  serializeChannelThumbnailContextKey,
+  serializeChannelThumbnailRequestKey
+} from '../src/channel-thumbnail-keys';
 import {
   createViewerRenderSnapshotSelector,
   computeViewerRenderInvalidation,
@@ -222,6 +227,63 @@ describe('viewer app lanes', () => {
     expect(hasUiFlag(uiFlags, ViewerUiInvalidationFlags.RgbGroupOptions)).toBe(true);
     expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ResourcePrepare)).toBe(true);
     expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(true);
+  });
+
+  it('keeps the previous channel thumbnail visible while a refreshed thumbnail is pending', () => {
+    const previous = createActiveState();
+    const activeSession = previous.sessions[0]!;
+    const descriptor = buildChannelViewItems(activeSession.decoded.layers[0]!.channelNames)[0]!;
+    const contextKey = serializeChannelThumbnailContextKey(activeSession.id, previous.sessionState.activeLayer, descriptor.selectionKey);
+    const previousRequestKey = serializeChannelThumbnailRequestKey({
+      sessionId: activeSession.id,
+      activeLayer: previous.sessionState.activeLayer,
+      selection: descriptor.selection,
+      exposureEv: previous.sessionState.exposureEv,
+      stokesDegreeModulation: previous.sessionState.stokesDegreeModulation
+    });
+    const pendingState = {
+      ...previous,
+      channelThumbnailsByRequestKey: {
+        [previousRequestKey]: 'thumb-0'
+      },
+      channelThumbnailLatestRequestKeyByContextKey: {
+        [contextKey]: previousRequestKey
+      },
+      sessionState: {
+        ...previous.sessionState,
+        exposureEv: 1
+      }
+    };
+
+    const snapshot = createViewerUiSnapshotSelector()(pendingState);
+    const item = snapshot.channelThumbnailItems.find((entry) => entry.selectionKey === descriptor.selectionKey);
+    expect(item?.thumbnailDataUrl).toBe('thumb-0');
+  });
+
+  it('marks channel-thumbnail updates as RGB-group UI invalidation', () => {
+    const previous = createActiveState();
+    const activeSession = previous.sessions[0]!;
+    const descriptor = buildChannelViewItems(activeSession.decoded.layers[0]!.channelNames)[0]!;
+    const requestKey = serializeChannelThumbnailRequestKey({
+      sessionId: activeSession.id,
+      activeLayer: previous.sessionState.activeLayer,
+      selection: descriptor.selection,
+      exposureEv: previous.sessionState.exposureEv,
+      stokesDegreeModulation: previous.sessionState.stokesDegreeModulation
+    });
+    const contextKey = serializeChannelThumbnailContextKey(activeSession.id, previous.sessionState.activeLayer, descriptor.selectionKey);
+    const next = {
+      ...previous,
+      channelThumbnailsByRequestKey: {
+        [requestKey]: 'thumb-0'
+      },
+      channelThumbnailLatestRequestKeyByContextKey: {
+        [contextKey]: requestKey
+      }
+    };
+
+    const uiFlags = createUiFlags(previous, next);
+    expect(hasUiFlag(uiFlags, ViewerUiInvalidationFlags.RgbGroupOptions)).toBe(true);
   });
 
   it('marks colormap-load completion as UI gradient and render texture invalidation', () => {

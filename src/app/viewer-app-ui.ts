@@ -4,6 +4,7 @@ import type { OpenedImageSession } from '../types';
 import type { ViewerAppState, ViewerUiSnapshot } from './viewer-app-types';
 import {
   sameColormapOptions,
+  sameChannelThumbnailItems,
   sameExportTarget,
   sameLayerOptions,
   sameMetadata,
@@ -12,6 +13,7 @@ import {
 } from './viewer-app-equality';
 import {
   buildExportTarget,
+  buildChannelThumbnailItems,
   buildLayerOptions,
   buildOpenedImageOptions,
   getViewerColormapOptions,
@@ -46,6 +48,7 @@ export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => Vie
   const selectLayerOptions = createLayerOptionsSelector();
   const selectMetadata = createMetadataSelector();
   const selectRgbGroupChannelNames = createRgbGroupChannelNamesSelector();
+  const selectChannelThumbnailItems = createChannelThumbnailItemsSelector();
   const selectStokesControl = createStokesControlSelector();
 
   let previousSnapshot: ViewerUiSnapshot | null = null;
@@ -80,6 +83,7 @@ export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => Vie
       metadata: selectMetadata(activeSession, state.sessionState.activeLayer),
       displaySelection: state.sessionState.displaySelection,
       rgbGroupChannelNames: selectRgbGroupChannelNames(activeSession, state.sessionState.activeLayer),
+      channelThumbnailItems: selectChannelThumbnailItems(state),
       shouldClearImageBrowserPanels: !activeSession
     };
 
@@ -172,7 +176,8 @@ export function computeViewerUiInvalidation(
 
   if (
     !sameDisplaySelection(previous.displaySelection, next.displaySelection) ||
-    !sameStringArray(previous.rgbGroupChannelNames, next.rgbGroupChannelNames)
+    !sameStringArray(previous.rgbGroupChannelNames, next.rgbGroupChannelNames) ||
+    !sameChannelThumbnailItems(previous.channelThumbnailItems, next.channelThumbnailItems)
   ) {
     flags |= ViewerUiInvalidationFlags.RgbGroupOptions;
   }
@@ -324,6 +329,19 @@ function createStokesControlSelector(): (state: ViewerAppState) => ViewerUiSnaps
   };
 }
 
+function createChannelThumbnailItemsSelector(): (state: ViewerAppState) => ViewerUiSnapshot['channelThumbnailItems'] {
+  let previousResult: ViewerUiSnapshot['channelThumbnailItems'] = [];
+  return (state) => {
+    const nextResult = buildChannelThumbnailItems(state);
+    if (sameChannelThumbnailItems(previousResult, nextResult)) {
+      return previousResult;
+    }
+
+    previousResult = nextResult;
+    return previousResult;
+  };
+}
+
 function sameViewerUiSnapshot(a: ViewerUiSnapshot, b: ViewerUiSnapshot): boolean {
   return (
     a.errorMessage === b.errorMessage &&
@@ -349,6 +367,7 @@ function sameViewerUiSnapshot(a: ViewerUiSnapshot, b: ViewerUiSnapshot): boolean
     sameMetadata(a.metadata, b.metadata) &&
     sameDisplaySelection(a.displaySelection, b.displaySelection) &&
     sameStringArray(a.rgbGroupChannelNames, b.rgbGroupChannelNames) &&
+    sameChannelThumbnailItems(a.channelThumbnailItems, b.channelThumbnailItems) &&
     a.shouldClearImageBrowserPanels === b.shouldClearImageBrowserPanels
   );
 }

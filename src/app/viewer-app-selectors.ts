@@ -1,3 +1,8 @@
+import { buildChannelViewItems } from '../channel-view-items';
+import {
+  serializeChannelThumbnailContextKey,
+  serializeChannelThumbnailRequestKey
+} from '../channel-thumbnail-keys';
 import { getColormapOptions } from '../colormaps';
 import { sameDisplaySelection } from '../display-model';
 import {
@@ -8,6 +13,7 @@ import type { DisplayLuminanceRange, OpenedImageSession, ViewerSessionState } fr
 import type {
   StokesDegreeModulationControlModel,
   ViewerAppState,
+  ViewerChannelThumbnailItem,
   ViewerLayerOption,
   ViewerOpenedImageOption
 } from './viewer-app-types';
@@ -52,6 +58,45 @@ export function buildLayerOptions(session: OpenedImageSession | null): ViewerLay
     label: buildLayerPanelLabel(layer.name, layer.channelNames, index),
     channelCount: layer.channelNames.length
   }));
+}
+
+export function buildChannelThumbnailItems(state: ViewerAppState): ViewerChannelThumbnailItem[] {
+  const session = selectActiveSession(state);
+  if (!session) {
+    return [];
+  }
+
+  const layer = session.decoded.layers[state.sessionState.activeLayer] ?? null;
+  if (!layer) {
+    return [];
+  }
+
+  return buildChannelViewItems(layer.channelNames).map((item) => {
+    const requestKey = serializeChannelThumbnailRequestKey({
+      sessionId: session.id,
+      activeLayer: state.sessionState.activeLayer,
+      selection: item.selection,
+      exposureEv: state.sessionState.exposureEv,
+      stokesDegreeModulation: state.sessionState.stokesDegreeModulation
+    });
+    const contextKey = serializeChannelThumbnailContextKey(
+      session.id,
+      state.sessionState.activeLayer,
+      item.selectionKey
+    );
+    const fallbackRequestKey = state.channelThumbnailLatestRequestKeyByContextKey[contextKey] ?? null;
+    const exactThumbnailDataUrl = Object.prototype.hasOwnProperty.call(state.channelThumbnailsByRequestKey, requestKey)
+      ? state.channelThumbnailsByRequestKey[requestKey] ?? null
+      : null;
+    const fallbackThumbnailDataUrl = fallbackRequestKey
+      ? state.channelThumbnailsByRequestKey[fallbackRequestKey] ?? null
+      : null;
+
+    return {
+      ...item,
+      thumbnailDataUrl: exactThumbnailDataUrl ?? fallbackThumbnailDataUrl
+    };
+  });
 }
 
 export function selectStokesDegreeModulationControl(

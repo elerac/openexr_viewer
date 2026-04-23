@@ -1,9 +1,16 @@
+import { buildChannelViewItems } from '../channel-view-items';
+import {
+  serializeChannelThumbnailContextKey,
+  serializeChannelThumbnailRequestKey
+} from '../channel-thumbnail-keys';
 import { samePixel, sameRoi, sameViewState } from '../view-state';
 import { ViewerInteractionCoordinator } from '../interaction-coordinator';
+import { ChannelThumbnailService } from '../services/channel-thumbnail-service';
 import { ThumbnailService } from '../services/thumbnail-service';
 import { RenderCacheService } from '../services/render-cache-service';
 import { ViewerAppCore } from './viewer-app-core';
 import type { ViewerStateTransition } from './viewer-app-types';
+import { selectActiveSession } from './viewer-app-selectors';
 
 export function applySessionResourceEffects(
   transition: ViewerStateTransition,
@@ -56,6 +63,45 @@ export function syncInteractionCoordinator(
   });
 }
 
+export function applyChannelThumbnailEffects(
+  transition: ViewerStateTransition,
+  core: ViewerAppCore,
+  channelThumbnailService: ChannelThumbnailService
+): void {
+  switch (transition.intent.type) {
+    case 'sessionReloaded': {
+      channelThumbnailService.discardSession(transition.intent.sessionId);
+      if (transition.state.activeSessionId === transition.intent.sessionId) {
+        scheduleActiveChannelThumbnailGeneration(core, channelThumbnailService);
+      }
+      return;
+    }
+    case 'sessionClosed': {
+      channelThumbnailService.discardSession(transition.intent.sessionId);
+      if (transition.state.activeSessionId) {
+        scheduleActiveChannelThumbnailGeneration(core, channelThumbnailService);
+      }
+      return;
+    }
+    case 'allSessionsClosed': {
+      channelThumbnailService.clear();
+      return;
+    }
+    case 'sessionLoaded': {
+      scheduleActiveChannelThumbnailGeneration(core, channelThumbnailService);
+      return;
+    }
+    default:
+      break;
+  }
+
+  if (!shouldRefreshActiveChannelThumbnails(transition)) {
+    return;
+  }
+
+  scheduleActiveChannelThumbnailGeneration(core, channelThumbnailService);
+}
+
 function scheduleThumbnailGeneration(
   core: ViewerAppCore,
   thumbnailService: ThumbnailService,
@@ -69,4 +115,70 @@ function scheduleThumbnailGeneration(
     token
   });
   void thumbnailService.enqueue(sessionId, stateSnapshot, token).catch(() => undefined);
+}
+
+function scheduleActiveChannelThumbnailGeneration(
+  core: ViewerAppCore,
+  channelThumbnailService: ChannelThumbnailService
+): void {
+  const state = core.getState();
+  const activeSession = selectActiveSession(state);
+  if (!activeSession) {
+    return;
+  }
+
+  const layer = activeSession.decoded.layers[state.sessionState.activeLayer] ?? null;
+  if (!layer) {
+    return;
+  }
+
+  for (const item of buildChannelViewItems(layer.channelNames)) {
+    const requestKey = serializeChannelThumbnailRequestKey({
+      sessionId: activeSession.id,
+      activeLayer: state.sessionState.activeLayer,
+      selection: item.selection,
+      exposureEv: state.sessionState.exposureEv,
+      stokesDegreeModulation: state.sessionState.stokesDegreeModulation
+    });
+    if (
+      Object.prototype.hasOwnProperty.call(state.channelThumbnailsByRequestKey, requestKey) ||
+      Object.prototype.hasOwnProperty.call(state.pendingChannelThumbnailTokensByRequestKey, requestKey)
+    ) {
+      continue;
+    }
+
+    const token = core.issueRequestId();
+    core.dispatch({
+      type: 'channelThumbnailRequested',
+      requestKey,
+      token
+    });
+    void channelThumbnailService.enqueue({
+      sessionId: activeSession.id,
+      requestKey,
+      contextKey: serializeChannelThumbnailContextKey(
+        activeSession.id,
+        state.sessionState.activeLayer,
+        item.selectionKey
+      ),
+      token,
+      stateSnapshot: state.sessionState,
+      selection: item.selection
+    }).catch(() => undefined);
+  }
+}
+
+function shouldRefreshActiveChannelThumbnails(transition: ViewerStateTransition): boolean {
+  if (!transition.state.activeSessionId) {
+    return false;
+  }
+
+  return (
+    transition.previousState.activeSessionId !== transition.state.activeSessionId ||
+    transition.previousState.sessionState.activeLayer !== transition.state.sessionState.activeLayer ||
+    transition.previousState.sessionState.exposureEv !== transition.state.sessionState.exposureEv ||
+    transition.previousState.sessionState.stokesDegreeModulation.aolp !== transition.state.sessionState.stokesDegreeModulation.aolp ||
+    transition.previousState.sessionState.stokesDegreeModulation.cop !== transition.state.sessionState.stokesDegreeModulation.cop ||
+    transition.previousState.sessionState.stokesDegreeModulation.top !== transition.state.sessionState.stokesDegreeModulation.top
+  );
 }

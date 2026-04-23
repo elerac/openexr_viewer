@@ -71,7 +71,11 @@ export function applyUiEffects(ui: ViewerUi, transition: ViewerUiTransition): vo
   }
 
   if (invalidation & ViewerUiInvalidationFlags.RgbGroupOptions) {
-    ui.setRgbGroupOptions(snapshot.rgbGroupChannelNames, snapshot.displaySelection);
+    ui.setRgbGroupOptions(
+      snapshot.rgbGroupChannelNames,
+      snapshot.displaySelection,
+      snapshot.channelThumbnailItems
+    );
   }
 
   if (invalidation & ViewerUiInvalidationFlags.ClearPanels) {

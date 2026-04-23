@@ -8,6 +8,7 @@ import type {
   ProbeReadoutModel,
   RoiReadoutModel,
   StokesDegreeModulationControlModel,
+  ViewerChannelThumbnailItem,
   ViewerDisplayRangeRequest,
   ViewerLayerOption,
   ViewerOpenedImageOption,
@@ -61,6 +62,26 @@ export function sameLayerOptions(a: ViewerLayerOption[], b: ViewerLayerOption[])
       && item.index === other.index
       && item.label === other.label
       && item.channelCount === other.channelCount;
+  });
+}
+
+export function sameChannelThumbnailItems(a: ViewerChannelThumbnailItem[], b: ViewerChannelThumbnailItem[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return a.every((item, index) => {
+    const other = b[index];
+    return Boolean(other)
+      && item.value === other.value
+      && item.selectionKey === other.selectionKey
+      && sameDisplaySelection(item.selection, other.selection)
+      && item.label === other.label
+      && item.meta === other.meta
+      && item.thumbnailDataUrl === other.thumbnailDataUrl
+      && item.mergedOrder === other.mergedOrder
+      && item.splitOrder === other.splitOrder
+      && sameStringArray(item.swatches, other.swatches);
   });
 }
 
@@ -207,6 +228,14 @@ function sameSampleValues(a: Record<string, number>, b: Record<string, number>):
   }
 
   return aKeys.every((key) => b[key] === a[key]);
+}
+
+function sameStringArray(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return a.every((item, index) => item === b[index]);
 }
 
 function sameImageSize(
