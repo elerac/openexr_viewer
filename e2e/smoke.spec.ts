@@ -1022,8 +1022,8 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
         bottomShellHeight: bottomPanelRect.height,
         bottomHeight: bottomPanelContentRect.height,
         bottomButtonWidth: bottomCollapseButtonRect.width,
-        bottomButtonTop: bottomCollapseButtonRect.top,
-        bottomShellTop: bottomPanelRect.top,
+        bottomButtonBottom: bottomCollapseButtonRect.bottom,
+        bottomShellBottom: bottomPanelRect.bottom,
         imageResizerWidth: imageResizer.getBoundingClientRect().width,
         rightResizerWidth: rightResizer.getBoundingClientRect().width,
         bottomResizerHeight: bottomResizer.getBoundingClientRect().height,
@@ -1057,7 +1057,7 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
   expect(Math.abs(initial.imageButtonLeft - initial.imageShellLeft)).toBeLessThan(2);
   expect(Math.abs(initial.rightButtonRight - initial.rightShellRight)).toBeLessThan(2);
   expect(Math.abs(initial.bottomButtonWidth - initial.bottomShellWidth)).toBeLessThan(3);
-  expect(Math.abs(initial.bottomButtonTop - initial.bottomShellTop)).toBeLessThan(2);
+  expect(Math.abs(initial.bottomButtonBottom - initial.bottomShellBottom)).toBeLessThan(2);
   expect(Math.abs(initial.bottomShellWidth - initial.mainWidth)).toBeLessThan(3);
   expect(initial.bottomHeight).toBeLessThanOrEqual(2);
 

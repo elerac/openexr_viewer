@@ -445,7 +445,7 @@ input[type='range'] {
   flex: 0 0 var(--bottom-panel-tab-height);
   width: 100%;
   height: var(--bottom-panel-tab-height);
-  border-bottom: 1px solid color-mix(in srgb, var(--panel-border) 88%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--panel-border) 88%, transparent);
 }
 
 .panel-collapse-button--left::before,
