@@ -15,7 +15,6 @@ interface ChannelThumbnailStripCallbacks {
 interface ChannelThumbnailTileRefs {
   preview: HTMLElement;
   label: HTMLSpanElement;
-  meta: HTMLSpanElement;
 }
 
 const tileRefs = new WeakMap<HTMLElement, ChannelThumbnailTileRefs>();
@@ -196,11 +195,8 @@ function createChannelThumbnailTile(): HTMLButtonElement {
   const label = document.createElement('span');
   label.className = 'channel-thumbnail-tile-label';
 
-  const meta = document.createElement('span');
-  meta.className = 'channel-thumbnail-tile-meta';
-
-  tile.append(preview, label, meta);
-  tileRefs.set(tile, { preview, label, meta });
+  tile.append(preview, label);
+  tileRefs.set(tile, { preview, label });
   return tile;
 }
 
@@ -222,7 +218,7 @@ function updateChannelThumbnailTile(
   tile.setAttribute('aria-selected', options.selected ? 'true' : 'false');
   tile.setAttribute('aria-disabled', options.disabled ? 'true' : 'false');
   tile.disabled = options.disabled;
-  tile.title = `${item.label}\n${item.meta}`;
+  tile.title = item.label;
 
   const nextPreview = createChannelThumbnailPreview(item.thumbnailDataUrl);
   if (!samePreview(refs.preview, nextPreview)) {
@@ -230,7 +226,6 @@ function updateChannelThumbnailTile(
     refs.preview = nextPreview;
   }
   refs.label.textContent = item.label;
-  refs.meta.textContent = item.meta;
 }
 
 function createChannelThumbnailPreview(thumbnailDataUrl: string | null): HTMLElement {

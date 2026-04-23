@@ -709,21 +709,6 @@ body.is-resizing-panel-rows * {
   min-height: 100%;
 }
 
-.bottom-panel-heading {
-  min-height: 2rem;
-  display: flex;
-  align-items: center;
-  padding: 0.45rem 0.8rem 0.2rem;
-  color: var(--text-dim);
-}
-
-.bottom-panel-heading h3 {
-  margin: 0;
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
 .bottom-panel-shell.is-collapsed,
 .side-panel.is-collapsed,
 .image-panel.is-collapsed {
@@ -1088,7 +1073,7 @@ body.is-resizing-panel-rows * {
   grid-auto-columns: minmax(6.6rem, 7.4rem);
   gap: 0.55rem;
   align-items: stretch;
-  padding: 0.25rem 0.8rem 0.8rem;
+  padding: 0.65rem 0.8rem 0.8rem;
   overflow-x: auto;
   overflow-y: hidden;
 }
@@ -1127,10 +1112,6 @@ body.is-resizing-panel-rows * {
     0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
-.channel-thumbnail-tile[aria-selected='true'] .channel-thumbnail-tile-meta {
-  color: #d7e6f2;
-}
-
 .channel-thumbnail-tile-preview,
 .channel-thumbnail-placeholder,
 .channel-thumbnail-image {
@@ -1165,13 +1146,6 @@ body.is-resizing-panel-rows * {
   white-space: nowrap;
   font-size: 0.82rem;
   font-weight: 600;
-}
-
-.channel-thumbnail-tile-meta {
-  min-width: 0;
-  color: var(--text-dim);
-  font-size: 0.74rem;
-  white-space: nowrap;
 }
 
 .compat-control {

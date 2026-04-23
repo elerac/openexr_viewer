@@ -623,11 +623,13 @@ test('renders bottom-panel channel thumbnails and syncs them with the channel se
   const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
   const channelSelect = page.locator('#rgb-group-select');
   const thumbnailTiles = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile');
+  const thumbnailImages = page.locator('#channel-thumbnail-strip .channel-thumbnail-image');
   const greenRow = page.locator('#channel-view-list .channel-view-row').filter({ hasText: /^G/ });
 
   await openGalleryCbox(page);
   await bottomPanelButton.click();
   await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('heading', { name: 'Channel Thumbnails' })).toHaveCount(0);
   await rgbSplitToggleButton.click();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
   await expect(channelSelect.locator('option:checked')).toHaveText('R');
@@ -637,7 +639,17 @@ test('renders bottom-panel channel thumbnails and syncs them with the channel se
 
   await flushAllIdleCallbacks(page);
 
-  await expect(page.locator('#channel-thumbnail-strip .channel-thumbnail-image')).toHaveCount(3);
+  await expect(thumbnailImages).toHaveCount(3);
+  await expect
+    .poll(async () => await thumbnailImages.evaluateAll((images) => images.map((image) => ({
+      width: image instanceof HTMLImageElement ? image.naturalWidth : 0,
+      height: image instanceof HTMLImageElement ? image.naturalHeight : 0
+    }))))
+    .toEqual([
+      { width: 128, height: 128 },
+      { width: 128, height: 128 },
+      { width: 128, height: 128 }
+    ]);
 
   await thumbnailTiles.nth(1).click();
   await expect(channelSelect.locator('option:checked')).toHaveText('G');

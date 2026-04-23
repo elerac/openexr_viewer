@@ -9,6 +9,7 @@ import {
 import { DecodedExrImage, DecodedLayer, ViewerSessionState } from './types';
 
 const OPENED_IMAGE_THUMBNAIL_SIZE = 40;
+const CHANNEL_VIEW_THUMBNAIL_SIZE = 128;
 const THUMBNAIL_STATS_MAX_SAMPLES = 4096;
 const THUMBNAIL_CHECKER_DARK = 23;
 const THUMBNAIL_CHECKER_LIGHT = 31;
@@ -76,7 +77,8 @@ export function createChannelViewThumbnailDataUrl(
       decoded.width,
       decoded.height,
       state,
-      selection
+      selection,
+      CHANNEL_VIEW_THUMBNAIL_SIZE
     );
     return createOpenedImageThumbnailDataUrlFromPixels(pixels);
   } catch {
@@ -89,9 +91,10 @@ export function buildDisplaySelectionThumbnailPixels(
   width: number,
   height: number,
   state: ViewerSessionState,
-  selection: DisplaySelection | null
+  selection: DisplaySelection | null,
+  outputSize = OPENED_IMAGE_THUMBNAIL_SIZE
 ): OpenedImageThumbnailPixels {
-  const thumbnailSize = OPENED_IMAGE_THUMBNAIL_SIZE;
+  const thumbnailSize = Math.max(1, Math.round(outputSize));
   const thumbnailData = new Uint8ClampedArray(thumbnailSize * thumbnailSize * 4);
   const fitScale = Math.min(thumbnailSize / width, thumbnailSize / height);
   const fittedWidth = Math.max(1, Math.round(width * fitScale));

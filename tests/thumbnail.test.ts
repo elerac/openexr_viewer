@@ -122,6 +122,29 @@ describe('thumbnail rendering', () => {
     expect(readPixel(thumbnail.data, thumbnail.width, 35, 20)).toEqual([255, 255, 255, 255]);
   });
 
+  it('renders higher-resolution channel thumbnails while keeping the same contain-fit behavior', () => {
+    const layer = createLayerFromChannels({
+      R: [0, 1],
+      G: [0, 1],
+      B: [0, 1]
+    }, 'beauty');
+
+    const thumbnail = buildDisplaySelectionThumbnailPixels(
+      layer,
+      2,
+      1,
+      createThumbnailState(),
+      createChannelRgbSelection('R', 'G', 'B'),
+      128
+    );
+
+    expect(thumbnail.width).toBe(128);
+    expect(thumbnail.height).toBe(128);
+    expect(readPixel(thumbnail.data, thumbnail.width, 64, 0)).toEqual([23, 23, 23, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 16, 64)).toEqual([0, 0, 0, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 112, 64)).toEqual([255, 255, 255, 255]);
+  });
+
   it('does not materialize interleaved channels while sampling the thumbnail', () => {
     const layer = createInterleavedLayerFromChannels({
       R: [0, 1],

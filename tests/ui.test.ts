@@ -1422,6 +1422,7 @@ describe('channel thumbnail strip', () => {
     const depthItem = channelThumbnailItems.find((item) => item.value === 'channel:depth.Z');
     expect(tiles).toHaveLength(2);
     expect(document.querySelectorAll('#channel-thumbnail-strip .channel-thumbnail-placeholder')).toHaveLength(2);
+    expect(document.querySelectorAll('#channel-thumbnail-strip .channel-thumbnail-tile-meta')).toHaveLength(0);
     expect(depthItem).toBeTruthy();
 
     const firstTile = tiles[0]!;
