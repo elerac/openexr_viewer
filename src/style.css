@@ -303,6 +303,39 @@ input[type='range'] {
   gap: 0.75rem;
 }
 
+.app-dialog-preview-stage {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 10rem;
+  padding: 0.85rem;
+  border: 1px solid #3a4457;
+  border-radius: 0.55rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent),
+    color-mix(in srgb, var(--panel) 88%, #000);
+  overflow: hidden;
+}
+
+.app-dialog-preview-canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  image-rendering: pixelated;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.app-dialog-preview-status {
+  margin: 0;
+  max-width: 18rem;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
 .app-dialog-checkbox {
   display: inline-flex;
   align-items: center;

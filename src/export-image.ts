@@ -1,12 +1,13 @@
 import { computeRec709Luminance, linearToSrgbByte } from './color';
 import {
   mapValueToColormapRgbBytes,
+  sampleColormapRgbBytes,
   modulateRgbBytesValue,
   type ColormapLut
 } from './colormaps';
 import { selectionUsesImageAlpha } from './display-model';
 import { isStokesDegreeModulationEnabled } from './stokes';
-import type { ViewerSessionState } from './types';
+import type { ExportColormapOrientation, ViewerSessionState } from './types';
 
 type ExportVisualizationState = Pick<
   ViewerSessionState,
@@ -25,6 +26,13 @@ export interface BuildExportImagePixelsArgs {
   height: number;
   state: ExportVisualizationState;
   colormapLut: ColormapLut | null;
+}
+
+export interface BuildColormapExportPixelsArgs {
+  lut: ColormapLut;
+  width: number;
+  height: number;
+  orientation: ExportColormapOrientation;
 }
 
 export function buildExportImagePixels({
@@ -82,16 +90,42 @@ export function buildExportImagePixels({
   };
 }
 
-export async function createPngBlobFromPixels(pixels: ExportImagePixels): Promise<Blob> {
-  if (typeof document === 'undefined') {
-    throw new Error('Image export is only available in a browser environment.');
+export function buildColormapExportPixels({
+  lut,
+  width,
+  height,
+  orientation
+}: BuildColormapExportPixelsArgs): ExportImagePixels {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+    throw new Error('Colormap export dimensions must be positive integers.');
   }
 
-  return await canvasToBlob(createCanvasFromPixels(pixels), 'image/png');
+  const pixelCount = width * height;
+  const data = new Uint8ClampedArray(pixelCount * 4);
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const pixelIndex = y * width + x;
+      const outputIndex = pixelIndex * 4;
+      const t = orientation === 'horizontal'
+        ? computeGradientPosition(x, width)
+        : computeGradientPosition(height - 1 - y, height);
+      const [r, g, b] = sampleColormapRgbBytes(lut, t);
+      data[outputIndex + 0] = r;
+      data[outputIndex + 1] = g;
+      data[outputIndex + 2] = b;
+      data[outputIndex + 3] = 255;
+    }
+  }
+
+  return {
+    width,
+    height,
+    data
+  };
 }
 
-function createCanvasFromPixels(pixels: ExportImagePixels): HTMLCanvasElement {
-  const canvas = document.createElement('canvas');
+export function renderPixelsToCanvas(canvas: HTMLCanvasElement, pixels: ExportImagePixels): void {
   canvas.width = pixels.width;
   canvas.height = pixels.height;
 
@@ -101,7 +135,16 @@ function createCanvasFromPixels(pixels: ExportImagePixels): HTMLCanvasElement {
   }
 
   context.putImageData(new ImageData(pixels.data, pixels.width, pixels.height), 0, 0);
-  return canvas;
+}
+
+export async function createPngBlobFromPixels(pixels: ExportImagePixels): Promise<Blob> {
+  if (typeof document === 'undefined') {
+    throw new Error('Image export is only available in a browser environment.');
+  }
+
+  const canvas = document.createElement('canvas');
+  renderPixelsToCanvas(canvas, pixels);
+  return await canvasToBlob(canvas, 'image/png');
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement, type: 'image/png'): Promise<Blob> {
@@ -127,4 +170,12 @@ function clampAlpha(value: number): number {
   }
 
   return Math.min(1, Math.max(0, value));
+}
+
+function computeGradientPosition(index: number, length: number): number {
+  if (length <= 1) {
+    return 0;
+  }
+
+  return index / (length - 1);
 }

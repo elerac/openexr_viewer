@@ -801,7 +801,7 @@ describe('view menu', () => {
     installUiFixture();
 
     const labels = Array.from(document.querySelectorAll('#file-menu .app-menu-item')).map((item) => item.textContent?.trim());
-    expect(labels).toEqual(['Open...', 'Open Folder...', 'Export...', 'Reload All', 'Close All']);
+    expect(labels).toEqual(['Open...', 'Open Folder...', 'Export...', 'Export Colormap...', 'Reload All', 'Close All']);
   });
 
   it('renders the top menu tabs in file-view-gallery-settings order', () => {
@@ -956,6 +956,21 @@ describe('view menu', () => {
     expect(exportButton.disabled).toBe(true);
   });
 
+  it('keeps colormap export disabled until colormaps are available and allows it without an active image', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const exportColormapButton = document.getElementById('export-colormap-button') as HTMLButtonElement;
+
+    expect(exportColormapButton.disabled).toBe(true);
+
+    ui.setColormapOptions([{ id: '0', label: 'Viridis' }], '0');
+    expect(exportColormapButton.disabled).toBe(false);
+
+    ui.setRgbViewLoading(true);
+    expect(exportColormapButton.disabled).toBe(false);
+  });
+
   it('closes the file menu and dispatches open-folder clicks', () => {
     installUiFixture();
 
@@ -1095,6 +1110,381 @@ describe('view menu', () => {
     expect(error.classList.contains('hidden')).toBe(false);
     expect(submitButton.disabled).toBe(false);
     expect(cancelButton.disabled).toBe(false);
+  });
+
+  it('requests and renders a colormap export preview when the dialog opens', async () => {
+    installUiFixture();
+
+    const onResolveExportColormapPreview = vi.fn(async () => createPreviewPixels(32, 2));
+    const ui = new ViewerUi(createUiCallbacks({ onResolveExportColormapPreview }));
+    ui.setColormapOptions([{ id: '0', label: 'Viridis' }], '0');
+    ui.setActiveColormap('0');
+
+    const exportButton = document.getElementById('export-colormap-button') as HTMLButtonElement;
+    const dialogBackdrop = document.getElementById('export-colormap-dialog-backdrop') as HTMLDivElement;
+    const previewCanvas = document.getElementById('export-colormap-preview-canvas') as HTMLCanvasElement;
+    const previewStatus = document.getElementById('export-colormap-preview-status') as HTMLElement;
+
+    exportButton.click();
+    await flushMicrotasks();
+
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
+    expect(onResolveExportColormapPreview).toHaveBeenCalledWith({
+      colormapId: '0',
+      width: 256,
+      height: 16,
+      orientation: 'horizontal'
+    }, expect.any(AbortSignal));
+    expect(previewCanvas.classList.contains('hidden')).toBe(false);
+    expect(previewCanvas.width).toBe(32);
+    expect(previewCanvas.height).toBe(2);
+    expect(previewStatus.classList.contains('hidden')).toBe(true);
+  });
+
+  it('refreshes the colormap export preview when dialog settings change', async () => {
+    installUiFixture();
+
+    const onResolveExportColormapPreview = vi.fn(async () => createPreviewPixels());
+    const ui = new ViewerUi(createUiCallbacks({ onResolveExportColormapPreview }));
+    ui.setColormapOptions([
+      { id: '0', label: 'Viridis' },
+      { id: '1', label: 'RdBu' }
+    ], '0');
+    ui.setActiveColormap('0');
+
+    const exportButton = document.getElementById('export-colormap-button') as HTMLButtonElement;
+    const colormapSelect = document.getElementById('export-colormap-select') as HTMLSelectElement;
+    const orientationSelect = document.getElementById('export-colormap-orientation-select') as HTMLSelectElement;
+    const widthInput = document.getElementById('export-colormap-width-input') as HTMLInputElement;
+    const heightInput = document.getElementById('export-colormap-height-input') as HTMLInputElement;
+
+    exportButton.click();
+    await flushMicrotasks();
+
+    colormapSelect.value = '1';
+    colormapSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    orientationSelect.value = 'vertical';
+    orientationSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    widthInput.value = '32';
+    widthInput.dispatchEvent(new Event('input', { bubbles: true }));
+    heightInput.value = '8';
+    heightInput.dispatchEvent(new Event('input', { bubbles: true }));
+    await flushMicrotasks();
+
+    expect(onResolveExportColormapPreview).toHaveBeenNthCalledWith(1, {
+      colormapId: '0',
+      width: 256,
+      height: 16,
+      orientation: 'horizontal'
+    }, expect.any(AbortSignal));
+    expect(onResolveExportColormapPreview).toHaveBeenNthCalledWith(2, {
+      colormapId: '1',
+      width: 256,
+      height: 16,
+      orientation: 'horizontal'
+    }, expect.any(AbortSignal));
+    expect(onResolveExportColormapPreview).toHaveBeenNthCalledWith(3, {
+      colormapId: '1',
+      width: 256,
+      height: 16,
+      orientation: 'vertical'
+    }, expect.any(AbortSignal));
+    expect(onResolveExportColormapPreview).toHaveBeenNthCalledWith(4, {
+      colormapId: '1',
+      width: 32,
+      height: 16,
+      orientation: 'vertical'
+    }, expect.any(AbortSignal));
+    expect(onResolveExportColormapPreview).toHaveBeenNthCalledWith(5, {
+      colormapId: '1',
+      width: 32,
+      height: 8,
+      orientation: 'vertical'
+    }, expect.any(AbortSignal));
+  });
+
+  it('shows preview-specific validation when dimensions are invalid without submitting export', async () => {
+    installUiFixture();
+
+    const onExportColormap = vi.fn(async () => undefined);
+    const onResolveExportColormapPreview = vi.fn(async () => createPreviewPixels(24, 2));
+    const ui = new ViewerUi(createUiCallbacks({ onExportColormap, onResolveExportColormapPreview }));
+    ui.setColormapOptions([{ id: '0', label: 'Viridis' }], '0');
+
+    const exportButton = document.getElementById('export-colormap-button') as HTMLButtonElement;
+    const widthInput = document.getElementById('export-colormap-width-input') as HTMLInputElement;
+    const previewCanvas = document.getElementById('export-colormap-preview-canvas') as HTMLCanvasElement;
+    const previewStatus = document.getElementById('export-colormap-preview-status') as HTMLElement;
+    const submitError = document.getElementById('export-colormap-dialog-error') as HTMLElement;
+
+    exportButton.click();
+    await flushMicrotasks();
+    expect(onResolveExportColormapPreview).toHaveBeenCalledTimes(1);
+    expect(previewCanvas.classList.contains('hidden')).toBe(false);
+
+    widthInput.value = '';
+    widthInput.dispatchEvent(new Event('input', { bubbles: true }));
+    await flushMicrotasks();
+
+    expect(onResolveExportColormapPreview).toHaveBeenCalledTimes(1);
+    expect(previewCanvas.classList.contains('hidden')).toBe(true);
+    expect(previewStatus.textContent).toBe('Enter a valid width and height to preview.');
+    expect(submitError.classList.contains('hidden')).toBe(true);
+    expect(onExportColormap).not.toHaveBeenCalled();
+  });
+
+  it('ignores stale preview responses when a newer request resolves later', async () => {
+    installUiFixture();
+
+    const firstPreview = createDeferred<ReturnType<typeof createPreviewPixels>>();
+    const secondPreview = createDeferred<ReturnType<typeof createPreviewPixels>>();
+    const onResolveExportColormapPreview = vi
+      .fn<(_: {
+        colormapId: string;
+        width: number;
+        height: number;
+        orientation: 'horizontal' | 'vertical';
+      }, signal: AbortSignal) => Promise<ReturnType<typeof createPreviewPixels>>>()
+      .mockReturnValueOnce(firstPreview.promise)
+      .mockReturnValueOnce(secondPreview.promise);
+    const ui = new ViewerUi(createUiCallbacks({ onResolveExportColormapPreview }));
+    ui.setColormapOptions([{ id: '0', label: 'Viridis' }], '0');
+
+    const exportButton = document.getElementById('export-colormap-button') as HTMLButtonElement;
+    const widthInput = document.getElementById('export-colormap-width-input') as HTMLInputElement;
+    const previewCanvas = document.getElementById('export-colormap-preview-canvas') as HTMLCanvasElement;
+    const previewStatus = document.getElementById('export-colormap-preview-status') as HTMLElement;
+
+    exportButton.click();
+    await flushMicrotasks();
+
+    widthInput.value = '512';
+    widthInput.dispatchEvent(new Event('input', { bubbles: true }));
+    await flushMicrotasks();
+
+    firstPreview.resolve(createPreviewPixels(12, 1));
+    await flushMicrotasks();
+
+    expect(previewCanvas.classList.contains('hidden')).toBe(true);
+    expect(previewStatus.textContent).toBe('Loading preview...');
+
+    secondPreview.resolve(createPreviewPixels(18, 3));
+    await flushMicrotasks();
+
+    expect(previewCanvas.classList.contains('hidden')).toBe(false);
+    expect(previewCanvas.width).toBe(18);
+    expect(previewCanvas.height).toBe(3);
+    expect(previewStatus.classList.contains('hidden')).toBe(true);
+  });
+
+  it('aborts pending preview work on close and starts cleanly when reopened', async () => {
+    installUiFixture();
+
+    const firstPreview = createDeferred<ReturnType<typeof createPreviewPixels>>();
+    const onResolveExportColormapPreview = vi
+      .fn<(_: {
+        colormapId: string;
+        width: number;
+        height: number;
+        orientation: 'horizontal' | 'vertical';
+      }, signal: AbortSignal) => Promise<ReturnType<typeof createPreviewPixels>>>()
+      .mockReturnValueOnce(firstPreview.promise)
+      .mockResolvedValueOnce(createPreviewPixels(20, 4));
+    const ui = new ViewerUi(createUiCallbacks({ onResolveExportColormapPreview }));
+    ui.setColormapOptions([{ id: '0', label: 'Viridis' }], '0');
+
+    const exportButton = document.getElementById('export-colormap-button') as HTMLButtonElement;
+    const cancelButton = document.getElementById('export-colormap-dialog-cancel-button') as HTMLButtonElement;
+    const dialogBackdrop = document.getElementById('export-colormap-dialog-backdrop') as HTMLDivElement;
+    const previewCanvas = document.getElementById('export-colormap-preview-canvas') as HTMLCanvasElement;
+    const previewStatus = document.getElementById('export-colormap-preview-status') as HTMLElement;
+
+    exportButton.click();
+    await flushMicrotasks();
+
+    const initialSignal = onResolveExportColormapPreview.mock.calls[0]?.[1] as AbortSignal;
+    cancelButton.click();
+    await flushMicrotasks();
+
+    expect(initialSignal.aborted).toBe(true);
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
+    expect(previewCanvas.classList.contains('hidden')).toBe(true);
+    expect(previewStatus.classList.contains('hidden')).toBe(true);
+
+    firstPreview.resolve(createPreviewPixels(10, 2));
+    await flushMicrotasks();
+
+    exportButton.click();
+    await flushMicrotasks();
+
+    expect(onResolveExportColormapPreview).toHaveBeenCalledTimes(2);
+    expect(previewCanvas.classList.contains('hidden')).toBe(false);
+    expect(previewCanvas.width).toBe(20);
+    expect(previewCanvas.height).toBe(4);
+  });
+
+  it('opens the colormap export dialog with defaults and normalizes the filename', async () => {
+    installUiFixture();
+
+    const onExportColormap = vi.fn(async () => undefined);
+    const ui = new ViewerUi(createUiCallbacks({ onExportColormap }));
+    ui.setColormapOptions([{ id: '0', label: 'Red / Black / Green' }], '0');
+    ui.setActiveColormap('0');
+
+    const exportButton = document.getElementById('export-colormap-button') as HTMLButtonElement;
+    const dialogBackdrop = document.getElementById('export-colormap-dialog-backdrop') as HTMLDivElement;
+    const colormapSelect = document.getElementById('export-colormap-select') as HTMLSelectElement;
+    const widthInput = document.getElementById('export-colormap-width-input') as HTMLInputElement;
+    const heightInput = document.getElementById('export-colormap-height-input') as HTMLInputElement;
+    const orientationSelect = document.getElementById('export-colormap-orientation-select') as HTMLSelectElement;
+    const filenameInput = document.getElementById('export-colormap-filename-input') as HTMLInputElement;
+    const submitButton = document.getElementById('export-colormap-dialog-submit-button') as HTMLButtonElement;
+
+    exportButton.click();
+
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
+    expect(colormapSelect.value).toBe('0');
+    expect(widthInput.value).toBe('256');
+    expect(heightInput.value).toBe('16');
+    expect(orientationSelect.value).toBe('horizontal');
+    expect(filenameInput.value).toBe('Red-Black-Green.png');
+
+    filenameInput.value = 'paper-ready';
+    submitButton.click();
+    await flushMicrotasks();
+
+    expect(onExportColormap).toHaveBeenCalledWith({
+      colormapId: '0',
+      width: 256,
+      height: 16,
+      orientation: 'horizontal',
+      filename: 'paper-ready.png',
+      format: 'png'
+    });
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
+  });
+
+  it('validates colormap export dimensions before submitting', async () => {
+    installUiFixture();
+
+    const onExportColormap = vi.fn(async () => undefined);
+    const ui = new ViewerUi(createUiCallbacks({ onExportColormap }));
+    ui.setColormapOptions([{ id: '0', label: 'Viridis' }], '0');
+
+    const exportButton = document.getElementById('export-colormap-button') as HTMLButtonElement;
+    const widthInput = document.getElementById('export-colormap-width-input') as HTMLInputElement;
+    const heightInput = document.getElementById('export-colormap-height-input') as HTMLInputElement;
+    const submitButton = document.getElementById('export-colormap-dialog-submit-button') as HTMLButtonElement;
+    const error = document.getElementById('export-colormap-dialog-error') as HTMLElement;
+
+    exportButton.click();
+
+    Object.defineProperty(widthInput, 'value', { configurable: true, writable: true, value: '' });
+    submitButton.click();
+    await flushMicrotasks();
+    expect(error.textContent).toBe('Width must be a positive integer.');
+
+    Object.defineProperty(widthInput, 'value', { configurable: true, writable: true, value: '1.5' });
+    submitButton.click();
+    await flushMicrotasks();
+    expect(error.textContent).toBe('Width must be a positive integer.');
+
+    Object.defineProperty(widthInput, 'value', { configurable: true, writable: true, value: '256' });
+    Object.defineProperty(heightInput, 'value', { configurable: true, writable: true, value: '0' });
+    submitButton.click();
+    await flushMicrotasks();
+    expect(error.textContent).toBe('Height must be a positive integer.');
+
+    expect(onExportColormap).not.toHaveBeenCalled();
+  });
+
+  it('updates colormap export auto-filenames when the selection changes without overwriting manual edits', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setColormapOptions([
+      { id: '0', label: 'Viridis' },
+      { id: '1', label: 'RdBu' }
+    ], '0');
+    ui.setActiveColormap('0');
+
+    const exportButton = document.getElementById('export-colormap-button') as HTMLButtonElement;
+    const colormapSelect = document.getElementById('export-colormap-select') as HTMLSelectElement;
+    const filenameInput = document.getElementById('export-colormap-filename-input') as HTMLInputElement;
+
+    exportButton.click();
+    expect(filenameInput.value).toBe('Viridis.png');
+
+    colormapSelect.value = '1';
+    colormapSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(filenameInput.value).toBe('RdBu.png');
+
+    filenameInput.value = 'my-paper-figure';
+    colormapSelect.value = '0';
+    colormapSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(filenameInput.value).toBe('my-paper-figure');
+  });
+
+  it('keeps the colormap export dialog open while the export callback is pending and shows failures inline', async () => {
+    installUiFixture();
+
+    const deferred = createDeferred<void>();
+    const onExportColormap = vi
+      .fn<(_: {
+        colormapId: string;
+        width: number;
+        height: number;
+        orientation: 'horizontal' | 'vertical';
+        filename: string;
+        format: 'png';
+      }) => Promise<void>>()
+      .mockReturnValueOnce(deferred.promise)
+      .mockRejectedValueOnce(new Error('Gradient encode failed'));
+    const ui = new ViewerUi(createUiCallbacks({ onExportColormap }));
+    ui.setColormapOptions([{ id: '0', label: 'Viridis' }], '0');
+
+    const exportButton = document.getElementById('export-colormap-button') as HTMLButtonElement;
+    const dialogBackdrop = document.getElementById('export-colormap-dialog-backdrop') as HTMLDivElement;
+    const submitButton = document.getElementById('export-colormap-dialog-submit-button') as HTMLButtonElement;
+    const cancelButton = document.getElementById('export-colormap-dialog-cancel-button') as HTMLButtonElement;
+    const error = document.getElementById('export-colormap-dialog-error') as HTMLElement;
+    const select = document.getElementById('export-colormap-select') as HTMLSelectElement;
+    const widthInput = document.getElementById('export-colormap-width-input') as HTMLInputElement;
+    const heightInput = document.getElementById('export-colormap-height-input') as HTMLInputElement;
+    const orientationSelect = document.getElementById('export-colormap-orientation-select') as HTMLSelectElement;
+    const filenameInput = document.getElementById('export-colormap-filename-input') as HTMLInputElement;
+
+    exportButton.click();
+    submitButton.click();
+    await flushMicrotasks();
+
+    expect(submitButton.disabled).toBe(true);
+    expect(cancelButton.disabled).toBe(true);
+    expect(select.disabled).toBe(true);
+    expect(widthInput.disabled).toBe(true);
+    expect(heightInput.disabled).toBe(true);
+    expect(orientationSelect.disabled).toBe(true);
+    expect(filenameInput.disabled).toBe(true);
+    expect(submitButton.textContent).toBe('Exporting...');
+
+    deferred.resolve();
+    await flushMicrotasks();
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
+
+    exportButton.click();
+    submitButton.click();
+    await flushMicrotasks();
+
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
+    expect(error.textContent).toBe('Gradient encode failed');
+    expect(error.classList.contains('hidden')).toBe(false);
+    expect(submitButton.disabled).toBe(false);
+    expect(cancelButton.disabled).toBe(false);
+    expect(select.disabled).toBe(false);
+    expect(widthInput.disabled).toBe(false);
+    expect(heightInput.disabled).toBe(false);
+    expect(orientationSelect.disabled).toBe(false);
+    expect(filenameInput.disabled).toBe(false);
   });
 });
 
@@ -1727,6 +2117,7 @@ function installUiFixture(): void {
   const bodyMarkup = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1] ?? html;
   document.body.innerHTML = bodyMarkup;
   resizeObserverRegistrations.length = 0;
+  installCanvasRenderingMocks();
 
   class ResizeObserverMock {
     private readonly registration: ResizeObserverRegistration;
@@ -1758,6 +2149,22 @@ function installUiFixture(): void {
   }
 
   vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+}
+
+function installCanvasRenderingMocks(): void {
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((contextId: string) => {
+    if (contextId !== '2d') {
+      return null;
+    }
+
+    return {
+      putImageData: () => {}
+    } as never;
+  });
+
+  vi.stubGlobal('ImageData', function(this: object, data: Uint8ClampedArray, width: number, height: number) {
+    return { data, width, height };
+  } as unknown as typeof ImageData);
 }
 
 function mockDesktopLayoutGeometry(
@@ -1909,6 +2316,20 @@ function createUiCallbacksBase() {
     onOpenFileClick: () => {},
     onOpenFolderClick: () => {},
     onExportImage: async (_request: { filename: string; format: 'png' }) => {},
+    onExportColormap: async (_request: {
+      colormapId: string;
+      width: number;
+      height: number;
+      orientation: 'horizontal' | 'vertical';
+      filename: string;
+      format: 'png';
+    }) => {},
+    onResolveExportColormapPreview: async (_request: {
+      colormapId: string;
+      width: number;
+      height: number;
+      orientation: 'horizontal' | 'vertical';
+    }) => createPreviewPixels(),
     onFileSelected: () => {},
     onFolderSelected: () => {},
     onFilesDropped: () => {},
@@ -1942,6 +2363,14 @@ function createDeferred<T>() {
     resolve = innerResolve;
   });
   return { promise, resolve };
+}
+
+function createPreviewPixels(width = 4, height = 1) {
+  return {
+    width,
+    height,
+    data: new Uint8ClampedArray(width * height * 4)
+  };
 }
 
 async function flushMicrotasks(): Promise<void> {

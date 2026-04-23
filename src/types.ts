@@ -160,10 +160,28 @@ export interface ViewportInfo {
 }
 
 export type ExportImageFormat = 'png';
+export type ExportColormapFormat = 'png';
+export type ExportColormapOrientation = 'horizontal' | 'vertical';
 
 export interface ExportImageRequest {
   filename: string;
   format: ExportImageFormat;
+}
+
+export interface ExportColormapRequest {
+  colormapId: string;
+  width: number;
+  height: number;
+  orientation: ExportColormapOrientation;
+  filename: string;
+  format: ExportColormapFormat;
+}
+
+export interface ExportColormapPreviewRequest {
+  colormapId: string;
+  width: number;
+  height: number;
+  orientation: ExportColormapOrientation;
 }
 
 export interface ExportImageTarget {

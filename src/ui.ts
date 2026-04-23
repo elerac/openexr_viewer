@@ -23,14 +23,18 @@ import {
   getDisplayCacheUsageState,
   OpenedImagesPanel
 } from './ui/opened-images-panel';
-import { DisposableBag, type Disposable } from './lifecycle';
-import { getListboxOptionIndexAtClientY } from './ui/render-helpers';
+import { DisposableBag, isAbortError, type Disposable } from './lifecycle';
+import { renderPixelsToCanvas, type ExportImagePixels } from './export-image';
+import { getListboxOptionIndexAtClientY, syncSelectOptions } from './ui/render-helpers';
 import { formatOverlayValue } from './value-format';
 import type { ColormapLut } from './colormaps';
 import type {
   DisplaySelection,
   DisplayLuminanceRange,
   ExrMetadataEntry,
+  ExportColormapOrientation,
+  ExportColormapPreviewRequest,
+  ExportColormapRequest,
   ExportImageRequest,
   ExportImageTarget,
   ImageRoi,
@@ -48,6 +52,11 @@ const LOADING_OVERLAY_MESSAGE_DELAY_MS = 1500;
 const LOADING_OVERLAY_SUBTLE_CLASS = 'loading-overlay--subtle';
 const LOADING_OVERLAY_DARKENING_CLASS = 'loading-overlay--darkening';
 const LOADING_OVERLAY_MESSAGE_CLASS = 'loading-overlay--message';
+const DEFAULT_COLORMAP_EXPORT_WIDTH = 256;
+const DEFAULT_COLORMAP_EXPORT_HEIGHT = 16;
+const DEFAULT_COLORMAP_EXPORT_ORIENTATION: ExportColormapOrientation = 'horizontal';
+const COLORMAP_EXPORT_PREVIEW_LOADING_MESSAGE = 'Loading preview...';
+const COLORMAP_EXPORT_PREVIEW_INVALID_MESSAGE = 'Enter a valid width and height to preview.';
 
 export type LoadingOverlayPhase = 'hidden' | 'subtle' | 'darkening' | 'message';
 
@@ -55,6 +64,11 @@ export interface UiCallbacks {
   onOpenFileClick: () => void;
   onOpenFolderClick: () => void;
   onExportImage: (request: ExportImageRequest) => Promise<void>;
+  onExportColormap: (request: ExportColormapRequest) => Promise<void>;
+  onResolveExportColormapPreview: (
+    request: ExportColormapPreviewRequest,
+    signal: AbortSignal
+  ) => Promise<ExportImagePixels>;
   onFileSelected: (file: File) => void;
   onFolderSelected: (files: File[]) => void;
   onFilesDropped: (files: File[]) => void;
@@ -311,9 +325,18 @@ export class ViewerUi implements Disposable {
   private currentChannelSelection: DisplaySelection | null = null;
   private hasActiveChannelImage = false;
   private exportTarget: ExportImageTarget | null = null;
+  private colormapExportOptions: Array<{ id: string; label: string }> = [];
+  private defaultColormapId = '';
+  private activeColormapId = '';
   private exportDialogOpen = false;
   private exportDialogBusy = false;
   private exportDialogRestoreFocusTarget: HTMLElement | null = null;
+  private exportColormapDialogOpen = false;
+  private exportColormapDialogBusy = false;
+  private exportColormapDialogRestoreFocusTarget: HTMLElement | null = null;
+  private exportColormapAutoFilename = '';
+  private exportColormapPreviewAbortController: AbortController | null = null;
+  private exportColormapPreviewRequestToken = 0;
   private topMenuTrackingMode: TopMenuTrackingMode = 'inactive';
   private hoverOpenedTopMenuButton: HTMLButtonElement | null = null;
   private readonly probeValueRows = new Map<string, ProbeValueRowElements>();
@@ -420,6 +443,7 @@ export class ViewerUi implements Disposable {
     }
 
     this.closeExportDialog(false);
+    this.closeExportColormapDialog(false);
     this.closeAllTopMenus(false);
     this.showDropOverlay(false);
     this.disposed = true;
@@ -461,6 +485,7 @@ export class ViewerUi implements Disposable {
     this.updateLoadingOverlayVisibility();
     if (loading) {
       this.closeExportDialog(false);
+      this.closeExportColormapDialog(false);
     }
   }
 
@@ -522,7 +547,15 @@ export class ViewerUi implements Disposable {
       return;
     }
 
+    this.colormapExportOptions = items.map((item) => ({ ...item }));
+    this.defaultColormapId = activeId;
     this.colormapPanel.setColormapOptions(items, activeId);
+    if (this.exportColormapDialogOpen) {
+      this.syncColormapExportDialogOptions();
+    } else if (this.colormapExportOptions.length === 0) {
+      this.resetExportColormapDialogInputs();
+    }
+    this.updateFileMenuItemsDisabled();
   }
 
   setActiveColormap(activeId: string): void {
@@ -530,6 +563,7 @@ export class ViewerUi implements Disposable {
       return;
     }
 
+    this.activeColormapId = activeId;
     this.colormapPanel.setActiveColormap(activeId);
   }
 
@@ -833,6 +867,7 @@ export class ViewerUi implements Disposable {
     }
 
     this.elements.exportImageButton.disabled = this.isLoading || this.isRgbViewLoading || !this.exportTarget;
+    this.elements.exportColormapButton.disabled = this.isLoading || this.colormapExportOptions.length === 0;
   }
 
   private getTopMenus(): TopMenuElements[] {
@@ -863,6 +898,7 @@ export class ViewerUi implements Disposable {
       return;
     }
 
+    this.closeExportColormapDialog(false);
     this.closeAllTopMenus();
     this.exportDialogRestoreFocusTarget = this.elements.fileMenuButton;
     this.applyExportTargetToDialog(this.exportTarget);
@@ -970,6 +1006,315 @@ export class ViewerUi implements Disposable {
         this.setExportDialogBusy(false);
       }
     }
+  }
+
+  private syncColormapExportDialogOptions(): void {
+    if (this.colormapExportOptions.length === 0) {
+      this.closeExportColormapDialog(false);
+      this.resetExportColormapDialogInputs();
+      return;
+    }
+
+    const currentSelectionId = this.elements.exportColormapSelect.value;
+    syncSelectOptions(
+      this.elements.exportColormapSelect,
+      this.colormapExportOptions.map((item) => ({
+        value: item.id,
+        label: item.label
+      }))
+    );
+    this.elements.exportColormapSelect.value = this.resolvePreferredColormapExportId(currentSelectionId);
+    this.syncColormapExportFilenameForSelection(true);
+    void this.refreshExportColormapPreview();
+  }
+
+  private resolvePreferredColormapExportId(preferredId: string | null | undefined): string {
+    const preferred = preferredId ?? '';
+    if (preferred && this.colormapExportOptions.some((item) => item.id === preferred)) {
+      return preferred;
+    }
+
+    if (this.activeColormapId && this.colormapExportOptions.some((item) => item.id === this.activeColormapId)) {
+      return this.activeColormapId;
+    }
+
+    if (this.defaultColormapId && this.colormapExportOptions.some((item) => item.id === this.defaultColormapId)) {
+      return this.defaultColormapId;
+    }
+
+    return this.colormapExportOptions[0]?.id ?? '';
+  }
+
+  private getSelectedColormapExportOption(): { id: string; label: string } | null {
+    const selectedId = this.elements.exportColormapSelect.value;
+    return this.colormapExportOptions.find((item) => item.id === selectedId) ?? null;
+  }
+
+  private syncColormapExportFilenameForSelection(preserveManualEdits: boolean): void {
+    const filename = buildDefaultColormapExportFilename(this.getSelectedColormapExportOption()?.label ?? '');
+    const currentFilename = normalizeExportFilename(this.elements.exportColormapFilenameInput.value);
+    const previousAutoFilename = normalizeExportFilename(this.exportColormapAutoFilename);
+    if (!preserveManualEdits || currentFilename === previousAutoFilename) {
+      this.elements.exportColormapFilenameInput.value = filename;
+    }
+    this.exportColormapAutoFilename = filename;
+  }
+
+  private openExportColormapDialog(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    if (this.elements.exportColormapButton.disabled || this.colormapExportOptions.length === 0) {
+      return;
+    }
+
+    this.closeExportDialog(false);
+    this.closeAllTopMenus();
+    this.exportColormapDialogRestoreFocusTarget = this.elements.fileMenuButton;
+    syncSelectOptions(
+      this.elements.exportColormapSelect,
+      this.colormapExportOptions.map((item) => ({
+        value: item.id,
+        label: item.label
+      }))
+    );
+    this.elements.exportColormapSelect.value = this.resolvePreferredColormapExportId(this.activeColormapId);
+    this.elements.exportColormapWidthInput.value = String(DEFAULT_COLORMAP_EXPORT_WIDTH);
+    this.elements.exportColormapHeightInput.value = String(DEFAULT_COLORMAP_EXPORT_HEIGHT);
+    this.elements.exportColormapOrientationSelect.value = DEFAULT_COLORMAP_EXPORT_ORIENTATION;
+    this.syncColormapExportFilenameForSelection(false);
+    this.setExportColormapDialogError(null);
+    this.setExportColormapDialogBusy(false);
+    this.exportColormapDialogOpen = true;
+    this.elements.exportColormapDialogBackdrop.classList.remove('hidden');
+    this.elements.exportColormapSelect.focus();
+    void this.refreshExportColormapPreview();
+  }
+
+  private closeExportColormapDialog(restoreFocus = true): void {
+    if (this.disposed) {
+      return;
+    }
+
+    if (
+      !this.exportColormapDialogOpen &&
+      this.elements.exportColormapDialogBackdrop.classList.contains('hidden')
+    ) {
+      return;
+    }
+
+    this.exportColormapDialogOpen = false;
+    this.resetExportColormapPreview();
+    this.setExportColormapDialogBusy(false);
+    this.setExportColormapDialogError(null);
+    this.elements.exportColormapDialogBackdrop.classList.add('hidden');
+
+    if (restoreFocus) {
+      (this.exportColormapDialogRestoreFocusTarget ?? this.elements.exportColormapButton).focus();
+    }
+    this.exportColormapDialogRestoreFocusTarget = null;
+  }
+
+  private resetExportColormapDialogInputs(): void {
+    this.elements.exportColormapSelect.replaceChildren();
+    this.elements.exportColormapWidthInput.value = String(DEFAULT_COLORMAP_EXPORT_WIDTH);
+    this.elements.exportColormapHeightInput.value = String(DEFAULT_COLORMAP_EXPORT_HEIGHT);
+    this.elements.exportColormapOrientationSelect.value = DEFAULT_COLORMAP_EXPORT_ORIENTATION;
+    this.elements.exportColormapFilenameInput.value = '';
+    this.exportColormapAutoFilename = '';
+    this.resetExportColormapPreview();
+  }
+
+  private setExportColormapDialogBusy(busy: boolean): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.exportColormapDialogBusy = busy;
+    this.elements.exportColormapSelect.disabled = busy;
+    this.elements.exportColormapWidthInput.disabled = busy;
+    this.elements.exportColormapHeightInput.disabled = busy;
+    this.elements.exportColormapOrientationSelect.disabled = busy;
+    this.elements.exportColormapFilenameInput.disabled = busy;
+    this.elements.exportColormapDialogCancelButton.disabled = busy;
+    this.elements.exportColormapDialogSubmitButton.disabled = busy;
+    this.elements.exportColormapDialogSubmitButton.textContent = busy ? 'Exporting...' : 'Export';
+  }
+
+  private setExportColormapDialogError(message: string | null): void {
+    if (this.disposed) {
+      return;
+    }
+
+    if (!message) {
+      this.elements.exportColormapDialogError.classList.add('hidden');
+      this.elements.exportColormapDialogError.textContent = '';
+      return;
+    }
+
+    this.elements.exportColormapDialogError.classList.remove('hidden');
+    this.elements.exportColormapDialogError.textContent = message;
+  }
+
+  private async handleExportColormapDialogSubmit(): Promise<void> {
+    if (this.disposed || this.exportColormapDialogBusy) {
+      return;
+    }
+
+    const filename = normalizeExportFilename(this.elements.exportColormapFilenameInput.value);
+    if (!filename) {
+      this.setExportColormapDialogError('Enter a filename.');
+      this.elements.exportColormapFilenameInput.focus();
+      return;
+    }
+
+    const width = parsePositiveIntegerInput(this.elements.exportColormapWidthInput.value);
+    if (width === null) {
+      this.setExportColormapDialogError('Width must be a positive integer.');
+      this.elements.exportColormapWidthInput.focus();
+      return;
+    }
+
+    const height = parsePositiveIntegerInput(this.elements.exportColormapHeightInput.value);
+    if (height === null) {
+      this.setExportColormapDialogError('Height must be a positive integer.');
+      this.elements.exportColormapHeightInput.focus();
+      return;
+    }
+
+    const request = parseExportColormapRequest({
+      colormapId: this.elements.exportColormapSelect.value,
+      width,
+      height,
+      orientation: this.elements.exportColormapOrientationSelect.value,
+      filename,
+      format: 'png'
+    });
+    if (!request) {
+      this.setExportColormapDialogError('Export failed.');
+      return;
+    }
+
+    this.elements.exportColormapWidthInput.value = String(request.width);
+    this.elements.exportColormapHeightInput.value = String(request.height);
+    this.elements.exportColormapFilenameInput.value = request.filename;
+    this.setExportColormapDialogError(null);
+    this.setExportColormapDialogBusy(true);
+
+    try {
+      await this.callbacks.onExportColormap(request);
+      this.closeExportColormapDialog(true);
+    } catch (error) {
+      this.setExportColormapDialogError(error instanceof Error ? error.message : 'Export failed.');
+    } finally {
+      if (this.exportColormapDialogOpen) {
+        this.setExportColormapDialogBusy(false);
+      }
+    }
+  }
+
+  private getExportColormapPreviewRequest(): ExportColormapPreviewRequest | null {
+    const width = parsePositiveIntegerInput(this.elements.exportColormapWidthInput.value);
+    const height = parsePositiveIntegerInput(this.elements.exportColormapHeightInput.value);
+    if (width === null || height === null) {
+      return null;
+    }
+
+    return parseExportColormapPreviewRequest({
+      colormapId: this.elements.exportColormapSelect.value,
+      width,
+      height,
+      orientation: this.elements.exportColormapOrientationSelect.value
+    });
+  }
+
+  private async refreshExportColormapPreview(): Promise<void> {
+    if (this.disposed || !this.exportColormapDialogOpen) {
+      return;
+    }
+
+    const request = this.getExportColormapPreviewRequest();
+    if (!request) {
+      this.cancelExportColormapPreview();
+      this.hideExportColormapPreviewCanvas();
+      this.setExportColormapPreviewStatus(COLORMAP_EXPORT_PREVIEW_INVALID_MESSAGE);
+      return;
+    }
+
+    this.cancelExportColormapPreview();
+    const abortController = new AbortController();
+    this.exportColormapPreviewAbortController = abortController;
+    const requestToken = ++this.exportColormapPreviewRequestToken;
+
+    this.hideExportColormapPreviewCanvas();
+    this.setExportColormapPreviewStatus(COLORMAP_EXPORT_PREVIEW_LOADING_MESSAGE);
+
+    try {
+      const pixels = await this.callbacks.onResolveExportColormapPreview(request, abortController.signal);
+      if (
+        this.disposed ||
+        !this.exportColormapDialogOpen ||
+        abortController.signal.aborted ||
+        requestToken !== this.exportColormapPreviewRequestToken
+      ) {
+        return;
+      }
+
+      this.renderExportColormapPreview(pixels);
+    } catch (error) {
+      if (
+        isAbortError(error) ||
+        this.disposed ||
+        !this.exportColormapDialogOpen ||
+        abortController.signal.aborted ||
+        requestToken !== this.exportColormapPreviewRequestToken
+      ) {
+        return;
+      }
+
+      this.hideExportColormapPreviewCanvas();
+      this.setExportColormapPreviewStatus(error instanceof Error ? error.message : 'Preview failed.');
+    } finally {
+      if (this.exportColormapPreviewAbortController === abortController) {
+        this.exportColormapPreviewAbortController = null;
+      }
+    }
+  }
+
+  private cancelExportColormapPreview(): void {
+    this.exportColormapPreviewRequestToken += 1;
+    this.exportColormapPreviewAbortController?.abort();
+    this.exportColormapPreviewAbortController = null;
+  }
+
+  private resetExportColormapPreview(): void {
+    this.cancelExportColormapPreview();
+    this.hideExportColormapPreviewCanvas();
+    this.setExportColormapPreviewStatus(null);
+  }
+
+  private renderExportColormapPreview(pixels: ExportImagePixels): void {
+    renderPixelsToCanvas(this.elements.exportColormapPreviewCanvas, pixels);
+    this.elements.exportColormapPreviewCanvas.classList.remove('hidden');
+    this.setExportColormapPreviewStatus(null);
+  }
+
+  private hideExportColormapPreviewCanvas(): void {
+    this.elements.exportColormapPreviewCanvas.classList.add('hidden');
+    this.elements.exportColormapPreviewCanvas.width = 0;
+    this.elements.exportColormapPreviewCanvas.height = 0;
+  }
+
+  private setExportColormapPreviewStatus(message: string | null): void {
+    if (!message) {
+      this.elements.exportColormapPreviewStatus.classList.add('hidden');
+      this.elements.exportColormapPreviewStatus.textContent = '';
+      return;
+    }
+
+    this.elements.exportColormapPreviewStatus.classList.remove('hidden');
+    this.elements.exportColormapPreviewStatus.textContent = message;
   }
 
   private isTopMenuOpen(menu: TopMenuElements): boolean {
@@ -1249,6 +1594,14 @@ export class ViewerUi implements Disposable {
       this.openExportDialog();
     });
 
+    this.disposables.addEventListener(this.elements.exportColormapButton, 'click', () => {
+      if (this.elements.exportColormapButton.disabled) {
+        return;
+      }
+
+      this.openExportColormapDialog();
+    });
+
     this.disposables.addEventListener(this.elements.galleryCboxRgbButton, 'click', () => {
       if (this.elements.galleryCboxRgbButton.disabled) {
         return;
@@ -1349,10 +1702,68 @@ export class ViewerUi implements Disposable {
       void this.handleExportDialogSubmit();
     });
 
+    this.disposables.addEventListener(this.elements.exportColormapSelect, 'change', () => {
+      if (this.elements.exportColormapSelect.disabled) {
+        return;
+      }
+
+      this.syncColormapExportFilenameForSelection(true);
+      void this.refreshExportColormapPreview();
+    });
+
+    this.disposables.addEventListener(this.elements.exportColormapOrientationSelect, 'change', () => {
+      if (this.elements.exportColormapOrientationSelect.disabled) {
+        return;
+      }
+
+      void this.refreshExportColormapPreview();
+    });
+
+    this.disposables.addEventListener(this.elements.exportColormapWidthInput, 'input', () => {
+      if (this.elements.exportColormapWidthInput.disabled) {
+        return;
+      }
+
+      void this.refreshExportColormapPreview();
+    });
+
+    this.disposables.addEventListener(this.elements.exportColormapHeightInput, 'input', () => {
+      if (this.elements.exportColormapHeightInput.disabled) {
+        return;
+      }
+
+      void this.refreshExportColormapPreview();
+    });
+
+    this.disposables.addEventListener(this.elements.exportColormapDialogBackdrop, 'click', (event) => {
+      if (event.target === this.elements.exportColormapDialogBackdrop && !this.exportColormapDialogBusy) {
+        this.closeExportColormapDialog(true);
+      }
+    });
+
+    this.disposables.addEventListener(this.elements.exportColormapDialogCancelButton, 'click', () => {
+      if (this.exportColormapDialogBusy) {
+        return;
+      }
+
+      this.closeExportColormapDialog(true);
+    });
+
+    this.disposables.addEventListener(this.elements.exportColormapDialogForm, 'submit', (event) => {
+      event.preventDefault();
+      void this.handleExportColormapDialogSubmit();
+    });
+
     this.disposables.addEventListener(document, 'keydown', (event) => {
       if (event.key === 'Escape' && this.exportDialogOpen && !this.exportDialogBusy) {
         event.preventDefault();
         this.closeExportDialog(true);
+        return;
+      }
+
+      if (event.key === 'Escape' && this.exportColormapDialogOpen && !this.exportColormapDialogBusy) {
+        event.preventDefault();
+        this.closeExportColormapDialog(true);
       }
     });
 
@@ -1862,6 +2273,20 @@ function buildDefaultExportFilename(displayName: string): string {
   return `${withoutExtension}${duplicateSuffix}.png`;
 }
 
+function buildDefaultColormapExportFilename(label: string): string {
+  const trimmed = label.trim();
+  if (!trimmed) {
+    return 'colormap.png';
+  }
+
+  const sanitized = trimmed
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '');
+
+  return `${sanitized || 'colormap'}.png`;
+}
+
 function normalizeExportFilename(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -1883,6 +2308,66 @@ function parseExportImageRequest(args: {
     filename: args.filename,
     format: 'png'
   };
+}
+
+function parseExportColormapRequest(args: {
+  colormapId: string;
+  width: number;
+  height: number;
+  orientation: string;
+  filename: string;
+  format: string;
+}): ExportColormapRequest | null {
+  const previewRequest = parseExportColormapPreviewRequest(args);
+  if (!previewRequest || args.format !== 'png') {
+    return null;
+  }
+
+  return {
+    ...previewRequest,
+    filename: args.filename,
+    format: 'png'
+  };
+}
+
+function parseExportColormapPreviewRequest(args: {
+  colormapId: string;
+  width: number;
+  height: number;
+  orientation: string;
+}): ExportColormapPreviewRequest | null {
+  if (!args.colormapId) {
+    return null;
+  }
+
+  if (args.orientation !== 'horizontal' && args.orientation !== 'vertical') {
+    return null;
+  }
+
+  if (!Number.isInteger(args.width) || args.width <= 0 || !Number.isInteger(args.height) || args.height <= 0) {
+    return null;
+  }
+
+  return {
+    colormapId: args.colormapId,
+    width: args.width,
+    height: args.height,
+    orientation: args.orientation
+  };
+}
+
+function parsePositiveIntegerInput(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
 }
 
 export {

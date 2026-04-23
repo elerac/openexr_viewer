@@ -19,6 +19,7 @@
               <button id="open-file-button" class="app-menu-item" type="button" role="menuitem">Open...</button>
               <button id="open-folder-button" class="app-menu-item" type="button" role="menuitem">Open Folder...</button>
               <button id="export-image-button" class="app-menu-item" type="button" role="menuitem">Export...</button>
+              <button id="export-colormap-button" class="app-menu-item" type="button" role="menuitem">Export Colormap...</button>
               <button id="reload-all-opened-images-button" class="app-menu-item" type="button" role="menuitem">Reload All</button>
               <button id="close-all-opened-images-button" class="app-menu-item" type="button" role="menuitem">Close All</button>
             </div>
@@ -119,6 +120,68 @@
           <div class="app-dialog-actions">
             <button id="export-dialog-cancel-button" type="button">Cancel</button>
             <button id="export-dialog-submit-button" type="submit">Export</button>
+          </div>
+        </form>
+      </div>
+      <div id="export-colormap-dialog-backdrop" class="app-dialog-backdrop hidden">
+        <form
+          id="export-colormap-dialog-form"
+          class="app-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="export-colormap-dialog-title"
+        >
+          <div class="app-dialog-header">
+            <h2 id="export-colormap-dialog-title" class="app-dialog-title">Export Colormap</h2>
+            <p class="app-dialog-subtitle">Export a registered colormap as a PNG gradient.</p>
+          </div>
+          <div class="app-dialog-body">
+            <label class="app-dialog-field" for="export-colormap-select">
+              <span class="app-dialog-field-label">Colormap</span>
+              <select id="export-colormap-select"></select>
+            </label>
+            <div class="app-dialog-field-row">
+              <label class="app-dialog-field" for="export-colormap-width-input">
+                <span class="app-dialog-field-label">Width</span>
+                <input id="export-colormap-width-input" type="number" min="1" step="1" value="256" />
+              </label>
+              <label class="app-dialog-field" for="export-colormap-height-input">
+                <span class="app-dialog-field-label">Height</span>
+                <input id="export-colormap-height-input" type="number" min="1" step="1" value="16" />
+              </label>
+            </div>
+            <label class="app-dialog-field" for="export-colormap-orientation-select">
+              <span class="app-dialog-field-label">Orientation</span>
+              <select id="export-colormap-orientation-select">
+                <option value="horizontal">Horizontal</option>
+                <option value="vertical">Vertical</option>
+              </select>
+            </label>
+            <div class="app-dialog-field">
+              <span class="app-dialog-field-label">Preview</span>
+              <div id="export-colormap-preview-stage" class="app-dialog-preview-stage">
+                <canvas
+                  id="export-colormap-preview-canvas"
+                  class="app-dialog-preview-canvas hidden"
+                  aria-hidden="true"
+                ></canvas>
+                <p
+                  id="export-colormap-preview-status"
+                  class="app-dialog-preview-status hidden"
+                  role="status"
+                  aria-live="polite"
+                ></p>
+              </div>
+            </div>
+            <label class="app-dialog-field" for="export-colormap-filename-input">
+              <span class="app-dialog-field-label">Filename</span>
+              <input id="export-colormap-filename-input" type="text" autocomplete="off" spellcheck="false" />
+            </label>
+            <p id="export-colormap-dialog-error" class="app-dialog-error hidden" role="alert"></p>
+          </div>
+          <div class="app-dialog-actions">
+            <button id="export-colormap-dialog-cancel-button" type="button">Cancel</button>
+            <button id="export-colormap-dialog-submit-button" type="submit">Export</button>
           </div>
         </form>
       </div>

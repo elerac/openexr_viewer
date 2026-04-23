@@ -2,7 +2,12 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { linearToSrgbByte } from '../src/color';
-import { buildExportImagePixels, createPngBlobFromPixels } from '../src/export-image';
+import {
+  buildColormapExportPixels,
+  buildExportImagePixels,
+  createPngBlobFromPixels,
+  renderPixelsToCanvas
+} from '../src/export-image';
 import { createDefaultStokesDegreeModulation } from '../src/stokes';
 
 afterEach(() => {
@@ -119,5 +124,100 @@ describe('export image pixels', () => {
       0
     );
     expect(blob.type).toBe('image/png');
+  });
+
+  it('renders pixels into an existing canvas before encoding', () => {
+    const putImageData = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      putImageData
+    } as never);
+    const imageData = vi.fn(function(this: object, data: Uint8ClampedArray, width: number, height: number) {
+      return { data, width, height };
+    });
+    vi.stubGlobal('ImageData', imageData as unknown as typeof ImageData);
+
+    const canvas = document.createElement('canvas');
+    const pixels = {
+      width: 2,
+      height: 1,
+      data: new Uint8ClampedArray([1, 2, 3, 4, 5, 6, 7, 8])
+    };
+
+    renderPixelsToCanvas(canvas, pixels);
+
+    expect(canvas.width).toBe(2);
+    expect(canvas.height).toBe(1);
+    expect(imageData).toHaveBeenCalledWith(pixels.data, 2, 1);
+    expect(putImageData).toHaveBeenCalledWith(
+      expect.objectContaining({ data: pixels.data, width: 2, height: 1 }),
+      0,
+      0
+    );
+  });
+});
+
+describe('colormap export pixels', () => {
+  const lut = {
+    id: 'test',
+    label: 'Test',
+    entryCount: 2,
+    rgba8: new Uint8Array([
+      0, 0, 255, 255,
+      255, 0, 0, 255
+    ])
+  };
+
+  it('renders horizontal gradients from left to right', () => {
+    const pixels = buildColormapExportPixels({
+      lut,
+      width: 3,
+      height: 1,
+      orientation: 'horizontal'
+    });
+
+    expect(Array.from(pixels.data)).toEqual([
+      0, 0, 255, 255,
+      128, 0, 128, 255,
+      255, 0, 0, 255
+    ]);
+  });
+
+  it('renders vertical gradients from bottom to top', () => {
+    const pixels = buildColormapExportPixels({
+      lut,
+      width: 1,
+      height: 3,
+      orientation: 'vertical'
+    });
+
+    expect(Array.from(pixels.data)).toEqual([
+      255, 0, 0, 255,
+      128, 0, 128, 255,
+      0, 0, 255, 255
+    ]);
+  });
+
+  it('uses the low end of the gradient when the gradient axis is a single pixel', () => {
+    const horizontal = buildColormapExportPixels({
+      lut,
+      width: 1,
+      height: 2,
+      orientation: 'horizontal'
+    });
+    const vertical = buildColormapExportPixels({
+      lut,
+      width: 2,
+      height: 1,
+      orientation: 'vertical'
+    });
+
+    expect(Array.from(horizontal.data)).toEqual([
+      0, 0, 255, 255,
+      0, 0, 255, 255
+    ]);
+    expect(Array.from(vertical.data)).toEqual([
+      0, 0, 255, 255,
+      0, 0, 255, 255
+    ]);
   });
 });

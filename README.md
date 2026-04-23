@@ -11,6 +11,7 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
 - Local EXR load via `File > Open...` or drag/drop (drag-and-drop supports multiple files and recursive folder drops in one action).
 - Recursive folder EXR load via `File > Open Folder...`; all `.exr` files under the selected folder are appended as sessions.
 - `File > Export...` exports the full active image to LDR PNG with the current layer, channel/stokes selection, exposure, colormap, and alpha settings applied.
+- `File > Export Colormap...` exports any registered colormap as a standalone PNG gradient with configurable colormap, size, orientation, and filename.
 - `View > Image viewer` / `Panorama viewer` switches between the existing 2D image view and an equirectangular panorama projection suitable for 360-degree environment maps and HDRIs.
 - `Shift` + left-drag in `Image viewer` creates a persistent rectangular ROI for measurement.
 - Multi-image sessions:
@@ -144,6 +145,7 @@ npm run test:e2e
 - `File > Open Folder...`: recursively open every `.exr` file under the selected folder and append them as new sessions.
 - Drag/drop: drop one or more `.exr` files, or drop a folder to recursively load every `.exr` under it.
 - `File > Export...`: export the active image to PNG with optional downscaling.
+- `File > Export Colormap...`: export a registered colormap to a PNG gradient with selectable colormap, `width`, `height`, `orientation`, and filename.
 - `Settings > Cache Budget`: choose the retained display-cache cap from `64`, `128`, `256`, `512`, or `1024` MB. The value persists in `localStorage`.
 - `View > Image viewer` / `Panorama viewer`: switch between planar image viewing and spherical panorama viewing.
 - Per-file row `Reload` action: reload and re-decode that entry in `Opened Images`.

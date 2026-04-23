@@ -1,12 +1,13 @@
 import { disposeDecodeWorker, loadExrOffMainThread } from '../exr-worker-client';
 import { ViewerInteractionCoordinator } from '../interaction-coordinator';
-import { createAbortError, isAbortError } from '../lifecycle';
+import { createAbortError, isAbortError, throwIfAborted } from '../lifecycle';
 import { ViewerUi } from '../ui';
 import { preserveImagePanOnViewportChange, type ViewportClientRect, ViewerInteraction } from '../interaction';
 import { WebGlExrRenderer } from '../renderer';
 import { DisplayController } from '../controllers/display-controller';
 import { SessionController } from '../controllers/session-controller';
-import { createPngBlobFromPixels } from '../export-image';
+import { getColormapAsset, loadColormapLut } from '../colormaps';
+import { buildColormapExportPixels, createPngBlobFromPixels } from '../export-image';
 import { ChannelThumbnailService } from '../services/channel-thumbnail-service';
 import { LoadQueueService } from '../services/load-queue';
 import { ThumbnailService } from '../services/thumbnail-service';
@@ -22,6 +23,7 @@ import {
   syncInteractionCoordinator
 } from './viewer-app-state-effects';
 import { applyUiEffects } from './viewer-app-ui-effects';
+import type { ExportColormapPreviewRequest, ExportColormapRequest } from '../types';
 
 export interface AppHandle {
   dispose(): void;
@@ -47,6 +49,55 @@ export async function bootstrapApp(): Promise<AppHandle> {
   };
 
   const loadQueue = new LoadQueueService();
+  const resolveColormapExportPixels = async (
+    request: ExportColormapPreviewRequest | ExportColormapRequest,
+    options: {
+      signal?: AbortSignal;
+      previewMaxLongestEdge?: number;
+    } = {}
+  ) => {
+    if (disposed) {
+      throw createAbortError('Viewer application has been disposed.');
+    }
+
+    if (options.signal) {
+      throwIfAborted(options.signal);
+    }
+
+    const state = core.getState();
+    const registry = state.colormapRegistry;
+    if (!registry) {
+      throw new Error('No colormaps are available.');
+    }
+
+    if (!Number.isInteger(request.width) || request.width <= 0 || !Number.isInteger(request.height) || request.height <= 0) {
+      throw new Error('Colormap export dimensions must be positive integers.');
+    }
+
+    if (!getColormapAsset(registry, request.colormapId)) {
+      throw new Error(`Unknown colormap: ${request.colormapId}`);
+    }
+
+    const dimensions = options.previewMaxLongestEdge
+      ? resolveBoundedColormapExportSize(request.width, request.height, options.previewMaxLongestEdge)
+      : { width: request.width, height: request.height };
+
+    const lut = await loadColormapLut(registry, request.colormapId, options.signal);
+    if (options.signal) {
+      throwIfAborted(options.signal);
+    }
+
+    if (disposed) {
+      throw createAbortError('Viewer application has been disposed.');
+    }
+
+    return buildColormapExportPixels({
+      lut,
+      width: dimensions.width,
+      height: dimensions.height,
+      orientation: request.orientation
+    });
+  };
   const ui = new ViewerUi({
     onOpenFileClick: () => {
       const input = document.getElementById('file-input') as HTMLInputElement;
@@ -94,6 +145,35 @@ export async function bootstrapApp(): Promise<AppHandle> {
         core.dispatch({ type: 'errorSet', message });
         throw new Error(message);
       }
+    },
+    onExportColormap: async (request) => {
+      if (disposed) {
+        throw createAbortError('Viewer application has been disposed.');
+      }
+
+      try {
+        const pixels = await resolveColormapExportPixels(request);
+        const blob = await createPngBlobFromPixels(pixels);
+        if (disposed) {
+          throw createAbortError('Viewer application has been disposed.');
+        }
+
+        triggerBrowserDownload(blob, request.filename);
+      } catch (error) {
+        if (disposed) {
+          throw error instanceof Error ? error : createAbortError('Viewer application has been disposed.');
+        }
+
+        const message = error instanceof Error ? error.message : 'Export failed.';
+        core.dispatch({ type: 'errorSet', message });
+        throw new Error(message);
+      }
+    },
+    onResolveExportColormapPreview: async (request, signal) => {
+      return await resolveColormapExportPixels(request, {
+        signal,
+        previewMaxLongestEdge: 256
+      });
     },
     onFileSelected: (file) => {
       void sessionController.enqueueFiles([file]);
@@ -397,6 +477,23 @@ function triggerBrowserDownload(blob: Blob, filename: string): void {
   setTimeout(() => {
     URL.revokeObjectURL(objectUrl);
   }, 1000);
+}
+
+function resolveBoundedColormapExportSize(
+  width: number,
+  height: number,
+  maxLongestEdge: number
+): { width: number; height: number } {
+  const longestEdge = Math.max(width, height);
+  if (!Number.isFinite(maxLongestEdge) || maxLongestEdge <= 0 || longestEdge <= maxLongestEdge) {
+    return { width, height };
+  }
+
+  const scale = maxLongestEdge / longestEdge;
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale))
+  };
 }
 
 function readViewportClientRect(element: HTMLElement): ViewportClientRect {

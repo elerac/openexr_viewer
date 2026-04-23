@@ -29,6 +29,7 @@ export interface Elements {
   openFileButton: HTMLButtonElement;
   openFolderButton: HTMLButtonElement;
   exportImageButton: HTMLButtonElement;
+  exportColormapButton: HTMLButtonElement;
   fileInput: HTMLInputElement;
   folderInput: HTMLInputElement;
   exportDialogBackdrop: HTMLDivElement;
@@ -38,6 +39,19 @@ export interface Elements {
   exportDialogError: HTMLElement;
   exportDialogCancelButton: HTMLButtonElement;
   exportDialogSubmitButton: HTMLButtonElement;
+  exportColormapDialogBackdrop: HTMLDivElement;
+  exportColormapDialogForm: HTMLFormElement;
+  exportColormapSelect: HTMLSelectElement;
+  exportColormapWidthInput: HTMLInputElement;
+  exportColormapHeightInput: HTMLInputElement;
+  exportColormapOrientationSelect: HTMLSelectElement;
+  exportColormapPreviewStage: HTMLDivElement;
+  exportColormapPreviewCanvas: HTMLCanvasElement;
+  exportColormapPreviewStatus: HTMLElement;
+  exportColormapFilenameInput: HTMLInputElement;
+  exportColormapDialogError: HTMLElement;
+  exportColormapDialogCancelButton: HTMLButtonElement;
+  exportColormapDialogSubmitButton: HTMLButtonElement;
   resetViewButton: HTMLButtonElement;
   visualizationNoneButton: HTMLButtonElement;
   colormapToggleButton: HTMLButtonElement;
@@ -198,6 +212,7 @@ export function resolveElements(): Elements {
     openFileButton: requireElement('open-file-button', HTMLButtonElement),
     openFolderButton: requireElement('open-folder-button', HTMLButtonElement),
     exportImageButton: requireElement('export-image-button', HTMLButtonElement),
+    exportColormapButton: requireElement('export-colormap-button', HTMLButtonElement),
     fileInput: requireElement('file-input', HTMLInputElement),
     folderInput: requireElement('folder-input', HTMLInputElement),
     exportDialogBackdrop: requireElement('export-dialog-backdrop', HTMLDivElement),
@@ -207,6 +222,19 @@ export function resolveElements(): Elements {
     exportDialogError: requireElement('export-dialog-error', HTMLElement),
     exportDialogCancelButton: requireElement('export-dialog-cancel-button', HTMLButtonElement),
     exportDialogSubmitButton: requireElement('export-dialog-submit-button', HTMLButtonElement),
+    exportColormapDialogBackdrop: requireElement('export-colormap-dialog-backdrop', HTMLDivElement),
+    exportColormapDialogForm: requireElement('export-colormap-dialog-form', HTMLFormElement),
+    exportColormapSelect: requireElement('export-colormap-select', HTMLSelectElement),
+    exportColormapWidthInput: requireElement('export-colormap-width-input', HTMLInputElement),
+    exportColormapHeightInput: requireElement('export-colormap-height-input', HTMLInputElement),
+    exportColormapOrientationSelect: requireElement('export-colormap-orientation-select', HTMLSelectElement),
+    exportColormapPreviewStage: requireElement('export-colormap-preview-stage', HTMLDivElement),
+    exportColormapPreviewCanvas: requireElement('export-colormap-preview-canvas', HTMLCanvasElement),
+    exportColormapPreviewStatus: requireElement('export-colormap-preview-status', HTMLElement),
+    exportColormapFilenameInput: requireElement('export-colormap-filename-input', HTMLInputElement),
+    exportColormapDialogError: requireElement('export-colormap-dialog-error', HTMLElement),
+    exportColormapDialogCancelButton: requireElement('export-colormap-dialog-cancel-button', HTMLButtonElement),
+    exportColormapDialogSubmitButton: requireElement('export-colormap-dialog-submit-button', HTMLButtonElement),
     resetViewButton: requireElement('reset-view-button', HTMLButtonElement),
     visualizationNoneButton: requireElement('visualization-none-button', HTMLButtonElement),
     colormapToggleButton: requireElement('colormap-toggle-button', HTMLButtonElement),
