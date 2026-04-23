@@ -29,8 +29,6 @@ import {
 const OPENED_IMAGE_THUMBNAIL_SIZE = 40;
 const CHANNEL_VIEW_THUMBNAIL_SIZE = 128;
 const THUMBNAIL_STATS_MAX_SAMPLES = 4096;
-const THUMBNAIL_CHECKER_DARK = 23;
-const THUMBNAIL_CHECKER_LIGHT = 31;
 
 export interface OpenedImageThumbnailPixels {
   width: number;
@@ -155,13 +153,6 @@ export function buildDisplaySelectionThumbnailPixels(
   for (let y = 0; y < thumbnailSize; y += 1) {
     for (let x = 0; x < thumbnailSize; x += 1) {
       const outIndex = (y * thumbnailSize + x) * 4;
-      const checker = ((Math.floor(x / 5) + Math.floor(y / 5)) % 2) === 0
-        ? THUMBNAIL_CHECKER_DARK
-        : THUMBNAIL_CHECKER_LIGHT;
-      thumbnailData[outIndex + 0] = checker;
-      thumbnailData[outIndex + 1] = checker;
-      thumbnailData[outIndex + 2] = checker;
-      thumbnailData[outIndex + 3] = 255;
 
       if (
         x < offsetX ||
@@ -194,12 +185,13 @@ export function buildDisplaySelectionThumbnailPixels(
         }
 
         const alpha = useImageAlpha ? clamp01(sample.a) : 1;
-        thumbnailData[outIndex + 0] = Math.round(rgb[0] * alpha + checker * (1 - alpha));
-        thumbnailData[outIndex + 1] = Math.round(rgb[1] * alpha + checker * (1 - alpha));
-        thumbnailData[outIndex + 2] = Math.round(rgb[2] * alpha + checker * (1 - alpha));
+        thumbnailData[outIndex + 0] = rgb[0];
+        thumbnailData[outIndex + 1] = rgb[1];
+        thumbnailData[outIndex + 2] = rgb[2];
+        thumbnailData[outIndex + 3] = Math.round(alpha * 255);
       } else {
         readDisplaySelectionPixelValuesAtIndex(evaluator, sourceIndex, sample);
-        const alpha = clamp01(sample.a);
+        const alpha = useImageAlpha ? clamp01(sample.a) : 1;
 
         let r = sample.r;
         let g = sample.g;
@@ -221,11 +213,11 @@ export function buildDisplaySelectionThumbnailPixels(
         const srgbG = linearToSrgbByte(g);
         const srgbB = linearToSrgbByte(b);
 
-        thumbnailData[outIndex + 0] = Math.round(srgbR * alpha + checker * (1 - alpha));
-        thumbnailData[outIndex + 1] = Math.round(srgbG * alpha + checker * (1 - alpha));
-        thumbnailData[outIndex + 2] = Math.round(srgbB * alpha + checker * (1 - alpha));
+        thumbnailData[outIndex + 0] = srgbR;
+        thumbnailData[outIndex + 1] = srgbG;
+        thumbnailData[outIndex + 2] = srgbB;
+        thumbnailData[outIndex + 3] = Math.round(alpha * 255);
       }
-      thumbnailData[outIndex + 3] = 255;
     }
   }
 

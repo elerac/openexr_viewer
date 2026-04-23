@@ -96,7 +96,7 @@ describe('thumbnail rendering', () => {
     ]);
   });
 
-  it('composites alpha thumbnails over the checkerboard', () => {
+  it('preserves source alpha in rgb thumbnails', () => {
     const layer = createLayerFromChannels({
       R: [1],
       G: [0],
@@ -113,7 +113,7 @@ describe('thumbnail rendering', () => {
       })
     );
 
-    expect(readPixel(thumbnail.data, thumbnail.width, 0, 0)).toEqual([81, 17, 17, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 0, 0)).toEqual([255, 0, 0, 64]);
   });
 
   it('contain-fits wide images into the 40x40 thumbnail bounds', () => {
@@ -132,7 +132,7 @@ describe('thumbnail rendering', () => {
       })
     );
 
-    expect(readPixel(thumbnail.data, thumbnail.width, 20, 0)).toEqual([23, 23, 23, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 20, 0)).toEqual([0, 0, 0, 0]);
     expect(readPixel(thumbnail.data, thumbnail.width, 5, 20)).toEqual([0, 0, 0, 255]);
     expect(readPixel(thumbnail.data, thumbnail.width, 35, 20)).toEqual([255, 255, 255, 255]);
   });
@@ -155,7 +155,7 @@ describe('thumbnail rendering', () => {
 
     expect(thumbnail.width).toBe(128);
     expect(thumbnail.height).toBe(128);
-    expect(readPixel(thumbnail.data, thumbnail.width, 64, 0)).toEqual([23, 23, 23, 255]);
+    expect(readPixel(thumbnail.data, thumbnail.width, 64, 0)).toEqual([0, 0, 0, 0]);
     expect(readPixel(thumbnail.data, thumbnail.width, 16, 64)).toEqual([0, 0, 0, 255]);
     expect(readPixel(thumbnail.data, thumbnail.width, 112, 64)).toEqual([255, 255, 255, 255]);
   });
@@ -226,6 +226,33 @@ describe('thumbnail rendering', () => {
 
     expect(readPixel(thumbnail.data, thumbnail.width, 5, 20)).toEqual([0, 255, 0, 255]);
     expect(readPixel(thumbnail.data, thumbnail.width, 35, 20)).toEqual([255, 0, 0, 255]);
+  });
+
+  it('preserves source alpha in colormap thumbnail previews', () => {
+    const layer = createLayerFromChannels({
+      Y: [1],
+      A: [0.25]
+    }, 'beauty');
+
+    const thumbnail = buildDisplaySelectionThumbnailPixels(
+      layer,
+      1,
+      1,
+      createThumbnailState(),
+      createChannelMonoSelection('Y', 'A'),
+      40,
+      {
+        visualizationMode: 'colormap',
+        colormapRange: { min: 0, max: 1 },
+        colormapLut: redBlackGreenLut,
+        stokesDegreeModulation: createDefaultStokesDegreeModulation()
+      }
+    );
+
+    expect(readPixel(thumbnail.data, thumbnail.width, 20, 20)).toEqual([
+      ...mapValueToColormapRgbBytes(1, { min: 0, max: 1 }, redBlackGreenLut),
+      64
+    ]);
   });
 
   it('uses the grouped rgb stokes mono path for colormap thumbnail previews', () => {
