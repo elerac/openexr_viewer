@@ -19,6 +19,7 @@ import {
   type LoadingOverlayPhase,
   type PanelSplitMetrics
 } from '../src/ui';
+import { getPanelSplitSizeRange } from '../src/ui/layout-split-controller';
 
 interface ResizeObserverRegistration {
   callback: ResizeObserverCallback;
@@ -546,7 +547,7 @@ describe('panel split sizing', () => {
     expect(sizes.imagePanelWidth).toBeGreaterThanOrEqual(160);
     expect(sizes.rightPanelWidth).toBeGreaterThanOrEqual(240);
     expect(sizes.bottomPanelHeight).toBeLessThanOrEqual(234);
-    expect(sizes.bottomPanelHeight).toBeGreaterThanOrEqual(120);
+    expect(sizes.bottomPanelHeight).toBeGreaterThanOrEqual(72);
   });
 
   it('preserves the active side split as much as possible while clamping overflow', () => {
@@ -562,6 +563,20 @@ describe('panel split sizing', () => {
 
     expect(sizes.imagePanelWidth).toBe(248);
     expect(sizes.rightPanelWidth).toBe(240);
+  });
+
+  it('reports the reduced bottom-panel minimum height in the resizer range', () => {
+    expect(
+      getPanelSplitSizeRange(
+        'bottomPanelHeight',
+        {
+          imagePanelWidth: 220,
+          rightPanelWidth: 280,
+          bottomPanelHeight: 120
+        },
+        metrics
+      )
+    ).toEqual({ min: 72, max: 234 });
   });
 
   it('maps splitter keyboard input to resize actions', () => {
@@ -722,6 +737,12 @@ describe('panel split sizing', () => {
     expect(bottomResizer.getAttribute('aria-disabled')).toBe('false');
     expect(bottomResizer.tabIndex).toBe(0);
     expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('226px');
+
+    bottomResizer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('72px');
+    expect(bottomResizer.getAttribute('aria-valuemin')).toBe('72');
+    expect(bottomResizer.getAttribute('aria-valuenow')).toBe('72');
   });
 
   it('resets stored panel layout defaults and dispatches reset-settings callbacks', () => {

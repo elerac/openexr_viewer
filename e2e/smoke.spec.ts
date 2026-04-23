@@ -1233,10 +1233,16 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
   await expect(bottomCollapseButton).toHaveAttribute('aria-expanded', 'true');
   await expect(bottomResizer).toBeVisible();
 
-  await dragBy(bottomResizer, 0, -48);
+  const afterBottomOpen = await readLayout();
+  expect(afterBottomOpen.bottomHeight).toBeGreaterThanOrEqual(110);
+  expect(afterBottomOpen.bottomHeight).toBeLessThan(120);
+
+  await dragBy(bottomResizer, 0, 160);
   const afterBottomResize = await readLayout();
-  expect(afterBottomResize.bottomHeight).toBeGreaterThan(afterRightResize.bottomHeight + 30);
-  expect(afterBottomResize.viewerHeight).toBeLessThan(afterRightResize.viewerHeight - 30);
+  expect(afterBottomResize.bottomHeight).toBeLessThan(120);
+  expect(afterBottomResize.bottomHeight).toBeGreaterThanOrEqual(68);
+  expect(afterBottomResize.bottomHeight).toBeLessThanOrEqual(74);
+  expect(afterBottomResize.viewerHeight).toBeGreaterThan(afterBottomOpen.viewerHeight + 30);
 
   expect(afterBottomResize.stored).not.toBeNull();
 
@@ -1250,6 +1256,8 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
   };
   expect(stored.imagePanelWidth).toBeCloseTo(afterBottomResize.imageWidth, 0);
   expect(stored.rightPanelWidth).toBeCloseTo(afterBottomResize.rightWidth, 0);
+  expect(stored.bottomPanelHeight).toBeGreaterThanOrEqual(72);
+  expect(stored.bottomPanelHeight).toBeLessThan(120);
   expect(Math.abs((stored.bottomPanelHeight ?? 0) - afterBottomResize.bottomHeight)).toBeLessThanOrEqual(2);
   expect(stored.imagePanelCollapsed).toBe(false);
   expect(stored.rightPanelCollapsed).toBe(false);
