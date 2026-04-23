@@ -569,7 +569,7 @@ describe('panel split sizing', () => {
     expect(getPanelSplitKeyboardAction('ArrowRight', false, 'vertical')).toBeNull();
   });
 
-  it('keeps legacy saved panel layouts open by default', () => {
+  it('keeps legacy saved panel side layouts open and bottom layout collapsed by default', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
     window.localStorage.setItem(
@@ -589,10 +589,10 @@ describe('panel split sizing', () => {
 
     expect(imageButton.getAttribute('aria-expanded')).toBe('true');
     expect(rightButton.getAttribute('aria-expanded')).toBe('true');
-    expect(bottomButton.getAttribute('aria-expanded')).toBe('true');
+    expect(bottomButton.getAttribute('aria-expanded')).toBe('false');
     expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('260px');
     expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('340px');
-    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('120px');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
   });
 
   it('toggles panel collapse buttons and restores the last expanded widths', () => {
@@ -674,20 +674,20 @@ describe('panel split sizing', () => {
 
     bottomButton.click();
 
-    expect(bottomButton.getAttribute('aria-expanded')).toBe('false');
-    expect(bottomButton.getAttribute('aria-label')).toBe('Expand bottom panel');
-    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
+    expect(bottomButton.getAttribute('aria-expanded')).toBe('true');
+    expect(bottomButton.getAttribute('aria-label')).toBe('Collapse bottom panel');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('210px');
     expect(mainLayout.style.getPropertyValue('--bottom-panel-tab-height')).toBe('18px');
-    expect(mainLayout.style.getPropertyValue('--bottom-panel-resizer-height')).toBe('0px');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-resizer-height')).toBe('0.5rem');
     expect(JSON.parse(window.localStorage.getItem('openexr-viewer:panel-splits:v1') ?? '{}')).toMatchObject({
       bottomPanelHeight: 210,
-      bottomPanelCollapsed: true
+      bottomPanelCollapsed: false
     });
 
     bottomButton.click();
 
-    expect(bottomButton.getAttribute('aria-expanded')).toBe('true');
-    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('210px');
+    expect(bottomButton.getAttribute('aria-expanded')).toBe('false');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
   });
 
   it('ignores vertical resizer keyboard input while the bottom panel is collapsed', () => {
@@ -700,16 +700,12 @@ describe('panel split sizing', () => {
     const bottomResizer = document.getElementById('bottom-panel-resizer') as HTMLElement;
     const mainLayout = document.getElementById('main-layout') as HTMLElement;
 
-    bottomButton.click();
     bottomResizer.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
 
     expect(bottomResizer.getAttribute('aria-disabled')).toBe('true');
     expect(bottomResizer.tabIndex).toBe(-1);
     expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
-    expect(JSON.parse(window.localStorage.getItem('openexr-viewer:panel-splits:v1') ?? '{}')).toMatchObject({
-      bottomPanelHeight: 210,
-      bottomPanelCollapsed: true
-    });
+    expect(window.localStorage.getItem('openexr-viewer:panel-splits:v1')).toBeNull();
 
     bottomButton.click();
     bottomResizer.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
@@ -755,17 +751,17 @@ describe('panel split sizing', () => {
     expect(onResetSettings).toHaveBeenCalledTimes(1);
     expect(imageButton.getAttribute('aria-expanded')).toBe('true');
     expect(rightButton.getAttribute('aria-expanded')).toBe('true');
-    expect(bottomButton.getAttribute('aria-expanded')).toBe('true');
+    expect(bottomButton.getAttribute('aria-expanded')).toBe('false');
     expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('220px');
     expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('320px');
-    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('120px');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
     expect(JSON.parse(window.localStorage.getItem('openexr-viewer:panel-splits:v1') ?? '{}')).toEqual({
       imagePanelWidth: 220,
       rightPanelWidth: 320,
       bottomPanelHeight: 120,
       imagePanelCollapsed: false,
       rightPanelCollapsed: false,
-      bottomPanelCollapsed: false
+      bottomPanelCollapsed: true
     });
   });
 });

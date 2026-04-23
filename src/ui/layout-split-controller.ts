@@ -36,7 +36,7 @@ const DEFAULT_PANEL_SPLIT_SIZES: PanelSplitSizes = {
 const DEFAULT_PANEL_COLLAPSE_STATE: PanelCollapseState = {
   imagePanelCollapsed: false,
   rightPanelCollapsed: false,
-  bottomPanelCollapsed: false
+  bottomPanelCollapsed: true
 };
 
 type PanelCollapseKey = keyof PanelCollapseState;

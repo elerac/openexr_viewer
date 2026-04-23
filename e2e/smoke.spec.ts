@@ -850,6 +850,10 @@ test('resets settings back to the default budget and panel layout', async ({ pag
 
   await dragBy(imageResizer, 48, 0);
   await dragBy(rightResizer, -48, 0);
+  await bottomCollapseButton.click();
+  await page.waitForTimeout(100);
+  await expect(bottomCollapseButton).toHaveAttribute('aria-expanded', 'true');
+  await expect(bottomResizer).toBeVisible();
   await dragBy(bottomResizer, 0, -48);
   await imageCollapseButton.click();
   await rightCollapseButton.click();
@@ -878,10 +882,10 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   const afterReset = await readLayout();
   expect(Math.abs(afterReset.imageWidth - 220)).toBeLessThanOrEqual(2);
   expect(Math.abs(afterReset.rightWidth - 320)).toBeLessThanOrEqual(2);
-  expect(Math.abs(afterReset.bottomHeight - 120)).toBeLessThanOrEqual(2);
+  expect(afterReset.bottomHeight).toBeLessThanOrEqual(2);
   expect(afterReset.imageExpanded).toBe('true');
   expect(afterReset.rightExpanded).toBe('true');
-  expect(afterReset.bottomExpanded).toBe('true');
+  expect(afterReset.bottomExpanded).toBe('false');
   expect(afterReset.storedBudget).toBe('256');
   expect(JSON.parse(afterReset.storedPanel ?? '{}')).toEqual({
     imagePanelWidth: 220,
@@ -889,7 +893,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
     bottomPanelHeight: 120,
     imagePanelCollapsed: false,
     rightPanelCollapsed: false,
-    bottomPanelCollapsed: false
+    bottomPanelCollapsed: true
   });
 
   await page.reload();
@@ -908,10 +912,10 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   const afterReload = await readLayout();
   expect(Math.abs(afterReload.imageWidth - 220)).toBeLessThanOrEqual(2);
   expect(Math.abs(afterReload.rightWidth - 320)).toBeLessThanOrEqual(2);
-  expect(Math.abs(afterReload.bottomHeight - 120)).toBeLessThanOrEqual(2);
+  expect(afterReload.bottomHeight).toBeLessThanOrEqual(2);
   expect(afterReload.imageExpanded).toBe('true');
   expect(afterReload.rightExpanded).toBe('true');
-  expect(afterReload.bottomExpanded).toBe('true');
+  expect(afterReload.bottomExpanded).toBe('false');
   expect(afterReload.storedBudget).toBe('256');
   expect(JSON.parse(afterReload.storedPanel ?? '{}')).toEqual({
     imagePanelWidth: 220,
@@ -919,7 +923,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
     bottomPanelHeight: 120,
     imagePanelCollapsed: false,
     rightPanelCollapsed: false,
-    bottomPanelCollapsed: false
+    bottomPanelCollapsed: true
   });
 });
 
@@ -947,7 +951,7 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
 
   await expect(imageResizer).toBeVisible();
   await expect(rightResizer).toBeVisible();
-  await expect(bottomResizer).toBeVisible();
+  await expect(bottomResizer).toBeHidden();
   await expect(imageCollapseButton).toBeVisible();
   await expect(rightCollapseButton).toBeVisible();
   await expect(bottomCollapseButton).toBeVisible();
@@ -1055,6 +1059,7 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
   expect(Math.abs(initial.bottomButtonWidth - initial.bottomShellWidth)).toBeLessThan(3);
   expect(Math.abs(initial.bottomButtonTop - initial.bottomShellTop)).toBeLessThan(2);
   expect(Math.abs(initial.bottomShellWidth - initial.mainWidth)).toBeLessThan(3);
+  expect(initial.bottomHeight).toBeLessThanOrEqual(2);
 
   await dragBy(imageResizer, 48, 0);
   const afterImageResize = await readLayout();
@@ -1066,6 +1071,11 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
   expect(afterRightResize.rightWidth).toBeGreaterThan(afterImageResize.rightWidth + 30);
   expect(afterRightResize.canvasWidth).toBeGreaterThan(0);
   expect(afterRightResize.canvasHeight).toBeGreaterThan(0);
+
+  await bottomCollapseButton.click();
+  await page.waitForTimeout(100);
+  await expect(bottomCollapseButton).toHaveAttribute('aria-expanded', 'true');
+  await expect(bottomResizer).toBeVisible();
 
   await dragBy(bottomResizer, 0, -48);
   const afterBottomResize = await readLayout();
