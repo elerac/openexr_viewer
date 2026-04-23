@@ -18,9 +18,15 @@ interface ChannelThumbnailTileRefs {
 }
 
 const tileRefs = new WeakMap<HTMLElement, ChannelThumbnailTileRefs>();
+const DEFAULT_STRIP_PADDING_TOP_PX = 7.2;
+const DEFAULT_STRIP_PADDING_BOTTOM_PX = 8.8;
+const DEFAULT_TILE_PADDING_PX = 5.12;
+const DEFAULT_TILE_GAP_PX = 3.84;
+const DEFAULT_TILE_BORDER_PX = 1;
 
 export class ChannelThumbnailStrip implements Disposable {
   private readonly disposables = new DisposableBag();
+  private readonly resizeObserver: ResizeObserver;
   private isLoading = false;
   private hasActiveImage = false;
   private restoreFocusAfterLoading = false;
@@ -42,6 +48,13 @@ export class ChannelThumbnailStrip implements Disposable {
     });
     this.disposables.addEventListener(this.elements.channelThumbnailStrip, 'keydown', (event) => {
       this.handleKeyDown(event);
+    });
+    this.resizeObserver = new ResizeObserver(() => {
+      this.syncTileSizing();
+    });
+    this.resizeObserver.observe(this.elements.channelThumbnailStrip);
+    this.disposables.add(() => {
+      this.resizeObserver.disconnect();
     });
   }
 
@@ -125,6 +138,7 @@ export class ChannelThumbnailStrip implements Disposable {
         return tile;
       }
     );
+    this.syncTileSizing();
 
     if (shouldRestoreFocus) {
       focusSelectedTile(this.elements.channelThumbnailStrip);
@@ -186,6 +200,54 @@ export class ChannelThumbnailStrip implements Disposable {
     nextTile.focus();
     nextTile.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
     this.chooseValue(nextTile.dataset.channelValue ?? '');
+  }
+
+  private syncTileSizing(): void {
+    const strip = this.elements.channelThumbnailStrip;
+    const stripStyle = getComputedStyle(strip);
+    const stripRect = strip.getBoundingClientRect();
+    const stripContentHeight = Math.max(
+      0,
+      stripRect.height -
+        readCssPixels(stripStyle.paddingTop, DEFAULT_STRIP_PADDING_TOP_PX) -
+        readCssPixels(stripStyle.paddingBottom, DEFAULT_STRIP_PADDING_BOTTOM_PX)
+    );
+
+    for (const tile of strip.querySelectorAll<HTMLButtonElement>('.channel-thumbnail-tile')) {
+      const refs = tileRefs.get(tile);
+      if (!refs) {
+        continue;
+      }
+
+      const tileStyle = getComputedStyle(tile);
+      const borderTop = readCssPixels(tileStyle.borderTopWidth, DEFAULT_TILE_BORDER_PX);
+      const borderRight = readCssPixels(tileStyle.borderRightWidth, DEFAULT_TILE_BORDER_PX);
+      const borderBottom = readCssPixels(tileStyle.borderBottomWidth, DEFAULT_TILE_BORDER_PX);
+      const borderLeft = readCssPixels(tileStyle.borderLeftWidth, DEFAULT_TILE_BORDER_PX);
+      const paddingTop = readCssPixels(tileStyle.paddingTop, DEFAULT_TILE_PADDING_PX);
+      const paddingRight = readCssPixels(tileStyle.paddingRight, DEFAULT_TILE_PADDING_PX);
+      const paddingBottom = readCssPixels(tileStyle.paddingBottom, DEFAULT_TILE_PADDING_PX);
+      const paddingLeft = readCssPixels(tileStyle.paddingLeft, DEFAULT_TILE_PADDING_PX);
+      const rowGap = readCssPixels(tileStyle.rowGap || tileStyle.gap, DEFAULT_TILE_GAP_PX);
+      const labelHeight = refs.label.getBoundingClientRect().height;
+      const tileRect = tile.getBoundingClientRect();
+      const tileContentHeight = Math.max(
+        0,
+        (tileRect.height > 0 ? tileRect.height : stripContentHeight + borderTop + borderBottom) -
+          borderTop -
+          borderBottom
+      );
+      const previewHeight = Math.max(0, tileContentHeight - paddingTop - paddingBottom - rowGap - labelHeight);
+      const previewWidth = previewHeight * resolveThumbnailAspectRatioValue(
+        refs.preview.style.getPropertyValue('--thumbnail-aspect-ratio')
+      );
+      const tileWidth = previewWidth + paddingLeft + paddingRight + borderLeft + borderRight;
+
+      tile.style.setProperty('--channel-thumbnail-tile-width', formatPixels(tileWidth));
+      refs.preview.style.setProperty('--channel-thumbnail-preview-height', formatPixels(previewHeight));
+      refs.preview.style.setProperty('--channel-thumbnail-preview-width', formatPixels(previewWidth));
+      refs.label.style.setProperty('--channel-thumbnail-label-max-width', formatPixels(previewWidth));
+    }
   }
 }
 
@@ -286,11 +348,8 @@ function samePreview(current: HTMLElement, next: HTMLElement): boolean {
 }
 
 function resolveThumbnailAspectRatioStyleValue(thumbnailAspectRatio: number | null): string {
-  if (!thumbnailAspectRatio || !Number.isFinite(thumbnailAspectRatio) || thumbnailAspectRatio <= 0) {
-    return '1 / 1';
-  }
-
-  return thumbnailAspectRatio.toString();
+  const aspectRatio = resolveThumbnailAspectRatioValue(thumbnailAspectRatio);
+  return aspectRatio === 1 ? '1 / 1' : aspectRatio.toString();
 }
 
 function getEnabledTiles(container: HTMLElement): HTMLButtonElement[] {
@@ -300,4 +359,41 @@ function getEnabledTiles(container: HTMLElement): HTMLButtonElement[] {
 function focusSelectedTile(container: HTMLElement): void {
   const selectedTile = getEnabledTiles(container).find((tile) => tile.getAttribute('aria-selected') === 'true');
   selectedTile?.focus();
+}
+
+function resolveThumbnailAspectRatioValue(value: number | string | null): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value > 0 ? value : 1;
+  }
+
+  if (typeof value !== 'string') {
+    return 1;
+  }
+
+  const normalized = value.trim();
+  if (!normalized) {
+    return 1;
+  }
+
+  if (normalized.includes('/')) {
+    const [numeratorText, denominatorText] = normalized.split('/', 2).map((part) => part.trim());
+    const numerator = Number(numeratorText);
+    const denominator = Number(denominatorText);
+    if (Number.isFinite(numerator) && Number.isFinite(denominator) && numerator > 0 && denominator > 0) {
+      return numerator / denominator;
+    }
+    return 1;
+  }
+
+  const aspectRatio = Number(normalized);
+  return Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1;
+}
+
+function readCssPixels(value: string, fallback: number): number {
+  const pixels = Number.parseFloat(value);
+  return Number.isFinite(pixels) ? pixels : fallback;
+}
+
+function formatPixels(value: number): string {
+  return `${Math.max(0, Math.round(value * 100) / 100)}px`;
 }

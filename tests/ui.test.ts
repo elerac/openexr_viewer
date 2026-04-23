@@ -20,11 +20,19 @@ import {
   type PanelSplitMetrics
 } from '../src/ui';
 
+interface ResizeObserverRegistration {
+  callback: ResizeObserverCallback;
+  observedElements: Element[];
+}
+
+const resizeObserverRegistrations: ResizeObserverRegistration[] = [];
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
   window.localStorage.clear();
+  resizeObserverRegistrations.length = 0;
 });
 
 describe('progressive loading overlay disclosure', () => {
@@ -1209,7 +1217,7 @@ describe('ui disposal', () => {
     expect(onOpenFileClick).not.toHaveBeenCalled();
     expect(onFilesDropped).not.toHaveBeenCalled();
     expect(onReorderOpenedImage).not.toHaveBeenCalled();
-    expect(disconnectSpy).toHaveBeenCalledTimes(1);
+    expect(disconnectSpy).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -1459,6 +1467,99 @@ describe('channel thumbnail strip', () => {
     expect(document.querySelectorAll('#channel-thumbnail-strip .channel-thumbnail-image')).toHaveLength(2);
   });
 
+  it('sizes thumbnail previews from the available strip height', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'beauty.A', 'depth.Z'];
+    const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: 'data:image/png;base64,AAAA',
+      thumbnailAspectRatio: 2
+    }));
+    const strip = document.getElementById('channel-thumbnail-strip') as HTMLElement;
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: 'beauty.A'
+    }, channelThumbnailItems);
+
+    const tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
+    expect(tiles).toHaveLength(2);
+
+    strip.style.paddingTop = '6px';
+    strip.style.paddingBottom = '8px';
+    for (const tile of tiles) {
+      tile.style.padding = '4px';
+      tile.style.rowGap = '3px';
+      tile.style.border = '1px solid transparent';
+    }
+
+    mockChannelThumbnailStripGeometry({ stripHeight: 120, tileHeight: 106, labelHeight: 16 });
+    triggerResizeObserversForElement(strip);
+
+    const firstTile = tiles[0]!;
+    const firstPreview = firstTile.querySelector('.channel-thumbnail-tile-preview') as HTMLElement;
+    const firstLabel = firstTile.querySelector('.channel-thumbnail-tile-label') as HTMLElement;
+
+    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-height')).toBe('77px');
+    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-width')).toBe('154px');
+    expect(firstTile.style.getPropertyValue('--channel-thumbnail-tile-width')).toBe('164px');
+    expect(firstLabel.style.getPropertyValue('--channel-thumbnail-label-max-width')).toBe('154px');
+  });
+
+  it('recomputes thumbnail sizes when the strip height changes', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'beauty.A', 'depth.Z'];
+    const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: 'data:image/png;base64,AAAA',
+      thumbnailAspectRatio: 2
+    }));
+    const strip = document.getElementById('channel-thumbnail-strip') as HTMLElement;
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: 'beauty.A'
+    }, channelThumbnailItems);
+
+    const tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
+    strip.style.paddingTop = '6px';
+    strip.style.paddingBottom = '8px';
+    for (const tile of tiles) {
+      tile.style.padding = '4px';
+      tile.style.rowGap = '3px';
+      tile.style.border = '1px solid transparent';
+    }
+
+    mockChannelThumbnailStripGeometry({ stripHeight: 120, tileHeight: 106, labelHeight: 16 });
+    triggerResizeObserversForElement(strip);
+
+    const firstTile = tiles[0]!;
+    const firstPreview = firstTile.querySelector('.channel-thumbnail-tile-preview') as HTMLElement;
+
+    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-height')).toBe('77px');
+    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-width')).toBe('154px');
+    expect(firstTile.style.getPropertyValue('--channel-thumbnail-tile-width')).toBe('164px');
+
+    mockChannelThumbnailStripGeometry({ stripHeight: 160, tileHeight: 146, labelHeight: 18 });
+    triggerResizeObserversForElement(strip);
+
+    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-height')).toBe('115px');
+    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-width')).toBe('230px');
+    expect(firstTile.style.getPropertyValue('--channel-thumbnail-tile-width')).toBe('240px');
+  });
+
   it('preserves focus across repeated horizontal keyboard navigation in the bottom strip', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
@@ -1576,11 +1677,35 @@ function installUiFixture(): void {
   const html = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
   const bodyMarkup = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1] ?? html;
   document.body.innerHTML = bodyMarkup;
+  resizeObserverRegistrations.length = 0;
 
   class ResizeObserverMock {
-    observe(): void {}
-    unobserve(): void {}
-    disconnect(): void {}
+    private readonly registration: ResizeObserverRegistration;
+
+    constructor(callback: ResizeObserverCallback) {
+      this.registration = {
+        callback,
+        observedElements: []
+      };
+      resizeObserverRegistrations.push(this.registration);
+    }
+
+    observe(target: Element): void {
+      if (!this.registration.observedElements.includes(target)) {
+        this.registration.observedElements.push(target);
+      }
+    }
+
+    unobserve(target: Element): void {
+      const index = this.registration.observedElements.indexOf(target);
+      if (index >= 0) {
+        this.registration.observedElements.splice(index, 1);
+      }
+    }
+
+    disconnect(): void {
+      this.registration.observedElements.length = 0;
+    }
   }
 
   vi.stubGlobal('ResizeObserver', ResizeObserverMock);
@@ -1633,6 +1758,57 @@ function mockOpenedFilesListGeometry(rowHeight = 20): Element[] {
   });
 
   return rows;
+}
+
+function mockChannelThumbnailStripGeometry(
+  args: {
+    stripHeight: number;
+    stripWidth?: number;
+    tileHeight: number;
+    tileWidth?: number;
+    labelHeight: number;
+  }
+): HTMLButtonElement[] {
+  const strip = document.getElementById('channel-thumbnail-strip') as HTMLElement;
+  const tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
+  const tileWidth = args.tileWidth ?? 120;
+
+  mockDomRect(strip, {
+    top: 0,
+    bottom: args.stripHeight,
+    height: args.stripHeight,
+    width: args.stripWidth ?? 360
+  });
+
+  tiles.forEach((tile, index) => {
+    const left = index * (tileWidth + 8);
+    mockDomRect(tile, {
+      top: 0,
+      bottom: args.tileHeight,
+      height: args.tileHeight,
+      left,
+      width: tileWidth
+    });
+
+    const label = tile.querySelector('.channel-thumbnail-tile-label') as HTMLElement;
+    mockDomRect(label, {
+      top: args.tileHeight - args.labelHeight,
+      bottom: args.tileHeight,
+      height: args.labelHeight,
+      left,
+      width: tileWidth
+    });
+  });
+
+  return tiles;
+}
+
+function triggerResizeObserversForElement(element: Element): void {
+  resizeObserverRegistrations
+    .filter((registration) => registration.observedElements.includes(element))
+    .forEach((registration) => {
+      registration.callback([], {} as ResizeObserver);
+    });
 }
 
 function mockDomRect(
