@@ -225,7 +225,7 @@ describe('session controller shim', () => {
     expect(core.getState().sessionState.displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
   });
 
-  it('carries current image view and lock state when loading a new image', async () => {
+  it('carries current image view, lock state, and ROI when loading a new image', async () => {
     const decodeBytes = vi
       .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
       .mockResolvedValueOnce(createDecodedImage(6, 6))
@@ -248,6 +248,10 @@ describe('session controller shim', () => {
         panoramaHfovDeg: 100
       }
     });
+    core.dispatch({
+      type: 'roiSet',
+      roi: { x0: 2, y0: 3, x1: 6, y1: 7 }
+    });
 
     await controller.enqueueFiles([createFile('second.exr')]);
 
@@ -256,11 +260,12 @@ describe('session controller shim', () => {
       zoom: 3,
       panX: 5,
       panY: 6,
-      lockedPixel: { ix: 1, iy: 1 }
+      lockedPixel: { ix: 1, iy: 1 },
+      roi: { x0: 2, y0: 3, x1: 6, y1: 7 }
     });
   });
 
-  it('switches active sessions while carrying current view and lock state', async () => {
+  it('switches active sessions while carrying current view, lock state, and ROI', async () => {
     const decodeBytes = vi
       .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
       .mockResolvedValueOnce(createDecodedImage(6, 6))
@@ -294,6 +299,10 @@ describe('session controller shim', () => {
         panoramaHfovDeg: 100
       }
     });
+    core.dispatch({
+      type: 'roiSet',
+      roi: { x0: 2, y0: 1, x1: 4, y1: 5 }
+    });
 
     controller.switchActiveSession(firstSession!.id);
 
@@ -304,8 +313,51 @@ describe('session controller shim', () => {
       panY: 5,
       exposureEv: 2,
       displaySelection: createChannelMonoSelection('R'),
-      lockedPixel: { ix: 1, iy: 1 }
+      lockedPixel: { ix: 1, iy: 1 },
+      roi: { x0: 2, y0: 1, x1: 4, y1: 5 }
     });
+  });
+
+  it('clamps carried ROI to the target image when switching sessions', async () => {
+    const decodeBytes = vi
+      .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
+      .mockResolvedValueOnce(createDecodedImage(4, 4))
+      .mockResolvedValueOnce(createDecodedImage(8, 8));
+    const { controller, core } = createController({ decodeBytes });
+
+    await controller.enqueueFiles([createFile('first.exr')]);
+    await controller.enqueueFiles([createFile('second.exr')]);
+
+    const [firstSession] = controller.getSessions();
+    core.dispatch({
+      type: 'roiSet',
+      roi: { x0: 2, y0: 1, x1: 6, y1: 5 }
+    });
+
+    controller.switchActiveSession(firstSession!.id);
+
+    expect(core.getState().sessionState.roi).toEqual({ x0: 2, y0: 1, x1: 3, y1: 3 });
+  });
+
+  it('clears carried ROI when it no longer intersects the target image on session switch', async () => {
+    const decodeBytes = vi
+      .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
+      .mockResolvedValueOnce(createDecodedImage(4, 4))
+      .mockResolvedValueOnce(createDecodedImage(8, 8));
+    const { controller, core } = createController({ decodeBytes });
+
+    await controller.enqueueFiles([createFile('first.exr')]);
+    await controller.enqueueFiles([createFile('second.exr')]);
+
+    const [firstSession] = controller.getSessions();
+    core.dispatch({
+      type: 'roiSet',
+      roi: { x0: 5, y0: 5, x1: 7, y1: 7 }
+    });
+
+    controller.switchActiveSession(firstSession!.id);
+
+    expect(core.getState().sessionState.roi).toBeNull();
   });
 
   it('reloads the active session with remapped session state', async () => {

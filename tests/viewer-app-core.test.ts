@@ -171,7 +171,7 @@ describe('viewer app core', () => {
     expect(core.getState().sessionState).toEqual(createInitialState());
   });
 
-  it('keeps ROI on layer switches and restores session-specific ROIs when switching sessions', () => {
+  it('keeps ROI on layer switches and carries the current ROI across session switches', () => {
     const core = new ViewerAppCore();
     const layeredDecoded: DecodedExrImage = {
       width: 2,
@@ -193,7 +193,7 @@ describe('viewer app core', () => {
     core.dispatch({ type: 'roiSet', roi: { x0: 1, y0: 0, x1: 1, y1: 0 } });
     core.dispatch({ type: 'activeSessionSwitched', sessionId: first.id });
 
-    expect(core.getState().sessionState.roi).toEqual({ x0: 0, y0: 0, x1: 1, y1: 0 });
+    expect(core.getState().sessionState.roi).toEqual({ x0: 1, y0: 0, x1: 1, y1: 0 });
 
     core.dispatch({ type: 'activeSessionSwitched', sessionId: second.id });
 

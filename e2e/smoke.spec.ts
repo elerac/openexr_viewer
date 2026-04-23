@@ -2041,6 +2041,75 @@ test('creates ROI with shift-drag and keeps ROI editing disabled in panorama mod
   await expect(roiBounds).toHaveText(initialBounds);
 });
 
+test('carries ROI across open-file switches', async ({ page }) => {
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  const openedImages = page.locator('#opened-images-select');
+  const viewer = page.locator('#viewer-container');
+  const roiEmptyState = page.locator('#roi-empty-state');
+  const roiDetails = page.locator('#roi-details');
+  const roiBounds = page.locator('#roi-bounds');
+  const dragRoi = async (
+    start: { xRatio: number; yRatio: number },
+    end: { xRatio: number; yRatio: number }
+  ) => {
+    const box = await viewer.boundingBox();
+    if (!box) {
+      throw new Error('Viewer container is not visible.');
+    }
+
+    await page.keyboard.down('Shift');
+    await page.mouse.move(box.x + box.width * start.xRatio, box.y + box.height * start.yRatio);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * end.xRatio, box.y + box.height * end.yRatio, { steps: 8 });
+    await page.mouse.up();
+    await page.keyboard.up('Shift');
+  };
+
+  await page.setInputFiles('#file-input', {
+    name: 'scalar_z.exr',
+    mimeType: 'image/exr',
+    buffer: buildScalarChannelExr()
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('scalar_z.exr', { timeout: 30000 });
+  await expect(roiEmptyState).toBeVisible();
+
+  await dragRoi({ xRatio: 0.25, yRatio: 0.25 }, { xRatio: 0.75, yRatio: 0.75 });
+
+  await expect(roiDetails).toBeVisible();
+  const initialBounds = (await roiBounds.textContent())?.trim() ?? '';
+  expect(initialBounds).toMatch(/^x \d+\.\.\d+  y \d+\.\.\d+$/);
+
+  await page.setInputFiles('#file-input', {
+    name: 'spectral.exr',
+    mimeType: 'image/exr',
+    buffer: buildSpectralExr()
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('spectral.exr', { timeout: 30000 });
+  await expect(roiDetails).toBeVisible();
+
+  await dragRoi({ xRatio: 0.25, yRatio: 0.25 }, { xRatio: 0.75, yRatio: 0.25 });
+
+  const updatedBounds = (await roiBounds.textContent())?.trim() ?? '';
+  expect(updatedBounds).toMatch(/^x \d+\.\.\d+  y \d+\.\.\d+$/);
+  expect(updatedBounds).not.toBe(initialBounds);
+
+  const scalarRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'scalar_z.exr' });
+  await scalarRow.locator('.opened-file-label').click();
+
+  await expect(openedImages.locator('option:checked')).toContainText('scalar_z.exr');
+  await expect(roiDetails).toBeVisible();
+  await expect(roiEmptyState).toBeHidden();
+  await expect(roiBounds).toHaveText(updatedBounds);
+});
+
 function buildScalarChannelExr(): Buffer {
   ensureExrEncoderInitialized();
 

@@ -17,7 +17,7 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
 - Multi-image sessions:
   - New image opens as active while previously opened images are kept in memory.
   - `Opened Images` list allows switching active image by filename.
-  - Multi-layer EXRs expose a `Layer` selector, and session state follows the implementation: selected layer is preserved per opened session, while display channel mapping and the active probe position carry across session switches when valid for the target image. The active viewer mode is preserved across session switches, and each session remembers separate image-view and panorama-view camera state.
+  - Multi-layer EXRs expose a `Layer` selector, and session state follows the implementation: selected layer is preserved per opened session, while display channel mapping, the active probe position, and the committed ROI carry across session switches when valid for the target image. The active viewer mode is preserved across session switches, and each session remembers separate image-view and panorama-view camera state.
   - Reorder opened images directly by click-hold-moving a filename row in the `Opened Images` list.
   - Retained layer source textures use a real GPU-resident LRU cache budget instead of an active-session-only policy. The currently bound display channels stay protected; other retained layer textures, including other layers from the active EXR, remain evictable under the global budget. The default retained-cache cap is `256 MB`, configurable from the top-bar `Settings` menu with fixed presets (`64`, `128`, `256`, `512`, `1024` MB).
   - Per-file row `Reload` action re-decodes the selected session from its original source.
@@ -28,7 +28,7 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
 - Visible loading indicator while large EXR files are decoding/loading.
 - ROI inspector:
   - Shows bounds, size, total pixels, per-channel valid sample counts, and `min` / `mean` / `max` for the active display selection.
-  - ROI is session-specific, survives view-mode switches, and can be cleared from the Inspector.
+  - ROI survives view-mode switches, carries across image switches and new loads, clamps to the target image bounds when needed, and can be cleared from the Inspector.
 - Exposure control: slider + numeric input (`-10` to `+10` EV, step `0.1`).
 - Visualization mode buttons:
   - `None` is the default RGB display path.
