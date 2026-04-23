@@ -23,6 +23,7 @@ const CHANNEL_OPTIONS_MAX_VISIBLE_ROWS = 10;
 
 interface ChannelPanelCallbacks {
   onChannelViewChange: (value: string) => void;
+  onChannelViewRowClick: () => void;
   onSplitToggle: (includeSplitRgbChannels: boolean) => void;
 }
 
@@ -103,6 +104,7 @@ export class ChannelPanel implements Disposable {
         return;
       }
 
+      this.callbacks.onChannelViewRowClick();
       this.chooseChannelViewValue(row.dataset.channelValue ?? '');
     });
     this.disposables.addEventListener(this.elements.channelViewList, 'keydown', (event) => {
@@ -122,6 +124,32 @@ export class ChannelPanel implements Disposable {
 
     this.disposed = true;
     this.disposables.dispose();
+  }
+
+  stepSelection(delta: -1 | 1): boolean {
+    if (
+      this.disposed ||
+      this.elements.rgbGroupSelect.disabled ||
+      this.elements.channelViewList.hidden ||
+      this.channelViewItems.length === 0
+    ) {
+      return false;
+    }
+
+    const currentValue = this.selectedValue || this.elements.rgbGroupSelect.value;
+    const currentIndex = this.channelViewItems.findIndex((item) => item.value === currentValue);
+    const anchorIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex = Math.max(0, Math.min(this.channelViewItems.length - 1, anchorIndex + delta));
+    const nextValue = this.channelViewItems[nextIndex]?.value ?? null;
+    if (!nextValue) {
+      return false;
+    }
+
+    if (nextValue !== this.selectedValue) {
+      this.chooseChannelViewValue(nextValue);
+    }
+
+    return true;
   }
 
   setLoading(loading: boolean): void {

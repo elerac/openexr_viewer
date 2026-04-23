@@ -21,6 +21,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 
 interface OpenedImagesPanelCallbacks {
   onOpenedImageSelected: (sessionId: string) => void;
+  onOpenedImageRowClick: () => void;
   onReorderOpenedImage: (
     draggedSessionId: string,
     targetSessionId: string,
@@ -122,6 +123,7 @@ export class OpenedImagesPanel implements Disposable {
 
       event.preventDefault();
       row.focus();
+      this.callbacks.onOpenedImageRowClick();
 
       const sessionId = row.dataset.sessionId ?? '';
       this.elements.openedImagesSelect.value = sessionId;
@@ -182,6 +184,32 @@ export class OpenedImagesPanel implements Disposable {
 
   getOpenedImageCount(): number {
     return this.openedImageCount;
+  }
+
+  stepSelection(delta: -1 | 1): boolean {
+    if (
+      this.disposed ||
+      this.elements.openedImagesSelect.disabled ||
+      this.elements.openedFilesList.hidden ||
+      this.openedImageItems.length === 0
+    ) {
+      return false;
+    }
+
+    const currentId = this.openedImagesActiveId ?? this.elements.openedImagesSelect.value;
+    const currentIndex = this.openedImageItems.findIndex((item) => item.id === currentId);
+    const anchorIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex = Math.max(0, Math.min(this.openedImageItems.length - 1, anchorIndex + delta));
+    const nextSessionId = this.openedImageItems[nextIndex]?.id ?? null;
+    if (!nextSessionId) {
+      return false;
+    }
+
+    if (nextSessionId !== this.openedImagesActiveId) {
+      this.chooseOpenedImage(nextSessionId);
+    }
+
+    return true;
   }
 
   setLoading(loading: boolean): void {

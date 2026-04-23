@@ -2415,6 +2415,410 @@ describe('channel thumbnail strip', () => {
   });
 });
 
+describe('global panel arrow navigation', () => {
+  it('uses ArrowUp and ArrowDown on the document to move the open-files selection by default', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onOpenedImageSelected = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image-a.exr' },
+      { id: 'session-2', label: 'image-b.exr' },
+      { id: 'session-3', label: 'image-c.exr' }
+    ], 'session-2');
+
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+
+    expect(onOpenedImageSelected).toHaveBeenNthCalledWith(1, 'session-3');
+    expect(onOpenedImageSelected).toHaveBeenNthCalledWith(2, 'session-2');
+    expect((document.getElementById('opened-images-select') as HTMLSelectElement).value).toBe('session-2');
+  });
+
+  it('uses ArrowLeft and ArrowRight on the document to move the bottom channel selection', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onRgbGroupChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onRgbGroupChange }));
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'depth.Z', 'mask'];
+    const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    }));
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, channelThumbnailItems);
+
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+
+    expect(onRgbGroupChange).toHaveBeenNthCalledWith(1, {
+      kind: 'channelMono',
+      channel: 'depth.Z',
+      alpha: null
+    });
+    expect(onRgbGroupChange).toHaveBeenNthCalledWith(2, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    });
+  });
+
+  it('switches ArrowUp and ArrowDown to Channel View after a channel-view row click', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onOpenedImageSelected = vi.fn();
+    const onRgbGroupChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected, onRgbGroupChange }));
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'depth.Z'];
+
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image-a.exr' },
+      { id: 'session-2', label: 'image-b.exr' }
+    ], 'session-1');
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    })));
+
+    const channelRows = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-view-list .channel-view-row'));
+    channelRows[0]?.click();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+
+    expect(onRgbGroupChange).toHaveBeenLastCalledWith({
+      kind: 'channelMono',
+      channel: 'depth.Z',
+      alpha: null
+    });
+    expect(onOpenedImageSelected).not.toHaveBeenCalled();
+    expect((document.getElementById('rgb-group-select') as HTMLSelectElement).value).toBe('channel:depth.Z');
+  });
+
+  it('switches ArrowUp and ArrowDown back to Open Files after an open-files row click', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onOpenedImageSelected = vi.fn();
+    const onRgbGroupChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected, onRgbGroupChange }));
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'depth.Z'];
+
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image-a.exr' },
+      { id: 'session-2', label: 'image-b.exr' },
+      { id: 'session-3', label: 'image-c.exr' }
+    ], 'session-1');
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    })));
+
+    const channelRows = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-view-list .channel-view-row'));
+    channelRows[0]?.click();
+
+    const openedFileRows = mockOpenedFilesListGeometry() as HTMLDivElement[];
+    openedFileRows[0]?.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      button: 0,
+      clientY: 10
+    }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    openedFileRows[0]?.blur();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+
+    expect(onOpenedImageSelected).toHaveBeenLastCalledWith('session-2');
+    expect((document.getElementById('opened-images-select') as HTMLSelectElement).value).toBe('session-2');
+    expect(onRgbGroupChange).not.toHaveBeenCalledWith({
+      kind: 'channelMono',
+      channel: 'depth.Z',
+      alpha: null
+    });
+  });
+
+  it('does not switch the vertical target when only the Channel View toggle is clicked', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onOpenedImageSelected = vi.fn();
+    const onRgbGroupChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected, onRgbGroupChange }));
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'depth.Z'];
+
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image-a.exr' },
+      { id: 'session-2', label: 'image-b.exr' }
+    ], 'session-1');
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    })));
+
+    (document.getElementById('channel-view-toggle') as HTMLButtonElement).click();
+    (document.getElementById('channel-view-toggle') as HTMLButtonElement).click();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+
+    expect(onOpenedImageSelected).toHaveBeenLastCalledWith('session-2');
+    expect(onRgbGroupChange).not.toHaveBeenCalled();
+  });
+
+  it('ignores global arrow routing while the export dialog is open', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onOpenedImageSelected = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image-a.exr' },
+      { id: 'session-2', label: 'image-b.exr' }
+    ], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    (document.getElementById('export-image-button') as HTMLButtonElement).click();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+
+    expect(onOpenedImageSelected).not.toHaveBeenCalled();
+    expect((document.getElementById('opened-images-select') as HTMLSelectElement).value).toBe('session-1');
+  });
+
+  it('ignores global arrow routing while a top menu is open', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onOpenedImageSelected = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image-a.exr' },
+      { id: 'session-2', label: 'image-b.exr' }
+    ], 'session-1');
+
+    (document.getElementById('file-menu-button') as HTMLButtonElement).click();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+
+    expect(onOpenedImageSelected).not.toHaveBeenCalled();
+    expect((document.getElementById('opened-images-select') as HTMLSelectElement).value).toBe('session-1');
+  });
+
+  it('ignores global arrow routing from editable controls', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onOpenedImageSelected = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image-a.exr' },
+      { id: 'session-2', label: 'image-b.exr' }
+    ], 'session-1');
+
+    const input = document.createElement('input');
+    document.body.append(input);
+    input.focus();
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+
+    expect(onOpenedImageSelected).not.toHaveBeenCalled();
+    expect((document.getElementById('opened-images-select') as HTMLSelectElement).value).toBe('session-1');
+  });
+
+  it('does not handle a focused strip tile twice when the local handler already consumed the arrow key', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onRgbGroupChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onRgbGroupChange }));
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
+    const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    }));
+    const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, channelThumbnailItems);
+
+    splitToggle.click();
+    onRgbGroupChange.mockClear();
+
+    const tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
+    tiles[0]?.focus();
+    tiles[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+
+    expect(onRgbGroupChange).toHaveBeenCalledTimes(1);
+    expect(onRgbGroupChange).toHaveBeenCalledWith({
+      kind: 'channelMono',
+      channel: 'beauty.G',
+      alpha: null
+    });
+  });
+
+  it('keeps global left and right routing active while an open-files row is focused', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onRgbGroupChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onRgbGroupChange }));
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'depth.Z'];
+
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image-a.exr' },
+      { id: 'session-2', label: 'image-b.exr' }
+    ], 'session-1');
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    })));
+
+    const openedFileRows = mockOpenedFilesListGeometry() as HTMLDivElement[];
+    openedFileRows[0]?.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      button: 0,
+      clientY: 10
+    }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    onRgbGroupChange.mockClear();
+
+    openedFileRows[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+
+    expect(onRgbGroupChange).toHaveBeenCalledTimes(1);
+    expect(onRgbGroupChange).toHaveBeenCalledWith({
+      kind: 'channelMono',
+      channel: 'depth.Z',
+      alpha: null
+    });
+  });
+
+  it('keeps global up and down routing active while a bottom-strip tile is focused', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onOpenedImageSelected = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected }));
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'depth.Z'];
+
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image-a.exr' },
+      { id: 'session-2', label: 'image-b.exr' }
+    ], 'session-1');
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    })));
+
+    const tile = document.querySelector<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile');
+    tile?.focus();
+
+    tile?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+
+    expect(onOpenedImageSelected).toHaveBeenCalledTimes(1);
+    expect(onOpenedImageSelected).toHaveBeenCalledWith('session-2');
+  });
+
+  it('does nothing for global horizontal routing when the bottom panel is collapsed', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onRgbGroupChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onRgbGroupChange }));
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'depth.Z'];
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    })));
+
+    (document.getElementById('bottom-panel-collapse-button') as HTMLButtonElement).click();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+
+    expect(onRgbGroupChange).not.toHaveBeenCalled();
+  });
+
+  it('falls back to Open Files when Channel View was active but becomes unavailable', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onOpenedImageSelected = vi.fn();
+    const onRgbGroupChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected, onRgbGroupChange }));
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'depth.Z'];
+
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image-a.exr' },
+      { id: 'session-2', label: 'image-b.exr' }
+    ], 'session-1');
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    })));
+
+    const channelRows = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-view-list .channel-view-row'));
+    channelRows[0]?.click();
+    (document.getElementById('channel-view-toggle') as HTMLButtonElement).click();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+
+    expect(onOpenedImageSelected).toHaveBeenLastCalledWith('session-2');
+    expect(onRgbGroupChange).not.toHaveBeenCalledWith({
+      kind: 'channelMono',
+      channel: 'depth.Z',
+      alpha: null
+    });
+  });
+});
+
 function installUiFixture(): void {
   const html = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
   const bodyMarkup = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1] ?? html;

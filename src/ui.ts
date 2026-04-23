@@ -172,6 +172,7 @@ interface TopMenuElements {
 }
 
 type TopMenuTrackingMode = 'inactive' | 'pointer';
+type VerticalNavigationTarget = 'openedFiles' | 'channelView';
 
 interface ProbeValueRowElements {
   row: HTMLDivElement;
@@ -324,6 +325,7 @@ export class ViewerUi implements Disposable {
   private channelThumbnailItems: ChannelThumbnailOptionItem[] = [];
   private rgbGroupChannelNames: string[] = [];
   private currentChannelSelection: DisplaySelection | null = null;
+  private verticalNavigationTarget: VerticalNavigationTarget = 'openedFiles';
   private hasActiveChannelImage = false;
   private exportTarget: ExportImageTarget | null = null;
   private colormapExportOptions: Array<{ id: string; label: string }> = [];
@@ -355,6 +357,9 @@ export class ViewerUi implements Disposable {
       onOpenedImageSelected: (sessionId) => {
         this.callbacks.onOpenedImageSelected(sessionId);
       },
+      onOpenedImageRowClick: () => {
+        this.verticalNavigationTarget = 'openedFiles';
+      },
       onReorderOpenedImage: (draggedSessionId, targetSessionId, placement) => {
         this.callbacks.onReorderOpenedImage(draggedSessionId, targetSessionId, placement);
       },
@@ -376,6 +381,9 @@ export class ViewerUi implements Disposable {
     this.channelPanel = new ChannelPanel(this.elements, {
       onChannelViewChange: (value) => {
         this.handleChannelViewValueChange(value);
+      },
+      onChannelViewRowClick: () => {
+        this.verticalNavigationTarget = 'channelView';
       },
       onSplitToggle: (includeSplitRgbChannels) => {
         this.handleRgbSplitToggle(includeSplitRgbChannels);
@@ -647,6 +655,7 @@ export class ViewerUi implements Disposable {
     this.layerPanel.clearForNoImage();
     this.channelPanel.clearForNoImage();
     this.channelThumbnailStrip.clearForNoImage();
+    this.normalizeVerticalNavigationTarget();
   }
 
   setLayerOptions(items: LayerOptionItem[], activeIndex: number): void {
@@ -736,6 +745,8 @@ export class ViewerUi implements Disposable {
     } else {
       this.channelThumbnailStrip.clearForNoImage();
     }
+
+    this.normalizeVerticalNavigationTarget();
   }
 
   setProbeReadout(
@@ -1894,6 +1905,10 @@ export class ViewerUi implements Disposable {
         return;
       }
 
+      if (this.handleGlobalPanelNavigationKeyDown(event)) {
+        return;
+      }
+
       if (
         (event.key === 'f' || event.key === 'F') &&
         !event.altKey &&
@@ -1931,6 +1946,122 @@ export class ViewerUi implements Disposable {
     this.disposables.addEventListener(this.elements.viewerContainer, 'drop', (event) => {
       void this.handleDropEvent(event, true);
     });
+  }
+
+  private handleGlobalPanelNavigationKeyDown(event: KeyboardEvent): boolean {
+    if (
+      event.defaultPrevented ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      this.isLocalKeyboardNavigationEvent(event) ||
+      isEditableKeyboardEvent(event) ||
+      this.exportDialogOpen ||
+      this.exportColormapDialogOpen ||
+      this.getTopMenus().some((menu) => this.isTopMenuOpen(menu))
+    ) {
+      return false;
+    }
+
+    if (event.key === 'ArrowUp' || event.key === 'Up') {
+      if (!this.routeGlobalVerticalNavigation(-1)) {
+        return false;
+      }
+      event.preventDefault();
+      return true;
+    }
+
+    if (event.key === 'ArrowDown' || event.key === 'Down') {
+      if (!this.routeGlobalVerticalNavigation(1)) {
+        return false;
+      }
+      event.preventDefault();
+      return true;
+    }
+
+    if (event.key === 'ArrowLeft' || event.key === 'Left') {
+      if (!this.routeGlobalHorizontalNavigation(-1)) {
+        return false;
+      }
+      event.preventDefault();
+      return true;
+    }
+
+    if (event.key === 'ArrowRight' || event.key === 'Right') {
+      if (!this.routeGlobalHorizontalNavigation(1)) {
+        return false;
+      }
+      event.preventDefault();
+      return true;
+    }
+
+    return false;
+  }
+
+  private routeGlobalVerticalNavigation(delta: -1 | 1): boolean {
+    const target = this.normalizeVerticalNavigationTarget();
+    if (target === 'channelView') {
+      return this.channelPanel.stepSelection(delta);
+    }
+
+    return this.openedImagesPanel.stepSelection(delta);
+  }
+
+  private routeGlobalHorizontalNavigation(delta: -1 | 1): boolean {
+    if (
+      this.elements.bottomPanelContent.classList.contains('is-collapsed') ||
+      this.elements.bottomPanelCollapseButton.getAttribute('aria-expanded') === 'false'
+    ) {
+      return false;
+    }
+
+    return this.channelThumbnailStrip.stepSelection(delta);
+  }
+
+  private isLocalKeyboardNavigationEvent(event: KeyboardEvent): boolean {
+    const target = event.target;
+    if (!(target instanceof Node)) {
+      return false;
+    }
+
+    if (
+      this.elements.imagePanelResizer.contains(target) ||
+      this.elements.rightPanelResizer.contains(target) ||
+      this.elements.bottomPanelResizer.contains(target) ||
+      this.elements.appMenuBar.contains(target)
+    ) {
+      return true;
+    }
+
+    if (event.key === 'ArrowUp' || event.key === 'Up' || event.key === 'ArrowDown' || event.key === 'Down') {
+      return (
+        this.elements.openedFilesList.contains(target) ||
+        this.elements.partsLayersList.contains(target) ||
+        this.elements.channelViewList.contains(target)
+      );
+    }
+
+    if (event.key === 'ArrowLeft' || event.key === 'Left' || event.key === 'ArrowRight' || event.key === 'Right') {
+      return this.elements.channelThumbnailStrip.contains(target);
+    }
+
+    return false;
+  }
+
+  private normalizeVerticalNavigationTarget(): VerticalNavigationTarget {
+    if (
+      this.verticalNavigationTarget === 'channelView' &&
+      (
+        this.elements.channelViewList.hidden ||
+        this.elements.rgbGroupSelect.disabled ||
+        this.elements.channelViewList.querySelector('.image-browser-row') === null
+      )
+    ) {
+      this.verticalNavigationTarget = 'openedFiles';
+    }
+
+    return this.verticalNavigationTarget;
   }
 
   private async handleDropEvent(event: DragEvent, stopPropagation = false): Promise<void> {

@@ -67,6 +67,31 @@ export class ChannelThumbnailStrip implements Disposable {
     this.disposables.dispose();
   }
 
+  stepSelection(delta: -1 | 1): boolean {
+    if (
+      this.disposed ||
+      this.isLoading ||
+      this.elements.channelThumbnailStrip.hidden ||
+      this.items.length === 0
+    ) {
+      return false;
+    }
+
+    const currentIndex = this.items.findIndex((item) => item.value === this.selectedValue);
+    const anchorIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex = Math.max(0, Math.min(this.items.length - 1, anchorIndex + delta));
+    const nextValue = this.items[nextIndex]?.value ?? null;
+    if (!nextValue) {
+      return false;
+    }
+
+    if (nextValue !== this.selectedValue) {
+      this.chooseValue(nextValue);
+    }
+
+    return true;
+  }
+
   setLoading(loading: boolean): void {
     if (this.disposed) {
       return;
