@@ -1449,6 +1449,76 @@ describe('channel thumbnail strip', () => {
     expect(document.querySelectorAll('#channel-thumbnail-strip .channel-thumbnail-image')).toHaveLength(2);
   });
 
+  it('preserves focus across repeated horizontal keyboard navigation in the bottom strip', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onRgbGroupChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onRgbGroupChange }));
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
+    const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    }));
+    const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
+    const channelSelect = document.getElementById('rgb-group-select') as HTMLSelectElement;
+    const getTiles = (): HTMLButtonElement[] => Array.from(
+      document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile')
+    );
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, channelThumbnailItems);
+
+    splitToggle.click();
+    onRgbGroupChange.mockClear();
+
+    let tiles = getTiles();
+    expect(tiles).toHaveLength(3);
+    expect(document.querySelectorAll('#channel-thumbnail-strip .channel-thumbnail-placeholder')).toHaveLength(3);
+
+    tiles[0]?.focus();
+    tiles[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+
+    tiles = getTiles();
+    expect(channelSelect.value).toBe('channel:beauty.G');
+    expect(document.activeElement).toBe(tiles[1]);
+    expect(tiles[1]?.getAttribute('aria-selected')).toBe('true');
+    expect(onRgbGroupChange).toHaveBeenNthCalledWith(1, {
+      kind: 'channelMono',
+      channel: 'beauty.G',
+      alpha: null
+    });
+
+    tiles[1]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+
+    tiles = getTiles();
+    expect(channelSelect.value).toBe('channel:beauty.B');
+    expect(document.activeElement).toBe(tiles[2]);
+    expect(tiles[2]?.getAttribute('aria-selected')).toBe('true');
+    expect(onRgbGroupChange).toHaveBeenNthCalledWith(2, {
+      kind: 'channelMono',
+      channel: 'beauty.B',
+      alpha: null
+    });
+
+    tiles[2]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+
+    tiles = getTiles();
+    expect(channelSelect.value).toBe('channel:beauty.G');
+    expect(document.activeElement).toBe(tiles[1]);
+    expect(tiles[1]?.getAttribute('aria-selected')).toBe('true');
+    expect(onRgbGroupChange).toHaveBeenNthCalledWith(3, {
+      kind: 'channelMono',
+      channel: 'beauty.G',
+      alpha: null
+    });
+  });
+
   it('preserves horizontal scroll when selecting a thumbnail from a scrolled strip', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();

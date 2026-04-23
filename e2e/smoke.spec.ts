@@ -696,6 +696,45 @@ test('renders bottom-panel channel thumbnails and syncs them with the channel se
   await expect(greenRow).toHaveAttribute('aria-selected', 'true');
 });
 
+test('moves bottom-panel thumbnail selections with left and right arrow keys', async ({ page }) => {
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
+  await page.waitForTimeout(1500);
+
+  const errorBanner = page.locator('#error-banner');
+  if (await errorBanner.isVisible()) {
+    await expect(errorBanner).toContainText('WebGL2 is required');
+    return;
+  }
+
+  const bottomPanelButton = page.locator('#bottom-panel-collapse-button');
+  const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
+  const channelSelect = page.locator('#rgb-group-select');
+  const thumbnailTiles = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile');
+
+  await openGalleryCbox(page);
+  await bottomPanelButton.click();
+  await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'true');
+  await rgbSplitToggleButton.click();
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(channelSelect.locator('option:checked')).toHaveText('R');
+  await expect(thumbnailTiles).toHaveCount(3);
+
+  await thumbnailTiles.nth(0).focus();
+  await expect(thumbnailTiles.nth(0)).toBeFocused();
+
+  await page.keyboard.press('ArrowRight');
+  await expect(channelSelect.locator('option:checked')).toHaveText('G');
+  await expect(thumbnailTiles.nth(1)).toBeFocused();
+
+  await page.keyboard.press('ArrowRight');
+  await expect(channelSelect.locator('option:checked')).toHaveText('B');
+  await expect(thumbnailTiles.nth(2)).toBeFocused();
+
+  await page.keyboard.press('ArrowLeft');
+  await expect(channelSelect.locator('option:checked')).toHaveText('G');
+  await expect(thumbnailTiles.nth(1)).toBeFocused();
+});
+
 test('moves open files and channel view selections with arrow keys', async ({ page }) => {
   await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/');
   await page.waitForTimeout(1500);

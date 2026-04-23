@@ -98,6 +98,7 @@ export class ChannelThumbnailStrip implements Disposable {
 
   private render(): void {
     const disabled = this.isLoading || this.items.length === 0;
+    const shouldRestoreFocus = !disabled && isFocusWithinElement(this.elements.channelThumbnailStrip);
     this.elements.channelThumbnailStrip.classList.toggle('is-disabled', disabled);
 
     if (this.items.length === 0) {
@@ -124,6 +125,10 @@ export class ChannelThumbnailStrip implements Disposable {
         return tile;
       }
     );
+
+    if (shouldRestoreFocus) {
+      focusSelectedTile(this.elements.channelThumbnailStrip);
+    }
   }
 
   private chooseValue(value: string): void {
