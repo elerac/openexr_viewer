@@ -3,12 +3,16 @@ export interface Elements {
   mainLayout: HTMLElement;
   rightStack: HTMLElement;
   sidePanel: HTMLElement;
+  bottomPanel: HTMLElement;
+  bottomPanelContent: HTMLElement;
   imagePanel: HTMLElement;
   imagePanelContent: HTMLElement;
   imagePanelCollapseButton: HTMLButtonElement;
   rightPanelCollapseButton: HTMLButtonElement;
+  bottomPanelCollapseButton: HTMLButtonElement;
   imagePanelResizer: HTMLElement;
   rightPanelResizer: HTMLElement;
+  bottomPanelResizer: HTMLElement;
   fileMenuButton: HTMLButtonElement;
   fileMenu: HTMLElement;
   viewMenuButton: HTMLButtonElement;
@@ -146,12 +150,16 @@ export type LayoutSplitElements = Pick<
   | 'mainLayout'
   | 'rightStack'
   | 'sidePanel'
+  | 'bottomPanel'
+  | 'bottomPanelContent'
   | 'imagePanel'
   | 'imagePanelContent'
   | 'imagePanelCollapseButton'
   | 'rightPanelCollapseButton'
+  | 'bottomPanelCollapseButton'
   | 'imagePanelResizer'
   | 'rightPanelResizer'
+  | 'bottomPanelResizer'
 >;
 
 export function resolveElements(): Elements {
@@ -160,12 +168,16 @@ export function resolveElements(): Elements {
     mainLayout: requireElement('main-layout', HTMLElement),
     rightStack: requireElement('right-stack', HTMLElement),
     sidePanel: requireElement('inspector-panel', HTMLElement),
+    bottomPanel: requireElement('bottom-panel', HTMLElement),
+    bottomPanelContent: requireElement('bottom-panel-content', HTMLElement),
     imagePanel: requireElement('image-panel', HTMLElement),
     imagePanelContent: requireElement('image-panel-content', HTMLElement),
     imagePanelCollapseButton: requireElement('image-panel-collapse-button', HTMLButtonElement),
     rightPanelCollapseButton: requireElement('right-panel-collapse-button', HTMLButtonElement),
+    bottomPanelCollapseButton: requireElement('bottom-panel-collapse-button', HTMLButtonElement),
     imagePanelResizer: requireElement('image-panel-resizer', HTMLElement),
     rightPanelResizer: requireElement('right-panel-resizer', HTMLElement),
+    bottomPanelResizer: requireElement('bottom-panel-resizer', HTMLElement),
     fileMenuButton: requireElement('file-menu-button', HTMLButtonElement),
     fileMenu: requireElement('file-menu', HTMLElement),
     viewMenuButton: requireElement('view-menu-button', HTMLButtonElement),

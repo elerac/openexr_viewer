@@ -355,6 +355,9 @@ input[type='range'] {
   --right-panel-width: 320px;
   --right-panel-tab-width: 18px;
   --right-panel-resizer-width: 0.5rem;
+  --bottom-panel-height: 120px;
+  --bottom-panel-tab-height: 18px;
+  --bottom-panel-resizer-height: 0.5rem;
   grid-row: 3;
   align-self: stretch;
   min-height: 0;
@@ -365,7 +368,14 @@ input[type='range'] {
     minmax(360px, 1fr)
     var(--right-panel-resizer-width)
     calc(var(--right-panel-width) + var(--right-panel-tab-width));
-  grid-template-areas: "image image-resizer viewer right-resizer panel";
+  grid-template-rows:
+    minmax(240px, 1fr)
+    var(--bottom-panel-resizer-height)
+    calc(var(--bottom-panel-height) + var(--bottom-panel-tab-height));
+  grid-template-areas:
+    "image image-resizer viewer right-resizer panel"
+    "bottom-resizer bottom-resizer bottom-resizer bottom-resizer bottom-resizer"
+    "bottom bottom bottom bottom bottom";
   gap: 0;
 }
 
@@ -385,6 +395,11 @@ input[type='range'] {
 
 .image-panel-shell {
   grid-area: image;
+}
+
+.bottom-panel-shell {
+  grid-area: bottom;
+  flex-direction: column;
 }
 
 .panel-collapse-button {
@@ -422,6 +437,13 @@ input[type='range'] {
   border-left: 1px solid color-mix(in srgb, var(--panel-border) 88%, transparent);
 }
 
+.panel-shell--bottom .panel-collapse-button {
+  flex: 0 0 var(--bottom-panel-tab-height);
+  width: 100%;
+  height: var(--bottom-panel-tab-height);
+  border-bottom: 1px solid color-mix(in srgb, var(--panel-border) 88%, transparent);
+}
+
 .panel-collapse-button--left::before,
 .panel-collapse-button--right.is-collapsed::before {
   border-width: 0.38rem 0.48rem 0.38rem 0;
@@ -432,6 +454,16 @@ input[type='range'] {
 .panel-collapse-button--left.is-collapsed::before {
   border-width: 0.38rem 0 0.38rem 0.48rem;
   border-color: transparent transparent transparent currentColor;
+}
+
+.panel-collapse-button--bottom::before {
+  border-width: 0.48rem 0.38rem 0 0.38rem;
+  border-color: currentColor transparent transparent transparent;
+}
+
+.panel-collapse-button--bottom.is-collapsed::before {
+  border-width: 0 0.38rem 0.48rem 0.38rem;
+  border-color: transparent transparent currentColor transparent;
 }
 
 .panel-collapse-button:hover,
@@ -474,6 +506,18 @@ input[type='range'] {
   width: 1px;
 }
 
+.layout-resizer--horizontal {
+  height: var(--layout-resizer-height, 0.5rem);
+  cursor: row-resize;
+}
+
+.layout-resizer--horizontal::before {
+  left: 0;
+  right: 0;
+  top: calc(50% - 0.5px);
+  height: 1px;
+}
+
 .layout-resizer:hover::before,
 .layout-resizer:focus-visible::before,
 .layout-resizer.is-resizing::before {
@@ -505,9 +549,20 @@ input[type='range'] {
   --layout-resizer-width: var(--right-panel-resizer-width);
 }
 
+#bottom-panel-resizer {
+  grid-area: bottom-resizer;
+  --layout-resizer-height: var(--bottom-panel-resizer-height);
+}
+
 body.is-resizing-panel-columns,
 body.is-resizing-panel-columns * {
   cursor: col-resize !important;
+  user-select: none;
+}
+
+body.is-resizing-panel-rows,
+body.is-resizing-panel-rows * {
+  cursor: row-resize !important;
   user-select: none;
 }
 
@@ -638,8 +693,20 @@ body.is-resizing-panel-columns * {
   overflow: auto;
 }
 
+.bottom-panel {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.bottom-panel-shell.is-collapsed,
 .side-panel.is-collapsed,
 .image-panel.is-collapsed {
+  overflow: hidden;
+}
+
+.bottom-panel.is-collapsed {
   overflow: hidden;
 }
 
@@ -1649,9 +1716,10 @@ body.is-resizing-panel-columns * {
     height: auto;
     min-height: 100%;
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(360px, 1fr) auto auto;
+    grid-template-rows: minmax(360px, 1fr) auto auto auto;
     grid-template-areas:
       "viewer"
+      "bottom"
       "panel"
       "image";
     gap: 0.4rem;

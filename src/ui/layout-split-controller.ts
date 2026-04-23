@@ -14,28 +14,39 @@ const PANEL_SPLIT_KEYBOARD_STEP = 16;
 const PANEL_SPLIT_KEYBOARD_LARGE_STEP = 64;
 const PANEL_COLLAPSE_TAB_WIDTH = 18;
 const PANEL_COLLAPSE_TAB_WIDTH_CSS = `${PANEL_COLLAPSE_TAB_WIDTH}px`;
+const PANEL_COLLAPSE_TAB_HEIGHT = 18;
+const PANEL_COLLAPSE_TAB_HEIGHT_CSS = `${PANEL_COLLAPSE_TAB_HEIGHT}px`;
 const PANEL_RESIZER_WIDTH = 8;
 const PANEL_RESIZER_WIDTH_CSS = '0.5rem';
+const PANEL_RESIZER_HEIGHT = 8;
+const PANEL_RESIZER_HEIGHT_CSS = '0.5rem';
 const IMAGE_PANEL_MIN_WIDTH = 160;
 const IMAGE_PANEL_MAX_WIDTH = 420;
 const RIGHT_PANEL_MIN_WIDTH = 240;
 const RIGHT_PANEL_MAX_WIDTH = 520;
+const BOTTOM_PANEL_MIN_HEIGHT = 120;
+const BOTTOM_PANEL_MAX_HEIGHT = 360;
 const VIEWER_MIN_WIDTH = 360;
+const VIEWER_MIN_HEIGHT = 240;
 const DEFAULT_PANEL_SPLIT_SIZES: PanelSplitSizes = {
   imagePanelWidth: 220,
-  rightPanelWidth: 320
+  rightPanelWidth: 320,
+  bottomPanelHeight: 120
 };
 const DEFAULT_PANEL_COLLAPSE_STATE: PanelCollapseState = {
   imagePanelCollapsed: false,
-  rightPanelCollapsed: false
+  rightPanelCollapsed: false,
+  bottomPanelCollapsed: false
 };
 
 type PanelCollapseKey = keyof PanelCollapseState;
+type PanelSplitAxis = 'horizontal' | 'vertical';
 
 interface PanelLayoutState extends PanelSplitSizes, PanelCollapseState {}
 
 interface PanelResizeDragState {
   key: PanelSplitSizeKey;
+  axis: PanelSplitAxis;
   pointerId: number;
   startX: number;
   startY: number;
@@ -60,10 +71,13 @@ export class LayoutSplitController implements Disposable {
 
     this.bindPanelResizer(this.elements.imagePanelResizer, 'imagePanelWidth');
     this.bindPanelResizer(this.elements.rightPanelResizer, 'rightPanelWidth');
+    this.bindPanelResizer(this.elements.bottomPanelResizer, 'bottomPanelHeight');
     this.bindCollapseButton(this.elements.imagePanelCollapseButton, 'imagePanelCollapsed');
     this.bindCollapseButton(this.elements.rightPanelCollapseButton, 'rightPanelCollapsed');
+    this.bindCollapseButton(this.elements.bottomPanelCollapseButton, 'bottomPanelCollapsed');
     this.resizeObserver.observe(this.elements.mainLayout);
     this.resizeObserver.observe(this.elements.rightStack);
+    this.resizeObserver.observe(this.elements.bottomPanel);
     this.disposables.add(() => {
       this.resizeObserver.disconnect();
     });
@@ -113,7 +127,12 @@ export class LayoutSplitController implements Disposable {
         'width',
         DEFAULT_PANEL_SPLIT_SIZES.imagePanelWidth
       ),
-      rightPanelWidth: readElementSize(this.elements.sidePanel, 'width', DEFAULT_PANEL_SPLIT_SIZES.rightPanelWidth)
+      rightPanelWidth: readElementSize(this.elements.sidePanel, 'width', DEFAULT_PANEL_SPLIT_SIZES.rightPanelWidth),
+      bottomPanelHeight: readElementSize(
+        this.elements.bottomPanelContent,
+        'height',
+        DEFAULT_PANEL_SPLIT_SIZES.bottomPanelHeight
+      )
     };
   }
 
@@ -130,8 +149,9 @@ export class LayoutSplitController implements Disposable {
   }
 
   private bindPanelResizer(resizer: HTMLElement, key: PanelSplitSizeKey): void {
+    const axis = getPanelSplitAxis(key);
     this.disposables.addEventListener(resizer, 'pointerdown', (event) => {
-      this.beginPanelResize(event, key);
+      this.beginPanelResize(event, key, axis);
     });
     this.disposables.addEventListener(resizer, 'pointermove', (event) => {
       this.onPanelResizePointerMove(event);
@@ -143,7 +163,7 @@ export class LayoutSplitController implements Disposable {
       this.finishPanelResize(event);
     });
     this.disposables.addEventListener(resizer, 'keydown', (event) => {
-      this.onPanelResizerKeyDown(event, key);
+      this.onPanelResizerKeyDown(event, key, axis);
     });
   }
 
@@ -153,7 +173,7 @@ export class LayoutSplitController implements Disposable {
     });
   }
 
-  private beginPanelResize(event: PointerEvent, key: PanelSplitSizeKey): void {
+  private beginPanelResize(event: PointerEvent, key: PanelSplitSizeKey, axis: PanelSplitAxis): void {
     if (this.disposed) {
       return;
     }
@@ -166,6 +186,7 @@ export class LayoutSplitController implements Disposable {
     const resizer = event.currentTarget as HTMLElement;
     this.activePanelResize = {
       key,
+      axis,
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
@@ -173,7 +194,7 @@ export class LayoutSplitController implements Disposable {
       resizer
     };
     resizer.classList.add('is-resizing');
-    document.body.classList.add('is-resizing-panel-columns');
+    document.body.classList.add(axis === 'horizontal' ? 'is-resizing-panel-columns' : 'is-resizing-panel-rows');
     resizer.setPointerCapture(event.pointerId);
   }
 
@@ -189,13 +210,10 @@ export class LayoutSplitController implements Disposable {
 
     event.preventDefault();
     const nextSizes = { ...dragState.startSizes };
-    const deltaX = event.clientX - dragState.startX;
-
-    if (dragState.key === 'imagePanelWidth') {
-      nextSizes.imagePanelWidth = dragState.startSizes.imagePanelWidth + deltaX;
-    } else {
-      nextSizes.rightPanelWidth = dragState.startSizes.rightPanelWidth - deltaX;
-    }
+    const delta =
+      dragState.axis === 'horizontal' ? event.clientX - dragState.startX : event.clientY - dragState.startY;
+    nextSizes[dragState.key] =
+      dragState.startSizes[dragState.key] + delta * getPanelSplitResizeDirection(dragState.key);
 
     this.applyPanelLayoutState({ ...this.panelLayoutState, ...nextSizes }, dragState.key, false);
   }
@@ -212,11 +230,12 @@ export class LayoutSplitController implements Disposable {
     }
     dragState.resizer.classList.remove('is-resizing');
     document.body.classList.remove('is-resizing-panel-columns');
+    document.body.classList.remove('is-resizing-panel-rows');
     this.activePanelResize = null;
     saveStoredPanelSplitState(this.panelLayoutState);
   }
 
-  private onPanelResizerKeyDown(event: KeyboardEvent, key: PanelSplitSizeKey): void {
+  private onPanelResizerKeyDown(event: KeyboardEvent, key: PanelSplitSizeKey, axis: PanelSplitAxis): void {
     if (this.disposed) {
       return;
     }
@@ -225,7 +244,7 @@ export class LayoutSplitController implements Disposable {
       return;
     }
 
-    const action = getPanelSplitKeyboardAction(event.key, event.shiftKey);
+    const action = getPanelSplitKeyboardAction(event.key, event.shiftKey, axis);
     if (!action) {
       return;
     }
@@ -237,8 +256,7 @@ export class LayoutSplitController implements Disposable {
       const range = getPanelSplitSizeRange(key, nextSizes, this.getPanelSplitMetrics(this.panelLayoutState));
       nextSizes[key] = action.target === 'min' ? range.min : range.max;
     } else {
-      const delta = key === 'rightPanelWidth' ? -action.delta : action.delta;
-      nextSizes[key] += delta;
+      nextSizes[key] += action.delta * getPanelSplitResizeDirection(key);
     }
 
     this.applyPanelLayoutState({ ...this.panelLayoutState, ...nextSizes }, key, true);
@@ -285,11 +303,14 @@ export class LayoutSplitController implements Disposable {
   private renderPanelLayoutState(): void {
     const imagePanelWidth = this.panelLayoutState.imagePanelCollapsed ? 0 : this.panelLayoutState.imagePanelWidth;
     const rightPanelWidth = this.panelLayoutState.rightPanelCollapsed ? 0 : this.panelLayoutState.rightPanelWidth;
+    const bottomPanelHeight = this.panelLayoutState.bottomPanelCollapsed ? 0 : this.panelLayoutState.bottomPanelHeight;
 
     this.elements.mainLayout.style.setProperty('--image-panel-tab-width', PANEL_COLLAPSE_TAB_WIDTH_CSS);
     this.elements.mainLayout.style.setProperty('--right-panel-tab-width', PANEL_COLLAPSE_TAB_WIDTH_CSS);
+    this.elements.mainLayout.style.setProperty('--bottom-panel-tab-height', PANEL_COLLAPSE_TAB_HEIGHT_CSS);
     this.elements.mainLayout.style.setProperty('--image-panel-width', `${Math.round(imagePanelWidth)}px`);
     this.elements.mainLayout.style.setProperty('--right-panel-width', `${Math.round(rightPanelWidth)}px`);
+    this.elements.mainLayout.style.setProperty('--bottom-panel-height', `${Math.round(bottomPanelHeight)}px`);
     this.elements.mainLayout.style.setProperty(
       '--image-panel-resizer-width',
       this.panelLayoutState.imagePanelCollapsed ? '0px' : PANEL_RESIZER_WIDTH_CSS
@@ -298,10 +319,16 @@ export class LayoutSplitController implements Disposable {
       '--right-panel-resizer-width',
       this.panelLayoutState.rightPanelCollapsed ? '0px' : PANEL_RESIZER_WIDTH_CSS
     );
+    this.elements.mainLayout.style.setProperty(
+      '--bottom-panel-resizer-height',
+      this.panelLayoutState.bottomPanelCollapsed ? '0px' : PANEL_RESIZER_HEIGHT_CSS
+    );
     this.elements.imagePanel.classList.toggle('is-collapsed', this.panelLayoutState.imagePanelCollapsed);
     this.elements.rightStack.classList.toggle('is-collapsed', this.panelLayoutState.rightPanelCollapsed);
+    this.elements.bottomPanel.classList.toggle('is-collapsed', this.panelLayoutState.bottomPanelCollapsed);
     this.elements.imagePanelContent.classList.toggle('is-collapsed', this.panelLayoutState.imagePanelCollapsed);
     this.elements.sidePanel.classList.toggle('is-collapsed', this.panelLayoutState.rightPanelCollapsed);
+    this.elements.bottomPanelContent.classList.toggle('is-collapsed', this.panelLayoutState.bottomPanelCollapsed);
     this.updatePanelSplitAria();
     this.updateCollapseButtons();
   }
@@ -309,23 +336,34 @@ export class LayoutSplitController implements Disposable {
   private getExpandedPanelSplitSizes(): PanelSplitSizes {
     return {
       imagePanelWidth: this.panelLayoutState.imagePanelWidth,
-      rightPanelWidth: this.panelLayoutState.rightPanelWidth
+      rightPanelWidth: this.panelLayoutState.rightPanelWidth,
+      bottomPanelHeight: this.panelLayoutState.bottomPanelHeight
     };
   }
 
   private isPanelCollapsed(key: PanelSplitSizeKey): boolean {
-    return key === 'imagePanelWidth'
-      ? this.panelLayoutState.imagePanelCollapsed
-      : this.panelLayoutState.rightPanelCollapsed;
+    switch (key) {
+      case 'imagePanelWidth':
+        return this.panelLayoutState.imagePanelCollapsed;
+      case 'rightPanelWidth':
+        return this.panelLayoutState.rightPanelCollapsed;
+      case 'bottomPanelHeight':
+        return this.panelLayoutState.bottomPanelCollapsed;
+      default:
+        throw new Error(`Unknown panel split size key: ${key satisfies never}`);
+    }
   }
 
   private getPanelSplitMetrics(state: PanelCollapseState): PanelSplitMetrics {
     return {
       mainWidth: readElementSize(this.elements.mainLayout, 'width', window.innerWidth),
+      mainHeight: readElementSize(this.elements.mainLayout, 'height', window.innerHeight),
       imagePanelTabWidth: PANEL_COLLAPSE_TAB_WIDTH,
       imageResizerWidth: state.imagePanelCollapsed ? 0 : PANEL_RESIZER_WIDTH,
       rightPanelTabWidth: PANEL_COLLAPSE_TAB_WIDTH,
-      rightResizerWidth: state.rightPanelCollapsed ? 0 : PANEL_RESIZER_WIDTH
+      rightResizerWidth: state.rightPanelCollapsed ? 0 : PANEL_RESIZER_WIDTH,
+      bottomPanelTabHeight: PANEL_COLLAPSE_TAB_HEIGHT,
+      bottomResizerHeight: state.bottomPanelCollapsed ? 0 : PANEL_RESIZER_HEIGHT
     };
   }
 
@@ -333,6 +371,7 @@ export class LayoutSplitController implements Disposable {
     const metrics = this.getPanelSplitMetrics(this.panelLayoutState);
     this.updatePanelResizerAria(this.elements.imagePanelResizer, 'imagePanelWidth', metrics);
     this.updatePanelResizerAria(this.elements.rightPanelResizer, 'rightPanelWidth', metrics);
+    this.updatePanelResizerAria(this.elements.bottomPanelResizer, 'bottomPanelHeight', metrics);
   }
 
   private updatePanelResizerAria(
@@ -362,6 +401,11 @@ export class LayoutSplitController implements Disposable {
       'right',
       this.panelLayoutState.rightPanelCollapsed
     );
+    updateCollapseButton(
+      this.elements.bottomPanelCollapseButton,
+      'bottom',
+      this.panelLayoutState.bottomPanelCollapsed
+    );
   }
 }
 
@@ -383,7 +427,7 @@ export function parsePanelSplitStorageValue(value: string | null): StoredPanelSp
 
   const record = parsed as Record<string, unknown>;
   const state: StoredPanelSplitState = {};
-  const keys: PanelSplitSizeKey[] = ['imagePanelWidth', 'rightPanelWidth'];
+  const keys: PanelSplitSizeKey[] = ['imagePanelWidth', 'rightPanelWidth', 'bottomPanelHeight'];
 
   for (const key of keys) {
     const item = record[key];
@@ -398,13 +442,17 @@ export function parsePanelSplitStorageValue(value: string | null): StoredPanelSp
   if (typeof record.rightPanelCollapsed === 'boolean') {
     state.rightPanelCollapsed = record.rightPanelCollapsed;
   }
+  if (typeof record.bottomPanelCollapsed === 'boolean') {
+    state.bottomPanelCollapsed = record.bottomPanelCollapsed;
+  }
 
   return state;
 }
 
 export function getPanelSplitKeyboardAction(
   key: string,
-  shiftKey: boolean
+  shiftKey: boolean,
+  axis: PanelSplitAxis = 'horizontal'
 ): PanelSplitKeyboardAction | null {
   if (key === 'Home') {
     return { type: 'snap', target: 'min' };
@@ -414,11 +462,20 @@ export function getPanelSplitKeyboardAction(
   }
 
   const step = shiftKey ? PANEL_SPLIT_KEYBOARD_LARGE_STEP : PANEL_SPLIT_KEYBOARD_STEP;
-  if (key === 'ArrowLeft' || key === 'Left') {
-    return { type: 'delta', delta: -step };
-  }
-  if (key === 'ArrowRight' || key === 'Right') {
-    return { type: 'delta', delta: step };
+  if (axis === 'horizontal') {
+    if (key === 'ArrowLeft' || key === 'Left') {
+      return { type: 'delta', delta: -step };
+    }
+    if (key === 'ArrowRight' || key === 'Right') {
+      return { type: 'delta', delta: step };
+    }
+  } else {
+    if (key === 'ArrowUp' || key === 'Up') {
+      return { type: 'delta', delta: -step };
+    }
+    if (key === 'ArrowDown' || key === 'Down') {
+      return { type: 'delta', delta: step };
+    }
   }
 
   return null;
@@ -432,7 +489,12 @@ export function clampPanelSplitSizes(
   const sideWidthLimit = getSidePanelWidthLimit(metrics);
   const clampedSizes: PanelSplitSizes = {
     imagePanelWidth: clampFiniteSize(sizes.imagePanelWidth, IMAGE_PANEL_MIN_WIDTH, IMAGE_PANEL_MAX_WIDTH),
-    rightPanelWidth: clampFiniteSize(sizes.rightPanelWidth, RIGHT_PANEL_MIN_WIDTH, RIGHT_PANEL_MAX_WIDTH)
+    rightPanelWidth: clampFiniteSize(sizes.rightPanelWidth, RIGHT_PANEL_MIN_WIDTH, RIGHT_PANEL_MAX_WIDTH),
+    bottomPanelHeight: clampFiniteSize(
+      sizes.bottomPanelHeight,
+      BOTTOM_PANEL_MIN_HEIGHT,
+      BOTTOM_PANEL_MAX_HEIGHT
+    )
   };
 
   let overflow = clampedSizes.imagePanelWidth + clampedSizes.rightPanelWidth - sideWidthLimit;
@@ -456,9 +518,12 @@ export function clampPanelSplitSizes(
     }
   }
 
+  clampedSizes.bottomPanelHeight = Math.min(clampedSizes.bottomPanelHeight, getBottomPanelHeightLimit(metrics));
+
   return {
     imagePanelWidth: Math.round(clampedSizes.imagePanelWidth),
-    rightPanelWidth: Math.round(clampedSizes.rightPanelWidth)
+    rightPanelWidth: Math.round(clampedSizes.rightPanelWidth),
+    bottomPanelHeight: Math.round(clampedSizes.bottomPanelHeight)
   };
 }
 
@@ -483,6 +548,13 @@ export function getPanelSplitSizeRange(
     };
   }
 
+  if (key === 'bottomPanelHeight') {
+    return {
+      min: BOTTOM_PANEL_MIN_HEIGHT,
+      max: Math.max(BOTTOM_PANEL_MIN_HEIGHT, Math.min(BOTTOM_PANEL_MAX_HEIGHT, getBottomPanelHeightLimit(metrics)))
+    };
+  }
+
   throw new Error(`Unknown panel split size key: ${key}`);
 }
 
@@ -501,8 +573,10 @@ function saveStoredPanelSplitState(state: PanelLayoutState): void {
       JSON.stringify({
         imagePanelWidth: Math.round(state.imagePanelWidth),
         rightPanelWidth: Math.round(state.rightPanelWidth),
+        bottomPanelHeight: Math.round(state.bottomPanelHeight),
         imagePanelCollapsed: state.imagePanelCollapsed,
-        rightPanelCollapsed: state.rightPanelCollapsed
+        rightPanelCollapsed: state.rightPanelCollapsed,
+        bottomPanelCollapsed: state.bottomPanelCollapsed
       })
     );
   } catch {
@@ -522,18 +596,33 @@ function normalizePanelLayoutState(state: Partial<PanelLayoutState>): PanelLayou
       RIGHT_PANEL_MIN_WIDTH,
       RIGHT_PANEL_MAX_WIDTH
     ),
+    bottomPanelHeight: clampFiniteSize(
+      state.bottomPanelHeight ?? DEFAULT_PANEL_SPLIT_SIZES.bottomPanelHeight,
+      BOTTOM_PANEL_MIN_HEIGHT,
+      BOTTOM_PANEL_MAX_HEIGHT
+    ),
     imagePanelCollapsed: state.imagePanelCollapsed ?? DEFAULT_PANEL_COLLAPSE_STATE.imagePanelCollapsed,
-    rightPanelCollapsed: state.rightPanelCollapsed ?? DEFAULT_PANEL_COLLAPSE_STATE.rightPanelCollapsed
+    rightPanelCollapsed: state.rightPanelCollapsed ?? DEFAULT_PANEL_COLLAPSE_STATE.rightPanelCollapsed,
+    bottomPanelCollapsed: state.bottomPanelCollapsed ?? DEFAULT_PANEL_COLLAPSE_STATE.bottomPanelCollapsed
   };
 }
 
 function getPanelSplitSizeKeyForCollapseKey(key: PanelCollapseKey): PanelSplitSizeKey {
-  return key === 'imagePanelCollapsed' ? 'imagePanelWidth' : 'rightPanelWidth';
+  switch (key) {
+    case 'imagePanelCollapsed':
+      return 'imagePanelWidth';
+    case 'rightPanelCollapsed':
+      return 'rightPanelWidth';
+    case 'bottomPanelCollapsed':
+      return 'bottomPanelHeight';
+    default:
+      throw new Error(`Unknown panel collapse key: ${key satisfies never}`);
+  }
 }
 
 function updateCollapseButton(
   button: HTMLButtonElement,
-  side: 'left' | 'right',
+  side: 'left' | 'right' | 'bottom',
   collapsed: boolean
 ): void {
   button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
@@ -547,6 +636,14 @@ function readElementSize(element: HTMLElement, axis: 'width' | 'height', fallbac
   return Number.isFinite(value) && value > 0 ? Math.round(value) : fallback;
 }
 
+function getPanelSplitAxis(key: PanelSplitSizeKey): PanelSplitAxis {
+  return key === 'bottomPanelHeight' ? 'vertical' : 'horizontal';
+}
+
+function getPanelSplitResizeDirection(key: PanelSplitSizeKey): number {
+  return key === 'imagePanelWidth' ? 1 : -1;
+}
+
 function getSidePanelWidthLimit(metrics: PanelSplitMetrics): number {
   const availableWidth =
     metrics.mainWidth -
@@ -556,6 +653,12 @@ function getSidePanelWidthLimit(metrics: PanelSplitMetrics): number {
     metrics.rightResizerWidth -
     VIEWER_MIN_WIDTH;
   return Math.max(IMAGE_PANEL_MIN_WIDTH + RIGHT_PANEL_MIN_WIDTH, Math.floor(availableWidth));
+}
+
+function getBottomPanelHeightLimit(metrics: PanelSplitMetrics): number {
+  const availableHeight =
+    metrics.mainHeight - metrics.bottomPanelTabHeight - metrics.bottomResizerHeight - VIEWER_MIN_HEIGHT;
+  return Math.max(BOTTOM_PANEL_MIN_HEIGHT, Math.min(BOTTOM_PANEL_MAX_HEIGHT, Math.floor(availableHeight)));
 }
 
 function clampFiniteSize(value: number, min: number, max: number): number {

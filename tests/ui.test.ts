@@ -489,10 +489,13 @@ describe('roi inspector', () => {
 describe('panel split sizing', () => {
   const metrics: PanelSplitMetrics = {
     mainWidth: 900,
+    mainHeight: 500,
     imagePanelTabWidth: 18,
     imageResizerWidth: 8,
     rightPanelTabWidth: 18,
-    rightResizerWidth: 8
+    rightResizerWidth: 8,
+    bottomPanelTabHeight: 18,
+    bottomResizerHeight: 8
   };
 
   it('ignores corrupt panel split storage', () => {
@@ -505,19 +508,27 @@ describe('panel split sizing', () => {
       parsePanelSplitStorageValue(
         JSON.stringify({
           imagePanelWidth: 260,
+          bottomPanelHeight: 210,
           rightPanelWidth: 'wide',
           imagePanelCollapsed: true,
+          bottomPanelCollapsed: true,
           removedPanelHeight: 180
         })
       )
-    ).toEqual({ imagePanelWidth: 260, imagePanelCollapsed: true });
+    ).toEqual({
+      imagePanelWidth: 260,
+      bottomPanelHeight: 210,
+      imagePanelCollapsed: true,
+      bottomPanelCollapsed: true
+    });
   });
 
   it('clamps saved panel sizes to keep the viewer usable', () => {
     const sizes = clampPanelSplitSizes(
       {
         imagePanelWidth: 999,
-        rightPanelWidth: 999
+        rightPanelWidth: 999,
+        bottomPanelHeight: 999
       },
       metrics
     );
@@ -525,13 +536,16 @@ describe('panel split sizing', () => {
     expect(sizes.imagePanelWidth + sizes.rightPanelWidth).toBeLessThanOrEqual(488);
     expect(sizes.imagePanelWidth).toBeGreaterThanOrEqual(160);
     expect(sizes.rightPanelWidth).toBeGreaterThanOrEqual(240);
+    expect(sizes.bottomPanelHeight).toBeLessThanOrEqual(234);
+    expect(sizes.bottomPanelHeight).toBeGreaterThanOrEqual(120);
   });
 
   it('preserves the active side split as much as possible while clamping overflow', () => {
     const sizes = clampPanelSplitSizes(
       {
         imagePanelWidth: 420,
-        rightPanelWidth: 520
+        rightPanelWidth: 520,
+        bottomPanelHeight: 180
       },
       metrics,
       'imagePanelWidth'
@@ -549,6 +563,12 @@ describe('panel split sizing', () => {
     expect(getPanelSplitKeyboardAction('ArrowDown', false)).toBeNull();
   });
 
+  it('maps vertical splitter keyboard input to resize actions', () => {
+    expect(getPanelSplitKeyboardAction('ArrowUp', false, 'vertical')).toEqual({ type: 'delta', delta: -16 });
+    expect(getPanelSplitKeyboardAction('ArrowDown', true, 'vertical')).toEqual({ type: 'delta', delta: 64 });
+    expect(getPanelSplitKeyboardAction('ArrowRight', false, 'vertical')).toBeNull();
+  });
+
   it('keeps legacy saved panel layouts open by default', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
@@ -564,12 +584,15 @@ describe('panel split sizing', () => {
 
     const imageButton = document.getElementById('image-panel-collapse-button') as HTMLButtonElement;
     const rightButton = document.getElementById('right-panel-collapse-button') as HTMLButtonElement;
+    const bottomButton = document.getElementById('bottom-panel-collapse-button') as HTMLButtonElement;
     const mainLayout = document.getElementById('main-layout') as HTMLElement;
 
     expect(imageButton.getAttribute('aria-expanded')).toBe('true');
     expect(rightButton.getAttribute('aria-expanded')).toBe('true');
+    expect(bottomButton.getAttribute('aria-expanded')).toBe('true');
     expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('260px');
     expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('340px');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('120px');
   });
 
   it('toggles panel collapse buttons and restores the last expanded widths', () => {
@@ -638,6 +661,62 @@ describe('panel split sizing', () => {
     expect(imageResizer.getAttribute('aria-disabled')).toBe('false');
     expect(imageResizer.tabIndex).toBe(0);
     expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('296px');
+  });
+
+  it('toggles the bottom collapse button and restores the last expanded height', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry({ imageWidth: 280, rightWidth: 340, bottomHeight: 210 });
+
+    new ViewerUi(createUiCallbacks());
+
+    const bottomButton = document.getElementById('bottom-panel-collapse-button') as HTMLButtonElement;
+    const mainLayout = document.getElementById('main-layout') as HTMLElement;
+
+    bottomButton.click();
+
+    expect(bottomButton.getAttribute('aria-expanded')).toBe('false');
+    expect(bottomButton.getAttribute('aria-label')).toBe('Expand bottom panel');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-tab-height')).toBe('18px');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-resizer-height')).toBe('0px');
+    expect(JSON.parse(window.localStorage.getItem('openexr-viewer:panel-splits:v1') ?? '{}')).toMatchObject({
+      bottomPanelHeight: 210,
+      bottomPanelCollapsed: true
+    });
+
+    bottomButton.click();
+
+    expect(bottomButton.getAttribute('aria-expanded')).toBe('true');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('210px');
+  });
+
+  it('ignores vertical resizer keyboard input while the bottom panel is collapsed', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry({ bottomHeight: 210 });
+
+    new ViewerUi(createUiCallbacks());
+
+    const bottomButton = document.getElementById('bottom-panel-collapse-button') as HTMLButtonElement;
+    const bottomResizer = document.getElementById('bottom-panel-resizer') as HTMLElement;
+    const mainLayout = document.getElementById('main-layout') as HTMLElement;
+
+    bottomButton.click();
+    bottomResizer.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+
+    expect(bottomResizer.getAttribute('aria-disabled')).toBe('true');
+    expect(bottomResizer.tabIndex).toBe(-1);
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
+    expect(JSON.parse(window.localStorage.getItem('openexr-viewer:panel-splits:v1') ?? '{}')).toMatchObject({
+      bottomPanelHeight: 210,
+      bottomPanelCollapsed: true
+    });
+
+    bottomButton.click();
+    bottomResizer.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+
+    expect(bottomResizer.getAttribute('aria-disabled')).toBe('false');
+    expect(bottomResizer.tabIndex).toBe(0);
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('226px');
   });
 });
 
@@ -1246,27 +1325,35 @@ function installUiFixture(): void {
 function mockDesktopLayoutGeometry(
   args: {
     mainWidth?: number;
+    mainHeight?: number;
     imageWidth?: number;
     rightWidth?: number;
+    bottomHeight?: number;
   } = {}
 ): void {
   mockDomRect(document.getElementById('main-layout') as HTMLElement, {
     top: 0,
-    bottom: 800,
-    height: 800,
+    bottom: args.mainHeight ?? 800,
+    height: args.mainHeight ?? 800,
     width: args.mainWidth ?? 1200
   });
   mockDomRect(document.getElementById('image-panel-content') as HTMLElement, {
     top: 0,
-    bottom: 800,
-    height: 800,
+    bottom: args.mainHeight ?? 800,
+    height: args.mainHeight ?? 800,
     width: args.imageWidth ?? 220
   });
   mockDomRect(document.getElementById('inspector-panel') as HTMLElement, {
     top: 0,
-    bottom: 800,
-    height: 800,
+    bottom: args.mainHeight ?? 800,
+    height: args.mainHeight ?? 800,
     width: args.rightWidth ?? 320
+  });
+  mockDomRect(document.getElementById('bottom-panel-content') as HTMLElement, {
+    top: 0,
+    bottom: args.bottomHeight ?? 120,
+    height: args.bottomHeight ?? 120,
+    width: args.mainWidth ?? 1200
   });
 }
 

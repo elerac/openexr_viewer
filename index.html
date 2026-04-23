@@ -346,6 +346,27 @@
             </section>
           </aside>
         </div>
+
+        <div
+          id="bottom-panel-resizer"
+          class="layout-resizer layout-resizer--horizontal"
+          role="separator"
+          tabindex="0"
+          aria-label="Resize viewer and bottom panels"
+          aria-orientation="horizontal"
+        ></div>
+
+        <div id="bottom-panel" class="bottom-panel-shell panel-shell panel-shell--bottom">
+          <button
+            id="bottom-panel-collapse-button"
+            class="panel-collapse-button panel-collapse-button--bottom"
+            type="button"
+            aria-label="Collapse bottom panel"
+            aria-controls="bottom-panel-content"
+            aria-expanded="true"
+          ></button>
+          <aside id="bottom-panel-content" class="bottom-panel" aria-label="Bottom panel"></aside>
+        </div>
       </main>
     </div>
 
