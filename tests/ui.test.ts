@@ -2059,13 +2059,30 @@ describe('channel view icons', () => {
 });
 
 describe('channel thumbnail strip', () => {
-  it('shows a no-image message by default', () => {
+  it('renders an empty thumbnail state by default', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
 
     new ViewerUi(createUiCallbacks());
 
-    expect(document.getElementById('channel-thumbnail-strip')?.textContent).toContain('Open an image');
+    const strip = document.getElementById('channel-thumbnail-strip') as HTMLElement;
+    expect(strip.querySelectorAll('.image-browser-empty')).toHaveLength(1);
+    expect(strip.querySelectorAll('.channel-thumbnail-tile')).toHaveLength(0);
+    expect(strip.textContent?.trim()).toBe('');
+  });
+
+  it('shows a no-channels message for an active image with no visible channel items', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const ui = new ViewerUi(createUiCallbacks());
+
+    ui.setRgbGroupOptions([], null, []);
+
+    const strip = document.getElementById('channel-thumbnail-strip') as HTMLElement;
+    expect(strip.querySelectorAll('.image-browser-empty')).toHaveLength(1);
+    expect(strip.querySelectorAll('.channel-thumbnail-tile')).toHaveLength(0);
+    expect(strip.textContent).toContain('No channels');
   });
 
   it('renders placeholder thumbnails, syncs click selection, and supports horizontal keyboard navigation', () => {
