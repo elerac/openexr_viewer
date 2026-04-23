@@ -1652,6 +1652,34 @@ describe('channel thumbnail strip', () => {
     });
   });
 
+  it('keeps scalar alpha selections on the scalar channel when split RGB is enabled', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onRgbGroupChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onRgbGroupChange }));
+    const channelNames = ['R', 'G', 'B', 'A', 'mask'];
+    const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
+    const channelSelect = document.getElementById('rgb-group-select') as HTMLSelectElement;
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelMono',
+      channel: 'mask',
+      alpha: 'A'
+    }, buildChannelViewItems(channelNames));
+
+    expect(Array.from(channelSelect.selectedOptions).map((option) => option.textContent)).toEqual(['mask,A']);
+
+    splitToggle.click();
+
+    expect(Array.from(channelSelect.selectedOptions).map((option) => option.textContent)).toEqual(['mask']);
+    expect(onRgbGroupChange).toHaveBeenCalledWith({
+      kind: 'channelMono',
+      channel: 'mask',
+      alpha: null
+    });
+  });
+
   it('preserves horizontal scroll when selecting a thumbnail from a scrolled strip', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();

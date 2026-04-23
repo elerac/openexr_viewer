@@ -187,7 +187,7 @@ export class ChannelPanel implements Disposable {
       label: item.label
     })));
     applyListboxRowSizing(this.elements.rgbGroupSelect, this.channelViewItems.length, CHANNEL_OPTIONS_MAX_VISIBLE_ROWS);
-    this.elements.rgbGroupSelect.value = this.selectedValue;
+    this.syncSelectedChannelViewValue();
     this.elements.rgbGroupSelect.disabled = this.isLoading || this.channelViewItems.length === 0;
     this.renderChannelViewRows();
 
@@ -280,9 +280,27 @@ export class ChannelPanel implements Disposable {
     }
 
     this.selectedValue = value;
-    this.elements.rgbGroupSelect.value = value;
+    this.syncSelectedChannelViewValue();
     this.renderChannelViewRows();
     this.callbacks.onChannelViewChange(value);
+  }
+
+  private syncSelectedChannelViewValue(): void {
+    const options = Array.from(this.elements.rgbGroupSelect.options);
+    let selectedIndex = -1;
+
+    for (const [index, option] of options.entries()) {
+      const selected = option.value === this.selectedValue;
+      option.selected = selected;
+      if (selected) {
+        selectedIndex = index;
+      }
+    }
+
+    this.elements.rgbGroupSelect.selectedIndex = selectedIndex;
+    if (selectedIndex < 0) {
+      this.elements.rgbGroupSelect.value = '';
+    }
   }
 
   private updateRgbSplitToggleState(): void {

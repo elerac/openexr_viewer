@@ -376,13 +376,13 @@ test('boots empty, opens the gallery demo image, and keeps core controls stable'
   await expect(rgbSplitToggleButton).toBeEnabled();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-controls', 'rgb-group-select');
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');
-  await expect(rgbGroupSelect.locator('option:checked')).toHaveText(/R,G,B/);
+  await expect(rgbGroupSelect.locator('option:checked')).toHaveText('RGB');
   await expect(rgbGroupSelect.locator('option').filter({ hasText: /^R$/ })).toHaveCount(0);
   await expect(rgbGroupSelect.locator('option').filter({ hasText: /^G$/ })).toHaveCount(0);
   await expect(rgbGroupSelect.locator('option').filter({ hasText: /^B$/ })).toHaveCount(0);
   await rgbSplitToggleButton.click();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
-  await expect(rgbGroupSelect.locator('option').filter({ hasText: /^R,G,B$/ })).toHaveCount(0);
+  await expect(rgbGroupSelect.locator('option').filter({ hasText: /^RGB$/ })).toHaveCount(0);
   await expect(rgbGroupSelect.locator('option:checked')).toHaveText('R');
   await expect(rgbGroupSelect.locator('option').filter({ hasText: /^R$/ })).toHaveCount(1);
   await expect(rgbGroupSelect.locator('option').filter({ hasText: /^G$/ })).toHaveCount(1);
@@ -393,7 +393,7 @@ test('boots empty, opens the gallery demo image, and keeps core controls stable'
   await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['Mono:']);
   await rgbSplitToggleButton.click();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');
-  await expect(rgbGroupSelect.locator('option:checked')).toHaveText(/R,G,B/);
+  await expect(rgbGroupSelect.locator('option:checked')).toHaveText('RGB');
   await expect(rgbGroupSelect.locator('option').filter({ hasText: /^R$/ })).toHaveCount(0);
   await expect(rgbGroupSelect.locator('option').filter({ hasText: /^G$/ })).toHaveCount(0);
   await expect(rgbGroupSelect.locator('option').filter({ hasText: /^B$/ })).toHaveCount(0);
@@ -1598,15 +1598,15 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   await expect(channelSelect).toBeEnabled();
   await expect(rgbSplitToggleButton).toBeVisible();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');
-  await expect(channelSelect.locator('option', { hasText: 'AoLP.(R,G,B)' })).toHaveCount(1);
-  await expect(channelSelect.locator('option', { hasText: 'DoLP.(R,G,B)' })).toHaveCount(1);
-  await expect(channelSelect.locator('option', { hasText: 'DoP.(R,G,B)' })).toHaveCount(1);
-  await expect(channelSelect.locator('option', { hasText: 'DoCP.(R,G,B)' })).toHaveCount(1);
-  await expect(channelSelect.locator('option', { hasText: 'CoP.(R,G,B)' })).toHaveCount(1);
-  await expect(channelSelect.locator('option', { hasText: 'ToP.(R,G,B)' })).toHaveCount(1);
-  await expect(channelSelect.locator('option', { hasText: 'S1/S0.(R,G,B)' })).toHaveCount(1);
-  await expect(channelSelect.locator('option', { hasText: 'S2/S0.(R,G,B)' })).toHaveCount(1);
-  await expect(channelSelect.locator('option', { hasText: 'S3/S0.(R,G,B)' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'AoLP.RGB' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'DoLP.RGB' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'DoP.RGB' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'DoCP.RGB' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'CoP.RGB' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'ToP.RGB' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'S1/S0.RGB' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'S2/S0.RGB' })).toHaveCount(1);
+  await expect(channelSelect.locator('option', { hasText: 'S3/S0.RGB' })).toHaveCount(1);
   await expect(channelSelect.locator('option').filter({ hasText: /^AoLP\.R$/ })).toHaveCount(0);
   await expect(channelSelect.locator('option').filter({ hasText: /^S0\.R$/ })).toHaveCount(0);
 
@@ -1634,7 +1634,7 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   expect(yellowCyanYellowId).not.toBe('-1');
   expect(previousColormapId).not.toBe('-1');
 
-  await channelSelect.selectOption({ label: 'AoLP.(R,G,B)' });
+  await channelSelect.selectOption({ label: 'AoLP.RGB' });
   await expect(colormapRangeControl).toBeVisible();
   await expect(colormapSelect).toHaveValue(hsvId);
   await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'false');
@@ -1658,14 +1658,14 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   await expect(colormapRangeControl).toBeVisible();
   await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['Mono:']);
 
-  await channelSelect.selectOption({ label: 'S2/S0.(R,G,B)' });
+  await channelSelect.selectOption({ label: 'S2/S0.RGB' });
   await expect(stokesDegreeModulationButton).toBeHidden();
   await expect(colormapSelect).toHaveValue(previousColormapId);
   await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-1, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
 
-  await channelSelect.selectOption({ label: 'AoLP.(R,G,B)' });
+  await channelSelect.selectOption({ label: 'AoLP.RGB' });
   await expect(colormapSelect).toHaveValue(hsvId);
   await expect(stokesDegreeModulationButton).toBeVisible();
   await expect(stokesDegreeModulationButton).toHaveText('DoLP Modulation');
@@ -1673,7 +1673,7 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   await rgbSplitToggleButton.click();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
   await expect(channelSelect.locator('option:checked')).toHaveText('AoLP.R');
-  await expect(channelSelect.locator('option').filter({ hasText: /^AoLP\.\(R,G,B\)$/ })).toHaveCount(0);
+  await expect(channelSelect.locator('option').filter({ hasText: /^AoLP\.RGB$/ })).toHaveCount(0);
   await expect(channelSelect.locator('option').filter({ hasText: /^AoLP\.R$/ })).toHaveCount(1);
   await expect(channelSelect.locator('option').filter({ hasText: /^AoLP\.G$/ })).toHaveCount(1);
   await expect(channelSelect.locator('option').filter({ hasText: /^AoLP\.B$/ })).toHaveCount(1);
@@ -1686,7 +1686,7 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   await expect(channelSelect.locator('option').filter({ hasText: /^S3\/S0\.R$/ })).toHaveCount(1);
   await expect(channelSelect.locator('option').filter({ hasText: /^S3\/S0\.G$/ })).toHaveCount(1);
   await expect(channelSelect.locator('option').filter({ hasText: /^S3\/S0\.B$/ })).toHaveCount(1);
-  await expect(channelSelect.locator('option').filter({ hasText: /^S0\.\(R,G,B\)$/ })).toHaveCount(0);
+  await expect(channelSelect.locator('option').filter({ hasText: /^S0\.RGB$/ })).toHaveCount(0);
   await expect(channelSelect.locator('option').filter({ hasText: /^S0\.R$/ })).toHaveCount(1);
   await expect(colormapSelect).toHaveValue(hsvId);
   await expect(stokesDegreeModulationButton).toBeVisible();
@@ -1738,12 +1738,12 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
 
   await rgbSplitToggleButton.click();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');
-  await expect(channelSelect.locator('option:checked')).toHaveText('ToP.(R,G,B)');
-  await expect(channelSelect.locator('option').filter({ hasText: /^R,G,B$/ })).toHaveCount(1);
+  await expect(channelSelect.locator('option:checked')).toHaveText('ToP.RGB');
+  await expect(channelSelect.locator('option').filter({ hasText: /^RGB$/ })).toHaveCount(1);
   await expect(channelSelect.locator('option').filter({ hasText: /^ToP\.B$/ })).toHaveCount(0);
   await expect(channelSelect.locator('option').filter({ hasText: /^S0\.R$/ })).toHaveCount(0);
-  await channelSelect.selectOption({ label: 'R,G,B' });
-  await expect(channelSelect.locator('option:checked')).toHaveText('R,G,B');
+  await channelSelect.selectOption({ label: 'RGB' });
+  await expect(channelSelect.locator('option:checked')).toHaveText('RGB');
   await expect(stokesDegreeModulationButton).toBeHidden();
   await expect(noneButton).toHaveAttribute('aria-pressed', 'true');
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'false');
@@ -1755,12 +1755,12 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'true');
   await expect(colormapSelect).toHaveValue(previousColormapId);
 
-  await channelSelect.selectOption({ label: 'ToP.(R,G,B)' });
+  await channelSelect.selectOption({ label: 'ToP.RGB' });
   await expect(colormapSelect).toHaveValue(yellowCyanYellowId);
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-Math.PI / 4, 6);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI / 4, 6);
 
-  await channelSelect.selectOption({ label: 'R,G,B' });
+  await channelSelect.selectOption({ label: 'RGB' });
   await expect(noneButton).toHaveAttribute('aria-pressed', 'false');
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'true');
   await expect(exposureControl).toBeHidden();
@@ -1842,7 +1842,7 @@ test('keeps the selected split RGB Stokes channel when opening another matching 
   });
   await expect(openedImages.locator('option:checked')).toContainText('stokes_rgb_first.exr', { timeout: 30000 });
 
-  await channelSelect.selectOption({ label: 'AoLP.(R,G,B)' });
+  await channelSelect.selectOption({ label: 'AoLP.RGB' });
   await rgbSplitToggleButton.click();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
   await expect(channelSelect.locator('option:checked')).toHaveText('AoLP.R');
@@ -1926,7 +1926,7 @@ test('loads arbitrary scalar channels as grayscale display options', async ({ pa
   await expect(channelSelect).toBeEnabled();
   await expect(rgbSplitToggleButton).toBeVisible();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');
-  await expect(channelSelect.locator('option:checked')).toHaveText('R,G,B,A');
+  await expect(channelSelect.locator('option:checked')).toHaveText('RGBA');
   await expect(channelSelect.locator('option').filter({ hasText: /^R$/ })).toHaveCount(0);
   await expect(channelSelect.locator('option').filter({ hasText: /^G$/ })).toHaveCount(0);
   await expect(channelSelect.locator('option').filter({ hasText: /^B$/ })).toHaveCount(0);
@@ -1941,7 +1941,7 @@ test('loads arbitrary scalar channels as grayscale display options', async ({ pa
   await rgbSplitToggleButton.click();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
   await expect(channelSelect.locator('option:checked')).toHaveText('mask');
-  await expect(channelSelect.locator('option').filter({ hasText: /^R,G,B,A$/ })).toHaveCount(0);
+  await expect(channelSelect.locator('option').filter({ hasText: /^RGBA$/ })).toHaveCount(0);
   await expect(channelSelect.locator('option').filter({ hasText: /^R$/ })).toHaveCount(1);
   await expect(channelSelect.locator('option').filter({ hasText: /^G$/ })).toHaveCount(1);
   await expect(channelSelect.locator('option').filter({ hasText: /^B$/ })).toHaveCount(1);
@@ -1949,8 +1949,8 @@ test('loads arbitrary scalar channels as grayscale display options', async ({ pa
   await expect(channelSelect.locator('option').filter({ hasText: /^mask$/ })).toHaveCount(1);
   await rgbSplitToggleButton.click();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');
-  await channelSelect.selectOption({ label: 'R,G,B,A' });
-  await expect(channelSelect.locator('option:checked')).toHaveText('R,G,B,A');
+  await channelSelect.selectOption({ label: 'RGBA' });
+  await expect(channelSelect.locator('option:checked')).toHaveText('RGBA');
 
   await page.setInputFiles('#file-input', {
     name: 'named_rgba.exr',
@@ -1958,7 +1958,7 @@ test('loads arbitrary scalar channels as grayscale display options', async ({ pa
     buffer: buildNamedRgbaExr()
   });
   await expect(openedImages.locator('option:checked')).toContainText('named_rgba.exr', { timeout: 30000 });
-  await expect(channelSelect.locator('option:checked')).toHaveText('beauty.(R,G,B,A)');
+  await expect(channelSelect.locator('option:checked')).toHaveText('beauty.RGBA');
 
   await page.setInputFiles('#file-input', {
     name: 'named_rgb_bare_alpha.exr',
@@ -1966,7 +1966,7 @@ test('loads arbitrary scalar channels as grayscale display options', async ({ pa
     buffer: buildNamedRgbBareAlphaExr()
   });
   await expect(openedImages.locator('option:checked')).toContainText('named_rgb_bare_alpha.exr', { timeout: 30000 });
-  await expect(channelSelect.locator('option:checked')).toHaveText('beauty.(R,G,B)');
+  await expect(channelSelect.locator('option:checked')).toHaveText('beauty.RGB');
 
   await page.setInputFiles('#file-input', {
     name: 'scalar_alpha.exr',

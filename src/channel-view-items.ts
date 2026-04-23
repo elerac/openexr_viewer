@@ -23,9 +23,11 @@ export function buildChannelViewItems(channelNames: string[]): ChannelViewItem[]
   const mergedItems = buildDisplayItems(channelNames, false);
   const splitItems = buildDisplayItems(channelNames, true);
   const itemsByValue = new Map<string, ChannelViewItem>();
+  const buildCollisionKey = (item: Omit<ChannelViewItem, 'mergedOrder' | 'splitOrder'>): string =>
+    `${item.value}::${item.selectionKey}`;
 
   mergedItems.forEach((item, index) => {
-    const existing = itemsByValue.get(item.value);
+    const existing = itemsByValue.get(item.value) ?? itemsByValue.get(buildCollisionKey(item));
     if (existing) {
       existing.mergedOrder = index;
       return;
@@ -41,6 +43,16 @@ export function buildChannelViewItems(channelNames: string[]): ChannelViewItem[]
   splitItems.forEach((item, index) => {
     const existing = itemsByValue.get(item.value);
     if (existing) {
+      if (existing.selectionKey !== item.selectionKey) {
+        itemsByValue.set(buildCollisionKey(item), {
+          ...item,
+          value: buildCollisionKey(item),
+          mergedOrder: null,
+          splitOrder: index
+        });
+        return;
+      }
+
       existing.splitOrder = index;
       return;
     }
