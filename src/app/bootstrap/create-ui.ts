@@ -76,8 +76,8 @@ export function createViewerUi({
     onFileSelected: (file) => {
       void getSessionController().enqueueFiles([file]);
     },
-    onFolderSelected: (files) => {
-      void getSessionController().enqueueFolderFiles(files);
+    onFolderSelected: (files, options) => {
+      void getSessionController().enqueueFolderFiles(files, options);
     },
     onFilesDropped: (files) => {
       void getSessionController().enqueueFiles(files);

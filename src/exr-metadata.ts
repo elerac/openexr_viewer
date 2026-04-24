@@ -40,6 +40,21 @@ interface ParsedExrHeader {
   nextOffset: number;
 }
 
+export interface ExrHeaderSummaryPart {
+  name: string | null;
+  type: string | null;
+  compression: string | null;
+  dataWindow: string | null;
+  displayWindow: string | null;
+  channels: string | null;
+}
+
+export interface ExrHeaderSummary {
+  isMultipart: boolean;
+  partCount: number;
+  parts: ExrHeaderSummaryPart[];
+}
+
 export function parseExrMetadata(bytes: Uint8Array): ExrMetadataEntry[][] {
   try {
     if (bytes.byteLength < 8) {
@@ -74,6 +89,31 @@ export function parseExrMetadata(bytes: Uint8Array): ExrMetadataEntry[][] {
   } catch {
     return [];
   }
+}
+
+export function summarizeExrHeader(bytes: Uint8Array): ExrHeaderSummary | null {
+  const metadataByPart = parseExrMetadata(bytes);
+  if (metadataByPart.length === 0) {
+    return null;
+  }
+
+  const view = bytes.byteLength >= 8 ? toDataView(bytes) : null;
+  const isMultipart = view && view.getUint32(0, true) === OPENEXR_MAGIC
+    ? (view.getUint32(4, true) & MULTIPART_FLAG) !== 0
+    : metadataByPart.length > 1;
+
+  return {
+    isMultipart,
+    partCount: metadataByPart.length,
+    parts: metadataByPart.map((metadata) => ({
+      name: getMetadataValue(metadata, 'name'),
+      type: getMetadataValue(metadata, 'type'),
+      compression: getMetadataValue(metadata, 'compression'),
+      dataWindow: getMetadataValue(metadata, 'dataWindow'),
+      displayWindow: getMetadataValue(metadata, 'displayWindow'),
+      channels: getMetadataValue(metadata, 'channels')
+    }))
+  };
 }
 
 function readHeader(bytes: Uint8Array, view: DataView, startOffset: number): ParsedExrHeader {
@@ -150,6 +190,10 @@ function formatHeaderMetadata(attributes: RawExrAttribute[]): ExrMetadataEntry[]
     .forEach((entry) => result.push(stripOrder(entry)));
 
   return result;
+}
+
+function getMetadataValue(metadata: ExrMetadataEntry[], key: string): string | null {
+  return metadata.find((entry) => entry.key === key)?.value ?? null;
 }
 
 function stripOrder(entry: ExrMetadataEntry & { order: number }): ExrMetadataEntry {

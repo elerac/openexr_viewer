@@ -15,6 +15,8 @@ interface GlobalKeyboardControllerCallbacks {
   isExportColormapDialogOpen: () => boolean;
   isExportColormapDialogBusy: () => boolean;
   closeExportColormapDialog: (restoreFocus?: boolean) => void;
+  isFolderLoadDialogOpen: () => boolean;
+  closeFolderLoadDialog: (restoreFocus?: boolean) => void;
   isWindowPreviewActive: () => boolean;
   setWindowPreviewEnabled: (enabled: boolean) => void;
   hasOpenMenu: () => boolean;
@@ -50,6 +52,12 @@ export class GlobalKeyboardController implements Disposable {
       ) {
         event.preventDefault();
         this.callbacks.closeExportColormapDialog(true);
+        return;
+      }
+
+      if (event.key === 'Escape' && this.callbacks.isFolderLoadDialogOpen()) {
+        event.preventDefault();
+        this.callbacks.closeFolderLoadDialog(true);
         return;
       }
 

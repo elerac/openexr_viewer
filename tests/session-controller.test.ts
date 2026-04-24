@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { SessionController } from '../src/controllers/session-controller';
 import { LoadQueueService } from '../src/services/load-queue';
 import { ViewerAppCore } from '../src/app/viewer-app-core';
+import type { DecodeBytesOptions } from '../src/exr-decode-context';
 import { DecodedExrImage } from '../src/types';
 import {
   createChannelMonoSelection,
@@ -64,7 +65,7 @@ function createFolderFile(
 }
 
 function createController(options: {
-  decodeBytes?: (bytes: Uint8Array) => Promise<DecodedExrImage>;
+  decodeBytes?: (bytes: Uint8Array, options?: DecodeBytesOptions) => Promise<DecodedExrImage>;
 } = {}) {
   const core = new ViewerAppCore();
   const controller = new SessionController({
@@ -89,6 +90,21 @@ describe('session controller shim', () => {
     expect(session?.filename).toBe('beauty.exr');
     expect(core.getState().sessionState.activeColormapId).toBe(core.getState().defaultColormapId);
     expect(core.getState().sessionState.displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
+  });
+
+  it('passes per-decode signal and filename context to file decodes', async () => {
+    const decodeBytes = vi.fn(async () => createDecodedImage(8, 4));
+    const { controller } = createController({ decodeBytes });
+
+    await controller.enqueueFiles([createFile('beauty.exr')]);
+
+    expect(decodeBytes).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        filename: 'beauty.exr'
+      })
+    );
   });
 
   it('keeps a matching plain channel selection when loading a new image', async () => {
@@ -377,6 +393,38 @@ describe('session controller shim', () => {
     expect(reloaded?.decoded.height).toBe(8);
   });
 
+  it('cancels in-flight reload decodes when the session is closed', async () => {
+    const reloadSignalRef: { current: AbortSignal | null } = { current: null };
+    const decodeBytes = vi
+      .fn<(bytes: Uint8Array, options?: DecodeBytesOptions) => Promise<DecodedExrImage>>()
+      .mockResolvedValueOnce(createDecodedImage(4, 4))
+      .mockImplementationOnce((_bytes, options) => {
+        reloadSignalRef.current = options?.signal ?? null;
+        return new Promise<DecodedExrImage>((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => {
+            reject(options.signal!.reason);
+          }, { once: true });
+        });
+      });
+    const { controller } = createController({ decodeBytes });
+
+    await controller.enqueueFiles([createFile('reload.exr')]);
+    const sessionId = controller.getActiveSessionId()!;
+    const pending = controller.reloadSession(sessionId);
+    for (let index = 0; index < 6 && !reloadSignalRef.current; index += 1) {
+      await Promise.resolve();
+    }
+
+    controller.closeSession(sessionId);
+
+    await expect(pending).resolves.toBeUndefined();
+    if (!reloadSignalRef.current) {
+      throw new Error('Reload signal was not captured.');
+    }
+    expect(reloadSignalRef.current.aborted).toBe(true);
+    expect(controller.getActiveSession()).toBeNull();
+  });
+
   it('loads only exr files from folder selections', async () => {
     const decodeBytes = vi
       .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
@@ -429,6 +477,25 @@ describe('session controller shim', () => {
     expect(decodeBytes).toHaveBeenCalledTimes(1);
     expect(controller.getSessions().map((session) => session.filename)).toEqual(['existing.exr']);
     expect(core.getState().errorMessage).toBe('No OpenEXR files found in the selected folder.');
+  });
+
+  it('blocks over-limit folder loads until an override is provided', async () => {
+    const decodeBytes = vi.fn(async () => createDecodedImage());
+    const { controller, core } = createController({ decodeBytes });
+    const files = Array.from({ length: 251 }, (_value, index) => {
+      return createFolderFile(`shots/${String(index).padStart(3, '0')}.exr`);
+    });
+
+    await controller.enqueueFolderFiles(files);
+
+    expect(decodeBytes).not.toHaveBeenCalled();
+    expect(controller.getSessions()).toHaveLength(0);
+    expect(core.getState().errorMessage).toContain('Folder load blocked.');
+
+    await controller.enqueueFolderFiles(files, { overrideLimits: true });
+
+    expect(decodeBytes).toHaveBeenCalledTimes(251);
+    expect(controller.getSessions()).toHaveLength(251);
   });
 
   it('keeps duplicate filename suffixing for files loaded from different subfolders', async () => {

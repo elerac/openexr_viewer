@@ -1,10 +1,18 @@
 import { loadExr } from './exr';
 import { collectDecodedImageTransferables } from './decode-transferables';
+import {
+  createDecodeErrorContext,
+  createDecodeErrorPayload,
+  type DecodeErrorContext,
+  type DecodeErrorPayload
+} from './exr-decode-context';
 import type { DecodedExrImage } from './types';
 
 interface DecodeWorkerRequest {
   id: number;
   bytes: Uint8Array;
+  filename: string | null;
+  context: DecodeErrorContext;
 }
 
 type DecodeWorkerResponse =
@@ -16,7 +24,7 @@ type DecodeWorkerResponse =
   | {
       id: number;
       ok: false;
-      error: string;
+      error: DecodeErrorPayload;
     };
 
 type DecodeWorkerScope = {
@@ -42,10 +50,11 @@ async function decodeAndReply(request: DecodeWorkerRequest): Promise<void> {
       collectDecodedImageTransferables(image)
     );
   } catch (error) {
+    const context = request.context ?? createDecodeErrorContext(request.bytes, request.filename, error);
     worker.postMessage({
       id: request.id,
       ok: false,
-      error: error instanceof Error ? error.message : 'Failed to decode EXR.'
+      error: createDecodeErrorPayload(error, context)
     } satisfies DecodeWorkerResponse);
   }
 }

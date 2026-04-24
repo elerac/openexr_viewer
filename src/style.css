@@ -452,6 +452,35 @@ input[type='range'] {
   font-size: 0.82rem;
 }
 
+.app-dialog-warning {
+  margin: 0;
+  color: #ffdca8;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.folder-load-dialog-stats {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.4rem 0.75rem;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid #3a4457;
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--panel) 88%, #000);
+}
+
+.folder-load-dialog-stats dt {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.folder-load-dialog-stats dd {
+  margin: 0;
+  font-size: 0.82rem;
+  text-align: right;
+}
+
 .app-dialog-actions {
   display: flex;
   justify-content: flex-end;

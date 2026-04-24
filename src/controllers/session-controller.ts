@@ -2,7 +2,15 @@ import { createAbortError, isAbortError, throwIfAborted, type Disposable } from 
 import { ViewerAppCore } from '../app/viewer-app-core';
 import { buildLoadedSession, buildReloadedSession } from '../app/session-resource';
 import { selectActiveSession } from '../app/viewer-app-selectors';
-import { LoadQueueService } from '../services/load-queue';
+import { LoadQueueService, type LoadQueueOptions } from '../services/load-queue';
+import type { DecodeBytesOptions } from '../exr-decode-context';
+import {
+  DEFAULT_FOLDER_LOAD_LIMITS,
+  createFolderLoadAdmission,
+  formatByteCount,
+  getFolderExrFiles,
+  getFolderLoadStats
+} from '../folder-load-limits';
 import type { DecodedExrImage, OpenedImageDropPlacement, OpenedImageSession, SessionSource, ViewportInfo } from '../types';
 
 const GALLERY_IMAGES = [
@@ -13,10 +21,20 @@ const GALLERY_IMAGES = [
   }
 ] as const;
 
+const LOAD_CATEGORY_OPEN_FILES = 'open-files';
+const LOAD_CATEGORY_FOLDER = 'folder';
+const LOAD_CATEGORY_GALLERY = 'gallery';
+const LOAD_CATEGORY_RELOAD_SESSION = 'reload-session';
+const LOAD_CATEGORY_RELOAD_ALL = 'reload-all';
+
+export interface FolderLoadOptions {
+  overrideLimits?: boolean;
+}
+
 export interface SessionControllerDependencies {
   core: ViewerAppCore;
   loadQueue: LoadQueueService;
-  decodeBytes: (bytes: Uint8Array) => Promise<DecodedExrImage>;
+  decodeBytes: (bytes: Uint8Array, options?: DecodeBytesOptions) => Promise<DecodedExrImage>;
   getViewport: () => ViewportInfo;
 }
 
@@ -27,6 +45,8 @@ export class SessionController implements Disposable {
   private readonly getViewport: SessionControllerDependencies['getViewport'];
 
   private readonly abortController = new AbortController();
+  private queuedLoadCount = 0;
+  private nextLoadGroupId = 1;
   private disposed = false;
 
   constructor(dependencies: SessionControllerDependencies) {
@@ -41,59 +61,51 @@ export class SessionController implements Disposable {
       return Promise.resolve();
     }
 
-    return this.loadQueue.enqueue(async (signal) => {
+    this.cancelBackgroundLoads('Foreground load superseded background work.');
+    return this.enqueueLoadTask(async (signal) => {
       this.throwIfStopped(signal);
-      this.core.dispatch({ type: 'loadingSet', loading: true });
-      this.core.dispatch({ type: 'errorSet', message: null });
-      try {
-        for (const file of files) {
-          await this.loadFile(file, signal);
-        }
-      } finally {
-        this.core.dispatch({ type: 'loadingSet', loading: false });
+      for (const file of files) {
+        await this.loadFile(file, signal);
       }
-    }).catch((error) => {
-      if (isAbortError(error)) {
-        return;
-      }
-      throw error;
+    }, {
+      priority: 'foreground',
+      category: LOAD_CATEGORY_OPEN_FILES
     });
   }
 
-  enqueueFolderFiles(files: File[]): Promise<void> {
+  enqueueFolderFiles(files: File[], options: FolderLoadOptions = {}): Promise<void> {
     if (this.disposed || files.length === 0) {
       return Promise.resolve();
     }
 
-    return this.loadQueue.enqueue(async (signal) => {
+    const exrFiles = getFolderExrFiles(files);
+    if (exrFiles.length === 0) {
+      this.core.dispatch({
+        type: 'errorSet',
+        message: 'No OpenEXR files found in the selected folder.'
+      });
+      return Promise.resolve();
+    }
+
+    const admission = createFolderLoadAdmission(getFolderLoadStats(exrFiles), DEFAULT_FOLDER_LOAD_LIMITS);
+    if (admission.exceeded && !options.overrideLimits) {
+      this.core.dispatch({
+        type: 'errorSet',
+        message: formatFolderLimitMessage(admission.reasons)
+      });
+      return Promise.resolve();
+    }
+
+    const groupId = this.takeLoadGroupId('folder');
+    return this.enqueueLoadTask(async (signal) => {
       this.throwIfStopped(signal);
-      this.core.dispatch({ type: 'loadingSet', loading: true });
-      this.core.dispatch({ type: 'errorSet', message: null });
-
-      try {
-        const exrFiles = files
-          .filter((file) => isExrFilename(file.name))
-          .sort((left, right) => getFolderFileSortKey(left).localeCompare(getFolderFileSortKey(right)));
-
-        if (exrFiles.length === 0) {
-          this.core.dispatch({
-            type: 'errorSet',
-            message: 'No OpenEXR files found in the selected folder.'
-          });
-          return;
-        }
-
-        for (const file of exrFiles) {
-          await this.loadFile(file, signal);
-        }
-      } finally {
-        this.core.dispatch({ type: 'loadingSet', loading: false });
+      for (const file of exrFiles) {
+        await this.loadFile(file, signal);
       }
-    }).catch((error) => {
-      if (isAbortError(error)) {
-        return;
-      }
-      throw error;
+    }, {
+      priority: 'background',
+      category: LOAD_CATEGORY_FOLDER,
+      groupId
     });
   }
 
@@ -102,20 +114,13 @@ export class SessionController implements Disposable {
       return Promise.resolve();
     }
 
-    return this.loadQueue.enqueue(async (signal) => {
+    this.cancelBackgroundLoads('Foreground load superseded background work.');
+    return this.enqueueLoadTask(async (signal) => {
       this.throwIfStopped(signal);
-      this.core.dispatch({ type: 'loadingSet', loading: true });
-      this.core.dispatch({ type: 'errorSet', message: null });
-      try {
-        await this.loadGalleryImage(galleryId, signal);
-      } finally {
-        this.core.dispatch({ type: 'loadingSet', loading: false });
-      }
-    }).catch((error) => {
-      if (isAbortError(error)) {
-        return;
-      }
-      throw error;
+      await this.loadGalleryImage(galleryId, signal);
+    }, {
+      priority: 'foreground',
+      category: LOAD_CATEGORY_GALLERY
     });
   }
 
@@ -124,23 +129,17 @@ export class SessionController implements Disposable {
       return Promise.resolve();
     }
 
-    return this.loadQueue.enqueue(async (signal) => {
+    this.cancelBackgroundLoads('Foreground load superseded background work.');
+    return this.enqueueLoadTask(async (signal) => {
       this.throwIfStopped(signal);
-      this.core.dispatch({ type: 'loadingSet', loading: true });
-      this.core.dispatch({ type: 'errorSet', message: null });
-      try {
-        const error = await this.reloadSessionByIdInternal(sessionId, signal);
-        if (error) {
-          this.core.dispatch({ type: 'errorSet', message: `Reload failed: ${error}` });
-        }
-      } finally {
-        this.core.dispatch({ type: 'loadingSet', loading: false });
+      const error = await this.reloadSessionByIdInternal(sessionId, signal);
+      if (error) {
+        this.core.dispatch({ type: 'errorSet', message: `Reload failed: ${error}` });
       }
-    }).catch((error) => {
-      if (isAbortError(error)) {
-        return;
-      }
-      throw error;
+    }, {
+      priority: 'foreground',
+      category: LOAD_CATEGORY_RELOAD_SESSION,
+      sessionId
     });
   }
 
@@ -149,39 +148,43 @@ export class SessionController implements Disposable {
       return Promise.resolve();
     }
 
-    return this.loadQueue.enqueue(async (signal) => {
-      this.throwIfStopped(signal);
-      this.core.dispatch({ type: 'loadingSet', loading: true });
-      this.core.dispatch({ type: 'errorSet', message: null });
-      const failures: string[] = [];
-
-      try {
-        const reloadIds = this.getSessions().map((session) => session.id);
-        for (const sessionId of reloadIds) {
-          this.throwIfStopped(signal);
-          const label = this.getSessions().find((session) => session.id === sessionId)?.displayName ?? sessionId;
-          const error = await this.reloadSessionByIdInternal(sessionId, signal);
-          if (error) {
-            failures.push(`${label}: ${error}`);
-          }
+    const groupId = this.takeLoadGroupId('reload-all');
+    const failures: string[] = [];
+    const reloadTargets = this.getSessions().map((session) => ({
+      id: session.id,
+      label: session.displayName
+    }));
+    const promises = reloadTargets.map((target, index) => {
+      return this.enqueueLoadTask(async (signal) => {
+        this.throwIfStopped(signal);
+        const currentSession = this.getSessions().find((session) => session.id === target.id);
+        if (!currentSession) {
+          return;
         }
 
-        if (failures.length > 0) {
-          const preview = failures.slice(0, 3).join(' | ');
-          const suffix = failures.length > 3 ? ` (+${failures.length - 3} more)` : '';
-          this.core.dispatch({
-            type: 'errorSet',
-            message: `Reload all finished with ${failures.length} failure(s): ${preview}${suffix}`
-          });
+        const error = await this.reloadSessionByIdInternal(target.id, signal);
+        if (error) {
+          failures.push(`${target.label}: ${error}`);
         }
-      } finally {
-        this.core.dispatch({ type: 'loadingSet', loading: false });
-      }
-    }).catch((error) => {
-      if (isAbortError(error)) {
+      }, {
+        priority: 'background',
+        category: LOAD_CATEGORY_RELOAD_ALL,
+        sessionId: target.id,
+        groupId
+      }, index === 0);
+    });
+
+    return Promise.all(promises).then(() => {
+      if (this.disposed || this.getSessions().length === 0 || failures.length === 0) {
         return;
       }
-      throw error;
+
+      const preview = failures.slice(0, 3).join(' | ');
+      const suffix = failures.length > 3 ? ` (+${failures.length - 3} more)` : '';
+      this.core.dispatch({
+        type: 'errorSet',
+        message: `Reload all finished with ${failures.length} failure(s): ${preview}${suffix}`
+      });
     });
   }
 
@@ -190,6 +193,9 @@ export class SessionController implements Disposable {
       return;
     }
 
+    this.loadQueue.promoteWhere((entry) => {
+      return entry.category === LOAD_CATEGORY_RELOAD_ALL && entry.sessionId === sessionId;
+    });
     this.core.dispatch({
       type: 'activeSessionSwitched',
       sessionId
@@ -218,6 +224,12 @@ export class SessionController implements Disposable {
       return;
     }
 
+    this.loadQueue.cancelWhere((entry) => {
+      return (
+        entry.sessionId === sessionId &&
+        (entry.category === LOAD_CATEGORY_RELOAD_SESSION || entry.category === LOAD_CATEGORY_RELOAD_ALL)
+      );
+    }, 'Session load was cancelled.');
     this.core.dispatch({
       type: 'sessionClosed',
       sessionId
@@ -225,10 +237,14 @@ export class SessionController implements Disposable {
   }
 
   closeAllSessions(): void {
-    if (this.disposed || this.getSessions().length === 0) {
+    if (this.disposed) {
       return;
     }
 
+    this.loadQueue.cancelAll('All session loads were cancelled.');
+    if (this.getSessions().length === 0) {
+      return;
+    }
     this.core.dispatch({
       type: 'allSessionsClosed'
     });
@@ -264,6 +280,50 @@ export class SessionController implements Disposable {
 
     this.disposed = true;
     this.abortController.abort(createAbortError('Session controller has been disposed.'));
+    this.loadQueue.cancelAll('Session controller has been disposed.');
+  }
+
+  private enqueueLoadTask(
+    task: (signal: AbortSignal) => Promise<void>,
+    options: LoadQueueOptions,
+    clearError = true
+  ): Promise<void> {
+    this.beginQueuedLoad(clearError);
+    return this.loadQueue.enqueue(task, options).catch((error) => {
+      if (isAbortError(error)) {
+        return;
+      }
+      throw error;
+    }).finally(() => {
+      this.finishQueuedLoad();
+    });
+  }
+
+  private beginQueuedLoad(clearError: boolean): void {
+    this.queuedLoadCount += 1;
+    if (this.queuedLoadCount === 1) {
+      this.core.dispatch({ type: 'loadingSet', loading: true });
+    }
+    if (clearError) {
+      this.core.dispatch({ type: 'errorSet', message: null });
+    }
+  }
+
+  private finishQueuedLoad(): void {
+    this.queuedLoadCount = Math.max(0, this.queuedLoadCount - 1);
+    if (this.queuedLoadCount === 0) {
+      this.core.dispatch({ type: 'loadingSet', loading: false });
+    }
+  }
+
+  private cancelBackgroundLoads(message: string): void {
+    this.loadQueue.cancelWhere((entry) => entry.priority === 'background', message);
+  }
+
+  private takeLoadGroupId(prefix: string): string {
+    const id = `${prefix}-${this.nextLoadGroupId}`;
+    this.nextLoadGroupId += 1;
+    return id;
   }
 
   private async loadGalleryImage(galleryId: string, signal: AbortSignal): Promise<void> {
@@ -278,14 +338,17 @@ export class SessionController implements Disposable {
     const galleryImageUrl = `${import.meta.env.BASE_URL}${galleryImage.filename}`;
 
     try {
-      const response = await fetch(galleryImageUrl, { signal: this.abortController.signal });
+      const response = await fetch(galleryImageUrl, { signal });
       if (!response.ok) {
         throw new Error(`Failed to load ${galleryImageUrl} (${response.status})`);
       }
 
       const bytes = new Uint8Array(await response.arrayBuffer());
       this.throwIfStopped(signal);
-      const decoded = await this.decodeBytes(bytes);
+      const decoded = await this.decodeBytes(bytes, {
+        signal,
+        filename: galleryImage.filename
+      });
       this.throwIfStopped(signal);
       this.applyDecodedImage(decoded, galleryImage.filename, bytes.byteLength, {
         kind: 'url',
@@ -307,7 +370,10 @@ export class SessionController implements Disposable {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       this.throwIfStopped(signal);
-      const decoded = await this.decodeBytes(bytes);
+      const decoded = await this.decodeBytes(bytes, {
+        signal,
+        filename: getFileDecodeName(file)
+      });
       this.throwIfStopped(signal);
       this.applyDecodedImage(decoded, file.name, file.size, {
         kind: 'file',
@@ -360,7 +426,7 @@ export class SessionController implements Disposable {
     }
 
     try {
-      const decoded = await decodeExrFromSessionSource(session.source, this.decodeBytes, this.abortController.signal);
+      const decoded = await decodeExrFromSessionSource(session.source, session.filename, this.decodeBytes, signal);
       this.throwIfStopped(signal);
       const baseState = this.getActiveSessionId() === sessionId
         ? this.core.getState().sessionState
@@ -394,7 +460,8 @@ export class SessionController implements Disposable {
 
 async function decodeExrFromSessionSource(
   source: SessionSource,
-  decodeBytes: (bytes: Uint8Array) => Promise<DecodedExrImage>,
+  filename: string,
+  decodeBytes: (bytes: Uint8Array, options?: DecodeBytesOptions) => Promise<DecodedExrImage>,
   signal?: AbortSignal
 ): Promise<DecodedExrImage> {
   if (source.kind === 'url') {
@@ -407,21 +474,26 @@ async function decodeExrFromSessionSource(
     if (signal) {
       throwIfAborted(signal, 'Session reload was aborted.');
     }
-    return decodeBytes(bytes);
+    return decodeBytes(bytes, { signal, filename });
   }
 
   const bytes = new Uint8Array(await source.file.arrayBuffer());
   if (signal) {
     throwIfAborted(signal, 'Session reload was aborted.');
   }
-  return decodeBytes(bytes);
+  return decodeBytes(bytes, {
+    signal,
+    filename: getFileDecodeName(source.file) || filename
+  });
 }
 
-function isExrFilename(filename: string): boolean {
-  return /\.exr$/i.test(filename.trim());
-}
-
-function getFolderFileSortKey(file: File): string {
+function getFileDecodeName(file: File): string {
   const relativePath = file.webkitRelativePath.trim();
   return relativePath || file.name;
+}
+
+function formatFolderLimitMessage(reasons: string[]): string {
+  const limits = DEFAULT_FOLDER_LOAD_LIMITS;
+  const reasonText = reasons.length > 0 ? ` ${reasons.join('; ')}.` : '';
+  return `Folder load blocked.${reasonText} Limit: ${limits.maxFileCount} EXR files or ${formatByteCount(limits.maxTotalBytes)}.`;
 }

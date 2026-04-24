@@ -79,7 +79,65 @@ describe('load queue service', () => {
     queue.dispose();
     releaseFirst();
 
-    await expect(first).resolves.toBeUndefined();
+    await expect(first).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(second).rejects.toMatchObject({ name: 'AbortError' });
+    expect(activeSignal).not.toBeNull();
+    expect(activeSignal!.aborted).toBe(true);
+  });
+
+  it('prioritizes foreground tasks ahead of queued background tasks', async () => {
+    const queue = new LoadQueueService();
+    const events: string[] = [];
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+
+    const first = queue.enqueue(async () => {
+      events.push('first');
+      await firstGate;
+    }, { priority: 'background' });
+    const background = queue.enqueue(async () => {
+      events.push('background');
+    }, { priority: 'background' });
+    const foreground = queue.enqueue(async () => {
+      events.push('foreground');
+    }, { priority: 'foreground' });
+
+    await Promise.resolve();
+    releaseFirst();
+    await Promise.all([first, background, foreground]);
+
+    expect(events).toEqual(['first', 'foreground', 'background']);
+  });
+
+  it('cancels queued and active matching tasks', async () => {
+    const queue = new LoadQueueService();
+    let activeSignal: AbortSignal | null = null;
+    let markFirstStarted!: () => void;
+    let releaseFirst!: () => void;
+    const firstStarted = new Promise<void>((resolve) => {
+      markFirstStarted = resolve;
+    });
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+
+    const first = queue.enqueue(async (signal) => {
+      activeSignal = signal;
+      markFirstStarted();
+      await firstGate;
+    }, { priority: 'background', category: 'folder' });
+    await firstStarted;
+
+    const second = queue.enqueue(async () => {
+      throw new Error('should not run');
+    }, { priority: 'background', category: 'folder' });
+
+    queue.cancelWhere((entry) => entry.category === 'folder', 'Folder work was cancelled.');
+    releaseFirst();
+
+    await expect(first).rejects.toMatchObject({ name: 'AbortError' });
     await expect(second).rejects.toMatchObject({ name: 'AbortError' });
     expect(activeSignal).not.toBeNull();
     expect(activeSignal!.aborted).toBe(true);

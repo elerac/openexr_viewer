@@ -13,6 +13,7 @@ import { ColormapPanel } from './colormap-panel';
 import { DragDropController } from './drag-drop';
 import { ExportColormapDialogController } from './export-colormap-dialog';
 import { ExportImageDialogController } from './export-image-dialog';
+import { FolderLoadDialogController } from './folder-load-dialog';
 import { GlobalKeyboardController } from './global-keyboard-controller';
 import { resolveElements, type Elements } from './elements';
 import { setMetadata } from './metadata-panel';
@@ -49,6 +50,11 @@ import { ProbeReadoutController, type ProbeCoordinateImageSize } from './probe-r
 import { setRoiReadout } from './roi-readout';
 import { TopMenuController } from './top-menu-controller';
 import { WindowPreviewController } from './window-preview-controller';
+import {
+  DEFAULT_FOLDER_LOAD_LIMITS,
+  createFolderLoadAdmission,
+  getFolderLoadStats
+} from '../folder-load-limits';
 
 const DISPLAY_TOOLBAR_VISIBLE_STORAGE_KEY = 'openexr-viewer:display-toolbar-visible:v1';
 
@@ -62,7 +68,7 @@ export interface UiCallbacks {
     signal: AbortSignal
   ) => Promise<ExportImagePixels>;
   onFileSelected: (file: File) => void;
-  onFolderSelected: (files: File[]) => void;
+  onFolderSelected: (files: File[], options?: { overrideLimits?: boolean }) => void;
   onFilesDropped: (files: File[]) => void;
   onGalleryImageSelected: (galleryId: string) => void;
   onReloadAllOpenedImages: () => void;
@@ -109,6 +115,7 @@ export class ViewerUi implements Disposable {
   private readonly windowPreviewController: WindowPreviewController;
   private readonly exportImageDialog: ExportImageDialogController;
   private readonly exportColormapDialog: ExportColormapDialogController;
+  private readonly folderLoadDialog: FolderLoadDialogController;
   private readonly probeReadoutController: ProbeReadoutController;
   private readonly dragDropController: DragDropController;
   private readonly collapsibleSectionsController: CollapsibleSectionsController;
@@ -212,6 +219,10 @@ export class ViewerUi implements Disposable {
       closeExportColormapDialog: (restoreFocus) => {
         this.exportColormapDialog.close(restoreFocus);
       },
+      isFolderLoadDialogOpen: () => this.folderLoadDialog.isOpen(),
+      closeFolderLoadDialog: (restoreFocus) => {
+        this.folderLoadDialog.close(false, restoreFocus);
+      },
       isWindowPreviewActive: () => this.windowPreviewController.isActive(),
       setWindowPreviewEnabled: (enabled) => {
         void this.windowPreviewController.setEnabled(enabled);
@@ -254,13 +265,17 @@ export class ViewerUi implements Disposable {
         return this.callbacks.onResolveExportColormapPreview(request, signal);
       }
     });
+    this.folderLoadDialog = new FolderLoadDialogController(this.elements);
     this.probeReadoutController = new ProbeReadoutController(this.elements);
     this.dragDropController = new DragDropController(this.elements, {
-      onFolderSelected: (files) => {
-        this.callbacks.onFolderSelected(files);
+      onFolderSelected: (files, options) => {
+        void this.handleFolderSelected(files, options);
       },
       onFilesDropped: (files) => {
         this.callbacks.onFilesDropped(files);
+      },
+      confirmLargeFolderLoad: (admission) => {
+        return this.folderLoadDialog.confirm(admission, DEFAULT_FOLDER_LOAD_LIMITS);
       }
     });
     this.collapsibleSectionsController = new CollapsibleSectionsController(this.elements);
@@ -276,6 +291,7 @@ export class ViewerUi implements Disposable {
     this.disposables.addDisposable(this.windowPreviewController);
     this.disposables.addDisposable(this.exportImageDialog);
     this.disposables.addDisposable(this.exportColormapDialog);
+    this.disposables.addDisposable(this.folderLoadDialog);
     this.disposables.addDisposable(this.dragDropController);
     this.disposables.addDisposable(this.collapsibleSectionsController);
     this.clearImageBrowserPanels();
@@ -310,6 +326,7 @@ export class ViewerUi implements Disposable {
     this.clearPanoramaKeyboardOrbitInput();
     this.exportImageDialog.close(false);
     this.exportColormapDialog.close(false);
+    this.folderLoadDialog.close(false, false);
     this.topMenuController.closeAll(false);
     this.dragDropController.showOverlay(false);
     this.elements.appShell.classList.remove('is-window-preview');
@@ -357,7 +374,33 @@ export class ViewerUi implements Disposable {
     if (loading) {
       this.exportImageDialog.close(false);
       this.exportColormapDialog.close(false);
+      this.folderLoadDialog.close(false, false);
     }
+  }
+
+  private async handleFolderSelected(files: File[], options: { overrideLimits?: boolean } = {}): Promise<void> {
+    if (this.disposed || files.length === 0) {
+      return;
+    }
+
+    if (!options.overrideLimits) {
+      const admission = createFolderLoadAdmission(getFolderLoadStats(files), DEFAULT_FOLDER_LOAD_LIMITS);
+      if (admission.exceeded) {
+        const confirmed = await this.folderLoadDialog.confirm(admission, DEFAULT_FOLDER_LOAD_LIMITS);
+        if (!confirmed || this.disposed) {
+          return;
+        }
+        this.callbacks.onFolderSelected(files, { overrideLimits: true });
+        return;
+      }
+    }
+
+    if (options.overrideLimits) {
+      this.callbacks.onFolderSelected(files, { overrideLimits: true });
+      return;
+    }
+
+    this.callbacks.onFolderSelected(files);
   }
 
   setRgbViewLoading(loading: boolean): void {
@@ -791,7 +834,7 @@ export class ViewerUi implements Disposable {
       if (files.length === 0) {
         return;
       }
-      this.callbacks.onFolderSelected(files);
+      void this.handleFolderSelected(files);
       input.value = '';
     });
 

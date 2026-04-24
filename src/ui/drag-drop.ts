@@ -1,4 +1,10 @@
 import { DisposableBag, type Disposable } from '../lifecycle';
+import {
+  DEFAULT_FOLDER_LOAD_LIMITS,
+  createFolderLoadAdmission,
+  getFolderLoadStats,
+  type FolderLoadAdmission
+} from '../folder-load-limits';
 import type { DragDropElements } from './elements';
 
 interface FileSystemHandleLike {
@@ -47,6 +53,7 @@ type DirectoryAwareDataTransferItem = DataTransferItem & {
 interface ResolvedDroppedFiles {
   files: File[];
   containsDirectory: boolean;
+  overrideLimits?: boolean;
 }
 
 interface CapturedDroppedFileSystemHandle {
@@ -58,8 +65,16 @@ interface CapturedDroppedEntries {
 }
 
 interface DragDropControllerCallbacks {
-  onFolderSelected: (files: File[]) => void;
+  onFolderSelected: (files: File[], options?: { overrideLimits?: boolean }) => void;
   onFilesDropped: (files: File[]) => void;
+  confirmLargeFolderLoad?: (admission: FolderLoadAdmission) => Promise<boolean>;
+}
+
+class FolderDropLimitExceeded extends Error {
+  constructor(readonly admission: FolderLoadAdmission) {
+    super('Dropped folder exceeds load limits.');
+    this.name = 'FolderDropLimitExceeded';
+  }
 }
 
 export class DragDropController implements Disposable {
@@ -134,13 +149,20 @@ export class DragDropController implements Disposable {
     }
     this.showOverlay(false);
 
-    const { files, containsDirectory } = await resolveDroppedFiles(event.dataTransfer);
+    const { files, containsDirectory, overrideLimits } = await resolveDroppedFiles(
+      event.dataTransfer,
+      this.callbacks.confirmLargeFolderLoad
+    );
     if (files.length === 0) {
       return;
     }
 
     if (containsDirectory) {
-      this.callbacks.onFolderSelected(files);
+      if (overrideLimits) {
+        this.callbacks.onFolderSelected(files, { overrideLimits: true });
+      } else {
+        this.callbacks.onFolderSelected(files);
+      }
       return;
     }
 
@@ -163,7 +185,10 @@ function toFiles(files: FileList | null | undefined): File[] {
   return Array.from(files);
 }
 
-async function resolveDroppedFiles(dataTransfer: DataTransfer | null | undefined): Promise<ResolvedDroppedFiles> {
+async function resolveDroppedFiles(
+  dataTransfer: DataTransfer | null | undefined,
+  confirmLargeFolderLoad?: (admission: FolderLoadAdmission) => Promise<boolean>
+): Promise<ResolvedDroppedFiles> {
   if (!dataTransfer) {
     return {
       files: [],
@@ -179,7 +204,7 @@ async function resolveDroppedFiles(dataTransfer: DataTransfer | null | undefined
 
     if (capturedHandles) {
       try {
-        const handleResolved = await resolveDroppedFilesFromCapturedHandles(capturedHandles);
+        const handleResolved = await resolveDroppedFilesFromCapturedHandles(capturedHandles, confirmLargeFolderLoad);
         if (handleResolved) {
           return handleResolved;
         }
@@ -190,7 +215,7 @@ async function resolveDroppedFiles(dataTransfer: DataTransfer | null | undefined
 
     if (capturedEntries) {
       try {
-        const entryResolved = await resolveDroppedFilesFromCapturedEntries(capturedEntries);
+        const entryResolved = await resolveDroppedFilesFromCapturedEntries(capturedEntries, confirmLargeFolderLoad);
         if (entryResolved) {
           return entryResolved;
         }
@@ -221,49 +246,80 @@ function captureDroppedHandlePromises(
 }
 
 async function resolveDroppedFilesFromCapturedHandles(
-  captured: CapturedDroppedFileSystemHandle
+  captured: CapturedDroppedFileSystemHandle,
+  confirmLargeFolderLoad?: (admission: FolderLoadAdmission) => Promise<boolean>
 ): Promise<ResolvedDroppedFiles | null> {
   const handles = await Promise.all(captured.handles);
-  const files: File[] = [];
-  let containsDirectory = false;
+  const containsDirectory = handles.some((handle) => handle?.kind === 'directory');
+  const collect = async (enforceLimits: boolean): Promise<File[]> => {
+    const files: File[] = [];
 
-  for (const handle of handles) {
-    if (!handle) {
-      continue;
+    for (const handle of handles) {
+      if (!handle) {
+        continue;
+      }
+
+      if (handle.kind === 'file') {
+        addCollectedFile(files, await (handle as FileSystemFileHandleLike).getFile(), enforceLimits && containsDirectory);
+        continue;
+      }
+
+      await collectFilesFromDirectoryHandle(
+        handle as FileSystemDirectoryHandleLike,
+        handle.name,
+        enforceLimits && containsDirectory,
+        files
+      );
     }
 
-    if (handle.kind === 'file') {
-      files.push(await (handle as FileSystemFileHandleLike).getFile());
-      continue;
-    }
-
-    containsDirectory = true;
-    files.push(...await collectFilesFromDirectoryHandle(handle as FileSystemDirectoryHandleLike, handle.name));
-  }
-
-  return {
-    files,
-    containsDirectory
+    return files;
   };
+
+  try {
+    return {
+      files: await collect(true),
+      containsDirectory
+    };
+  } catch (error) {
+    if (!(error instanceof FolderDropLimitExceeded)) {
+      throw error;
+    }
+
+    if (!confirmLargeFolderLoad) {
+      return {
+        files: await collect(false),
+        containsDirectory
+      };
+    }
+
+    const confirmed = await confirmLargeFolderLoad(error.admission);
+    return {
+      files: confirmed ? await collect(false) : [],
+      containsDirectory,
+      overrideLimits: confirmed
+    };
+  }
 }
 
 async function collectFilesFromDirectoryHandle(
   directory: FileSystemDirectoryHandleLike,
-  relativePrefix: string
+  relativePrefix: string,
+  enforceLimits: boolean,
+  files: File[] = []
 ): Promise<File[]> {
-  const files: File[] = [];
-
   for await (const handle of directory.values()) {
     if (handle.kind === 'file') {
       const file = await (handle as FileSystemFileHandleLike).getFile();
-      files.push(withRelativePath(file, `${relativePrefix}/${file.name}`));
+      addCollectedFile(files, withRelativePath(file, `${relativePrefix}/${file.name}`), enforceLimits);
       continue;
     }
 
-    files.push(...await collectFilesFromDirectoryHandle(
+    await collectFilesFromDirectoryHandle(
       handle as FileSystemDirectoryHandleLike,
-      `${relativePrefix}/${handle.name}`
-    ));
+      `${relativePrefix}/${handle.name}`,
+      enforceLimits,
+      files
+    );
   }
 
   return files;
@@ -286,35 +342,63 @@ function captureDroppedEntries(items: DirectoryAwareDataTransferItem[]): Capture
 }
 
 async function resolveDroppedFilesFromCapturedEntries(
-  captured: CapturedDroppedEntries
+  captured: CapturedDroppedEntries,
+  confirmLargeFolderLoad?: (admission: FolderLoadAdmission) => Promise<boolean>
 ): Promise<ResolvedDroppedFiles | null> {
-  const files: File[] = [];
-  let containsDirectory = false;
+  const containsDirectory = captured.entries.some((entry) => Boolean(entry?.isDirectory));
+  const collect = async (enforceLimits: boolean): Promise<File[]> => {
+    const files: File[] = [];
 
-  for (const entry of captured.entries) {
-    if (!entry) {
-      continue;
+    for (const entry of captured.entries) {
+      if (!entry) {
+        continue;
+      }
+
+      if (entry.isDirectory) {
+        await collectFilesFromLegacyEntry(
+          entry as LegacyFileSystemDirectoryEntryLike,
+          entry.name,
+          enforceLimits && containsDirectory,
+          files
+        );
+        continue;
+      }
+
+      await collectFilesFromLegacyEntry(
+        entry as LegacyFileSystemFileEntryLike,
+        null,
+        enforceLimits && containsDirectory,
+        files
+      );
     }
 
-    if (entry.isDirectory) {
-      containsDirectory = true;
-      files.push(...await collectFilesFromLegacyEntry(
-        entry as LegacyFileSystemDirectoryEntryLike,
-        entry.name
-      ));
-      continue;
-    }
-
-    files.push(...await collectFilesFromLegacyEntry(
-      entry as LegacyFileSystemFileEntryLike,
-      null
-    ));
-  }
-
-  return {
-    files,
-    containsDirectory
+    return files;
   };
+
+  try {
+    return {
+      files: await collect(true),
+      containsDirectory
+    };
+  } catch (error) {
+    if (!(error instanceof FolderDropLimitExceeded)) {
+      throw error;
+    }
+
+    if (!confirmLargeFolderLoad) {
+      return {
+        files: await collect(false),
+        containsDirectory
+      };
+    }
+
+    const confirmed = await confirmLargeFolderLoad(error.admission);
+    return {
+      files: confirmed ? await collect(false) : [],
+      containsDirectory,
+      overrideLimits: confirmed
+    };
+  }
 }
 
 function getDroppedEntry(item: DirectoryAwareDataTransferItem): LegacyFileSystemEntryLike | null {
@@ -331,26 +415,29 @@ function getDroppedEntry(item: DirectoryAwareDataTransferItem): LegacyFileSystem
 
 async function collectFilesFromLegacyEntry(
   entry: LegacyFileSystemFileEntryLike | LegacyFileSystemDirectoryEntryLike,
-  relativePath: string | null
+  relativePath: string | null,
+  enforceLimits: boolean,
+  files: File[] = []
 ): Promise<File[]> {
   if (isLegacyFileEntry(entry)) {
     const file = await getFileFromLegacyEntry(entry);
-    return [relativePath ? withRelativePath(file, relativePath) : file];
+    addCollectedFile(files, relativePath ? withRelativePath(file, relativePath) : file, enforceLimits);
+    return files;
   }
 
   if (!isLegacyDirectoryEntry(entry)) {
-    return [];
+    return files;
   }
 
   const entries = await readAllLegacyDirectoryEntries(entry);
-  const files: File[] = [];
-
   for (const child of entries) {
     const childRelativePath = relativePath ? `${relativePath}/${child.name}` : child.name;
-    files.push(...await collectFilesFromLegacyEntry(
+    await collectFilesFromLegacyEntry(
       child as LegacyFileSystemFileEntryLike | LegacyFileSystemDirectoryEntryLike,
-      childRelativePath
-    ));
+      childRelativePath,
+      enforceLimits,
+      files
+    );
   }
 
   return files;
@@ -388,6 +475,18 @@ async function readAllLegacyDirectoryEntries(
       return entries;
     }
     entries.push(...batch);
+  }
+}
+
+function addCollectedFile(files: File[], file: File, enforceLimits: boolean): void {
+  files.push(file);
+  if (!enforceLimits) {
+    return;
+  }
+
+  const admission = createFolderLoadAdmission(getFolderLoadStats(files, true), DEFAULT_FOLDER_LOAD_LIMITS);
+  if (admission.exceeded) {
+    throw new FolderDropLimitExceeded(admission);
   }
 }
 

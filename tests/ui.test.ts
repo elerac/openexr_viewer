@@ -1508,6 +1508,60 @@ describe('view menu', () => {
     expect(folderInput.value).toBe('');
   });
 
+  it('asks for confirmation before forwarding over-limit folder input selections', async () => {
+    installUiFixture();
+
+    const onFolderSelected = vi.fn();
+    new ViewerUi(createUiCallbacks({ onFolderSelected }));
+    const folderInput = document.getElementById('folder-input') as HTMLInputElement;
+    const files = Array.from({ length: 251 }, (_value, index) => {
+      const file = new File(['x'], `${index}.exr`, { type: 'image/exr' });
+      Object.defineProperty(file, 'webkitRelativePath', {
+        configurable: true,
+        value: `shot/${index}.exr`
+      });
+      return file;
+    });
+
+    Object.defineProperty(folderInput, 'files', {
+      configurable: true,
+      value: createFileList(files)
+    });
+    folderInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+    const dialogBackdrop = document.getElementById('folder-load-dialog-backdrop') as HTMLDivElement;
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
+    expect(onFolderSelected).not.toHaveBeenCalled();
+
+    (document.getElementById('folder-load-dialog-submit-button') as HTMLButtonElement).click();
+    await flushMicrotasks();
+
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
+    expect(onFolderSelected).toHaveBeenCalledWith(files, { overrideLimits: true });
+  });
+
+  it('cancels over-limit folder input selections from the confirmation dialog', async () => {
+    installUiFixture();
+
+    const onFolderSelected = vi.fn();
+    new ViewerUi(createUiCallbacks({ onFolderSelected }));
+    const folderInput = document.getElementById('folder-input') as HTMLInputElement;
+    const files = Array.from({ length: 251 }, (_value, index) => {
+      return new File(['x'], `${index}.exr`, { type: 'image/exr' });
+    });
+
+    Object.defineProperty(folderInput, 'files', {
+      configurable: true,
+      value: createFileList(files)
+    });
+    folderInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+    (document.getElementById('folder-load-dialog-cancel-button') as HTMLButtonElement).click();
+    await flushMicrotasks();
+
+    expect(onFolderSelected).not.toHaveBeenCalled();
+  });
+
   it('disables open-folder while loading, matching open-file behavior', () => {
     installUiFixture();
 
@@ -2062,6 +2116,36 @@ describe('drag and drop', () => {
       { name: 'depth.exr', relativePath: 'shots/aovs/depth.exr' },
       { name: 'notes.txt', relativePath: 'shots/aovs/notes.txt' }
     ]);
+  });
+
+  it('confirms over-limit recursive folder drops before re-reading and forwarding them', async () => {
+    installUiFixture();
+
+    const onFolderSelected = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onFolderSelected }));
+    const files = Array.from({ length: 251 }, (_value, index) => {
+      return new File(['x'], `${index}.exr`, { type: 'image/exr' });
+    });
+
+    ui.viewerContainer.dispatchEvent(createHandleDropEvent('drop', [
+      createDirectoryEntryDropItem(createLegacyDirectoryEntry('shots', files.map(createLegacyFileEntry)))
+    ]));
+    await flushMicrotasks();
+    await flushMicrotasks();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const dialogBackdrop = document.getElementById('folder-load-dialog-backdrop') as HTMLDivElement;
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
+    expect(onFolderSelected).not.toHaveBeenCalled();
+
+    (document.getElementById('folder-load-dialog-submit-button') as HTMLButtonElement).click();
+    await flushMicrotasks();
+    await flushMicrotasks();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onFolderSelected).toHaveBeenCalledTimes(1);
+    expect(onFolderSelected.mock.calls[0]?.[0]).toHaveLength(251);
+    expect(onFolderSelected.mock.calls[0]?.[1]).toEqual({ overrideLimits: true });
   });
 });
 

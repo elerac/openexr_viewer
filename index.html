@@ -172,6 +172,28 @@
           </div>
         </form>
       </div>
+      <div id="folder-load-dialog-backdrop" class="app-dialog-backdrop hidden">
+        <form
+          id="folder-load-dialog-form"
+          class="app-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="folder-load-dialog-title"
+        >
+          <div class="app-dialog-header">
+            <h2 id="folder-load-dialog-title" class="app-dialog-title">Large Folder Load</h2>
+            <p id="folder-load-dialog-summary" class="app-dialog-subtitle"></p>
+          </div>
+          <div class="app-dialog-body">
+            <dl id="folder-load-dialog-stats" class="folder-load-dialog-stats"></dl>
+            <p id="folder-load-dialog-warning" class="app-dialog-warning"></p>
+          </div>
+          <div class="app-dialog-actions">
+            <button id="folder-load-dialog-cancel-button" type="button">Cancel</button>
+            <button id="folder-load-dialog-submit-button" type="submit">Continue</button>
+          </div>
+        </form>
+      </div>
       <div id="export-colormap-dialog-backdrop" class="app-dialog-backdrop hidden">
         <form
           id="export-colormap-dialog-form"

@@ -46,6 +46,13 @@ export interface Elements {
   exportDialogError: HTMLElement;
   exportDialogCancelButton: HTMLButtonElement;
   exportDialogSubmitButton: HTMLButtonElement;
+  folderLoadDialogBackdrop: HTMLDivElement;
+  folderLoadDialogForm: HTMLFormElement;
+  folderLoadDialogSummary: HTMLElement;
+  folderLoadDialogStats: HTMLElement;
+  folderLoadDialogWarning: HTMLElement;
+  folderLoadDialogCancelButton: HTMLButtonElement;
+  folderLoadDialogSubmitButton: HTMLButtonElement;
   exportColormapDialogBackdrop: HTMLDivElement;
   exportColormapDialogForm: HTMLFormElement;
   exportColormapSelect: HTMLSelectElement;
@@ -254,6 +261,18 @@ export type ExportColormapDialogElements = Pick<
   | 'exportColormapDialogSubmitButton'
 >;
 
+export type FolderLoadDialogElements = Pick<
+  Elements,
+  | 'fileMenuButton'
+  | 'folderLoadDialogBackdrop'
+  | 'folderLoadDialogForm'
+  | 'folderLoadDialogSummary'
+  | 'folderLoadDialogStats'
+  | 'folderLoadDialogWarning'
+  | 'folderLoadDialogCancelButton'
+  | 'folderLoadDialogSubmitButton'
+>;
+
 export type ProbeReadoutElements = Pick<
   Elements,
   | 'probeMode'
@@ -357,6 +376,13 @@ export function resolveElements(): Elements {
     exportDialogError: requireElement('export-dialog-error', HTMLElement),
     exportDialogCancelButton: requireElement('export-dialog-cancel-button', HTMLButtonElement),
     exportDialogSubmitButton: requireElement('export-dialog-submit-button', HTMLButtonElement),
+    folderLoadDialogBackdrop: requireElement('folder-load-dialog-backdrop', HTMLDivElement),
+    folderLoadDialogForm: requireElement('folder-load-dialog-form', HTMLFormElement),
+    folderLoadDialogSummary: requireElement('folder-load-dialog-summary', HTMLElement),
+    folderLoadDialogStats: requireElement('folder-load-dialog-stats', HTMLElement),
+    folderLoadDialogWarning: requireElement('folder-load-dialog-warning', HTMLElement),
+    folderLoadDialogCancelButton: requireElement('folder-load-dialog-cancel-button', HTMLButtonElement),
+    folderLoadDialogSubmitButton: requireElement('folder-load-dialog-submit-button', HTMLButtonElement),
     exportColormapDialogBackdrop: requireElement('export-colormap-dialog-backdrop', HTMLDivElement),
     exportColormapDialogForm: requireElement('export-colormap-dialog-form', HTMLFormElement),
     exportColormapSelect: requireElement('export-colormap-select', HTMLSelectElement),
