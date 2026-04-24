@@ -1,20 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_COLORMAP_ID } from '../src/colormaps';
 import {
-  clampPanoramaHfov,
-  clampPanoramaPitch,
   clampZoom,
   exposureToScale,
   imageToScreen,
+  preserveImagePanOnViewportChange,
+  screenToImage,
+  zoomAroundPoint
+} from '../src/interaction/image-geometry';
+import {
+  clampPanoramaHfov,
+  clampPanoramaPitch,
   normalizePanoramaYaw,
   orbitPanorama,
-  preserveImagePanOnViewportChange,
   projectPanoramaPixelToScreen,
-  screenToImage,
   screenToPanoramaPixel,
-  zoomAroundPoint,
   zoomPanorama
-} from '../src/interaction';
+} from '../src/interaction/panorama-geometry';
 import { ViewerState } from '../src/types';
 import { createChannelMonoSelection, createChannelRgbSelection } from './helpers/state-fixtures';
 

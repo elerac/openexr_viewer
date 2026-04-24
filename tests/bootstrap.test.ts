@@ -179,7 +179,7 @@ vi.mock('../src/app/viewer-app-core', () => ({
   }
 }));
 
-vi.mock('../src/ui', () => ({
+vi.mock('../src/ui/viewer-ui', () => ({
   ViewerUi: class {
     constructor(callbacks: Record<string, unknown>) {
       mocks.setUiCallbacks(callbacks);
@@ -231,7 +231,7 @@ vi.mock('../src/renderer', () => ({
   }
 }));
 
-vi.mock('../src/interaction', () => ({
+vi.mock('../src/interaction/image-geometry', () => ({
   preserveImagePanOnViewportChange: vi.fn((state, previousViewport, nextViewport) => ({
     panX: state.panX + (
       (nextViewport.left + nextViewport.width * 0.5) -
@@ -241,7 +241,10 @@ vi.mock('../src/interaction', () => ({
       (nextViewport.top + nextViewport.height * 0.5) -
       (previousViewport.top + previousViewport.height * 0.5)
     ) / state.zoom
-  })),
+  }))
+}));
+
+vi.mock('../src/interaction/viewer-interaction', () => ({
   ViewerInteraction: class {
     readonly destroy = mocks.interactionDestroy;
     readonly setPanoramaKeyboardOrbitInput = mocks.interactionSetPanoramaKeyboardOrbitInput;

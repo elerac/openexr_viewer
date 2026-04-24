@@ -1,4 +1,5 @@
-import { DEFAULT_PANORAMA_HFOV_DEG, clampZoom } from '../interaction';
+import { clampZoom } from '../interaction/image-geometry';
+import { DEFAULT_PANORAMA_HFOV_DEG } from '../interaction/panorama-geometry';
 import { cloneDisplayLuminanceRange } from '../colormap-range';
 import { cloneDisplaySelection } from '../display-model';
 import { clampImageRoiToBounds } from '../roi';

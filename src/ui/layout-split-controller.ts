@@ -5,7 +5,7 @@ import type {
   PanelSplitSizeKey,
   PanelSplitSizes,
   StoredPanelSplitState
-} from '../ui';
+} from './panel-layout-types';
 import { DisposableBag, type Disposable } from '../lifecycle';
 import type { LayoutSplitElements } from './elements';
 

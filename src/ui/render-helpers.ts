@@ -1,6 +1,12 @@
-import type { ListboxHitTestMetrics } from '../ui';
-
 const LISTBOX_ROW_KEY_DATASET = 'renderKey';
+
+export interface ListboxHitTestMetrics {
+  top: number;
+  height: number;
+  scrollTop: number;
+  scrollHeight: number;
+  optionCount: number;
+}
 
 export interface SelectOptionDefinition {
   value: string;

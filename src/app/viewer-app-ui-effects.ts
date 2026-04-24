@@ -1,4 +1,4 @@
-import { ViewerUi } from '../ui';
+import { ViewerUi } from '../ui/viewer-ui';
 import { ViewerUiInvalidationFlags } from './viewer-app-ui';
 import type { ViewerUiTransition } from './viewer-app-types';
 

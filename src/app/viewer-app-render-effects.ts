@@ -1,6 +1,6 @@
 import { WebGlExrRenderer } from '../renderer';
 import { RenderCacheService } from '../services/render-cache-service';
-import { ViewerUi } from '../ui';
+import { ViewerUi } from '../ui/viewer-ui';
 import { ViewerAppCore } from './viewer-app-core';
 import { ViewerRenderInvalidationFlags } from './viewer-app-render';
 import type { ViewerRenderTransition } from './viewer-app-types';

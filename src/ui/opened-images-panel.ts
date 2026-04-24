@@ -1,4 +1,4 @@
-import type { ListboxHitTestMetrics, OpenedImageOptionItem } from '../ui';
+import type { OpenedImageOptionItem } from './image-browser-types';
 import { DisposableBag, type Disposable } from '../lifecycle';
 import type { OpenedImageDropPlacement } from '../types';
 import type { OpenedImagesPanelElements } from './elements';
@@ -12,6 +12,7 @@ import {
   getListboxOptionIndexAtClientY,
   handleImageBrowserListKeyDown,
   isFocusWithinElement,
+  type ListboxHitTestMetrics,
   renderKeyedChildren,
   syncSelectOptions
 } from './render-helpers';

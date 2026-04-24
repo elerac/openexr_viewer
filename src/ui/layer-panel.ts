@@ -1,4 +1,4 @@
-import type { LayerOptionItem } from '../ui';
+import type { LayerOptionItem } from './image-browser-types';
 import { DisposableBag, type Disposable } from '../lifecycle';
 import type { LayerPanelElements } from './elements';
 import {

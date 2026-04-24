@@ -1,4 +1,4 @@
-import { imageToScreen } from '../interaction';
+import { imageToScreen } from '../interaction/image-geometry';
 import type { Disposable } from '../lifecycle';
 import { resolveActiveProbePixel } from '../probe';
 import type { ImagePixel, ImageRoi, ViewerState, ViewportInfo } from '../types';

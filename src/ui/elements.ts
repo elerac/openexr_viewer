@@ -185,6 +185,116 @@ export type LayoutSplitElements = Pick<
   | 'bottomPanelResizer'
 >;
 
+export type LoadingOverlayElements = Pick<Elements, 'loadingOverlay'>;
+
+export type TopMenuControllerElements = Pick<
+  Elements,
+  | 'appMenuBar'
+  | 'fileMenuButton'
+  | 'fileMenu'
+  | 'viewMenuButton'
+  | 'viewMenu'
+  | 'windowMenuButton'
+  | 'windowMenu'
+  | 'galleryMenuButton'
+  | 'galleryMenu'
+  | 'settingsMenuButton'
+  | 'settingsMenu'
+>;
+
+export type WindowPreviewElements = Pick<
+  Elements,
+  | 'appShell'
+  | 'viewerContainer'
+  | 'windowNormalMenuItem'
+  | 'windowFullScreenPreviewMenuItem'
+>;
+
+export type ExportImageDialogElements = Pick<
+  Elements,
+  | 'exportImageButton'
+  | 'fileMenuButton'
+  | 'exportDialogBackdrop'
+  | 'exportDialogForm'
+  | 'exportFilenameInput'
+  | 'exportFormatSelect'
+  | 'exportDialogError'
+  | 'exportDialogCancelButton'
+  | 'exportDialogSubmitButton'
+>;
+
+export type ExportColormapDialogElements = Pick<
+  Elements,
+  | 'exportColormapButton'
+  | 'fileMenuButton'
+  | 'exportColormapDialogBackdrop'
+  | 'exportColormapDialogForm'
+  | 'exportColormapSelect'
+  | 'exportColormapWidthInput'
+  | 'exportColormapHeightInput'
+  | 'exportColormapOrientationSelect'
+  | 'exportColormapPreviewCanvas'
+  | 'exportColormapPreviewStatus'
+  | 'exportColormapFilenameInput'
+  | 'exportColormapDialogError'
+  | 'exportColormapDialogCancelButton'
+  | 'exportColormapDialogSubmitButton'
+>;
+
+export type ProbeReadoutElements = Pick<
+  Elements,
+  | 'probeMode'
+  | 'probeCoords'
+  | 'probeColorPreview'
+  | 'probeColorSwatch'
+  | 'probeColorValues'
+  | 'probeValues'
+>;
+
+export type MetadataPanelElements = Pick<Elements, 'metadataEmptyState' | 'metadataTable'>;
+
+export type RoiReadoutElements = Pick<
+  Elements,
+  | 'roiEmptyState'
+  | 'roiDetails'
+  | 'clearRoiButton'
+  | 'roiBounds'
+  | 'roiSize'
+  | 'roiPixelCount'
+  | 'roiValidCount'
+  | 'roiStats'
+>;
+
+export type GlobalKeyboardControllerElements = Pick<
+  Elements,
+  | 'appMenuBar'
+  | 'imagePanelResizer'
+  | 'rightPanelResizer'
+  | 'bottomPanelResizer'
+  | 'openedFilesList'
+  | 'partsLayersList'
+  | 'channelViewList'
+  | 'channelThumbnailStrip'
+>;
+
+export type DragDropElements = Pick<Elements, 'viewerContainer' | 'dropOverlay'>;
+
+export type CollapsibleSectionsElements = Pick<
+  Elements,
+  | 'openedFilesToggle'
+  | 'openedFilesList'
+  | 'partsLayersToggle'
+  | 'partsLayersList'
+  | 'channelViewToggle'
+  | 'channelViewList'
+  | 'metadataToggle'
+  | 'metadataContent'
+  | 'probeToggle'
+  | 'probeContent'
+  | 'roiToggle'
+  | 'roiContent'
+>;
+
 export function resolveElements(): Elements {
   return {
     appShell: requireElement('app', HTMLElement),

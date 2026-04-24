@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getPanoramaVerticalFovDeg, screenToPanoramaPixel, ViewerInteraction } from '../src/interaction';
+import { getPanoramaVerticalFovDeg, screenToPanoramaPixel } from '../src/interaction/panorama-geometry';
+import { ViewerInteraction } from '../src/interaction/viewer-interaction';
 import { createChannelRgbSelection, createViewerState } from './helpers/state-fixtures';
 
 afterEach(() => {

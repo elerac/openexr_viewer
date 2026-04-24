@@ -4,22 +4,23 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildChannelViewItems } from '../src/channel-view-items';
-import {
-  buildPartLayerItemsFromChannelNames,
-  clampPanelSplitSizes,
-  formatProbeCoordinates,
-  formatDisplayCacheUsageText,
-  getDisplayCacheUsageState,
-  getChannelViewSwatches,
-  getListboxOptionIndexAtClientY,
-  getPanelSplitKeyboardAction,
-  parsePanelSplitStorageValue,
-  ProgressiveLoadingOverlayDisclosure,
-  ViewerUi,
-  type LoadingOverlayPhase,
-  type PanelSplitMetrics
-} from '../src/ui';
+import { getChannelViewSwatches } from '../src/ui/channel-panel';
 import { getPanelSplitSizeRange } from '../src/ui/layout-split-controller';
+import {
+  clampPanelSplitSizes,
+  getPanelSplitKeyboardAction,
+  parsePanelSplitStorageValue
+} from '../src/ui/layout-split-controller';
+import { buildPartLayerItemsFromChannelNames } from '../src/ui/layer-panel';
+import {
+  ProgressiveLoadingOverlayDisclosure,
+  type LoadingOverlayPhase
+} from '../src/ui/loading-overlay-disclosure';
+import { formatDisplayCacheUsageText, getDisplayCacheUsageState } from '../src/ui/opened-images-panel';
+import { type PanelSplitMetrics } from '../src/ui/panel-layout-types';
+import { formatProbeCoordinates } from '../src/ui/probe-readout';
+import { getListboxOptionIndexAtClientY } from '../src/ui/render-helpers';
+import { ViewerUi } from '../src/ui/viewer-ui';
 
 interface ResizeObserverRegistration {
   callback: ResizeObserverCallback;

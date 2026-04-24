@@ -1,5 +1,5 @@
 import { DEFAULT_COLORMAP_ID } from './colormaps';
-import { DEFAULT_PANORAMA_HFOV_DEG } from './interaction';
+import { DEFAULT_PANORAMA_HFOV_DEG } from './interaction/panorama-geometry';
 import { resolveDisplaySelectionForLayer } from './display-selection';
 import { createDefaultStokesDegreeModulation } from './stokes';
 import {
