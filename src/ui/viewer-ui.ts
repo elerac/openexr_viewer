@@ -6,6 +6,7 @@ import {
 } from '../channel-view-items';
 import { findMergedSelectionForSplitDisplay, findSplitSelectionForMergedDisplay } from '../display-selection';
 import { cloneDisplaySelection, sameDisplaySelection } from '../display-model';
+import { AppFullscreenController } from './app-fullscreen-controller';
 import { ChannelPanel } from './channel-panel';
 import { ChannelThumbnailStrip } from './channel-thumbnail-strip';
 import { CollapsibleSectionsController } from './collapsible-sections';
@@ -123,6 +124,7 @@ export class ViewerUi implements Disposable {
   private readonly colormapPanel: ColormapPanel;
   private readonly layoutSplitController: LayoutSplitController;
   private readonly topMenuController: TopMenuController;
+  private readonly appFullscreenController: AppFullscreenController;
   private readonly globalKeyboardController: GlobalKeyboardController;
   private readonly windowPreviewController: WindowPreviewController;
   private readonly exportImageDialog: ExportImageDialogController;
@@ -225,6 +227,11 @@ export class ViewerUi implements Disposable {
         this.clearPanoramaKeyboardOrbitInput();
       }
     });
+    this.appFullscreenController = new AppFullscreenController(this.elements, {
+      onBeforeToggle: () => {
+        this.topMenuController.closeAll();
+      }
+    });
     this.globalKeyboardController = new GlobalKeyboardController(this.elements, {
       isExportImageDialogOpen: () => this.exportImageDialog.isOpen(),
       isExportImageDialogBusy: () => this.exportImageDialog.isBusy(),
@@ -320,6 +327,7 @@ export class ViewerUi implements Disposable {
     this.disposables.addDisposable(this.colormapPanel);
     this.disposables.addDisposable(this.layoutSplitController);
     this.disposables.addDisposable(this.topMenuController);
+    this.disposables.addDisposable(this.appFullscreenController);
     this.disposables.addDisposable(this.globalKeyboardController);
     this.disposables.addDisposable(this.windowPreviewController);
     this.disposables.addDisposable(this.exportImageDialog);

@@ -1069,6 +1069,121 @@ describe('view menu', () => {
     expect(labels).toEqual(['File', 'View', 'Window', 'Gallery', 'Settings']);
   });
 
+  it('renders the app fullscreen button in the top bar', () => {
+    installUiFixture();
+    installFullscreenApiMock();
+
+    new ViewerUi(createUiCallbacks());
+
+    const button = document.getElementById('app-fullscreen-button') as HTMLButtonElement;
+
+    expect(button.closest('#app-menu-bar')).not.toBeNull();
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute('aria-label')).toBe('Enter app fullscreen');
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(button.title).toBe('Enter app fullscreen');
+    expect(button.querySelectorAll('.app-fullscreen-icon')).toHaveLength(2);
+  });
+
+  it('toggles app fullscreen without requiring an open image', async () => {
+    installUiFixture();
+
+    const { requestFullscreen, getFullscreenElement } = installFullscreenApiMock();
+    new ViewerUi(createUiCallbacks());
+
+    const button = document.getElementById('app-fullscreen-button') as HTMLButtonElement;
+    const appShell = document.getElementById('app') as HTMLElement;
+
+    button.click();
+    await flushMicrotasks();
+
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(getFullscreenElement()).toBe(appShell);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(button.getAttribute('aria-label')).toBe('Exit app fullscreen');
+    expect(button.title).toBe('Exit app fullscreen');
+  });
+
+  it('exits app fullscreen through the app fullscreen button', async () => {
+    installUiFixture();
+
+    const { exitFullscreen, getFullscreenElement } = installFullscreenApiMock();
+    new ViewerUi(createUiCallbacks());
+
+    const button = document.getElementById('app-fullscreen-button') as HTMLButtonElement;
+
+    button.click();
+    await flushMicrotasks();
+    button.click();
+    await flushMicrotasks();
+
+    expect(exitFullscreen).toHaveBeenCalledTimes(1);
+    expect(getFullscreenElement()).toBeNull();
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(button.getAttribute('aria-label')).toBe('Enter app fullscreen');
+  });
+
+  it('syncs app fullscreen button state when fullscreen exits outside the button handler', async () => {
+    installUiFixture();
+
+    const { setFullscreenElement } = installFullscreenApiMock();
+    new ViewerUi(createUiCallbacks());
+
+    const button = document.getElementById('app-fullscreen-button') as HTMLButtonElement;
+    const appShell = document.getElementById('app') as HTMLElement;
+
+    button.click();
+    await flushMicrotasks();
+
+    setFullscreenElement(appShell);
+    setFullscreenElement(null);
+
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(button.getAttribute('aria-label')).toBe('Enter app fullscreen');
+  });
+
+  it('does not mark full screen preview active when app fullscreen is entered', async () => {
+    installUiFixture();
+
+    installFullscreenApiMock();
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    const button = document.getElementById('app-fullscreen-button') as HTMLButtonElement;
+    const normalItem = document.getElementById('window-normal-menu-item') as HTMLButtonElement;
+    const previewItem = document.getElementById('window-full-screen-preview-menu-item') as HTMLButtonElement;
+
+    button.click();
+    await flushMicrotasks();
+
+    expect(previewItem.disabled).toBe(false);
+    expect(normalItem.getAttribute('aria-checked')).toBe('true');
+    expect(previewItem.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('switches from full screen preview to app fullscreen as separate fullscreen modes', async () => {
+    installUiFixture();
+
+    const { getFullscreenElement } = installFullscreenApiMock();
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    const button = document.getElementById('app-fullscreen-button') as HTMLButtonElement;
+    const appShell = document.getElementById('app') as HTMLElement;
+    const normalItem = document.getElementById('window-normal-menu-item') as HTMLButtonElement;
+    const previewItem = document.getElementById('window-full-screen-preview-menu-item') as HTMLButtonElement;
+
+    previewItem.click();
+    await flushMicrotasks();
+    button.click();
+    await flushMicrotasks();
+
+    expect(getFullscreenElement()).toBe(appShell);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(normalItem.getAttribute('aria-checked')).toBe('true');
+    expect(previewItem.getAttribute('aria-checked')).toBe('false');
+  });
+
   it('renders the Window menu items in normal-full-screen-preview-tool-bar order', () => {
     installUiFixture();
 
@@ -4447,6 +4562,7 @@ function expectTopMenuClosed(buttonId: string, menuId: string): void {
 
 function installFullscreenApiMock(options: { requestBehavior?: 'resolve' | 'reject' | 'missing' } = {}) {
   const behavior = options.requestBehavior ?? 'resolve';
+  const appShell = document.getElementById('app') as HTMLElement;
   const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
   let fullscreenElement: Element | null = null;
 
@@ -4473,6 +4589,11 @@ function installFullscreenApiMock(options: { requestBehavior?: 'resolve' | 'reje
   Object.defineProperty(document, 'exitFullscreen', {
     configurable: true,
     value: exitFullscreen
+  });
+
+  Object.defineProperty(appShell, 'requestFullscreen', {
+    configurable: true,
+    value: behavior === 'missing' ? undefined : requestFullscreen
   });
 
   Object.defineProperty(viewerContainer, 'requestFullscreen', {

@@ -44,6 +44,14 @@ output {
   padding: 0.4rem 0.4rem 0.08rem;
 }
 
+.app-shell:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  background: radial-gradient(circle at top right, #1a212b, var(--bg));
+  overflow: hidden;
+}
+
 .app-shell.is-window-preview {
   gap: 0;
   padding: 0;
@@ -89,6 +97,7 @@ output {
 }
 
 .app-menu-nav {
+  flex: 0 1 auto;
   min-width: 0;
   display: flex;
   align-items: stretch;
@@ -116,6 +125,52 @@ output {
   outline: none;
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--text);
+}
+
+.app-fullscreen-button {
+  flex: 0 0 auto;
+  width: 1.72rem;
+  height: 1.72rem;
+  margin-left: auto;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0.35rem;
+  padding: 0;
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.app-fullscreen-button:hover:not(:disabled),
+.app-fullscreen-button:focus-visible,
+.app-fullscreen-button[aria-pressed='true'] {
+  outline: none;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+}
+
+.app-fullscreen-button:disabled {
+  color: color-mix(in srgb, var(--text-dim) 42%, transparent);
+  cursor: not-allowed;
+}
+
+.app-fullscreen-icon {
+  width: 1.08rem;
+  height: 1.08rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-fullscreen-icon--exit,
+.app-fullscreen-button[aria-pressed='true'] .app-fullscreen-icon--enter {
+  display: none;
+}
+
+.app-fullscreen-button[aria-pressed='true'] .app-fullscreen-icon--exit {
+  display: block;
 }
 
 .app-menu-dropdown {

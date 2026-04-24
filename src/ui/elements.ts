@@ -1,6 +1,7 @@
 export interface Elements {
   appShell: HTMLElement;
   appMenuBar: HTMLElement;
+  appFullscreenButton: HTMLButtonElement;
   displayToolbar: HTMLElement;
   mainLayout: HTMLElement;
   rightStack: HTMLElement;
@@ -241,6 +242,8 @@ export type TopMenuControllerElements = Pick<
   | 'settingsMenu'
 >;
 
+export type AppFullscreenElements = Pick<Elements, 'appShell' | 'appFullscreenButton'>;
+
 export type WindowPreviewElements = Pick<
   Elements,
   | 'appShell'
@@ -367,6 +370,7 @@ export function resolveElements(): Elements {
   return {
     appShell: requireElement('app', HTMLElement),
     appMenuBar: requireElement('app-menu-bar', HTMLElement),
+    appFullscreenButton: requireElement('app-fullscreen-button', HTMLButtonElement),
     displayToolbar: requireElement('display-toolbar', HTMLElement),
     mainLayout: requireElement('main-layout', HTMLElement),
     rightStack: requireElement('right-stack', HTMLElement),
