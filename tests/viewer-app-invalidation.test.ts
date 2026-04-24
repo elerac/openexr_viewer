@@ -258,7 +258,8 @@ describe('viewer app lanes', () => {
       activeLayer: previous.sessionState.activeLayer,
       selection: descriptor.selection,
       exposureEv: previous.sessionState.exposureEv,
-      stokesDegreeModulation: previous.sessionState.stokesDegreeModulation
+      stokesDegreeModulation: previous.sessionState.stokesDegreeModulation,
+      stokesAolpDegreeModulationMode: previous.sessionState.stokesAolpDegreeModulationMode
     });
     const pendingState = {
       ...previous,
@@ -288,7 +289,8 @@ describe('viewer app lanes', () => {
       activeLayer: previous.sessionState.activeLayer,
       selection: descriptor.selection,
       exposureEv: previous.sessionState.exposureEv,
-      stokesDegreeModulation: previous.sessionState.stokesDegreeModulation
+      stokesDegreeModulation: previous.sessionState.stokesDegreeModulation,
+      stokesAolpDegreeModulationMode: previous.sessionState.stokesAolpDegreeModulationMode
     });
     const contextKey = serializeChannelThumbnailContextKey(activeSession.id, previous.sessionState.activeLayer, descriptor.selectionKey);
     const next = {

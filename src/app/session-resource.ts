@@ -11,7 +11,10 @@ import {
   buildSessionDisplayName,
   cloneViewerSessionState
 } from '../session-state';
-import { createDefaultStokesDegreeModulation } from '../stokes';
+import {
+  DEFAULT_STOKES_AOLP_DEGREE_MODULATION_MODE,
+  createDefaultStokesDegreeModulation
+} from '../stokes';
 import type {
   DecodedExrImage,
   ImagePixel,
@@ -93,6 +96,7 @@ export function createClearedViewerState(defaultColormapId: string): ViewerSessi
     colormapRangeMode: 'alwaysAuto',
     colormapZeroCentered: false,
     stokesDegreeModulation: createDefaultStokesDegreeModulation(),
+    stokesAolpDegreeModulationMode: DEFAULT_STOKES_AOLP_DEGREE_MODULATION_MODE,
     zoom: 1,
     panX: 0,
     panY: 0,
@@ -192,6 +196,7 @@ export function buildSwitchedSessionState(
       exposureEv: currentState.exposureEv,
       displaySelection: cloneDisplaySelection(currentState.displaySelection),
       stokesDegreeModulation: { ...currentState.stokesDegreeModulation },
+      stokesAolpDegreeModulationMode: currentState.stokesAolpDegreeModulationMode,
       lockedPixel,
       roi
     },

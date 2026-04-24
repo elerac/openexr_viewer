@@ -1,5 +1,6 @@
 import type {
   DisplaySelection as DisplaySelectionModel,
+  StokesAolpDegreeModulationMode,
   StokesDegreeModulationState
 } from './display-model';
 import type { ChannelStorage, FiniteValueRange } from './channel-storage';
@@ -25,6 +26,7 @@ export type {
   RgbSuffix,
   StokesAngleParameter,
   StokesAngleSelection,
+  StokesAolpDegreeModulationMode,
   StokesDegreeModulationParameter,
   StokesDegreeModulationState,
   StokesParameter,
@@ -110,6 +112,7 @@ export interface ViewerSessionState extends ViewerViewState {
   colormapRangeMode: ColormapRangeMode;
   colormapZeroCentered: boolean;
   stokesDegreeModulation: StokesDegreeModulationState;
+  stokesAolpDegreeModulationMode: StokesAolpDegreeModulationMode;
   activeLayer: number;
   displaySelection: DisplaySelectionModel | null;
   lockedPixel: ImagePixel | null;

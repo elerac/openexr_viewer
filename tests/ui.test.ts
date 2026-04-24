@@ -3910,6 +3910,7 @@ function createUiCallbacksBase() {
     onColormapAutoRange: () => {},
     onColormapZeroCenterToggle: () => {},
     onStokesDegreeModulationToggle: () => {},
+    onStokesAolpDegreeModulationModeChange: () => {},
     onClearRoi: () => {},
     onResetSettings: () => {},
     onResetView: () => {}

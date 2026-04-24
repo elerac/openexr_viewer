@@ -43,6 +43,9 @@ test('loads scalar Stokes channels and applies derived-channel defaults', async 
   const colormapAutoRangeButton = page.getByRole('button', { name: 'Auto Range' });
   const colormapZeroCenterButton = page.getByRole('button', { name: 'Zero Center' });
   const stokesDegreeModulationButton = page.locator('#stokes-degree-modulation-button');
+  const stokesAolpModeControl = page.locator('#stokes-aolp-modulation-mode-control');
+  const stokesAolpValueButton = page.locator('#stokes-aolp-modulation-value-button');
+  const stokesAolpSaturationButton = page.locator('#stokes-aolp-modulation-saturation-button');
   const hsvId = String(expectedColormapLabels.indexOf('HSV'));
   const rdBuId = String(expectedColormapLabels.indexOf('RdBu'));
   const blackRedId = String(expectedColormapLabels.indexOf('Black-Red'));
@@ -63,25 +66,40 @@ test('loads scalar Stokes channels and applies derived-channel defaults', async 
   await expect(stokesDegreeModulationButton).toBeVisible();
   await expect(stokesDegreeModulationButton).toHaveText('DoLP Modulation');
   await expect(stokesDegreeModulationButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(stokesAolpModeControl).toBeVisible();
+  await expect(stokesAolpValueButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(stokesAolpSaturationButton).toHaveAttribute('aria-pressed', 'false');
   await stokesDegreeModulationButton.click();
+  await expect(stokesDegreeModulationButton).toHaveAttribute('aria-pressed', 'true');
+  await stokesAolpSaturationButton.click();
+  await expect(stokesAolpValueButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(stokesAolpSaturationButton).toHaveAttribute('aria-pressed', 'true');
   await expect(stokesDegreeModulationButton).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI, 6);
 
   await channelSelect.selectOption({ label: 'Stokes DoLP' });
   await expect(stokesDegreeModulationButton).toBeHidden();
+  await expect(stokesAolpModeControl).toBeHidden();
   await expect(colormapSelect).toHaveValue(blackRedId);
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
 
+  await channelSelect.selectOption({ label: 'Stokes AoLP' });
+  await expect(stokesAolpModeControl).toBeVisible();
+  await expect(stokesAolpValueButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(stokesAolpSaturationButton).toHaveAttribute('aria-pressed', 'true');
+
   await channelSelect.selectOption({ label: 'Stokes DoP' });
   await expect(stokesDegreeModulationButton).toBeHidden();
+  await expect(stokesAolpModeControl).toBeHidden();
   await expect(colormapSelect).toHaveValue(blackRedId);
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
 
   await channelSelect.selectOption({ label: 'Stokes DoCP' });
   await expect(stokesDegreeModulationButton).toBeHidden();
+  await expect(stokesAolpModeControl).toBeHidden();
   await expect(colormapSelect).toHaveValue(blackRedId);
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(0, 8);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(1, 8);
@@ -91,6 +109,7 @@ test('loads scalar Stokes channels and applies derived-channel defaults', async 
   await expect(stokesDegreeModulationButton).toBeVisible();
   await expect(stokesDegreeModulationButton).toHaveText('DoCP Modulation');
   await expect(stokesDegreeModulationButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(stokesAolpModeControl).toBeHidden();
   await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'true');
   await stokesDegreeModulationButton.click();
   await expect(stokesDegreeModulationButton).toHaveAttribute('aria-pressed', 'false');
@@ -102,11 +121,13 @@ test('loads scalar Stokes channels and applies derived-channel defaults', async 
   await expect(stokesDegreeModulationButton).toBeVisible();
   await expect(stokesDegreeModulationButton).toHaveText('DoP Modulation');
   await expect(stokesDegreeModulationButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(stokesAolpModeControl).toBeHidden();
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-Math.PI / 4, 6);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(Math.PI / 4, 6);
 
   await channelSelect.selectOption({ label: 'Stokes S1/S0' });
   await expect(stokesDegreeModulationButton).toBeHidden();
+  await expect(stokesAolpModeControl).toBeHidden();
   await expect(colormapSelect).toHaveValue(rdBuId);
   await expect(colormapZeroCenterButton).toHaveAttribute('aria-pressed', 'true');
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-1, 8);

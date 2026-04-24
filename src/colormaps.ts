@@ -27,6 +27,8 @@ export interface ColormapLut {
   rgba8: Uint8Array;
 }
 
+export type HsvModulationMode = 'value' | 'saturation';
+
 interface ParsedNpyHeader {
   descr: string;
   fortranOrder: boolean;
@@ -233,12 +235,16 @@ export function mapValueToColormapRgbBytes(
   return sampleColormapRgbBytes(lut, (value - range.min) / (range.max - range.min));
 }
 
-export function modulateRgbBytesValue(
+export function modulateRgbBytesHsv(
   rgb: [number, number, number],
-  valueScale: number
+  scale: number,
+  mode: HsvModulationMode = 'value'
 ): [number, number, number] {
   const [h, s, v] = rgbBytesToHsv(rgb);
-  return hsvToRgbBytes(h, s, v * clampFiniteUnit(valueScale));
+  const clampedScale = clampFiniteUnit(scale);
+  return mode === 'saturation'
+    ? hsvToRgbBytes(h, s * clampedScale, v)
+    : hsvToRgbBytes(h, s, v * clampedScale);
 }
 
 function resolvePublicAssetUrl(file: string): string {

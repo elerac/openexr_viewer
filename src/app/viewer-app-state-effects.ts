@@ -140,7 +140,8 @@ function scheduleActiveChannelThumbnailGeneration(
       activeLayer: state.sessionState.activeLayer,
       selection: item.selection,
       exposureEv: state.sessionState.exposureEv,
-      stokesDegreeModulation: state.sessionState.stokesDegreeModulation
+      stokesDegreeModulation: state.sessionState.stokesDegreeModulation,
+      stokesAolpDegreeModulationMode: state.sessionState.stokesAolpDegreeModulationMode
     });
     if (
       Object.prototype.hasOwnProperty.call(state.channelThumbnailsByRequestKey, requestKey) ||
@@ -181,6 +182,7 @@ function shouldRefreshActiveChannelThumbnails(transition: ViewerStateTransition)
     transition.previousState.sessionState.exposureEv !== transition.state.sessionState.exposureEv ||
     transition.previousState.sessionState.stokesDegreeModulation.aolp !== transition.state.sessionState.stokesDegreeModulation.aolp ||
     transition.previousState.sessionState.stokesDegreeModulation.cop !== transition.state.sessionState.stokesDegreeModulation.cop ||
-    transition.previousState.sessionState.stokesDegreeModulation.top !== transition.state.sessionState.stokesDegreeModulation.top
+    transition.previousState.sessionState.stokesDegreeModulation.top !== transition.state.sessionState.stokesDegreeModulation.top ||
+    transition.previousState.sessionState.stokesAolpDegreeModulationMode !== transition.state.sessionState.stokesAolpDegreeModulationMode
   );
 }

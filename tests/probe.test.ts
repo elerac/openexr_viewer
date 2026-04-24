@@ -213,6 +213,23 @@ describe('probe helpers', () => {
     expect(unmodulated?.cssColor).toBe('rgb(255, 0, 0)');
   });
 
+  it('can modulate AoLP colormap preview saturation instead of value', () => {
+    const preview = buildProbeColorPreview(
+      { x: 0, y: 0, values: { AoLP: 0, DoLP: 0.5 } },
+      createStokesSelection('aolp'),
+      0,
+      {
+        mode: 'colormap',
+        colormapRange: { min: 0, max: 2 },
+        colormapLut: redBlackGreenLut,
+        stokesDegreeModulation: { aolp: true, cop: true, top: true },
+        stokesAolpDegreeModulationMode: 'saturation'
+      }
+    );
+
+    expect(preview?.cssColor).toBe('rgb(255, 128, 128)');
+  });
+
   it('uses grouped RGB Stokes derived values for probe preview', () => {
     const preview = buildProbeColorPreview(
       {

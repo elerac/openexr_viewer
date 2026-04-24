@@ -1,5 +1,5 @@
 import { computeRec709Luminance, linearToSrgbByte } from './color';
-import { ColormapLut, mapValueToColormapRgbBytes, modulateRgbBytesValue } from './colormaps';
+import { ColormapLut, mapValueToColormapRgbBytes, modulateRgbBytesHsv } from './colormaps';
 import {
   getDisplaySelectionDegreeModulationValueLabel,
   getDisplaySelectionValueLabel,
@@ -8,6 +8,7 @@ import {
   isMonoSelection,
   isStokesSelection,
   type DisplaySelection,
+  type StokesAolpDegreeModulationMode,
   type StokesDegreeModulationState
 } from './display-model';
 import {
@@ -15,7 +16,8 @@ import {
   createDefaultStokesDegreeModulation,
   getStokesDegreeModulationLabel,
   getStokesParameterLabel,
-  isStokesDegreeModulationEnabled
+  isStokesDegreeModulationEnabled,
+  resolveStokesDegreeModulationMode
 } from './stokes';
 import {
   DisplayLuminanceRange,
@@ -40,6 +42,7 @@ export interface ProbeVisualizationOptions {
   colormapRange: DisplayLuminanceRange | null;
   colormapLut?: ColormapLut | null;
   stokesDegreeModulation?: StokesDegreeModulationState;
+  stokesAolpDegreeModulationMode?: StokesAolpDegreeModulationMode;
 }
 
 export function resolveActiveProbePixel(
@@ -95,7 +98,14 @@ export function buildProbeColorPreview(
     const stokesDegreeModulation =
       visualization.stokesDegreeModulation ?? createDefaultStokesDegreeModulation();
     if (isStokesDegreeModulationEnabled(selection, stokesDegreeModulation)) {
-      bytes = modulateRgbBytesValue(bytes, readProbeStokesDegreeModulationValue(sample, selection));
+      bytes = modulateRgbBytesHsv(
+        bytes,
+        readProbeStokesDegreeModulationValue(sample, selection),
+        resolveStokesDegreeModulationMode(
+          selection,
+          visualization.stokesAolpDegreeModulationMode ?? 'value'
+        )
+      );
     }
   } else {
     bytes = [

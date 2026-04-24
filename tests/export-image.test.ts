@@ -32,7 +32,8 @@ describe('export image pixels', () => {
           b: 'B',
           alpha: null
         },
-        stokesDegreeModulation: createDefaultStokesDegreeModulation()
+        stokesDegreeModulation: createDefaultStokesDegreeModulation(),
+        stokesAolpDegreeModulationMode: 'value'
       },
       colormapLut: null
     });
@@ -59,7 +60,8 @@ describe('export image pixels', () => {
           channel: 'Y',
           alpha: null
         },
-        stokesDegreeModulation: createDefaultStokesDegreeModulation()
+        stokesDegreeModulation: createDefaultStokesDegreeModulation(),
+        stokesAolpDegreeModulationMode: 'value'
       },
       colormapLut: {
         id: '0',
@@ -88,12 +90,41 @@ describe('export image pixels', () => {
           b: 'B',
           alpha: 'A'
         },
-        stokesDegreeModulation: createDefaultStokesDegreeModulation()
+        stokesDegreeModulation: createDefaultStokesDegreeModulation(),
+        stokesAolpDegreeModulationMode: 'value'
       },
       colormapLut: null
     });
 
     expect(Array.from(pixels.data)).toEqual([255, 0, 0, 64]);
+  });
+
+  it('modulates AoLP colormap export saturation when requested', () => {
+    const pixels = buildExportImagePixels({
+      displayTexture: new Float32Array([0, 0, 0, 0.5]),
+      width: 1,
+      height: 1,
+      state: {
+        exposureEv: 0,
+        visualizationMode: 'colormap',
+        colormapRange: { min: 0, max: 1 },
+        displaySelection: {
+          kind: 'stokesAngle',
+          parameter: 'aolp',
+          source: { kind: 'scalar' }
+        },
+        stokesDegreeModulation: { aolp: true, cop: true, top: true },
+        stokesAolpDegreeModulationMode: 'saturation'
+      },
+      colormapLut: {
+        id: '0',
+        label: 'Test',
+        entryCount: 2,
+        rgba8: new Uint8Array([255, 0, 0, 255, 0, 0, 255, 255])
+      }
+    });
+
+    expect(Array.from(pixels.data)).toEqual([255, 128, 128, 255]);
   });
 
   it('encodes pngs from the existing rgba buffer without copying it', async () => {

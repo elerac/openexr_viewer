@@ -70,7 +70,8 @@ export function buildProbeReadoutModel(args: BuildProbePresentationArgs): ProbeR
       mode: args.sessionState.visualizationMode,
       colormapRange: args.sessionState.colormapRange ?? args.activeDisplayLuminanceRange,
       colormapLut: args.activeColormapLut,
-      stokesDegreeModulation: args.sessionState.stokesDegreeModulation
+      stokesDegreeModulation: args.sessionState.stokesDegreeModulation,
+      stokesAolpDegreeModulationMode: args.sessionState.stokesAolpDegreeModulationMode
     }),
     imageSize
   };

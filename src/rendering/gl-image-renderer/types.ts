@@ -15,6 +15,7 @@ export interface CommonUniforms {
   displayMode: WebGLUniformLocation;
   stokesParameter: WebGLUniformLocation;
   useStokesDegreeModulation: WebGLUniformLocation;
+  stokesDegreeModulationMode: WebGLUniformLocation;
   useImageAlpha: WebGLUniformLocation;
   compositeCheckerboard: WebGLUniformLocation;
   alphaOutputMode: WebGLUniformLocation;

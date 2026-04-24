@@ -24,6 +24,7 @@ describe('viewer store', () => {
       cop: true,
       top: true
     });
+    expect(createInitialState().stokesAolpDegreeModulationMode).toBe('value');
   });
 
   it('re-resolves display channels when switching to a layer without the current mapping', () => {

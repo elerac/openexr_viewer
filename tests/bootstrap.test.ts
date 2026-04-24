@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => {
       colormapRangeMode: 'alwaysAuto',
       colormapZeroCentered: false,
       stokesDegreeModulation: { aolp: false, cop: true, top: true },
+      stokesAolpDegreeModulationMode: 'value',
       zoom: 1,
       panX: 0,
       panY: 0,

@@ -15,6 +15,7 @@ uniform int uColormapEntryCount;
 uniform int uDisplayMode;
 uniform int uStokesParameter;
 uniform bool uUseStokesDegreeModulation;
+uniform int uStokesDegreeModulationMode;
 uniform bool uUseImageAlpha;
 uniform bool uCompositeCheckerboard;
 uniform int uAlphaOutputMode;
@@ -32,6 +33,8 @@ const int DISPLAY_MODE_STOKES_RGB_LUMINANCE = 5;
 const int ALPHA_OUTPUT_OPAQUE = 0;
 const int ALPHA_OUTPUT_STRAIGHT = 1;
 const int ALPHA_OUTPUT_PREMULTIPLIED = 2;
+const int STOKES_DEGREE_MODULATION_MODE_VALUE = 0;
+const int STOKES_DEGREE_MODULATION_MODE_SATURATION = 1;
 
 const int STOKES_PARAMETER_AOLP = 0;
 const int STOKES_PARAMETER_DOLP = 1;
@@ -490,13 +493,18 @@ void main() {
     vec3 color = sampleColormap(luminance, uColormapMin, uColormapMax);
     if (uUseStokesDegreeModulation) {
       vec3 hsv = rgbToHsv(color);
-      hsv.z *= computeStokesDegreeModulationDisplayValue(
+      float modulation = computeStokesDegreeModulationDisplayValue(
         uStokesParameter,
         displaySample.stokes.x,
         displaySample.stokes.y,
         displaySample.stokes.z,
         displaySample.stokes.w
       );
+      if (uStokesDegreeModulationMode == STOKES_DEGREE_MODULATION_MODE_SATURATION) {
+        hsv.y *= modulation;
+      } else {
+        hsv.z *= modulation;
+      }
       color = hsvToRgb(hsv);
     }
     outColor = encodeOutputColor(screen, color, imageAlpha);

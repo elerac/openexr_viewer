@@ -2,16 +2,21 @@ import { computeRec709Luminance, linearToSrgbByte } from './color';
 import {
   mapValueToColormapRgbBytes,
   sampleColormapRgbBytes,
-  modulateRgbBytesValue,
+  modulateRgbBytesHsv,
   type ColormapLut
 } from './colormaps';
 import { selectionUsesImageAlpha } from './display-model';
-import { isStokesDegreeModulationEnabled } from './stokes';
+import { isStokesDegreeModulationEnabled, resolveStokesDegreeModulationMode } from './stokes';
 import type { ExportColormapOrientation, ViewerSessionState } from './types';
 
 type ExportVisualizationState = Pick<
   ViewerSessionState,
-  'colormapRange' | 'displaySelection' | 'exposureEv' | 'stokesDegreeModulation' | 'visualizationMode'
+  | 'colormapRange'
+  | 'displaySelection'
+  | 'exposureEv'
+  | 'stokesAolpDegreeModulationMode'
+  | 'stokesDegreeModulation'
+  | 'visualizationMode'
 >;
 
 export interface ExportImagePixels {
@@ -49,6 +54,10 @@ export function buildExportImagePixels({
     state.displaySelection,
     state.stokesDegreeModulation
   );
+  const stokesDegreeModulationMode = resolveStokesDegreeModulationMode(
+    state.displaySelection,
+    state.stokesAolpDegreeModulationMode
+  );
   const exposureScale = 2 ** state.exposureEv;
 
   for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
@@ -67,7 +76,7 @@ export function buildExportImagePixels({
         colormapLut
       );
       if (useStokesDegreeModulation) {
-        rgb = modulateRgbBytesValue(rgb, rawAlpha);
+        rgb = modulateRgbBytesHsv(rgb, rawAlpha, stokesDegreeModulationMode);
       }
     } else {
       rgb = [

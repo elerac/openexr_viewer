@@ -37,7 +37,9 @@ export function applyUiEffects(ui: ViewerUi, transition: ViewerUiTransition): vo
   if (invalidation & ViewerUiInvalidationFlags.StokesDegreeModulation) {
     ui.setStokesDegreeModulationControl(
       snapshot.stokesDegreeModulationControl?.label ?? null,
-      snapshot.stokesDegreeModulationControl?.enabled ?? false
+      snapshot.stokesDegreeModulationControl?.enabled ?? false,
+      snapshot.stokesDegreeModulationControl?.showAolpMode ?? false,
+      snapshot.stokesDegreeModulationControl?.aolpMode ?? 'value'
     );
   }
 

@@ -1,7 +1,10 @@
 import { DEFAULT_COLORMAP_ID } from './colormaps';
 import { DEFAULT_PANORAMA_HFOV_DEG } from './interaction/panorama-geometry';
 import { resolveDisplaySelectionForLayer } from './display-selection';
-import { createDefaultStokesDegreeModulation } from './stokes';
+import {
+  DEFAULT_STOKES_AOLP_DEGREE_MODULATION_MODE,
+  createDefaultStokesDegreeModulation
+} from './stokes';
 import {
   DecodedExrImage,
   ViewerSessionState
@@ -16,6 +19,7 @@ const SESSION_STATE_KEYS = [
   'colormapRangeMode',
   'colormapZeroCentered',
   'stokesDegreeModulation',
+  'stokesAolpDegreeModulationMode',
   'zoom',
   'panX',
   'panY',
@@ -38,6 +42,7 @@ export function createInitialState(): ViewerSessionState {
     colormapRangeMode: 'alwaysAuto',
     colormapZeroCentered: false,
     stokesDegreeModulation: createDefaultStokesDegreeModulation(),
+    stokesAolpDegreeModulationMode: DEFAULT_STOKES_AOLP_DEGREE_MODULATION_MODE,
     zoom: 1,
     panX: 0,
     panY: 0,

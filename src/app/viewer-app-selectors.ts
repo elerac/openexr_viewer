@@ -84,7 +84,8 @@ export function buildChannelThumbnailItems(state: ViewerAppState): ViewerChannel
       activeLayer: state.sessionState.activeLayer,
       selection: item.selection,
       exposureEv: state.sessionState.exposureEv,
-      stokesDegreeModulation: state.sessionState.stokesDegreeModulation
+      stokesDegreeModulation: state.sessionState.stokesDegreeModulation,
+      stokesAolpDegreeModulationMode: state.sessionState.stokesAolpDegreeModulationMode
     });
     const contextKey = serializeChannelThumbnailContextKey(
       session.id,
@@ -116,7 +117,9 @@ export function selectStokesDegreeModulationControl(
 
   return {
     label: getStokesDegreeModulationLabel(selection.parameter) ?? 'Degree Modulation',
-    enabled: sessionState.stokesDegreeModulation[selection.parameter]
+    enabled: sessionState.stokesDegreeModulation[selection.parameter],
+    showAolpMode: selection.parameter === 'aolp',
+    aolpMode: sessionState.stokesAolpDegreeModulationMode
   };
 }
 

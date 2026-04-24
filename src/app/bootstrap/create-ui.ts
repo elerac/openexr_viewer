@@ -143,6 +143,9 @@ export function createViewerUi({
     onStokesDegreeModulationToggle: () => {
       getDisplayController().toggleStokesDegreeModulation();
     },
+    onStokesAolpDegreeModulationModeChange: (mode) => {
+      getDisplayController().setStokesAolpDegreeModulationMode(mode);
+    },
     onClearRoi: () => {
       core.dispatch({
         type: 'roiSet',

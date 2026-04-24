@@ -10,6 +10,7 @@ import type {
   OpenedImageSession,
   PixelSample,
   RoiStats,
+  StokesAolpDegreeModulationMode,
   ViewportInfo,
   ViewerInteractionState,
   ViewerRenderState,
@@ -62,6 +63,8 @@ export interface ViewerLayerOption {
 export interface StokesDegreeModulationControlModel {
   label: string;
   enabled: boolean;
+  showAolpMode: boolean;
+  aolpMode: StokesAolpDegreeModulationMode;
 }
 
 export interface ViewerResourceTarget {
@@ -124,6 +127,7 @@ export type ViewerIntent =
   | { type: 'colormapAutoRangeToggled' }
   | { type: 'colormapZeroCenteredToggled' }
   | { type: 'stokesDegreeModulationToggled' }
+  | { type: 'stokesAolpDegreeModulationModeSet'; mode: StokesAolpDegreeModulationMode }
   | { type: 'lockedPixelToggled'; pixel: ViewerSessionState['lockedPixel'] }
   | { type: 'roiSet'; roi: ViewerSessionState['roi'] }
   | { type: 'interactionStatePublished'; interactionState: ViewerInteractionState }

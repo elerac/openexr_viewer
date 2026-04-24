@@ -1,4 +1,4 @@
-import { isStokesDegreeModulationEnabled } from '../../stokes';
+import { isStokesDegreeModulationEnabled, resolveStokesDegreeModulationMode } from '../../stokes';
 import type { DisplaySourceBinding, DisplaySourceMode } from '../../display-texture';
 import type { ViewerState } from '../../types';
 import {
@@ -97,6 +97,13 @@ function setCommonUniforms(
   gl.uniform1i(
     uniforms.useStokesDegreeModulation,
     isStokesDegreeModulationEnabled(viewerState.displaySelection, viewerState.stokesDegreeModulation) ? 1 : 0
+  );
+  gl.uniform1i(
+    uniforms.stokesDegreeModulationMode,
+    resolveStokesDegreeModulationMode(
+      viewerState.displaySelection,
+      viewerState.stokesAolpDegreeModulationMode
+    ) === 'saturation' ? 1 : 0
   );
   gl.uniform1i(uniforms.useImageAlpha, state.activeBinding.usesImageAlpha ? 1 : 0);
   gl.uniform1i(uniforms.compositeCheckerboard, options.compositeCheckerboard ? 1 : 0);

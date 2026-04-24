@@ -12,7 +12,12 @@ import { getStokesDisplayColormapDefault } from '../stokes';
 import { ViewerAppCore } from '../app/viewer-app-core';
 import { selectActiveSession } from '../app/viewer-app-selectors';
 import type { RestorableVisualizationState } from '../app/viewer-app-types';
-import type { DisplayLuminanceRange, ViewerMode, VisualizationMode } from '../types';
+import type {
+  DisplayLuminanceRange,
+  StokesAolpDegreeModulationMode,
+  ViewerMode,
+  VisualizationMode
+} from '../types';
 
 export interface DisplayControllerDependencies {
   core: ViewerAppCore;
@@ -281,6 +286,17 @@ export class DisplayController implements Disposable {
 
     this.core.dispatch({
       type: 'stokesDegreeModulationToggled'
+    });
+  }
+
+  setStokesAolpDegreeModulationMode(mode: StokesAolpDegreeModulationMode): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.core.dispatch({
+      type: 'stokesAolpDegreeModulationModeSet',
+      mode
     });
   }
 

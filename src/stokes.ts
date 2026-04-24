@@ -10,6 +10,7 @@ import {
   isStokesSelection,
   sameDisplaySelection,
   type DisplaySelection,
+  type StokesAolpDegreeModulationMode,
   type StokesDegreeModulationState,
   type StokesParameter,
   type StokesSelection
@@ -68,6 +69,7 @@ export const DEFAULT_STOKES_DEGREE_MODULATION: StokesDegreeModulationState = {
   cop: true,
   top: true
 };
+export const DEFAULT_STOKES_AOLP_DEGREE_MODULATION_MODE: StokesAolpDegreeModulationMode = 'value';
 
 export function createDefaultStokesDegreeModulation(): StokesDegreeModulationState {
   return { ...DEFAULT_STOKES_DEGREE_MODULATION };
@@ -279,6 +281,15 @@ export function isStokesDegreeModulationEnabled(
   modulation: StokesDegreeModulationState
 ): boolean {
   return isStokesAngleSelection(selection) && modulation[selection.parameter];
+}
+
+export function resolveStokesDegreeModulationMode(
+  selection: DisplaySelection | null,
+  aolpMode: StokesAolpDegreeModulationMode
+): StokesAolpDegreeModulationMode {
+  return isStokesAngleSelection(selection) && selection.parameter === 'aolp'
+    ? aolpMode
+    : 'value';
 }
 
 export function clampStokesDegreeModulationValue(value: number): number {

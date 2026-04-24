@@ -1,4 +1,9 @@
-import { serializeDisplaySelectionKey, type DisplaySelection, type StokesDegreeModulationState } from './display-model';
+import {
+  serializeDisplaySelectionKey,
+  type DisplaySelection,
+  type StokesAolpDegreeModulationMode,
+  type StokesDegreeModulationState
+} from './display-model';
 
 export function serializeChannelThumbnailContextKey(
   sessionId: string,
@@ -15,8 +20,9 @@ export function serializeChannelThumbnailRequestKey(args: {
   selection: DisplaySelection | string;
   exposureEv: number;
   stokesDegreeModulation: StokesDegreeModulationState;
+  stokesAolpDegreeModulationMode: StokesAolpDegreeModulationMode;
 }): string {
-  return `${serializeChannelThumbnailContextKey(args.sessionId, args.activeLayer, args.selection)}|exposure:${serializeExposureEv(args.exposureEv)}|modulation:${serializeStokesDegreeModulationKey(args.stokesDegreeModulation)}`;
+  return `${serializeChannelThumbnailContextKey(args.sessionId, args.activeLayer, args.selection)}|exposure:${serializeExposureEv(args.exposureEv)}|modulation:${serializeStokesDegreeModulationKey(args.stokesDegreeModulation)}|aolpModulation:${args.stokesAolpDegreeModulationMode}`;
 }
 
 export function buildChannelThumbnailSessionPrefix(sessionId: string): string {

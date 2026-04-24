@@ -351,6 +351,20 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         }
       });
     }
+    case 'stokesAolpDegreeModulationModeSet': {
+      const selection = state.sessionState.displaySelection;
+      if (!isStokesSelection(selection) || selection.parameter !== 'aolp') {
+        return state;
+      }
+
+      if (state.sessionState.stokesAolpDegreeModulationMode === intent.mode) {
+        return state;
+      }
+
+      return patchSessionState(state, {
+        stokesAolpDegreeModulationMode: intent.mode
+      });
+    }
     case 'lockedPixelToggled': {
       const current = state.sessionState.lockedPixel;
       const same = current && intent.pixel && current.ix === intent.pixel.ix && current.iy === intent.pixel.iy;

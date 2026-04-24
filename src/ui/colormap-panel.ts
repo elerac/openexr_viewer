@@ -1,7 +1,7 @@
 import { buildZeroCenteredColormapRange } from '../colormap-range';
 import { ColormapLut, sampleColormapRgbBytes } from '../colormaps';
 import { DisposableBag, type Disposable } from '../lifecycle';
-import type { DisplayLuminanceRange, VisualizationMode } from '../types';
+import type { DisplayLuminanceRange, StokesAolpDegreeModulationMode, VisualizationMode } from '../types';
 import type { ColormapPanelElements } from './elements';
 import { syncSelectOptions } from './render-helpers';
 
@@ -17,6 +17,7 @@ interface ColormapPanelCallbacks {
   onColormapAutoRange: () => void;
   onColormapZeroCenterToggle: () => void;
   onStokesDegreeModulationToggle: () => void;
+  onStokesAolpDegreeModulationModeChange: (mode: StokesAolpDegreeModulationMode) => void;
 }
 
 export class ColormapPanel implements Disposable {
@@ -37,6 +38,7 @@ export class ColormapPanel implements Disposable {
     this.setVisualizationModeButtonsDisabled(true);
     this.elements.colormapSelect.disabled = true;
     this.elements.stokesDegreeModulationButton.disabled = true;
+    this.setStokesAolpModulationModeButtonsDisabled(true);
     this.setColormapRangeControlsDisabled(true);
 
     this.bindVisualizationModeButton(this.elements.visualizationNoneButton, 'rgb');
@@ -76,6 +78,8 @@ export class ColormapPanel implements Disposable {
 
       this.callbacks.onStokesDegreeModulationToggle();
     });
+    this.bindStokesAolpModulationModeButton(this.elements.stokesAolpModulationValueButton, 'value');
+    this.bindStokesAolpModulationModeButton(this.elements.stokesAolpModulationSaturationButton, 'saturation');
 
     this.disposables.addEventListener(this.elements.colormapVminSlider, 'input', () => {
       this.commitColormapMin(Number(this.elements.colormapVminSlider.value));
@@ -238,17 +242,24 @@ export class ColormapPanel implements Disposable {
     this.setColormapRangeValues(range, autoRange ?? range);
   }
 
-  setStokesDegreeModulationControl(label: string | null, enabled = false): void {
+  setStokesDegreeModulationControl(
+    label: string | null,
+    enabled = false,
+    showAolpMode = false,
+    aolpMode: StokesAolpDegreeModulationMode = 'value'
+  ): void {
     if (this.disposed) {
       return;
     }
 
     const visible = Boolean(label);
     this.elements.stokesDegreeModulationControl.classList.toggle('hidden', !visible);
+    this.elements.stokesAolpModulationModeControl.classList.toggle('hidden', !visible || !showAolpMode);
     if (label) {
       this.elements.stokesDegreeModulationButton.textContent = `${label} Modulation`;
     }
     this.elements.stokesDegreeModulationButton.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    this.setStokesAolpModulationMode(aolpMode);
     this.updateStokesDegreeModulationDisabled();
   }
 
@@ -276,6 +287,19 @@ export class ColormapPanel implements Disposable {
       }
 
       this.callbacks.onVisualizationModeChange(mode);
+    });
+  }
+
+  private bindStokesAolpModulationModeButton(
+    button: HTMLButtonElement,
+    mode: StokesAolpDegreeModulationMode
+  ): void {
+    this.disposables.addEventListener(button, 'click', () => {
+      if (button.disabled) {
+        return;
+      }
+
+      this.callbacks.onStokesAolpDegreeModulationModeChange(mode);
     });
   }
 
@@ -328,8 +352,24 @@ export class ColormapPanel implements Disposable {
 
   private updateStokesDegreeModulationDisabled(): void {
     const visible = !this.elements.stokesDegreeModulationControl.classList.contains('hidden');
-    this.elements.stokesDegreeModulationButton.disabled =
-      !visible || this.isLoading || this.openedImageCount === 0 || !this.isColormapEnabled;
+    const disabled = !visible || this.isLoading || this.openedImageCount === 0 || !this.isColormapEnabled;
+    this.elements.stokesDegreeModulationButton.disabled = disabled;
+    this.setStokesAolpModulationModeButtonsDisabled(
+      disabled || this.elements.stokesAolpModulationModeControl.classList.contains('hidden')
+    );
+  }
+
+  private setStokesAolpModulationMode(mode: StokesAolpDegreeModulationMode): void {
+    this.elements.stokesAolpModulationValueButton.setAttribute('aria-pressed', mode === 'value' ? 'true' : 'false');
+    this.elements.stokesAolpModulationSaturationButton.setAttribute(
+      'aria-pressed',
+      mode === 'saturation' ? 'true' : 'false'
+    );
+  }
+
+  private setStokesAolpModulationModeButtonsDisabled(disabled: boolean): void {
+    this.elements.stokesAolpModulationValueButton.disabled = disabled;
+    this.elements.stokesAolpModulationSaturationButton.disabled = disabled;
   }
 
   private setColormapRangeValues(range: DisplayLuminanceRange, autoRange: DisplayLuminanceRange): void {

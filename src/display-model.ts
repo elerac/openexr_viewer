@@ -21,6 +21,7 @@ export type StokesSource =
 
 export type StokesDegreeModulationParameter = StokesAngleParameter;
 export type StokesDegreeModulationState = Record<StokesDegreeModulationParameter, boolean>;
+export type StokesAolpDegreeModulationMode = 'value' | 'saturation';
 
 export type ChannelRgbSelection = {
   kind: 'channelRgb';

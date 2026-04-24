@@ -42,6 +42,7 @@ import type {
   PanoramaKeyboardOrbitInput,
   PixelSample,
   RoiStats,
+  StokesAolpDegreeModulationMode,
   ViewerMode,
   VisualizationMode
 } from '../types';
@@ -93,6 +94,7 @@ export interface UiCallbacks {
   onColormapAutoRange: () => void;
   onColormapZeroCenterToggle: () => void;
   onStokesDegreeModulationToggle: () => void;
+  onStokesAolpDegreeModulationModeChange: (mode: StokesAolpDegreeModulationMode) => void;
   onClearRoi: () => void;
   onResetSettings: () => void;
   onResetView: () => void;
@@ -201,6 +203,9 @@ export class ViewerUi implements Disposable {
       },
       onStokesDegreeModulationToggle: () => {
         this.callbacks.onStokesDegreeModulationToggle();
+      },
+      onStokesAolpDegreeModulationModeChange: (mode) => {
+        this.callbacks.onStokesAolpDegreeModulationModeChange(mode);
       }
     });
     this.layoutSplitController = new LayoutSplitController(this.elements);
@@ -502,12 +507,17 @@ export class ViewerUi implements Disposable {
     this.colormapPanel.setColormapRange(range, autoRange, alwaysAuto, zeroCentered);
   }
 
-  setStokesDegreeModulationControl(label: string | null, enabled = false): void {
+  setStokesDegreeModulationControl(
+    label: string | null,
+    enabled = false,
+    showAolpMode = false,
+    aolpMode: StokesAolpDegreeModulationMode = 'value'
+  ): void {
     if (this.disposed) {
       return;
     }
 
-    this.colormapPanel.setStokesDegreeModulationControl(label, enabled);
+    this.colormapPanel.setStokesDegreeModulationControl(label, enabled, showAolpMode, aolpMode);
   }
 
   setOpenedImageOptions(items: OpenedImageOptionItem[], activeId: string | null): void {

@@ -76,6 +76,9 @@ export interface Elements {
   colormapSelect: HTMLSelectElement;
   stokesDegreeModulationControl: HTMLDivElement;
   stokesDegreeModulationButton: HTMLButtonElement;
+  stokesAolpModulationModeControl: HTMLDivElement;
+  stokesAolpModulationValueButton: HTMLButtonElement;
+  stokesAolpModulationSaturationButton: HTMLButtonElement;
   colormapAutoRangeButton: HTMLButtonElement;
   colormapZeroCenterButton: HTMLButtonElement;
   colormapRangeSlider: HTMLDivElement;
@@ -173,6 +176,9 @@ export type ColormapPanelElements = Pick<
   | 'colormapSelect'
   | 'stokesDegreeModulationControl'
   | 'stokesDegreeModulationButton'
+  | 'stokesAolpModulationModeControl'
+  | 'stokesAolpModulationValueButton'
+  | 'stokesAolpModulationSaturationButton'
   | 'colormapAutoRangeButton'
   | 'colormapZeroCenterButton'
   | 'colormapRangeSlider'
@@ -406,6 +412,9 @@ export function resolveElements(): Elements {
     colormapSelect: requireElement('colormap-select', HTMLSelectElement),
     stokesDegreeModulationControl: requireElement('stokes-degree-modulation-control', HTMLDivElement),
     stokesDegreeModulationButton: requireElement('stokes-degree-modulation-button', HTMLButtonElement),
+    stokesAolpModulationModeControl: requireElement('stokes-aolp-modulation-mode-control', HTMLDivElement),
+    stokesAolpModulationValueButton: requireElement('stokes-aolp-modulation-value-button', HTMLButtonElement),
+    stokesAolpModulationSaturationButton: requireElement('stokes-aolp-modulation-saturation-button', HTMLButtonElement),
     colormapAutoRangeButton: requireElement('colormap-auto-range-button', HTMLButtonElement),
     colormapZeroCenterButton: requireElement('colormap-zero-center-button', HTMLButtonElement),
     colormapRangeSlider: requireElement('colormap-range-slider', HTMLDivElement),

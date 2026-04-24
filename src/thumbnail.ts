@@ -1,7 +1,7 @@
 import { computeRec709Luminance, linearToSrgbByte } from './color';
 import {
   mapValueToColormapRgbBytes,
-  modulateRgbBytesValue,
+  modulateRgbBytesHsv,
   type ColormapLut
 } from './colormaps';
 import {
@@ -9,6 +9,7 @@ import {
   isMonoSelection,
   selectionUsesImageAlpha,
   type DisplaySelection,
+  type StokesAolpDegreeModulationMode,
   type StokesDegreeModulationState
 } from './display-model';
 import {
@@ -17,7 +18,7 @@ import {
   resolveDisplaySelectionEvaluator,
   type DisplayPixelValues
 } from './display-texture';
-import { isStokesDegreeModulationEnabled } from './stokes';
+import { isStokesDegreeModulationEnabled, resolveStokesDegreeModulationMode } from './stokes';
 import {
   DecodedExrImage,
   DecodedLayer,
@@ -41,6 +42,7 @@ export interface ThumbnailPreviewOptions {
   colormapRange: DisplayLuminanceRange | null;
   colormapLut: ColormapLut | null;
   stokesDegreeModulation: StokesDegreeModulationState;
+  stokesAolpDegreeModulationMode?: StokesAolpDegreeModulationMode;
 }
 
 export function createOpenedImageThumbnailDataUrl(
@@ -148,6 +150,10 @@ export function buildDisplaySelectionThumbnailPixels(
   const useImageAlpha = selectionUsesImageAlpha(effectiveSelection);
   const useStokesDegreeModulation = useColormapPreview &&
     isStokesDegreeModulationEnabled(effectiveSelection, colormapPreview!.stokesDegreeModulation);
+  const stokesDegreeModulationMode = resolveStokesDegreeModulationMode(
+    effectiveSelection,
+    colormapPreview?.stokesAolpDegreeModulationMode ?? state.stokesAolpDegreeModulationMode
+  );
 
   for (let y = 0; y < thumbnailHeight; y += 1) {
     for (let x = 0; x < thumbnailWidth; x += 1) {
@@ -171,7 +177,7 @@ export function buildDisplaySelectionThumbnailPixels(
           colormapPreview.colormapLut
         );
         if (useStokesDegreeModulation) {
-          rgb = modulateRgbBytesValue(rgb, sample.a);
+          rgb = modulateRgbBytesHsv(rgb, sample.a, stokesDegreeModulationMode);
         }
 
         const alpha = useImageAlpha ? clamp01(sample.a) : 1;

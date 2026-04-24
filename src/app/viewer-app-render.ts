@@ -144,6 +144,7 @@ function createProbeReadoutSelector(): (
   let previousActiveDisplayLuminanceRange: ViewerAppState['activeDisplayLuminanceRange'] = null;
   let previousActiveColormapLut: ViewerAppState['activeColormapLut'] = null;
   let previousStokesDegreeModulation = { aolp: false, cop: false, top: false };
+  let previousStokesAolpDegreeModulationMode: ViewerAppState['sessionState']['stokesAolpDegreeModulationMode'] = 'value';
   let previousResult = buildProbeReadoutModel({
     activeSession: null,
     activeLayer: null,
@@ -176,7 +177,8 @@ function createProbeReadoutSelector(): (
           state.activeColormapLut === previousActiveColormapLut &&
           nextStokesDegreeModulation.aolp === previousStokesDegreeModulation.aolp &&
           nextStokesDegreeModulation.cop === previousStokesDegreeModulation.cop &&
-          nextStokesDegreeModulation.top === previousStokesDegreeModulation.top
+          nextStokesDegreeModulation.top === previousStokesDegreeModulation.top &&
+          state.sessionState.stokesAolpDegreeModulationMode === previousStokesAolpDegreeModulationMode
         )
       );
 
@@ -197,6 +199,7 @@ function createProbeReadoutSelector(): (
     previousActiveDisplayLuminanceRange = state.activeDisplayLuminanceRange;
     previousActiveColormapLut = state.activeColormapLut;
     previousStokesDegreeModulation = nextStokesDegreeModulation;
+    previousStokesAolpDegreeModulationMode = state.sessionState.stokesAolpDegreeModulationMode;
     previousResult = buildProbeReadoutModel({
       activeSession,
       activeLayer,
@@ -352,6 +355,7 @@ function sameRenderImageInputs(a: ViewerRenderSnapshot, b: ViewerRenderSnapshot)
     previous.stokesDegreeModulation.aolp === next.stokesDegreeModulation.aolp &&
     previous.stokesDegreeModulation.cop === next.stokesDegreeModulation.cop &&
     previous.stokesDegreeModulation.top === next.stokesDegreeModulation.top &&
+    previous.stokesAolpDegreeModulationMode === next.stokesAolpDegreeModulationMode &&
     a.activeColormapLut === b.activeColormapLut
   );
 }
@@ -397,6 +401,7 @@ function sameViewerRenderState(a: ViewerRenderState, b: ViewerRenderState): bool
     a.stokesDegreeModulation.aolp === b.stokesDegreeModulation.aolp &&
     a.stokesDegreeModulation.cop === b.stokesDegreeModulation.cop &&
     a.stokesDegreeModulation.top === b.stokesDegreeModulation.top &&
+    a.stokesAolpDegreeModulationMode === b.stokesAolpDegreeModulationMode &&
     a.activeLayer === b.activeLayer &&
     sameDisplaySelection(a.displaySelection, b.displaySelection) &&
     samePixel(a.lockedPixel, b.lockedPixel) &&
@@ -417,6 +422,7 @@ function stateLikeSessionState(): ViewerAppState['sessionState'] {
     colormapRangeMode: 'alwaysAuto',
     colormapZeroCentered: false,
     stokesDegreeModulation: { aolp: false, cop: false, top: false },
+    stokesAolpDegreeModulationMode: 'value',
     zoom: 1,
     panX: 0,
     panY: 0,
