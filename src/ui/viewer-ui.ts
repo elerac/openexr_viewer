@@ -50,6 +50,8 @@ import { setRoiReadout } from './roi-readout';
 import { TopMenuController } from './top-menu-controller';
 import { WindowPreviewController } from './window-preview-controller';
 
+const DISPLAY_TOOLBAR_VISIBLE_STORAGE_KEY = 'openexr-viewer:display-toolbar-visible:v1';
+
 export interface UiCallbacks {
   onOpenFileClick: () => void;
   onOpenFolderClick: () => void;
@@ -282,6 +284,7 @@ export class ViewerUi implements Disposable {
     this.disposables.addDisposable(this.collapsibleSectionsController);
     this.clearImageBrowserPanels();
     this.setViewerMode('image');
+    this.setDisplayToolbarVisible(readStoredDisplayToolbarVisible(), false);
     this.updateViewerModeMenuItemsDisabled();
     this.updateFileMenuItemsDisabled();
     this.bindEvents();
@@ -346,6 +349,7 @@ export class ViewerUi implements Disposable {
     this.elements.openFolderButton.disabled = loading;
     this.elements.galleryCboxRgbButton.disabled = loading;
     this.elements.resetViewButton.disabled = loading;
+    this.elements.toolbarResetViewButton.disabled = loading;
     this.openedImagesPanel.setLoading(loading);
     this.layerPanel.setLoading(loading);
     this.channelPanel.setLoading(loading);
@@ -770,6 +774,11 @@ export class ViewerUi implements Disposable {
       void this.windowPreviewController.setEnabled(true);
     });
 
+    this.disposables.addEventListener(this.elements.windowToolbarMenuItem, 'click', () => {
+      this.setDisplayToolbarVisible(this.elements.displayToolbar.classList.contains('hidden'));
+      this.topMenuController.closeAll();
+    });
+
     this.disposables.addEventListener(this.elements.fileInput, 'change', (event) => {
       const input = event.currentTarget as HTMLInputElement;
       const file = input.files?.[0] ?? null;
@@ -790,9 +799,8 @@ export class ViewerUi implements Disposable {
       input.value = '';
     });
 
-    this.disposables.addEventListener(this.elements.resetViewButton, 'click', () => {
-      this.callbacks.onResetView();
-    });
+    this.bindResetViewButton(this.elements.resetViewButton);
+    this.bindResetViewButton(this.elements.toolbarResetViewButton);
 
     this.disposables.addEventListener(this.elements.resetSettingsButton, 'click', () => {
       this.layoutSplitController.resetToDefaults();
@@ -807,6 +815,24 @@ export class ViewerUi implements Disposable {
       this.callbacks.onClearRoi();
     });
   }
+
+  private bindResetViewButton(button: HTMLButtonElement): void {
+    this.disposables.addEventListener(button, 'click', () => {
+      if (button.disabled) {
+        return;
+      }
+
+      this.callbacks.onResetView();
+    });
+  }
+
+  private setDisplayToolbarVisible(visible: boolean, persist = true): void {
+    this.elements.displayToolbar.classList.toggle('hidden', !visible);
+    this.elements.windowToolbarMenuItem.setAttribute('aria-checked', visible ? 'true' : 'false');
+    if (persist) {
+      saveStoredDisplayToolbarVisible(visible);
+    }
+  }
 }
 
 function toFiles(files: FileList | null | undefined): File[] {
@@ -814,4 +840,20 @@ function toFiles(files: FileList | null | undefined): File[] {
     return [];
   }
   return Array.from(files);
+}
+
+function readStoredDisplayToolbarVisible(): boolean {
+  try {
+    return window.localStorage.getItem(DISPLAY_TOOLBAR_VISIBLE_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function saveStoredDisplayToolbarVisible(visible: boolean): void {
+  try {
+    window.localStorage.setItem(DISPLAY_TOOLBAR_VISIBLE_STORAGE_KEY, String(visible));
+  } catch {
+    // Storage can be unavailable in private contexts; keep the runtime toolbar state anyway.
+  }
 }

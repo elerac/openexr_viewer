@@ -35,8 +35,8 @@ output {
 }
 
 .app-shell {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
   height: 100vh;
   height: 100dvh;
@@ -50,6 +50,7 @@ output {
 }
 
 .app-shell.is-window-preview .app-menu-bar,
+.app-shell.is-window-preview .display-toolbar,
 .app-shell.is-window-preview .error-banner,
 .app-shell.is-window-preview .image-panel-shell,
 .app-shell.is-window-preview .right-stack,
@@ -66,7 +67,6 @@ output {
 }
 
 .app-menu-bar {
-  grid-row: 1;
   position: relative;
   z-index: 20;
   min-height: 2.1rem;
@@ -147,24 +147,28 @@ output {
   white-space: nowrap;
 }
 
-.app-menu-item[role='menuitemradio'] {
+.app-menu-item[role='menuitemradio'],
+.app-menu-item[role='menuitemcheckbox'] {
   display: flex;
   align-items: center;
   gap: 0.38rem;
 }
 
-.app-menu-item[role='menuitemradio']::before {
+.app-menu-item[role='menuitemradio']::before,
+.app-menu-item[role='menuitemcheckbox']::before {
   content: "✓";
   width: 0.8rem;
   color: var(--accent);
   opacity: 0;
 }
 
-.app-menu-item[role='menuitemradio'][aria-checked='true'] {
+.app-menu-item[role='menuitemradio'][aria-checked='true'],
+.app-menu-item[role='menuitemcheckbox'][aria-checked='true'] {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
-.app-menu-item[role='menuitemradio'][aria-checked='true']::before {
+.app-menu-item[role='menuitemradio'][aria-checked='true']::before,
+.app-menu-item[role='menuitemcheckbox'][aria-checked='true']::before {
   opacity: 1;
 }
 
@@ -225,6 +229,81 @@ output {
   margin-top: 0.2rem;
 }
 
+.display-toolbar {
+  min-height: 2rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.24rem 0.45rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--panel) 86%, #000);
+}
+
+.display-toolbar-control {
+  flex: 0 1 20rem;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.display-toolbar-control label {
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.display-toolbar-reset {
+  flex: 0 0 auto;
+  min-width: 4.8rem;
+  padding-block: 0.28rem;
+}
+
+.display-toolbar-mode {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid #3a4457;
+  border-radius: 0.375rem;
+}
+
+.display-toolbar-mode button {
+  min-width: 5.4rem;
+  border: 0;
+  border-right: 1px solid #3a4457;
+  border-radius: 0;
+  padding-block: 0.28rem;
+}
+
+.display-toolbar-mode button:last-child {
+  border-right: 0;
+}
+
+.display-toolbar-exposure-inputs {
+  flex: 0 1 12.75rem;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.display-toolbar-exposure-inputs input[type='range'] {
+  flex: 0 1 7.5rem;
+  width: clamp(5rem, 11vw, 8rem);
+  min-width: 5rem;
+}
+
+.display-toolbar-exposure-inputs input[type='number'] {
+  width: 4.8rem;
+  padding-block: 0.2rem;
+}
+
 button,
 select {
   background: #202838;
@@ -258,7 +337,6 @@ input[type='range'] {
 }
 
 .error-banner {
-  grid-row: 2;
   padding: 0.5rem 0.75rem;
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--error) 12%, transparent);
@@ -385,6 +463,37 @@ input[type='range'] {
 }
 
 @media (max-width: 520px) {
+  .display-toolbar {
+    align-items: stretch;
+  }
+
+  .display-toolbar-reset {
+    width: 100%;
+  }
+
+  .display-toolbar-mode {
+    width: 100%;
+  }
+
+  .display-toolbar-mode button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .display-toolbar-control {
+    flex-basis: 100%;
+    align-items: stretch;
+  }
+
+  .display-toolbar-control label,
+  .display-toolbar-exposure-inputs {
+    width: 100%;
+  }
+
+  .display-toolbar-exposure-inputs input[type='range'] {
+    min-width: 0;
+  }
+
   .app-dialog {
     width: min(100%, 22rem);
   }
@@ -416,7 +525,8 @@ input[type='range'] {
   --bottom-panel-height: 120px;
   --bottom-panel-tab-height: 18px;
   --bottom-panel-resizer-height: 0.5rem;
-  grid-row: 3;
+  flex: 1 1 auto;
+  width: 100%;
   align-self: stretch;
   min-height: 0;
   display: grid;
@@ -1321,7 +1431,9 @@ body.is-resizing-panel-rows * {
 }
 
 #visualization-none-button[aria-pressed='true'],
+#toolbar-visualization-none-button[aria-pressed='true'],
 #colormap-toggle-button[aria-pressed='true'],
+#toolbar-colormap-toggle-button[aria-pressed='true'],
 #stokes-degree-modulation-button[aria-pressed='true'] {
   border-color: #75a7ff;
   background: rgba(75, 192, 255, 0.16);

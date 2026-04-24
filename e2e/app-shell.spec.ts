@@ -1,8 +1,41 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { Buffer } from 'node:buffer';
 import { gotoViewerApp, openGalleryCbox } from './helpers/app';
 import { expectedColormapLabels } from './helpers/exr-fixtures';
-import { readProbeCoords, resolveViewerPoint } from './helpers/viewer';
+import { readProbeCoords, resolveViewerPoint, setExposureValue } from './helpers/viewer';
+
+async function expectVisibleShellGap(page: Page, upper: Locator, lower: Locator): Promise<void> {
+  const [expectedGap, upperBox, lowerBox] = await Promise.all([
+    page.locator('#app').evaluate((element) => {
+      const style = getComputedStyle(element);
+      return Number.parseFloat(style.rowGap || style.gap) || 0;
+    }),
+    upper.boundingBox(),
+    lower.boundingBox()
+  ]);
+
+  if (!upperBox || !lowerBox) {
+    throw new Error('Expected shell layout targets to be visible.');
+  }
+
+  const actualGap = lowerBox.y - (upperBox.y + upperBox.height);
+  expect(Math.abs(actualGap - expectedGap)).toBeLessThanOrEqual(1);
+}
+
+async function expectMainPanelTopsAligned(viewer: Locator, imagePanel: Locator, rightStack: Locator): Promise<void> {
+  const [viewerBox, imagePanelBox, rightStackBox] = await Promise.all([
+    viewer.boundingBox(),
+    imagePanel.boundingBox(),
+    rightStack.boundingBox()
+  ]);
+
+  if (!viewerBox || !imagePanelBox || !rightStackBox) {
+    throw new Error('Expected main layout panels to be visible.');
+  }
+
+  expect(Math.abs(imagePanelBox.y - viewerBox.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs(rightStackBox.y - viewerBox.y)).toBeLessThanOrEqual(1);
+}
 
 test('boots an empty app shell with menu actions gated until an image opens', async ({ page }) => {
   await gotoViewerApp(page);
@@ -89,11 +122,22 @@ test('opens the gallery demo image and keeps core display controls stable', asyn
   const probeColorValues = page.locator('#probe-color-values');
   const probeValues = page.locator('#probe-values');
   const metadataTable = page.locator('#metadata-table');
+  const appMenuBar = page.locator('#app-menu-bar');
+  const mainLayout = page.locator('#main-layout');
+  const imagePanel = page.locator('#image-panel');
+  const rightStack = page.locator('#right-stack');
   const viewer = page.locator('#viewer-container');
-  const resetButton = page.getByRole('button', { name: 'Reset', exact: true });
-  const noneButton = page.getByRole('button', { name: 'None', exact: true });
-  const colormapButton = page.getByRole('button', { name: 'Colormap' });
+  const displayToolbar = page.locator('#display-toolbar');
+  const resetButton = page.locator('#reset-view-button');
+  const toolbarResetButton = page.locator('#toolbar-reset-view-button');
+  const noneButton = page.locator('#visualization-none-button');
+  const colormapButton = page.locator('#colormap-toggle-button');
+  const toolbarNoneButton = page.locator('#toolbar-visualization-none-button');
+  const toolbarColormapButton = page.locator('#toolbar-colormap-toggle-button');
   const exposureControl = page.locator('#exposure-control');
+  const exposureValue = page.locator('#exposure-value');
+  const toolbarExposureControl = page.locator('#toolbar-exposure-control');
+  const toolbarExposureValue = page.locator('#toolbar-exposure-value');
   const colormapRangeControl = page.locator('#colormap-range-control');
   const colormapSelect = page.locator('#colormap-select');
   const colormapAutoRangeButton = page.getByRole('button', { name: 'Auto Range' });
@@ -106,6 +150,8 @@ test('opens the gallery demo image and keeps core display controls stable', asyn
   const openedFileRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'cbox_rgb.exr' });
   const reloadOpenedFileButton = page.getByRole('button', { name: 'Reload cbox_rgb.exr', exact: true });
   const closeOpenedFileButton = page.getByRole('button', { name: 'Close cbox_rgb.exr', exact: true });
+  const windowMenuButton = page.getByRole('button', { name: 'Window', exact: true });
+  const toolbarMenuItem = page.locator('#window-toolbar-menu-item');
   const fileMenuButton = page.getByRole('button', { name: 'File', exact: true });
   const fileMenu = page.locator('#file-menu');
   const openMenuItem = page.locator('#open-file-button');
@@ -157,16 +203,38 @@ test('opens the gallery demo image and keeps core display controls stable', asyn
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');
   await expect(rgbGroupSelect.locator('option:checked')).toHaveText('RGB');
 
+  await expect(displayToolbar).toBeHidden();
+  await expectVisibleShellGap(page, appMenuBar, mainLayout);
+  await expectMainPanelTopsAligned(viewer, imagePanel, rightStack);
+  await windowMenuButton.click();
+  await expect(toolbarMenuItem).toHaveAttribute('aria-checked', 'false');
+  await toolbarMenuItem.click();
+  await expect(displayToolbar).toBeVisible();
+  await expect(toolbarMenuItem).toHaveAttribute('aria-checked', 'true');
+  await expectVisibleShellGap(page, displayToolbar, mainLayout);
+  await expectMainPanelTopsAligned(viewer, imagePanel, rightStack);
+
   await expect(resetButton).toBeVisible();
+  await expect(toolbarResetButton).toBeVisible();
   await expect(noneButton).toHaveAttribute('aria-pressed', 'true');
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(toolbarNoneButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(toolbarColormapButton).toHaveAttribute('aria-pressed', 'false');
   await expect(exposureControl).toBeVisible();
+  await expect(toolbarExposureControl).toBeVisible();
   await expect(colormapRangeControl).toBeHidden();
+  await setExposureValue(toolbarExposureValue, '1.3');
+  await expect(exposureValue).toHaveValue('1.3');
+  await setExposureValue(exposureValue, '-0.7');
+  await expect(toolbarExposureValue).toHaveValue('-0.7');
 
-  await colormapButton.click();
+  await toolbarColormapButton.click();
   await expect(noneButton).toHaveAttribute('aria-pressed', 'false');
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(toolbarNoneButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(toolbarColormapButton).toHaveAttribute('aria-pressed', 'true');
   await expect(exposureControl).toBeHidden();
+  await expect(toolbarExposureControl).toBeHidden();
   await expect(colormapRangeControl).toBeVisible();
   await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['Mono:']);
   await expect(colormapAutoRangeButton).toHaveAttribute('aria-pressed', 'true');
@@ -227,10 +295,13 @@ test('opens the gallery demo image and keeps core display controls stable', asyn
   await expect.poll(async () => Number(await colormapVminInput.inputValue())).toBeCloseTo(-zeroCenteredAutoMax, 5);
   await expect.poll(async () => Number(await colormapVmaxInput.inputValue())).toBeCloseTo(zeroCenteredAutoMax, 5);
 
-  await noneButton.click();
+  await toolbarNoneButton.click();
   await expect(noneButton).toHaveAttribute('aria-pressed', 'true');
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(toolbarNoneButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(toolbarColormapButton).toHaveAttribute('aria-pressed', 'false');
   await expect(exposureControl).toBeVisible();
+  await expect(toolbarExposureControl).toBeVisible();
   await expect(colormapRangeControl).toBeHidden();
 
   await closeOpenedFileButton.click();
