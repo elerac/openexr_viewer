@@ -1,4 +1,7 @@
 import {
+  shouldPreserveStokesColormapState
+} from '../colormap-range';
+import {
   DEFAULT_COLORMAP_ID,
   findColormapIdByLabel,
   getColormapAsset,
@@ -84,6 +87,7 @@ export class DisplayController implements Disposable {
         type: 'displaySelectionSet',
         displaySelection: cloneDisplaySelection(selection)
       });
+      await this.ensureActiveColormapLutLoaded();
       return;
     }
 
@@ -102,13 +106,17 @@ export class DisplayController implements Disposable {
 
       const latestState = this.core.getState();
       const keepManualColormap = this.manualColormapOverrideTransitionIds.has(transitionRequestId);
+      const keepGroupedColormap = shouldPreserveStokesColormapState(
+        latestState.sessionState.displaySelection,
+        selection
+      );
       if (!stokesDefaults) {
         this.core.dispatch({
           type: 'displaySelectionSet',
           displaySelection: cloneDisplaySelection(selection),
           restoreState
         });
-      } else if (keepManualColormap) {
+      } else if (keepManualColormap || keepGroupedColormap) {
         this.core.dispatch({
           type: 'displaySelectionSet',
           displaySelection: cloneDisplaySelection(selection),
@@ -190,7 +198,7 @@ export class DisplayController implements Disposable {
 
     if (
       state.sessionState.activeColormapId === colormapId &&
-      (state.pendingColormapRequestId !== null || state.loadedColormapId === colormapId)
+      state.loadedColormapId === colormapId
     ) {
       return;
     }
@@ -224,6 +232,19 @@ export class DisplayController implements Disposable {
         });
       }
     }
+  }
+
+  private async ensureActiveColormapLutLoaded(): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+
+    const state = this.core.getState();
+    if (state.loadedColormapId === state.sessionState.activeColormapId) {
+      return;
+    }
+
+    await this.setActiveColormap(state.sessionState.activeColormapId);
   }
 
   setVisualizationMode(mode: VisualizationMode): void {

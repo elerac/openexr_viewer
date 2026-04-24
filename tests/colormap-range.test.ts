@@ -50,6 +50,10 @@ describe('colormap range', () => {
       createStokesSelection('docp')
     )).toBe(true);
     expect(shouldPreserveStokesColormapState(
+      createStokesSelection('docp'),
+      createStokesSelection('dolp')
+    )).toBe(true);
+    expect(shouldPreserveStokesColormapState(
       createStokesSelection('s1_over_s0'),
       createStokesSelection('s2_over_s0')
     )).toBe(true);

@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => {
     defaultColormapId: '0',
     activeColormapLut: null,
     activeDisplayLuminanceRange: null,
+    loadedColormapId: null,
+    stokesDisplayRestoreStates: {},
     sessionState: {
       exposureEv: 0,
       viewerMode: 'image',
@@ -77,6 +79,12 @@ const mocks = vi.hoisted(() => {
   }));
   const displayGetActiveColormapLutForState = vi.fn(() => null);
   const loadColormapLut = vi.fn();
+  const findColormapIdByLabel = vi.fn((
+    registry: { options?: Array<{ id: string; label: string }> },
+    label: string
+  ) => {
+    return registry.options?.find((option) => option.label.toLowerCase() === label.toLowerCase())?.id ?? null;
+  });
   const getColormapAsset = vi.fn((registry: { assets?: Array<{ label: string; file: string }> }, id: string) => {
     const index = Number(id);
     return Number.isInteger(index) ? registry.assets?.[index] ?? null : null;
@@ -133,6 +141,7 @@ const mocks = vi.hoisted(() => {
     renderCachePrepareActiveSession,
     displayGetActiveColormapLutForState,
     loadColormapLut,
+    findColormapIdByLabel,
     getColormapAsset,
     createPngBlobFromPixels,
     buildColormapExportPixels,
@@ -319,6 +328,7 @@ vi.mock('../src/exr-worker-client', () => ({
 }));
 
 vi.mock('../src/colormaps', () => ({
+  findColormapIdByLabel: mocks.findColormapIdByLabel,
   getColormapAsset: mocks.getColormapAsset,
   loadColormapLut: mocks.loadColormapLut,
   mapValueToColormapRgbBytes: vi.fn(() => [0, 0, 0]),
@@ -780,6 +790,113 @@ describe('bootstrap app lifecycle', () => {
     app.dispose();
   });
 
+  it('resolves normal batch previews without inheriting the active Stokes colormap', async () => {
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
+      observe(): void {}
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+    const rgbSelection = {
+      kind: 'channelRgb',
+      r: 'R',
+      g: 'G',
+      b: 'B',
+      alpha: null
+    };
+    const stokesSelection = {
+      kind: 'stokesAngle',
+      parameter: 'aolp',
+      source: { kind: 'scalar' }
+    };
+    const { createPlanarChannelStorage } = await import('../src/channel-storage');
+    const pixelCount = 16 * 8;
+    const layer = {
+      name: null,
+      channelNames: ['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3'],
+      channelStorage: createPlanarChannelStorage({
+        R: new Float32Array(pixelCount).fill(1),
+        G: new Float32Array(pixelCount).fill(0.5),
+        B: new Float32Array(pixelCount).fill(0.25),
+        S0: new Float32Array(pixelCount).fill(1),
+        S1: new Float32Array(pixelCount).fill(0.25),
+        S2: new Float32Array(pixelCount).fill(0.5),
+        S3: new Float32Array(pixelCount).fill(0)
+      }, ['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3']),
+      analysis: {
+        displayLuminanceRangeBySelectionKey: {},
+        finiteRangeByChannel: {}
+      }
+    };
+    const session = {
+      id: 'session-1',
+      filename: 'stokes.exr',
+      displayName: 'stokes.exr',
+      fileSizeBytes: 3,
+      source: { kind: 'url', url: '/stokes.exr' },
+      decoded: {
+        width: 16,
+        height: 8,
+        layers: [layer]
+      },
+      state: mocks.coreState.sessionState
+    };
+    const mutableCoreState = mocks.coreState as unknown as {
+      activeSessionId: string | null;
+      sessions: unknown[];
+      sessionState: Record<string, unknown>;
+      stokesDisplayRestoreStates: Record<string, unknown>;
+    };
+    mutableCoreState.activeSessionId = 'session-1';
+    mutableCoreState.sessions = [session];
+    Object.assign(mutableCoreState.sessionState, {
+      visualizationMode: 'colormap',
+      activeColormapId: '1',
+      colormapRange: { min: 0, max: Math.PI },
+      colormapRangeMode: 'oneTime',
+      displaySelection: stokesSelection
+    });
+    mutableCoreState.stokesDisplayRestoreStates = {
+      'session-1': {
+        visualizationMode: 'rgb',
+        activeColormapId: '0',
+        colormapRange: null,
+        colormapRangeMode: 'alwaysAuto',
+        colormapZeroCentered: false
+      }
+    };
+
+    const { bootstrapApp } = await import('../src/app/bootstrap');
+    const app = await bootstrapApp();
+    const callbacks = mocks.getUiCallbacks() as {
+      onResolveExportImageBatchPreview: (request: {
+        sessionId: string;
+        activeLayer: number;
+        displaySelection: typeof rgbSelection;
+        channelLabel: string;
+      }, signal: AbortSignal) => Promise<{ width: number; height: number; data: Uint8ClampedArray }>;
+    };
+    const abortController = new AbortController();
+
+    const pixels = await callbacks.onResolveExportImageBatchPreview({
+      sessionId: 'session-1',
+      activeLayer: 0,
+      displaySelection: rgbSelection,
+      channelLabel: 'RGB'
+    }, abortController.signal);
+
+    expect(pixels.width).toBeGreaterThan(0);
+    expect(pixels.height).toBeGreaterThan(0);
+    expect(mocks.loadColormapLut).not.toHaveBeenCalled();
+
+    app.dispose();
+  });
+
   it('exports selected image batch entries as one ZIP download', async () => {
     vi.useFakeTimers();
 
@@ -926,6 +1043,209 @@ describe('bootstrap app lifecycle', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:batch');
 
     app.dispose();
+  });
+
+  it('isolates normal batch export entries from the active Stokes colormap', async () => {
+    vi.useFakeTimers();
+
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
+      observe(): void {}
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn<(_: Blob) => string>(() => 'blob:batch-stokes'),
+      revokeObjectURL: vi.fn()
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    vi.spyOn(document.body, 'append');
+
+    const registry = {
+      defaultId: '0',
+      assets: [
+        { label: 'Viridis', file: 'viridis.npy' },
+        { label: 'HSV', file: 'hsv.npy' },
+        { label: 'Secondary', file: 'secondary.npy' }
+      ],
+      options: [
+        { id: '0', label: 'Viridis' },
+        { id: '1', label: 'HSV' },
+        { id: '2', label: 'Secondary' }
+      ]
+    };
+    const luts = {
+      '1': { id: '1', label: 'HSV', entryCount: 2, rgba8: new Uint8Array([1, 0, 0, 255, 0, 1, 0, 255]) },
+      '2': { id: '2', label: 'Secondary', entryCount: 2, rgba8: new Uint8Array([0, 0, 1, 255, 1, 1, 0, 255]) }
+    };
+    mocks.loadColormapLut.mockImplementation(async (_registry: unknown, id: keyof typeof luts) => luts[id]);
+
+    const rgbSelection = {
+      kind: 'channelRgb',
+      r: 'R',
+      g: 'G',
+      b: 'B',
+      alpha: null
+    };
+    const stokesSelection = {
+      kind: 'stokesAngle',
+      parameter: 'aolp',
+      source: { kind: 'scalar' }
+    };
+    const layer = {
+      name: null,
+      channelNames: ['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3'],
+      channelStorage: {},
+      analysis: {
+        displayLuminanceRangeBySelectionKey: {},
+        finiteRangeByChannel: {}
+      }
+    };
+    const session1 = {
+      id: 'session-1',
+      filename: 'active.exr',
+      displayName: 'active.exr',
+      fileSizeBytes: 3,
+      source: { kind: 'url', url: '/active.exr' },
+      decoded: {
+        width: 2,
+        height: 1,
+        layers: [layer]
+      },
+      state: mocks.coreState.sessionState
+    };
+    const session2 = {
+      id: 'session-2',
+      filename: 'inactive.exr',
+      displayName: 'inactive.exr',
+      fileSizeBytes: 3,
+      source: { kind: 'url', url: '/inactive.exr' },
+      decoded: {
+        width: 2,
+        height: 1,
+        layers: [layer]
+      },
+      state: {
+        ...mocks.coreState.sessionState,
+        visualizationMode: 'colormap',
+        activeColormapId: '2',
+        colormapRange: { min: 0.2, max: 0.8 },
+        colormapRangeMode: 'oneTime',
+        displaySelection: rgbSelection
+      }
+    };
+    const mutableCoreState = mocks.coreState as unknown as {
+      activeSessionId: string | null;
+      sessions: unknown[];
+      colormapRegistry: typeof registry;
+      loadedColormapId: string | null;
+      activeColormapLut: unknown;
+      sessionState: Record<string, unknown>;
+      stokesDisplayRestoreStates: Record<string, unknown>;
+    };
+    mutableCoreState.activeSessionId = 'session-1';
+    mutableCoreState.sessions = [session1, session2];
+    mutableCoreState.colormapRegistry = registry;
+    mutableCoreState.loadedColormapId = '1';
+    mutableCoreState.activeColormapLut = luts['1'];
+    Object.assign(mutableCoreState.sessionState, {
+      visualizationMode: 'colormap',
+      activeColormapId: '1',
+      colormapRange: { min: 0, max: Math.PI },
+      colormapRangeMode: 'oneTime',
+      colormapZeroCentered: false,
+      displaySelection: stokesSelection
+    });
+    mutableCoreState.stokesDisplayRestoreStates = {
+      'session-1': {
+        visualizationMode: 'rgb',
+        activeColormapId: '0',
+        colormapRange: null,
+        colormapRangeMode: 'alwaysAuto',
+        colormapZeroCentered: false
+      }
+    };
+
+    mocks.createPngBlobFromPixels.mockResolvedValue(new Blob([new Uint8Array([0x89, 0x50])], { type: 'image/png' }));
+
+    const { bootstrapApp } = await import('../src/app/bootstrap');
+    const app = await bootstrapApp();
+    const callbacks = mocks.getUiCallbacks() as {
+      onExportImageBatch: (request: {
+        archiveFilename: string;
+        entries: Array<{
+          sessionId: string;
+          activeLayer: number;
+          displaySelection: typeof rgbSelection | typeof stokesSelection;
+          channelLabel: string;
+          outputFilename: string;
+        }>;
+        format: 'png-zip';
+      }, signal: AbortSignal) => Promise<void>;
+    };
+
+    await expect(callbacks.onExportImageBatch({
+      archiveFilename: 'openexr-export.zip',
+      format: 'png-zip',
+      entries: [
+        {
+          sessionId: 'session-1',
+          activeLayer: 0,
+          displaySelection: rgbSelection,
+          channelLabel: 'RGB',
+          outputFilename: 'active.RGB.png'
+        },
+        {
+          sessionId: 'session-2',
+          activeLayer: 0,
+          displaySelection: rgbSelection,
+          channelLabel: 'RGB',
+          outputFilename: 'inactive.RGB.png'
+        },
+        {
+          sessionId: 'session-1',
+          activeLayer: 0,
+          displaySelection: stokesSelection,
+          channelLabel: 'Stokes AoLP',
+          outputFilename: 'active.AoLP.png'
+        }
+      ]
+    }, new AbortController().signal)).resolves.toBeUndefined();
+
+    const preparedStates = mocks.renderCachePrepareActiveSession.mock.calls.map((call) => {
+      return (call as unknown[])[1];
+    });
+    expect(preparedStates[0]).toMatchObject({
+      displaySelection: rgbSelection,
+      visualizationMode: 'rgb',
+      activeColormapId: '0',
+      colormapRange: null,
+      colormapRangeMode: 'alwaysAuto',
+      colormapZeroCentered: false
+    });
+    expect(preparedStates[1]).toMatchObject({
+      displaySelection: rgbSelection,
+      visualizationMode: 'colormap',
+      activeColormapId: '2',
+      colormapRange: { min: 0.2, max: 0.8 },
+      colormapRangeMode: 'oneTime',
+      colormapZeroCentered: false
+    });
+    expect(preparedStates[2]).toMatchObject({
+      displaySelection: stokesSelection,
+      visualizationMode: 'colormap',
+      activeColormapId: '1',
+      colormapRange: { min: 0, max: Math.PI },
+      colormapRangeMode: 'oneTime',
+      colormapZeroCentered: false
+    });
+
+    app.dispose();
+    vi.useRealTimers();
   });
 
   it('surfaces colormap export failures when no registry is available', async () => {

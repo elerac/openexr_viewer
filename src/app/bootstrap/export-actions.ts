@@ -23,6 +23,11 @@ import type {
 } from '../../types';
 import type { WebGlExrRenderer } from '../../renderer';
 
+type BatchEntryVisualizationState = Pick<
+  ViewerSessionState,
+  'visualizationMode' | 'activeColormapId' | 'colormapRange' | 'colormapRangeMode' | 'colormapZeroCentered'
+>;
+
 interface ColormapExportResolverOptions {
   signal?: AbortSignal;
   previewMaxLongestEdge?: number;
@@ -508,12 +513,13 @@ async function resolveBatchEntryExportState({
   const baseState = session.id === appState.activeSessionId ? appState.sessionState : session.state;
   const currentState = appState.sessionState;
   const stokesDefault = isStokesSelection(selection) ? getStokesDisplayColormapDefault(selection) : null;
+  const entryVisualization = resolveBatchEntryVisualizationState(appState, session.id, baseState);
 
-  let visualizationMode = currentState.visualizationMode;
-  let activeColormapId = currentState.activeColormapId;
-  let colormapRange = cloneDisplayLuminanceRange(currentState.colormapRange);
-  let colormapRangeMode = currentState.colormapRangeMode;
-  let colormapZeroCentered = currentState.colormapZeroCentered;
+  let visualizationMode = entryVisualization.visualizationMode;
+  let activeColormapId = entryVisualization.activeColormapId;
+  let colormapRange = cloneDisplayLuminanceRange(entryVisualization.colormapRange);
+  let colormapRangeMode = entryVisualization.colormapRangeMode;
+  let colormapZeroCentered = entryVisualization.colormapZeroCentered;
 
   if (stokesDefault) {
     if (!appState.colormapRegistry) {
@@ -561,6 +567,34 @@ async function resolveBatchEntryExportState({
     : null;
 
   return { state: exportState, lut };
+}
+
+function resolveBatchEntryVisualizationState(
+  appState: ViewerAppState,
+  sessionId: string,
+  baseState: ViewerSessionState
+): BatchEntryVisualizationState {
+  const source = isStokesSelection(baseState.displaySelection)
+    ? appState.stokesDisplayRestoreStates[sessionId] ?? null
+    : baseState;
+
+  if (!source) {
+    return {
+      visualizationMode: 'rgb',
+      activeColormapId: appState.defaultColormapId,
+      colormapRange: null,
+      colormapRangeMode: 'alwaysAuto',
+      colormapZeroCentered: false
+    };
+  }
+
+  return {
+    visualizationMode: source.visualizationMode,
+    activeColormapId: source.activeColormapId,
+    colormapRange: cloneDisplayLuminanceRange(source.colormapRange),
+    colormapRangeMode: source.colormapRangeMode,
+    colormapZeroCentered: source.colormapZeroCentered
+  };
 }
 
 async function resolveBatchExportColormapLut(

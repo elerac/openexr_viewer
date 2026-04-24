@@ -109,19 +109,33 @@ const registry = {
   assets: [
     { label: 'Default', file: 'default.npy' },
     { label: 'HSV', file: 'hsv.npy' },
-    { label: 'Secondary', file: 'secondary.npy' }
+    { label: 'Secondary', file: 'secondary.npy' },
+    { label: 'Black-Red', file: 'black-red.npy' },
+    { label: 'RdBu', file: 'rdbu.npy' },
+    { label: 'Yellow-Black-Blue', file: 'yellow-black-blue.npy' }
   ],
   options: [
     { id: '0', label: 'Default' },
     { id: '1', label: 'HSV' },
-    { id: '2', label: 'Secondary' }
+    { id: '2', label: 'Secondary' },
+    { id: '3', label: 'Black-Red' },
+    { id: '4', label: 'RdBu' },
+    { id: '5', label: 'Yellow-Black-Blue' }
   ]
 };
 
 const luts = {
   '0': { id: '0', label: 'Default', entryCount: 2, rgba8: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]) },
   '1': { id: '1', label: 'HSV', entryCount: 2, rgba8: new Uint8Array([1, 0, 0, 255, 0, 1, 0, 255]) },
-  '2': { id: '2', label: 'Secondary', entryCount: 2, rgba8: new Uint8Array([0, 0, 1, 255, 1, 1, 0, 255]) }
+  '2': { id: '2', label: 'Secondary', entryCount: 2, rgba8: new Uint8Array([0, 0, 1, 255, 1, 1, 0, 255]) },
+  '3': { id: '3', label: 'Black-Red', entryCount: 2, rgba8: new Uint8Array([0, 0, 0, 255, 255, 0, 0, 255]) },
+  '4': { id: '4', label: 'RdBu', entryCount: 2, rgba8: new Uint8Array([0, 0, 255, 255, 255, 0, 0, 255]) },
+  '5': {
+    id: '5',
+    label: 'Yellow-Black-Blue',
+    entryCount: 2,
+    rgba8: new Uint8Array([255, 255, 0, 255, 0, 0, 255, 255])
+  }
 };
 
 function createController(session: OpenedImageSession | null = null) {
@@ -230,7 +244,120 @@ describe('display controller shim', () => {
 
     expect(core.getState().sessionState.visualizationMode).toBe('rgb');
     expect(core.getState().sessionState.activeColormapId).toBe('0');
+    expect(core.getState().loadedColormapId).toBe('0');
+    expect(core.getState().activeColormapLut).toEqual(luts['0']);
     expect(core.getState().sessionState.displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
+  });
+
+  it('carries manual colormap state across Stokes degree selections', async () => {
+    const decoded = createDecodedImage(['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3']);
+    const { controller, core } = createController(createSession(decoded));
+
+    await controller.initialize();
+    await controller.applyDisplaySelection(createStokesSelection('dolp'));
+    await controller.setActiveColormap('2');
+    controller.setColormapRange({ min: 0.2, max: 0.8 });
+    controller.toggleColormapZeroCenter();
+    colormapMocks.loadColormapLut.mockClear();
+
+    await controller.applyDisplaySelection(createStokesSelection('dop'));
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'colormap',
+      activeColormapId: '2',
+      colormapRange: { min: -0.8, max: 0.8 },
+      colormapRangeMode: 'oneTime',
+      colormapZeroCentered: true,
+      displaySelection: createStokesSelection('dop')
+    });
+
+    await controller.applyDisplaySelection(createStokesSelection('docp'));
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'colormap',
+      activeColormapId: '2',
+      colormapRange: { min: -0.8, max: 0.8 },
+      colormapRangeMode: 'oneTime',
+      colormapZeroCentered: true,
+      displaySelection: createStokesSelection('docp')
+    });
+    expect(colormapMocks.loadColormapLut).not.toHaveBeenCalled();
+  });
+
+  it('carries manual colormap state across normalized Stokes selections', async () => {
+    const decoded = createDecodedImage(['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3']);
+    const { controller, core } = createController(createSession(decoded));
+
+    await controller.initialize();
+    await controller.applyDisplaySelection(createStokesSelection('s1_over_s0'));
+    await controller.setActiveColormap('2');
+    controller.toggleColormapZeroCenter();
+    controller.setColormapRange({ min: -0.25, max: 0.75 });
+    colormapMocks.loadColormapLut.mockClear();
+
+    await controller.applyDisplaySelection(createStokesSelection('s2_over_s0'));
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'colormap',
+      activeColormapId: '2',
+      colormapRange: { min: -0.25, max: 0.75 },
+      colormapRangeMode: 'oneTime',
+      colormapZeroCentered: false,
+      displaySelection: createStokesSelection('s2_over_s0')
+    });
+
+    await controller.applyDisplaySelection(createStokesSelection('s3_over_s0'));
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'colormap',
+      activeColormapId: '2',
+      colormapRange: { min: -0.25, max: 0.75 },
+      colormapRangeMode: 'oneTime',
+      colormapZeroCentered: false,
+      displaySelection: createStokesSelection('s3_over_s0')
+    });
+    expect(colormapMocks.loadColormapLut).not.toHaveBeenCalled();
+  });
+
+  it('resets colormap state when switching across Stokes colormap groups', async () => {
+    const decoded = createDecodedImage(['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3']);
+    const { controller, core } = createController(createSession(decoded));
+
+    await controller.initialize();
+    await controller.applyDisplaySelection(createStokesSelection('dolp'));
+    await controller.setActiveColormap('2');
+    controller.setColormapRange({ min: 0.2, max: 0.8 });
+
+    await controller.applyDisplaySelection(createStokesSelection('cop'));
+
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'colormap',
+      activeColormapId: '5',
+      colormapRange: { min: -Math.PI / 4, max: Math.PI / 4 },
+      colormapRangeMode: 'oneTime',
+      colormapZeroCentered: true,
+      displaySelection: createStokesSelection('cop')
+    });
+
+    controller.toggleStokesDegreeModulation();
+    expect(core.getState().sessionState).toMatchObject({
+      colormapRange: { min: -Math.PI / 4, max: Math.PI / 4 },
+      colormapRangeMode: 'oneTime',
+      colormapZeroCentered: true,
+      displaySelection: createStokesSelection('cop')
+    });
+
+    await controller.applyDisplaySelection(createStokesSelection('dolp'));
+    await controller.setActiveColormap('2');
+    controller.setColormapRange({ min: 0.2, max: 0.8 });
+
+    await controller.applyDisplaySelection(createStokesSelection('s1_over_s0'));
+
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'colormap',
+      activeColormapId: '4',
+      colormapRange: { min: -1, max: 1 },
+      colormapRangeMode: 'oneTime',
+      colormapZeroCentered: true,
+      displaySelection: createStokesSelection('s1_over_s0')
+    });
+    expect(core.getState().activeColormapLut).toEqual(luts['4']);
   });
 
   it('keeps a manual colormap override when a split stokes selection is still transitioning', async () => {
