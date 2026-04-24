@@ -2275,6 +2275,36 @@ describe('opened files actions', () => {
     expect(openedFilesList.querySelectorAll('button')).toHaveLength(2);
     expect(document.querySelector('[aria-label="Pin cache for beauty.exr"]')).toBeNull();
   });
+
+  it('renders path-aware opened file labels in the row and compatibility select', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([
+      {
+        id: 'session-1',
+        label: 'hoge/image.exr',
+        sourceDetail: 'shots/hoge/image.exr'
+      },
+      {
+        id: 'session-2',
+        label: 'fuga/image.exr',
+        sourceDetail: 'shots/fuga/image.exr'
+      }
+    ], 'session-1');
+
+    const rowLabels = Array.from(
+      document.querySelectorAll('#opened-files-list .opened-file-label')
+    ).map((label) => label.textContent);
+    const selectLabels = Array.from(
+      (document.getElementById('opened-images-select') as HTMLSelectElement).options
+    ).map((option) => option.label);
+    const firstLabel = document.querySelector('#opened-files-list .opened-file-label') as HTMLSpanElement;
+
+    expect(rowLabels).toEqual(['hoge/image.exr', 'fuga/image.exr']);
+    expect(selectLabels).toEqual(['hoge/image.exr', 'fuga/image.exr']);
+    expect(firstLabel.title).toContain('Path: shots/hoge/image.exr');
+  });
 });
 
 describe('opened files reordering', () => {

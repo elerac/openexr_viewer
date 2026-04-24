@@ -27,11 +27,17 @@ export function selectActiveSession(state: ViewerAppState): OpenedImageSession |
 }
 
 export function buildOpenedImageOptions(state: ViewerAppState): ViewerOpenedImageOption[] {
-  return state.sessions.map((session) => ({
+  const sources = state.sessions.map((session) => ({
+    fallbackLabel: session.displayName,
+    sourceDetail: getSessionSourceDetail(session)
+  }));
+  const labels = buildPathAwareOpenedImageLabels(sources);
+
+  return state.sessions.map((session, index) => ({
     id: session.id,
-    label: session.displayName,
+    label: labels[index] ?? session.displayName,
     sizeBytes: session.fileSizeBytes,
-    sourceDetail: getSessionSourceDetail(session),
+    sourceDetail: sources[index]?.sourceDetail ?? session.displayName,
     thumbnailDataUrl: state.thumbnailsBySessionId[session.id] ?? null,
     thumbnailAspectRatio: resolveThumbnailAspectRatio(session.decoded.width, session.decoded.height)
   }));
@@ -145,6 +151,54 @@ export function getSessionSourceDetail(session: OpenedImageSession): string {
   return relativePath || session.source.file.name || session.filename;
 }
 
+export interface PathAwareOpenedImageLabelSource {
+  fallbackLabel: string;
+  sourceDetail: string;
+}
+
+export function buildPathAwareOpenedImageLabels(
+  sources: PathAwareOpenedImageLabelSource[]
+): string[] {
+  const entries = sources.map((source, index) => {
+    const segments = splitOpenedImagePath(source.sourceDetail);
+    const fallbackBaseName = stripDuplicateSuffix(source.fallbackLabel.trim());
+    return {
+      index,
+      fallbackLabel: source.fallbackLabel,
+      duplicateSuffix: getDuplicateSuffix(source.fallbackLabel),
+      segments,
+      baseName: segments[segments.length - 1] ?? fallbackBaseName
+    };
+  });
+  const labels = sources.map((source) => source.fallbackLabel);
+  const entriesByBaseName = new Map<string, typeof entries>();
+
+  for (const entry of entries) {
+    const group = entriesByBaseName.get(entry.baseName) ?? [];
+    group.push(entry);
+    entriesByBaseName.set(entry.baseName, group);
+  }
+
+  for (const group of entriesByBaseName.values()) {
+    if (group.length < 2) {
+      continue;
+    }
+
+    for (const entry of group) {
+      if (entry.segments.length < 2) {
+        labels[entry.index] = entry.fallbackLabel;
+        continue;
+      }
+
+      const uniqueSuffix = findShortestUniquePathSuffix(entry.segments, group.map((item) => item.segments));
+      const pathLabel = uniqueSuffix ?? entry.segments.join('/');
+      labels[entry.index] = uniqueSuffix ? pathLabel : `${pathLabel}${entry.duplicateSuffix}`;
+    }
+  }
+
+  return labels;
+}
+
 function resolveThumbnailAspectRatio(width: number, height: number): number | null {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     return null;
@@ -167,6 +221,48 @@ function buildDefaultExportFilename(displayName: string): string {
   const withoutExtension = extensionIndex > pathSeparatorIndex ? baseName.slice(0, extensionIndex) : baseName;
 
   return `${withoutExtension}${duplicateSuffix}.png`;
+}
+
+function splitOpenedImagePath(path: string): string[] {
+  return path
+    .trim()
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((segment) => segment.length > 0);
+}
+
+function stripDuplicateSuffix(label: string): string {
+  return label.replace(/ \(\d+\)$/, '');
+}
+
+function getDuplicateSuffix(label: string): string {
+  return label.match(/ \(\d+\)$/)?.[0] ?? '';
+}
+
+function findShortestUniquePathSuffix(
+  segments: string[],
+  groupSegments: string[][]
+): string | null {
+  for (let segmentCount = 2; segmentCount <= segments.length; segmentCount += 1) {
+    const suffix = buildPathSuffix(segments, segmentCount);
+    const matchingCount = groupSegments.reduce((count, currentSegments) => {
+      return count + (buildPathSuffix(currentSegments, segmentCount) === suffix ? 1 : 0);
+    }, 0);
+
+    if (matchingCount === 1) {
+      return suffix;
+    }
+  }
+
+  return null;
+}
+
+function buildPathSuffix(segments: string[], segmentCount: number): string | null {
+  if (segments.length < segmentCount) {
+    return null;
+  }
+
+  return segments.slice(segments.length - segmentCount).join('/');
 }
 
 function buildLayerPanelLabel(name: string | null, channelNames: string[], index: number): string {

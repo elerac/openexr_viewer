@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { SessionController } from '../src/controllers/session-controller';
 import { LoadQueueService } from '../src/services/load-queue';
 import { ViewerAppCore } from '../src/app/viewer-app-core';
+import { buildOpenedImageOptions } from '../src/app/viewer-app-selectors';
 import type { DecodeBytesOptions } from '../src/exr-decode-context';
 import { DecodedExrImage } from '../src/types';
 import {
@@ -577,7 +578,7 @@ describe('session controller shim', () => {
     const decodeBytes = vi
       .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
       .mockResolvedValue(createDecodedImage());
-    const { controller } = createController({ decodeBytes });
+    const { controller, core } = createController({ decodeBytes });
 
     await controller.enqueueFolderFiles([
       createFolderFile('shots/a/beauty.exr'),
@@ -594,6 +595,10 @@ describe('session controller shim', () => {
     )).toEqual([
       'shots/a/beauty.exr',
       'shots/b/beauty.exr'
+    ]);
+    expect(buildOpenedImageOptions(core.getState()).map((option) => option.label)).toEqual([
+      'a/beauty.exr',
+      'b/beauty.exr'
     ]);
   });
 
