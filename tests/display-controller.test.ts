@@ -278,6 +278,7 @@ describe('display controller shim', () => {
       activeColormapId: '2',
       displaySelection: createStokesSelection('aolp', 'stokesRgb', 'R')
     });
+    expect(core.getState().pendingSelectionTransitionRequestId).toBeNull();
     expect(colormapMocks.loadColormapLut.mock.calls.map(([, id]) => id)).toEqual(['2']);
   });
 

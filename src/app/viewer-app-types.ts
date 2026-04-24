@@ -170,7 +170,8 @@ export interface ViewerStateTransition {
 export interface ViewerUiSnapshot {
   errorMessage: string | null;
   isLoading: boolean;
-  isRgbViewLoading: boolean;
+  isDisplayBusy: boolean;
+  isDisplayOverlayLoading: boolean;
   activeSessionId: string | null;
   openedImageOptions: ViewerOpenedImageOption[];
   exportTarget: { filename: string } | null;

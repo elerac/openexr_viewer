@@ -108,6 +108,25 @@ describe('viewer app lanes', () => {
     expect(createRenderFlags(state, state)).toBe(ViewerRenderInvalidationFlags.None);
   });
 
+  it('keeps display selection transitions busy without requesting the full loading overlay', () => {
+    const state = createActiveState();
+    const selectUiSnapshot = createViewerUiSnapshotSelector();
+
+    const pendingSelection = selectUiSnapshot({
+      ...state,
+      pendingSelectionTransitionRequestId: 1
+    });
+    expect(pendingSelection.isDisplayBusy).toBe(true);
+    expect(pendingSelection.isDisplayOverlayLoading).toBe(false);
+
+    const pendingColormap = selectUiSnapshot({
+      ...state,
+      pendingColormapRequestId: 2
+    });
+    expect(pendingColormap.isDisplayBusy).toBe(true);
+    expect(pendingColormap.isDisplayOverlayLoading).toBe(true);
+  });
+
   it('treats hover-only changes as render-lane probe work', () => {
     const previous = createActiveState();
     const next = {

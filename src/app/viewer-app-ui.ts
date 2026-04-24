@@ -58,8 +58,12 @@ export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => Vie
     const nextSnapshot: ViewerUiSnapshot = {
       errorMessage: state.errorMessage,
       isLoading: state.isLoading,
-      isRgbViewLoading: Boolean(
+      isDisplayBusy: Boolean(
         state.pendingSelectionTransitionRequestId ||
+        state.pendingColormapRequestId ||
+        state.pendingColormapActivation
+      ),
+      isDisplayOverlayLoading: Boolean(
         state.pendingColormapRequestId ||
         state.pendingColormapActivation
       ),
@@ -110,7 +114,11 @@ export function computeViewerUiInvalidation(
     flags |= ViewerUiInvalidationFlags.Error;
   }
 
-  if (previous.isLoading !== next.isLoading || previous.isRgbViewLoading !== next.isRgbViewLoading) {
+  if (
+    previous.isLoading !== next.isLoading ||
+    previous.isDisplayBusy !== next.isDisplayBusy ||
+    previous.isDisplayOverlayLoading !== next.isDisplayOverlayLoading
+  ) {
     flags |= ViewerUiInvalidationFlags.Loading;
   }
 
@@ -346,7 +354,8 @@ function sameViewerUiSnapshot(a: ViewerUiSnapshot, b: ViewerUiSnapshot): boolean
   return (
     a.errorMessage === b.errorMessage &&
     a.isLoading === b.isLoading &&
-    a.isRgbViewLoading === b.isRgbViewLoading &&
+    a.isDisplayBusy === b.isDisplayBusy &&
+    a.isDisplayOverlayLoading === b.isDisplayOverlayLoading &&
     a.activeSessionId === b.activeSessionId &&
     sameOpenedImageOptions(a.openedImageOptions, b.openedImageOptions) &&
     sameExportTarget(a.exportTarget, b.exportTarget) &&

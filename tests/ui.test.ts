@@ -1443,6 +1443,22 @@ describe('view menu', () => {
     expect(exportButton.disabled).toBe(true);
   });
 
+  it('does not show the loading overlay while display selection is only busy', () => {
+    vi.useFakeTimers();
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const loadingOverlay = document.getElementById('loading-overlay') as HTMLDivElement;
+
+    ui.setRgbViewLoading(true, false);
+    vi.advanceTimersByTime(2000);
+
+    expect(loadingOverlay.classList.contains('hidden')).toBe(true);
+    expect(loadingOverlay.classList.contains('loading-overlay--subtle')).toBe(false);
+    expect(loadingOverlay.classList.contains('loading-overlay--darkening')).toBe(false);
+    expect(loadingOverlay.classList.contains('loading-overlay--message')).toBe(false);
+  });
+
   it('keeps colormap export disabled until colormaps are available and allows it without an active image', () => {
     installUiFixture();
 

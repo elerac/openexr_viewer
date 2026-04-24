@@ -120,7 +120,8 @@ export class ViewerUi implements Disposable {
   private readonly dragDropController: DragDropController;
   private readonly collapsibleSectionsController: CollapsibleSectionsController;
   private isLoading = false;
-  private isRgbViewLoading = false;
+  private isDisplayBusy = false;
+  private isDisplayOverlayLoading = false;
   private openedImageCount = 0;
   private includeSplitRgbChannels = false;
   private channelThumbnailItems: ChannelThumbnailOptionItem[] = [];
@@ -403,13 +404,14 @@ export class ViewerUi implements Disposable {
     this.callbacks.onFolderSelected(files);
   }
 
-  setRgbViewLoading(loading: boolean): void {
+  setRgbViewLoading(displayBusy: boolean, overlayLoading = displayBusy): void {
     if (this.disposed) {
       return;
     }
 
-    this.isRgbViewLoading = loading;
-    this.channelPanel.setRgbViewLoading(loading);
+    this.isDisplayBusy = displayBusy;
+    this.isDisplayOverlayLoading = overlayLoading;
+    this.channelPanel.setRgbViewLoading(displayBusy);
     this.renderChannelViewControls();
     this.updateFileMenuItemsDisabled();
     this.updateLoadingOverlayVisibility();
@@ -691,7 +693,7 @@ export class ViewerUi implements Disposable {
       return;
     }
 
-    this.loadingOverlayDisclosure.setLoading(this.isLoading || this.isRgbViewLoading);
+    this.loadingOverlayDisclosure.setLoading(this.isLoading || this.isDisplayOverlayLoading);
   }
 
   private renderLoadingOverlayPhase(phase: LoadingOverlayPhase): void {
@@ -707,7 +709,7 @@ export class ViewerUi implements Disposable {
       return;
     }
 
-    this.elements.exportImageButton.disabled = this.isLoading || this.isRgbViewLoading || !this.exportImageDialog.hasTarget();
+    this.elements.exportImageButton.disabled = this.isLoading || this.isDisplayBusy || !this.exportImageDialog.hasTarget();
     this.elements.exportColormapButton.disabled = this.isLoading || !this.exportColormapDialog.hasOptions();
   }
 

@@ -14,8 +14,6 @@ import { selectActiveSession } from '../app/viewer-app-selectors';
 import type { RestorableVisualizationState } from '../app/viewer-app-types';
 import type { DisplayLuminanceRange, ViewerMode, VisualizationMode } from '../types';
 
-const MIN_RGB_VIEW_LOADING_MS = 120;
-
 export interface DisplayControllerDependencies {
   core: ViewerAppCore;
 }
@@ -85,7 +83,6 @@ export class DisplayController implements Disposable {
     }
 
     const transitionRequestId = this.core.issueRequestId();
-    const startedAt = performance.now();
     this.core.dispatch({
       type: 'displaySelectionTransitionStarted',
       requestId: transitionRequestId
@@ -151,10 +148,6 @@ export class DisplayController implements Disposable {
         });
       }
 
-      const elapsedMs = performance.now() - startedAt;
-      if (elapsedMs < MIN_RGB_VIEW_LOADING_MS) {
-        await waitMs(MIN_RGB_VIEW_LOADING_MS - elapsedMs, this.abortController.signal);
-      }
     } catch (error) {
       if (!isAbortError(error) && !this.disposed) {
         throw error;
@@ -363,30 +356,6 @@ function waitForNextPaint(signal?: AbortSignal): Promise<void> {
         resolve();
       });
     });
-  });
-}
-
-function waitMs(durationMs: number, signal?: AbortSignal): Promise<void> {
-  if (!signal) {
-    return new Promise((resolve) => {
-      window.setTimeout(resolve, Math.max(0, durationMs));
-    });
-  }
-
-  throwIfAborted(signal, 'Display controller has been disposed.');
-  return new Promise((resolve, reject) => {
-    const onAbort = () => {
-      if (typeof window.clearTimeout === 'function') {
-        window.clearTimeout(handle);
-      }
-      reject(signal.reason instanceof Error ? signal.reason : createAbortError('Display controller has been disposed.'));
-    };
-    const handle = window.setTimeout(() => {
-      signal.removeEventListener('abort', onAbort);
-      resolve();
-    }, Math.max(0, durationMs));
-
-    signal.addEventListener('abort', onAbort, { once: true });
   });
 }
 
