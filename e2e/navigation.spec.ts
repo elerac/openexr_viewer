@@ -33,6 +33,50 @@ test('moves bottom-panel thumbnail selections with left and right arrow keys', a
   await expect(thumbnailTiles.nth(1)).toBeFocused();
 });
 
+test('keeps collapsed bottom channel names visible and selectable', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await gotoViewerApp(page);
+
+  const bottomPanel = page.locator('#bottom-panel-content');
+  const bottomPanelButton = page.locator('#bottom-panel-collapse-button');
+  const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
+  const channelSelect = page.locator('#rgb-group-select');
+  const thumbnailTiles = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile');
+  const thumbnailPreviews = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile-preview');
+
+  await openGalleryCbox(page);
+  await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'true');
+  await rgbSplitToggleButton.click();
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(thumbnailTiles).toHaveCount(3);
+  await expect(thumbnailTiles.nth(0)).toContainText('R');
+  await expect(thumbnailTiles.nth(1)).toContainText('G');
+  await expect(thumbnailTiles.nth(2)).toContainText('B');
+  await expect(thumbnailPreviews.nth(0)).toBeVisible();
+
+  await bottomPanelButton.click();
+  await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(thumbnailTiles.nth(0)).toContainText('R');
+  await expect(thumbnailTiles.nth(1)).toContainText('G');
+  await expect(thumbnailTiles.nth(2)).toContainText('B');
+  await expect(thumbnailPreviews.nth(0)).toBeHidden();
+  const collapsedHeight = await bottomPanel.evaluate((element) => Math.round(element.getBoundingClientRect().height));
+  expect(collapsedHeight).toBeGreaterThanOrEqual(32);
+  expect(collapsedHeight).toBeLessThanOrEqual(36);
+
+  await thumbnailTiles.nth(1).click();
+  await expect(channelSelect.locator('option:checked')).toHaveText('G');
+  await expect(thumbnailTiles.nth(1)).toHaveAttribute('aria-selected', 'true');
+
+  await page.keyboard.press('ArrowRight');
+  await expect(channelSelect.locator('option:checked')).toHaveText('B');
+  await expect(thumbnailTiles.nth(2)).toHaveAttribute('aria-selected', 'true');
+
+  await bottomPanelButton.click();
+  await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'true');
+  await expect(thumbnailPreviews.nth(0)).toBeVisible();
+});
+
 test('moves open files and channel view selections with arrow keys', async ({ page }) => {
   await gotoViewerApp(page);
 

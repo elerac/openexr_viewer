@@ -902,6 +902,35 @@ body.is-resizing-panel-rows * {
   overflow: hidden;
 }
 
+.bottom-panel.is-collapsed .channel-thumbnail-strip {
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.24rem 0.45rem;
+}
+
+.bottom-panel.is-collapsed .channel-thumbnail-tile {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 2.4rem;
+  max-width: 12rem;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  border-radius: 0.375rem;
+  padding: 0 0.58rem;
+}
+
+.bottom-panel.is-collapsed .channel-thumbnail-tile-preview {
+  display: none;
+}
+
+.bottom-panel.is-collapsed .channel-thumbnail-tile-label {
+  max-width: none;
+  line-height: 1.15;
+}
+
 .image-panel p {
   margin: 0;
 }

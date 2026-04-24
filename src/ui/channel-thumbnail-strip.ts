@@ -228,6 +228,17 @@ export class ChannelThumbnailStrip implements Disposable {
 
   private syncTileSizing(): void {
     const strip = this.elements.channelThumbnailStrip;
+    if (isCompactChannelThumbnailStrip(strip)) {
+      for (const tile of strip.querySelectorAll<HTMLButtonElement>('.channel-thumbnail-tile')) {
+        const refs = tileRefs.get(tile);
+        tile.style.removeProperty('--channel-thumbnail-tile-width');
+        refs?.preview.style.removeProperty('--channel-thumbnail-preview-height');
+        refs?.preview.style.removeProperty('--channel-thumbnail-preview-width');
+        refs?.label.style.removeProperty('--channel-thumbnail-label-max-width');
+      }
+      return;
+    }
+
     const stripStyle = getComputedStyle(strip);
     const stripRect = strip.getBoundingClientRect();
     const stripContentHeight = Math.max(
@@ -370,6 +381,10 @@ function getEnabledTiles(container: HTMLElement): HTMLButtonElement[] {
 function focusSelectedTile(container: HTMLElement): void {
   const selectedTile = getEnabledTiles(container).find((tile) => tile.getAttribute('aria-selected') === 'true');
   selectedTile?.focus();
+}
+
+function isCompactChannelThumbnailStrip(strip: HTMLElement): boolean {
+  return Boolean(strip.closest('.bottom-panel.is-collapsed'));
 }
 
 function readCssPixels(value: string, fallback: number): number {

@@ -26,6 +26,7 @@ const RIGHT_PANEL_MIN_WIDTH = 240;
 const RIGHT_PANEL_MAX_WIDTH = 520;
 const BOTTOM_PANEL_MIN_HEIGHT = 72;
 const BOTTOM_PANEL_MAX_HEIGHT = 360;
+const BOTTOM_PANEL_COLLAPSED_CONTENT_HEIGHT = 34;
 const VIEWER_MIN_WIDTH = 360;
 const VIEWER_MIN_HEIGHT = 240;
 const DEFAULT_PANEL_SPLIT_SIZES: PanelSplitSizes = {
@@ -322,7 +323,9 @@ export class LayoutSplitController implements Disposable {
   private renderPanelLayoutState(): void {
     const imagePanelWidth = this.panelLayoutState.imagePanelCollapsed ? 0 : this.panelLayoutState.imagePanelWidth;
     const rightPanelWidth = this.panelLayoutState.rightPanelCollapsed ? 0 : this.panelLayoutState.rightPanelWidth;
-    const bottomPanelHeight = this.panelLayoutState.bottomPanelCollapsed ? 0 : this.panelLayoutState.bottomPanelHeight;
+    const bottomPanelHeight = this.panelLayoutState.bottomPanelCollapsed
+      ? BOTTOM_PANEL_COLLAPSED_CONTENT_HEIGHT
+      : this.panelLayoutState.bottomPanelHeight;
 
     this.elements.mainLayout.style.setProperty('--image-panel-tab-width', PANEL_COLLAPSE_TAB_WIDTH_CSS);
     this.elements.mainLayout.style.setProperty('--right-panel-tab-width', PANEL_COLLAPSE_TAB_WIDTH_CSS);

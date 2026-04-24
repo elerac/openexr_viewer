@@ -909,7 +909,7 @@ describe('panel split sizing', () => {
     bottomButton.click();
 
     expect(bottomButton.getAttribute('aria-expanded')).toBe('false');
-    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('34px');
 
     bottomButton.click();
 
@@ -939,7 +939,7 @@ describe('panel split sizing', () => {
 
     expect(bottomResizer.getAttribute('aria-disabled')).toBe('true');
     expect(bottomResizer.tabIndex).toBe(-1);
-    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('34px');
     expect(JSON.parse(window.localStorage.getItem('openexr-viewer:panel-splits:v1') ?? '{}')).toMatchObject({
       bottomPanelHeight: 210,
       bottomPanelCollapsed: true
@@ -988,7 +988,7 @@ describe('panel split sizing', () => {
     expect(bottomButton.getAttribute('aria-expanded')).toBe('false');
     expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('0px');
     expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('0px');
-    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('34px');
 
     resetSettingsButton.click();
 
@@ -2440,6 +2440,64 @@ describe('channel thumbnail strip', () => {
     expect(firstTile.style.getPropertyValue('--channel-thumbnail-tile-width')).toBe('125px');
   });
 
+  it('uses label-only sizing while collapsed and restores thumbnail sizing after expanding', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'depth.Z'];
+    const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: 'data:image/png;base64,AAAA'
+    }));
+    const strip = document.getElementById('channel-thumbnail-strip') as HTMLElement;
+    const bottomButton = document.getElementById('bottom-panel-collapse-button') as HTMLButtonElement;
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, channelThumbnailItems);
+
+    const firstTile = document.querySelector<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile');
+    const firstPreview = firstTile?.querySelector('.channel-thumbnail-tile-preview') as HTMLElement;
+    const firstLabel = firstTile?.querySelector('.channel-thumbnail-tile-label') as HTMLElement;
+
+    expect(firstTile).toBeTruthy();
+    strip.style.paddingTop = '6px';
+    strip.style.paddingBottom = '8px';
+    firstTile!.style.padding = '4px';
+    firstTile!.style.rowGap = '3px';
+    firstTile!.style.border = '1px solid transparent';
+
+    mockChannelThumbnailStripGeometry({ stripHeight: 120, tileHeight: 106, labelHeight: 16 });
+    triggerResizeObserversForElement(strip);
+
+    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-height')).toBe('77px');
+    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-width')).toBe('77px');
+    expect(firstTile!.style.getPropertyValue('--channel-thumbnail-tile-width')).toBe('87px');
+    expect(firstLabel.style.getPropertyValue('--channel-thumbnail-label-max-width')).toBe('77px');
+
+    bottomButton.click();
+    triggerResizeObserversForElement(strip);
+
+    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-height')).toBe('');
+    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-width')).toBe('');
+    expect(firstTile!.style.getPropertyValue('--channel-thumbnail-tile-width')).toBe('');
+    expect(firstLabel.style.getPropertyValue('--channel-thumbnail-label-max-width')).toBe('');
+
+    bottomButton.click();
+    mockChannelThumbnailStripGeometry({ stripHeight: 120, tileHeight: 106, labelHeight: 16 });
+    triggerResizeObserversForElement(strip);
+
+    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-height')).toBe('77px');
+    expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-width')).toBe('77px');
+    expect(firstTile!.style.getPropertyValue('--channel-thumbnail-tile-width')).toBe('87px');
+    expect(firstLabel.style.getPropertyValue('--channel-thumbnail-label-max-width')).toBe('77px');
+  });
+
   it('keeps thumbnail frame sizing stable when the strip rerenders for another image', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
@@ -3168,7 +3226,7 @@ describe('global panel arrow navigation', () => {
     expect(onOpenedImageSelected).toHaveBeenCalledWith('session-2');
   });
 
-  it('does nothing for global horizontal routing when the bottom panel is collapsed', () => {
+  it('keeps global horizontal routing active when the bottom panel is collapsed', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
 
@@ -3190,7 +3248,11 @@ describe('global panel arrow navigation', () => {
     (document.getElementById('bottom-panel-collapse-button') as HTMLButtonElement).click();
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
 
-    expect(onRgbGroupChange).not.toHaveBeenCalled();
+    expect(onRgbGroupChange).toHaveBeenCalledWith({
+      kind: 'channelMono',
+      channel: 'depth.Z',
+      alpha: null
+    });
   });
 
   it('falls back to Open Files when Channel View was active but becomes unavailable', () => {

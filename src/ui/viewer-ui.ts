@@ -227,13 +227,6 @@ export class ViewerUi implements Disposable {
         return this.openedImagesPanel.stepSelection(delta);
       },
       routeHorizontalNavigation: (delta) => {
-        if (
-          this.elements.bottomPanelContent.classList.contains('is-collapsed') ||
-          this.elements.bottomPanelCollapseButton.getAttribute('aria-expanded') === 'false'
-        ) {
-          return false;
-        }
-
         return this.channelThumbnailStrip.stepSelection(delta);
       },
       canRouteChannelViewNavigation: () => {
