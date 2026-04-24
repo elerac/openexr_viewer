@@ -909,7 +909,7 @@ describe('panel split sizing', () => {
     bottomButton.click();
 
     expect(bottomButton.getAttribute('aria-expanded')).toBe('false');
-    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('34px');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
 
     bottomButton.click();
 
@@ -922,6 +922,38 @@ describe('panel split sizing', () => {
       bottomPanelHeight: 210,
       bottomPanelCollapsed: false
     });
+  });
+
+  it('reserves collapsed bottom strip content only while channel labels are available', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry({ bottomHeight: 210 });
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const bottomButton = document.getElementById('bottom-panel-collapse-button') as HTMLButtonElement;
+    const mainLayout = document.getElementById('main-layout') as HTMLElement;
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
+
+    bottomButton.click();
+
+    expect(bottomButton.getAttribute('aria-expanded')).toBe('false');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    })));
+
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('34px');
+
+    ui.setRgbGroupOptions([], null, []);
+
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
   });
 
   it('ignores vertical resizer keyboard input while the bottom panel is collapsed', () => {
@@ -939,7 +971,7 @@ describe('panel split sizing', () => {
 
     expect(bottomResizer.getAttribute('aria-disabled')).toBe('true');
     expect(bottomResizer.tabIndex).toBe(-1);
-    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('34px');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
     expect(JSON.parse(window.localStorage.getItem('openexr-viewer:panel-splits:v1') ?? '{}')).toMatchObject({
       bottomPanelHeight: 210,
       bottomPanelCollapsed: true
@@ -988,7 +1020,7 @@ describe('panel split sizing', () => {
     expect(bottomButton.getAttribute('aria-expanded')).toBe('false');
     expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('0px');
     expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('0px');
-    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('34px');
+    expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
 
     resetSettingsButton.click();
 
@@ -2496,6 +2528,175 @@ describe('channel thumbnail strip', () => {
     expect(firstPreview.style.getPropertyValue('--channel-thumbnail-preview-width')).toBe('77px');
     expect(firstTile!.style.getPropertyValue('--channel-thumbnail-tile-width')).toBe('87px');
     expect(firstLabel.style.getPropertyValue('--channel-thumbnail-label-max-width')).toBe('77px');
+  });
+
+  it('shows a delayed thumbnail hover preview while collapsed', () => {
+    vi.useFakeTimers();
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
+    const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: 'data:image/png;base64,AAAA'
+    }));
+    const bottomButton = document.getElementById('bottom-panel-collapse-button') as HTMLButtonElement;
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, channelThumbnailItems);
+    bottomButton.click();
+
+    const tile = document.querySelector<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile');
+    expect(tile).toBeTruthy();
+    mockChannelThumbnailStripGeometry({ stripHeight: 34, tileHeight: 26, labelHeight: 16 });
+
+    tile!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    vi.advanceTimersByTime(499);
+
+    expect(document.querySelector('.channel-thumbnail-hover-preview')).toBeNull();
+
+    vi.advanceTimersByTime(1);
+
+    const preview = document.querySelector('.channel-thumbnail-hover-preview');
+    expect(preview).not.toBeNull();
+    expect(preview?.querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,AAAA');
+  });
+
+  it('switches collapsed hover previews immediately after the first preview appears', () => {
+    vi.useFakeTimers();
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'depth.Z'];
+    const rgbThumbnailUrl = 'data:image/png;base64,AAAA';
+    const depthThumbnailUrl = 'data:image/png;base64,BBBB';
+    const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: item.value === 'channel:depth.Z' ? depthThumbnailUrl : rgbThumbnailUrl
+    }));
+    const strip = document.getElementById('channel-thumbnail-strip') as HTMLElement;
+    const bottomButton = document.getElementById('bottom-panel-collapse-button') as HTMLButtonElement;
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, channelThumbnailItems);
+    bottomButton.click();
+
+    const tiles = mockChannelThumbnailStripGeometry({ stripHeight: 34, tileHeight: 26, tileWidth: 82, labelHeight: 16 });
+    const firstTile = tiles[0];
+    const secondTile = tiles[1];
+    expect(firstTile).toBeTruthy();
+    expect(secondTile).toBeTruthy();
+
+    firstTile!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body }));
+    vi.advanceTimersByTime(499);
+
+    expect(document.querySelector('.channel-thumbnail-hover-preview')).toBeNull();
+
+    vi.advanceTimersByTime(1);
+
+    let previews = document.querySelectorAll('.channel-thumbnail-hover-preview');
+    expect(previews).toHaveLength(1);
+    expect(previews[0]?.querySelector('img')?.getAttribute('src')).toBe(rgbThumbnailUrl);
+
+    firstTile!.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: secondTile }));
+    secondTile!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: firstTile }));
+
+    previews = document.querySelectorAll('.channel-thumbnail-hover-preview');
+    expect(previews).toHaveLength(1);
+    expect(previews[0]?.querySelector('img')?.getAttribute('src')).toBe(depthThumbnailUrl);
+
+    secondTile!.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: firstTile }));
+    firstTile!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: secondTile }));
+
+    previews = document.querySelectorAll('.channel-thumbnail-hover-preview');
+    expect(previews).toHaveLength(1);
+    expect(previews[0]?.querySelector('img')?.getAttribute('src')).toBe(rgbThumbnailUrl);
+
+    strip.dispatchEvent(new MouseEvent('mouseleave', { relatedTarget: document.body }));
+    expect(document.querySelector('.channel-thumbnail-hover-preview')).toBeNull();
+
+    secondTile!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body }));
+    vi.advanceTimersByTime(499);
+
+    expect(document.querySelector('.channel-thumbnail-hover-preview')).toBeNull();
+
+    vi.advanceTimersByTime(1);
+
+    previews = document.querySelectorAll('.channel-thumbnail-hover-preview');
+    expect(previews).toHaveLength(1);
+    expect(previews[0]?.querySelector('img')?.getAttribute('src')).toBe(depthThumbnailUrl);
+  });
+
+  it('cancels the collapsed hover preview when the mouse leaves before the delay', () => {
+    vi.useFakeTimers();
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
+    const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: 'data:image/png;base64,AAAA'
+    }));
+    const bottomButton = document.getElementById('bottom-panel-collapse-button') as HTMLButtonElement;
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, channelThumbnailItems);
+    bottomButton.click();
+
+    const tile = document.querySelector<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile');
+    expect(tile).toBeTruthy();
+    tile!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    vi.advanceTimersByTime(250);
+    tile!.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }));
+    vi.advanceTimersByTime(250);
+
+    expect(document.querySelector('.channel-thumbnail-hover-preview')).toBeNull();
+  });
+
+  it('does not show the hover preview while the bottom strip is expanded', () => {
+    vi.useFakeTimers();
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
+    const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: 'data:image/png;base64,AAAA'
+    }));
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, channelThumbnailItems);
+
+    const tile = document.querySelector<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile');
+    expect(tile).toBeTruthy();
+    tile!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    vi.advanceTimersByTime(500);
+
+    expect(document.querySelector('.channel-thumbnail-hover-preview')).toBeNull();
   });
 
   it('keeps thumbnail frame sizing stable when the strip rerenders for another image', () => {

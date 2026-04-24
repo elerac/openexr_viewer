@@ -43,6 +43,7 @@ test('keeps collapsed bottom channel names visible and selectable', async ({ pag
   const channelSelect = page.locator('#rgb-group-select');
   const thumbnailTiles = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile');
   const thumbnailPreviews = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile-preview');
+  const thumbnailImages = page.locator('#channel-thumbnail-strip .channel-thumbnail-image');
 
   await openGalleryCbox(page);
   await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'true');
@@ -53,6 +54,7 @@ test('keeps collapsed bottom channel names visible and selectable', async ({ pag
   await expect(thumbnailTiles.nth(1)).toContainText('G');
   await expect(thumbnailTiles.nth(2)).toContainText('B');
   await expect(thumbnailPreviews.nth(0)).toBeVisible();
+  await expect(thumbnailImages.first()).toHaveAttribute('src', /^data:image\/png;base64,/, { timeout: 10000 });
 
   await bottomPanelButton.click();
   await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'false');
@@ -63,6 +65,13 @@ test('keeps collapsed bottom channel names visible and selectable', async ({ pag
   const collapsedHeight = await bottomPanel.evaluate((element) => Math.round(element.getBoundingClientRect().height));
   expect(collapsedHeight).toBeGreaterThanOrEqual(32);
   expect(collapsedHeight).toBeLessThanOrEqual(36);
+
+  await thumbnailTiles.nth(0).hover();
+  const hoverPreview = page.locator('.channel-thumbnail-hover-preview');
+  await expect(hoverPreview).toHaveCount(1, { timeout: 2000 });
+  await expect(hoverPreview.locator('img')).toHaveAttribute('src', /^data:image\/png;base64,/);
+  await page.mouse.move(8, 8);
+  await expect(hoverPreview).toHaveCount(0);
 
   await thumbnailTiles.nth(1).click();
   await expect(channelSelect.locator('option:checked')).toHaveText('G');

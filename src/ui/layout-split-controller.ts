@@ -63,6 +63,7 @@ export class LayoutSplitController implements Disposable {
     ...DEFAULT_PANEL_COLLAPSE_STATE
   };
   private activePanelResize: PanelResizeDragState | null = null;
+  private bottomCollapsedContentAvailable = false;
   private disposed = false;
 
   constructor(private readonly elements: LayoutSplitElements) {
@@ -116,6 +117,15 @@ export class LayoutSplitController implements Disposable {
     }
 
     this.applyPanelLayoutState(defaultState, null, true);
+  }
+
+  setBottomCollapsedContentAvailable(available: boolean): void {
+    if (this.disposed || this.bottomCollapsedContentAvailable === available) {
+      return;
+    }
+
+    this.bottomCollapsedContentAvailable = available;
+    this.renderPanelLayoutState();
   }
 
   private initializePanelSplits(): void {
@@ -324,7 +334,7 @@ export class LayoutSplitController implements Disposable {
     const imagePanelWidth = this.panelLayoutState.imagePanelCollapsed ? 0 : this.panelLayoutState.imagePanelWidth;
     const rightPanelWidth = this.panelLayoutState.rightPanelCollapsed ? 0 : this.panelLayoutState.rightPanelWidth;
     const bottomPanelHeight = this.panelLayoutState.bottomPanelCollapsed
-      ? BOTTOM_PANEL_COLLAPSED_CONTENT_HEIGHT
+      ? (this.bottomCollapsedContentAvailable ? BOTTOM_PANEL_COLLAPSED_CONTENT_HEIGHT : 0)
       : this.panelLayoutState.bottomPanelHeight;
 
     this.elements.mainLayout.style.setProperty('--image-panel-tab-width', PANEL_COLLAPSE_TAB_WIDTH_CSS);

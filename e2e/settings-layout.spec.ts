@@ -116,7 +116,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   const mutated = await readLayout();
   expect(mutated.imageWidth).toBeLessThan(2);
   expect(mutated.rightWidth).toBeLessThan(2);
-  expect(Math.abs(mutated.bottomHeight - 34)).toBeLessThanOrEqual(2);
+  expect(mutated.bottomHeight).toBeLessThanOrEqual(2);
   expect(mutated.imageExpanded).toBe('false');
   expect(mutated.rightExpanded).toBe('false');
   expect(mutated.bottomExpanded).toBe('false');
@@ -398,7 +398,7 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
   await bottomCollapseButton.click();
   await page.waitForTimeout(100);
   const afterBottomCollapse = await readLayout();
-  expect(Math.abs(afterBottomCollapse.bottomHeight - 34)).toBeLessThanOrEqual(2);
+  expect(afterBottomCollapse.bottomHeight).toBeLessThanOrEqual(2);
   expect(afterBottomCollapse.bottomShellHeight).toBeGreaterThan(10);
   expect(afterBottomCollapse.bottomResizerHeight).toBeLessThan(2);
   expect(afterBottomCollapse.viewerHeight).toBeGreaterThan(afterRightReopen.viewerHeight + 30);
@@ -415,7 +415,7 @@ test('resizes desktop panel splits and persists them', async ({ page }) => {
   await page.reload();
   await expectViewerAppReady(page);
   const afterBottomCollapseReload = await readLayout();
-  expect(Math.abs(afterBottomCollapseReload.bottomHeight - 34)).toBeLessThanOrEqual(2);
+  expect(afterBottomCollapseReload.bottomHeight).toBeLessThanOrEqual(2);
   await expect(bottomCollapseButton).toHaveAttribute('aria-expanded', 'false');
 
   await bottomCollapseButton.click();

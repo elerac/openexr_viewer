@@ -167,6 +167,9 @@ export class ViewerUi implements Disposable {
     this.channelThumbnailStrip = new ChannelThumbnailStrip(this.elements, {
       onChannelViewChange: (value) => {
         this.handleChannelViewValueChange(value);
+      },
+      onCollapsedContentAvailabilityChange: (available) => {
+        this.layoutSplitController.setBottomCollapsedContentAvailable(available);
       }
     });
     this.colormapPanel = new ColormapPanel(this.elements, {

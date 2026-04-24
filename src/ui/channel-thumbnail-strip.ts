@@ -10,14 +10,20 @@ import {
 
 interface ChannelThumbnailStripCallbacks {
   onChannelViewChange: (value: string) => void;
+  onCollapsedContentAvailabilityChange: (available: boolean) => void;
 }
 
 interface ChannelThumbnailTileRefs {
   preview: HTMLElement;
   label: HTMLSpanElement;
+  thumbnailDataUrl: string | null;
 }
 
 const tileRefs = new WeakMap<HTMLElement, ChannelThumbnailTileRefs>();
+const HOVER_PREVIEW_DELAY_MS = 500;
+const HOVER_PREVIEW_GAP_PX = 8;
+const HOVER_PREVIEW_VIEWPORT_MARGIN_PX = 8;
+const HOVER_PREVIEW_FALLBACK_SIZE_PX = 156;
 const DEFAULT_STRIP_PADDING_TOP_PX = 7.2;
 const DEFAULT_STRIP_PADDING_BOTTOM_PX = 8.8;
 const DEFAULT_TILE_PADDING_PX = 5.12;
@@ -32,6 +38,10 @@ export class ChannelThumbnailStrip implements Disposable {
   private restoreFocusAfterLoading = false;
   private items: ChannelViewThumbnailItem[] = [];
   private selectedValue = '';
+  private hoverPreviewTimer: number | null = null;
+  private hoverPreviewTile: HTMLButtonElement | null = null;
+  private hoverPreviewElement: HTMLElement | null = null;
+  private hoverPreviewSessionActive = false;
   private disposed = false;
 
   constructor(
@@ -44,13 +54,33 @@ export class ChannelThumbnailStrip implements Disposable {
         return;
       }
 
+      this.endHoverPreviewSession();
       this.chooseValue(row.dataset.channelValue ?? '');
     });
     this.disposables.addEventListener(this.elements.channelThumbnailStrip, 'keydown', (event) => {
       this.handleKeyDown(event);
     });
+    this.disposables.addEventListener(this.elements.channelThumbnailStrip, 'mouseover', (event) => {
+      this.handleMouseOver(event);
+    });
+    this.disposables.addEventListener(this.elements.channelThumbnailStrip, 'mouseout', (event) => {
+      this.handleMouseOut(event);
+    });
+    this.disposables.addEventListener(this.elements.channelThumbnailStrip, 'mouseleave', () => {
+      this.endHoverPreviewSession();
+    });
+    this.disposables.addEventListener(this.elements.channelThumbnailStrip, 'scroll', () => {
+      this.endHoverPreviewSession();
+    });
+    this.disposables.addEventListener(window, 'resize', () => {
+      this.endHoverPreviewSession();
+    });
+    this.disposables.addEventListener(document, 'click', () => {
+      this.endHoverPreviewSession();
+    }, true);
     this.resizeObserver = new ResizeObserver(() => {
       this.syncTileSizing();
+      this.endHoverPreviewSession();
     });
     this.resizeObserver.observe(this.elements.channelThumbnailStrip);
     this.disposables.add(() => {
@@ -64,6 +94,7 @@ export class ChannelThumbnailStrip implements Disposable {
     }
 
     this.disposed = true;
+    this.endHoverPreviewSession();
     this.disposables.dispose();
   }
 
@@ -135,9 +166,11 @@ export class ChannelThumbnailStrip implements Disposable {
   }
 
   private render(): void {
+    this.endHoverPreviewSession();
     const disabled = this.isLoading || this.items.length === 0;
     const shouldRestoreFocus = !disabled && isFocusWithinElement(this.elements.channelThumbnailStrip);
     this.elements.channelThumbnailStrip.classList.toggle('is-disabled', disabled);
+    this.callbacks.onCollapsedContentAvailabilityChange(this.items.length > 0);
 
     if (this.items.length === 0) {
       this.elements.channelThumbnailStrip.replaceChildren(
@@ -226,6 +259,130 @@ export class ChannelThumbnailStrip implements Disposable {
     this.chooseValue(nextTile.dataset.channelValue ?? '');
   }
 
+  private handleMouseOver(event: MouseEvent): void {
+    const tile = findClosestListRow(event.target, 'channelValue') as HTMLButtonElement | null;
+    if (!tile || tile.disabled || this.isLoading) {
+      return;
+    }
+
+    const relatedTarget = event.relatedTarget instanceof Node ? event.relatedTarget : null;
+    if (relatedTarget && tile.contains(relatedTarget)) {
+      return;
+    }
+
+    this.scheduleHoverPreview(tile);
+  }
+
+  private handleMouseOut(event: MouseEvent): void {
+    const tile = findClosestListRow(event.target, 'channelValue') as HTMLButtonElement | null;
+    if (!tile) {
+      return;
+    }
+
+    const relatedTarget = event.relatedTarget instanceof Node ? event.relatedTarget : null;
+    if (relatedTarget && tile.contains(relatedTarget)) {
+      return;
+    }
+
+    if (relatedTarget && this.elements.channelThumbnailStrip.contains(relatedTarget)) {
+      if (!this.hoverPreviewSessionActive && this.hoverPreviewTile === tile) {
+        this.clearHoverPreviewTimer();
+        this.hoverPreviewTile = null;
+      }
+      return;
+    }
+
+    if (this.hoverPreviewTile === tile) {
+      this.endHoverPreviewSession();
+    }
+  }
+
+  private scheduleHoverPreview(tile: HTMLButtonElement): void {
+    this.clearHoverPreviewTimer();
+    if (!isCompactChannelThumbnailStrip(this.elements.channelThumbnailStrip)) {
+      this.endHoverPreviewSession();
+      return;
+    }
+
+    const refs = tileRefs.get(tile);
+    if (!refs?.thumbnailDataUrl) {
+      this.endHoverPreviewSession();
+      return;
+    }
+
+    this.hoverPreviewTile = tile;
+    if (this.hoverPreviewSessionActive) {
+      this.showHoverPreview(tile);
+      return;
+    }
+
+    this.hoverPreviewTimer = window.setTimeout(() => {
+      this.hoverPreviewTimer = null;
+      if (this.hoverPreviewTile !== tile) {
+        return;
+      }
+
+      this.showHoverPreview(tile);
+    }, HOVER_PREVIEW_DELAY_MS);
+  }
+
+  private showHoverPreview(tile: HTMLButtonElement): void {
+    if (
+      this.disposed ||
+      this.isLoading ||
+      !tile.isConnected ||
+      !isCompactChannelThumbnailStrip(this.elements.channelThumbnailStrip)
+    ) {
+      this.endHoverPreviewSession();
+      return;
+    }
+
+    const refs = tileRefs.get(tile);
+    if (!refs?.thumbnailDataUrl) {
+      this.endHoverPreviewSession();
+      return;
+    }
+
+    this.removeHoverPreviewElement();
+
+    const preview = document.createElement('div');
+    preview.className = 'channel-thumbnail-hover-preview';
+    preview.setAttribute('aria-hidden', 'true');
+
+    const image = document.createElement('img');
+    image.className = 'channel-thumbnail-hover-preview-image';
+    image.src = refs.thumbnailDataUrl;
+    image.alt = '';
+    image.draggable = false;
+    preview.append(image);
+
+    document.body.append(preview);
+    positionHoverPreview(tile, preview);
+    preview.classList.add('is-visible');
+    this.hoverPreviewElement = preview;
+    this.hoverPreviewTile = tile;
+    this.hoverPreviewSessionActive = true;
+  }
+
+  private clearHoverPreviewTimer(): void {
+    if (this.hoverPreviewTimer !== null) {
+      window.clearTimeout(this.hoverPreviewTimer);
+      this.hoverPreviewTimer = null;
+    }
+  }
+
+  private removeHoverPreviewElement(): void {
+    this.hoverPreviewElement?.remove();
+    this.hoverPreviewElement = null;
+  }
+
+  private endHoverPreviewSession(): void {
+    this.clearHoverPreviewTimer();
+    this.removeHoverPreviewElement();
+    this.hoverPreviewTile = null;
+    this.hoverPreviewSessionActive = false;
+  }
+
   private syncTileSizing(): void {
     const strip = this.elements.channelThumbnailStrip;
     if (isCompactChannelThumbnailStrip(strip)) {
@@ -296,7 +453,7 @@ function createChannelThumbnailTile(): HTMLButtonElement {
   label.className = 'channel-thumbnail-tile-label';
 
   tile.append(preview, label);
-  tileRefs.set(tile, { preview, label });
+  tileRefs.set(tile, { preview, label, thumbnailDataUrl: null });
   return tile;
 }
 
@@ -325,6 +482,7 @@ function updateChannelThumbnailTile(
     tile.replaceChild(nextPreview, refs.preview);
     refs.preview = nextPreview;
   }
+  refs.thumbnailDataUrl = item.thumbnailDataUrl;
   refs.label.textContent = item.label;
 }
 
@@ -381,6 +539,36 @@ function getEnabledTiles(container: HTMLElement): HTMLButtonElement[] {
 function focusSelectedTile(container: HTMLElement): void {
   const selectedTile = getEnabledTiles(container).find((tile) => tile.getAttribute('aria-selected') === 'true');
   selectedTile?.focus();
+}
+
+function positionHoverPreview(tile: HTMLElement, preview: HTMLElement): void {
+  const tileRect = tile.getBoundingClientRect();
+  const previewRect = preview.getBoundingClientRect();
+  const previewWidth = previewRect.width || HOVER_PREVIEW_FALLBACK_SIZE_PX;
+  const previewHeight = previewRect.height || HOVER_PREVIEW_FALLBACK_SIZE_PX;
+  const viewportWidth = document.documentElement.clientWidth || window.innerWidth || previewWidth;
+  const viewportHeight = document.documentElement.clientHeight || window.innerHeight || previewHeight;
+  const maxLeft = Math.max(
+    HOVER_PREVIEW_VIEWPORT_MARGIN_PX,
+    viewportWidth - previewWidth - HOVER_PREVIEW_VIEWPORT_MARGIN_PX
+  );
+  const maxTop = Math.max(
+    HOVER_PREVIEW_VIEWPORT_MARGIN_PX,
+    viewportHeight - previewHeight - HOVER_PREVIEW_VIEWPORT_MARGIN_PX
+  );
+  const centeredLeft = tileRect.left + tileRect.width / 2 - previewWidth / 2;
+  let top = tileRect.top - previewHeight - HOVER_PREVIEW_GAP_PX;
+
+  if (top < HOVER_PREVIEW_VIEWPORT_MARGIN_PX) {
+    top = tileRect.bottom + HOVER_PREVIEW_GAP_PX;
+  }
+
+  preview.style.left = `${clamp(centeredLeft, HOVER_PREVIEW_VIEWPORT_MARGIN_PX, maxLeft)}px`;
+  preview.style.top = `${clamp(top, HOVER_PREVIEW_VIEWPORT_MARGIN_PX, maxTop)}px`;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function isCompactChannelThumbnailStrip(strip: HTMLElement): boolean {
