@@ -1,7 +1,11 @@
 import { clampZoom } from '../interaction/image-geometry';
 import { DEFAULT_PANORAMA_HFOV_DEG } from '../interaction/panorama-geometry';
 import { cloneDisplayLuminanceRange } from '../colormap-range';
-import { cloneDisplaySelection } from '../display-model';
+import {
+  cloneDisplaySelection,
+  sameDisplaySelection,
+  type DisplaySelection
+} from '../display-model';
 import { clampImageRoiToBounds } from '../roi';
 import {
   buildSessionDisplayName,
@@ -179,7 +183,7 @@ export function buildSwitchedSessionState(
         panoramaHfovDeg: nextSession.state.panoramaHfovDeg
       };
 
-  return buildViewerStateForLayer(
+  const nextState = buildViewerStateForLayer(
     {
       ...cloneViewerSessionState(nextSession.state),
       viewerMode: currentState.viewerMode,
@@ -187,11 +191,6 @@ export function buildSwitchedSessionState(
       ...nextPanoramaCamera,
       exposureEv: currentState.exposureEv,
       displaySelection: cloneDisplaySelection(currentState.displaySelection),
-      visualizationMode: currentState.visualizationMode,
-      activeColormapId: currentState.activeColormapId,
-      colormapRange: cloneDisplayLuminanceRange(currentState.colormapRange),
-      colormapRangeMode: currentState.colormapRangeMode,
-      colormapZeroCentered: currentState.colormapZeroCentered,
       stokesDegreeModulation: { ...currentState.stokesDegreeModulation },
       lockedPixel,
       roi
@@ -199,6 +198,19 @@ export function buildSwitchedSessionState(
     nextSession.decoded,
     nextSession.state.activeLayer
   );
+
+  if (!shouldCarryColormapState(currentState.displaySelection, nextState.displaySelection)) {
+    return nextState;
+  }
+
+  return {
+    ...nextState,
+    visualizationMode: currentState.visualizationMode,
+    activeColormapId: currentState.activeColormapId,
+    colormapRange: cloneDisplayLuminanceRange(currentState.colormapRange),
+    colormapRangeMode: currentState.colormapRangeMode,
+    colormapZeroCentered: currentState.colormapZeroCentered
+  };
 }
 
 export function buildResetSessionState(
@@ -269,4 +281,20 @@ function clampPixelToImageBounds(pixel: ImagePixel, width: number, height: numbe
     ix: pixel.ix,
     iy: pixel.iy
   };
+}
+
+function shouldCarryColormapState(previous: DisplaySelection | null, next: DisplaySelection | null): boolean {
+  if (!previous || !next || previous.kind !== next.kind) {
+    return false;
+  }
+
+  if (previous.kind === 'channelMono') {
+    return next.kind === 'channelMono' && previous.channel === next.channel;
+  }
+
+  if (previous.kind === 'channelRgb') {
+    return next.kind === 'channelRgb' && previous.r === next.r && previous.g === next.g && previous.b === next.b;
+  }
+
+  return sameDisplaySelection(previous, next);
 }

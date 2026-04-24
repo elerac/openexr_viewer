@@ -79,6 +79,30 @@ describe('viewer app core', () => {
     });
   });
 
+  it('does not carry colormap state when session switching falls back to a different channel', () => {
+    const core = new ViewerAppCore();
+    const first = createSession('first');
+    const second = createSession('second', createDecodedImage(['R', 'G', 'B', 'mask']));
+    core.dispatch({ type: 'sessionLoaded', session: first });
+    core.dispatch({ type: 'sessionLoaded', session: second });
+
+    core.dispatch({ type: 'displaySelectionSet', displaySelection: createChannelMonoSelection('mask') });
+    core.dispatch({ type: 'activeColormapSet', colormapId: '2' });
+    core.dispatch({ type: 'colormapRangeSet', range: { min: 0.2, max: 0.8 } });
+    core.dispatch({ type: 'visualizationModeRequested', visualizationMode: 'colormap' });
+
+    core.dispatch({ type: 'activeSessionSwitched', sessionId: first.id });
+
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'rgb',
+      activeColormapId: '0',
+      colormapRange: null,
+      colormapRangeMode: 'alwaysAuto',
+      colormapZeroCentered: false,
+      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+    });
+  });
+
   it('inserts reordered sessions at explicit before and after boundaries', () => {
     const core = new ViewerAppCore();
     const first = createSession('first');

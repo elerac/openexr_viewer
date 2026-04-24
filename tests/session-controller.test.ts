@@ -126,6 +126,81 @@ describe('session controller shim', () => {
     expect(core.getState().sessionState.displaySelection).toEqual(createChannelMonoSelection('G'));
   });
 
+  it('keeps colormap state when loading a new image with the same selected channel', async () => {
+    const decodeBytes = vi
+      .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
+      .mockResolvedValueOnce(createDecodedImage(6, 6, ['R', 'G', 'B', 'Z']))
+      .mockResolvedValueOnce(createDecodedImage(6, 6, ['R', 'G', 'B', 'Z']));
+    const { controller, core } = createController({ decodeBytes });
+
+    await controller.enqueueFiles([createFile('first.exr')]);
+    core.dispatch({
+      type: 'displaySelectionSet',
+      displaySelection: createChannelMonoSelection('Z')
+    });
+    core.dispatch({
+      type: 'activeColormapSet',
+      colormapId: '2'
+    });
+    core.dispatch({
+      type: 'colormapRangeSet',
+      range: { min: 0.2, max: 0.8 }
+    });
+    core.dispatch({
+      type: 'visualizationModeRequested',
+      visualizationMode: 'colormap'
+    });
+
+    await controller.enqueueFiles([createFile('second.exr')]);
+
+    expect(controller.getActiveSession()?.filename).toBe('second.exr');
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'colormap',
+      activeColormapId: '2',
+      colormapRange: { min: 0.2, max: 0.8 },
+      colormapRangeMode: 'oneTime',
+      displaySelection: createChannelMonoSelection('Z')
+    });
+  });
+
+  it('resets colormap state when loading a new image falls back to a different channel', async () => {
+    const decodeBytes = vi
+      .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
+      .mockResolvedValueOnce(createDecodedImage(6, 6, ['R', 'G', 'B', 'mask']))
+      .mockResolvedValueOnce(createDecodedImage(6, 6));
+    const { controller, core } = createController({ decodeBytes });
+
+    await controller.enqueueFiles([createFile('first.exr')]);
+    core.dispatch({
+      type: 'displaySelectionSet',
+      displaySelection: createChannelMonoSelection('mask')
+    });
+    core.dispatch({
+      type: 'activeColormapSet',
+      colormapId: '2'
+    });
+    core.dispatch({
+      type: 'colormapRangeSet',
+      range: { min: 0.2, max: 0.8 }
+    });
+    core.dispatch({
+      type: 'visualizationModeRequested',
+      visualizationMode: 'colormap'
+    });
+
+    await controller.enqueueFiles([createFile('second.exr')]);
+
+    expect(controller.getActiveSession()?.filename).toBe('second.exr');
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'rgb',
+      activeColormapId: core.getState().defaultColormapId,
+      colormapRange: null,
+      colormapRangeMode: 'alwaysAuto',
+      colormapZeroCentered: false,
+      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+    });
+  });
+
   it('keeps a matching grouped Stokes selection when loading a new image', async () => {
     const decodeBytes = vi
       .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
