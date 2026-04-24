@@ -134,7 +134,7 @@ export function renderPixelsToCanvas(canvas: HTMLCanvasElement, pixels: ExportIm
     throw new Error('Unable to create a 2D canvas context for export.');
   }
 
-  context.putImageData(new ImageData(pixels.data, pixels.width, pixels.height), 0, 0);
+  context.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height), 0, 0);
 }
 
 export async function createPngBlobFromPixels(pixels: ExportImagePixels): Promise<Blob> {

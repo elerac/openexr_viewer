@@ -38,6 +38,7 @@ import type {
   ExportImageTarget,
   ImageRoi,
   OpenedImageDropPlacement,
+  PanoramaKeyboardOrbitInput,
   PixelSample,
   RoiStats,
   ViewerMode,

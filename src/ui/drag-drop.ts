@@ -39,11 +39,10 @@ interface LegacyFileSystemDirectoryEntryLike extends LegacyFileSystemEntryLike {
   createReader: () => LegacyFileSystemDirectoryReaderLike;
 }
 
-interface DirectoryAwareDataTransferItem extends DataTransferItem {
+type DirectoryAwareDataTransferItem = DataTransferItem & {
   getAsEntry?: () => LegacyFileSystemEntryLike | null;
   getAsFileSystemHandle?: () => Promise<FileSystemHandleLike | null>;
-  webkitGetAsEntry?: () => LegacyFileSystemEntryLike | null;
-}
+};
 
 interface ResolvedDroppedFiles {
   files: File[];
@@ -334,9 +333,13 @@ async function collectFilesFromLegacyEntry(
   entry: LegacyFileSystemFileEntryLike | LegacyFileSystemDirectoryEntryLike,
   relativePath: string | null
 ): Promise<File[]> {
-  if (entry.isFile) {
+  if (isLegacyFileEntry(entry)) {
     const file = await getFileFromLegacyEntry(entry);
     return [relativePath ? withRelativePath(file, relativePath) : file];
+  }
+
+  if (!isLegacyDirectoryEntry(entry)) {
+    return [];
   }
 
   const entries = await readAllLegacyDirectoryEntries(entry);
@@ -351,6 +354,18 @@ async function collectFilesFromLegacyEntry(
   }
 
   return files;
+}
+
+function isLegacyFileEntry(
+  entry: LegacyFileSystemEntryLike
+): entry is LegacyFileSystemFileEntryLike {
+  return entry.isFile;
+}
+
+function isLegacyDirectoryEntry(
+  entry: LegacyFileSystemEntryLike
+): entry is LegacyFileSystemDirectoryEntryLike {
+  return entry.isDirectory;
 }
 
 function getFileFromLegacyEntry(entry: LegacyFileSystemFileEntryLike): Promise<File> {

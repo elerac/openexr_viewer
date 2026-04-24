@@ -27,12 +27,6 @@ interface ChannelThumbnailJob {
   selection: DisplaySelection;
 }
 
-interface IdleDeadlineLike {
-  readonly didTimeout: boolean;
-  timeRemaining(): number;
-}
-
-type IdleCallbackLike = (deadline: IdleDeadlineLike) => void;
 type MaybePromise<T> = T | Promise<T>;
 
 export interface ChannelThumbnailServiceDependencies {

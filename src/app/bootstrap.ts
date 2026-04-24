@@ -1,5 +1,4 @@
 import { createAbortError } from '../lifecycle';
-import { ViewerUi } from '../ui/viewer-ui';
 import { ViewerInteraction } from '../interaction/viewer-interaction';
 import { LoadQueueService } from '../services/load-queue';
 import { ViewerAppCore } from './viewer-app-core';

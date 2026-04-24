@@ -44,7 +44,7 @@ describe('exr worker client', () => {
     vi.stubGlobal(
       'Worker',
       class extends WorkerMock {
-        constructor(...args: unknown[]) {
+        constructor(..._args: unknown[]) {
           super();
           workers.push(this);
         }

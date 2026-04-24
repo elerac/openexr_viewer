@@ -7,19 +7,27 @@
     "dev": "vite",
     "build": "vite build",
     "capture:thumbnail": "node scripts/capture-thumbnail.mjs",
+    "lint": "eslint src tests e2e playwright.config.ts vite.config.ts vitest.config.ts --max-warnings=0",
     "preview": "vite preview",
     "test": "vitest run --dir tests",
+    "test:coverage": "vitest run --coverage --dir tests",
     "test:watch": "vitest --dir tests",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "exrs": "^1.0.3"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.50.0",
     "@types/node": "^22.10.2",
+    "@vitest/coverage-v8": "^2.1.5",
+    "eslint": "^9.39.4",
+    "globals": "^17.5.0",
     "jsdom": "^29.0.2",
     "typescript": "^5.7.2",
+    "typescript-eslint": "^8.59.0",
     "vite": "^5.4.11",
     "vitest": "^2.1.5"
   }

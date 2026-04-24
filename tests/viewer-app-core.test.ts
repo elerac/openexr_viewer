@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ViewerAppCore } from '../src/app/viewer-app-core';
-import { buildLoadedSession } from '../src/app/session-resource';
 import { createInteractionState } from '../src/view-state';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
 import {

@@ -322,7 +322,7 @@ describe('render cache service', () => {
     const ui = createUiMock();
     const renderer = createRendererMock();
 
-    let activeSessionId: string | null = session.id;
+    const activeSessionId: string | null = session.id;
     const service = new RenderCacheService({
       ui,
       renderer,

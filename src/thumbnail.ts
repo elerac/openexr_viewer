@@ -234,7 +234,7 @@ export function createOpenedImageThumbnailDataUrlFromPixels(
     return null;
   }
 
-  context.putImageData(new ImageData(pixels.data, pixels.width, pixels.height), 0, 0);
+  context.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height), 0, 0);
   return canvas.toDataURL('image/png');
 }
 

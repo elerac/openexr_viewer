@@ -42,7 +42,9 @@ describe('image browser panels', () => {
         channelViewCount: count
       },
       {
-        onRgbGroupChange: vi.fn()
+        onChannelViewChange: vi.fn(),
+        onChannelViewRowClick: vi.fn(),
+        onSplitToggle: vi.fn()
       }
     );
 
@@ -79,7 +81,9 @@ describe('image browser panels', () => {
         channelViewCount: document.createElement('span')
       },
       {
-        onRgbGroupChange: vi.fn()
+        onChannelViewChange: vi.fn(),
+        onChannelViewRowClick: vi.fn(),
+        onSplitToggle: vi.fn()
       }
     );
 

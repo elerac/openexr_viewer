@@ -362,8 +362,9 @@ function lastUniform1iValue(
   gl: ReturnType<typeof createWebGlContextMock>,
   uniformName: string
 ): number | undefined {
-  const calls = gl.uniform1i.mock.calls.filter(([location]) => {
-    return (location as { name?: string } | null)?.name === uniformName;
+  const calls = gl.uniform1i.mock.calls.filter((call) => {
+    const [location] = call as [{ name?: string } | null, ...unknown[]];
+    return location?.name === uniformName;
   });
   return calls.at(-1)?.[1] as number | undefined;
 }
@@ -372,8 +373,9 @@ function lastUniform2fValue(
   gl: ReturnType<typeof createWebGlContextMock>,
   uniformName: string
 ): [number, number] | undefined {
-  const calls = gl.uniform2f.mock.calls.filter(([location]) => {
-    return (location as { name?: string } | null)?.name === uniformName;
+  const calls = gl.uniform2f.mock.calls.filter((call) => {
+    const [location] = call as [{ name?: string } | null, ...unknown[]];
+    return location?.name === uniformName;
   });
   const lastCall = calls.at(-1);
   if (!lastCall) {
@@ -385,9 +387,13 @@ function lastUniform2fValue(
 function createWebGlContextMock(): WebGL2RenderingContext & {
   texImage2D: ReturnType<typeof vi.fn>;
   createTexture: ReturnType<typeof vi.fn>;
+  createFramebuffer: ReturnType<typeof vi.fn>;
   deleteTexture: ReturnType<typeof vi.fn>;
   deleteProgram: ReturnType<typeof vi.fn>;
   deleteVertexArray: ReturnType<typeof vi.fn>;
+  readPixels: ReturnType<typeof vi.fn>;
+  uniform1i: ReturnType<typeof vi.fn>;
+  uniform2f: ReturnType<typeof vi.fn>;
   clearColor: ReturnType<typeof vi.fn>;
   clear: ReturnType<typeof vi.fn>;
 } {
@@ -485,6 +491,7 @@ function createWebGlContextMock(): WebGL2RenderingContext & {
     createFramebuffer: ReturnType<typeof vi.fn>;
     readPixels: ReturnType<typeof vi.fn>;
     uniform1i: ReturnType<typeof vi.fn>;
+    uniform2f: ReturnType<typeof vi.fn>;
     blitFramebuffer: ReturnType<typeof vi.fn>;
     deleteTexture: ReturnType<typeof vi.fn>;
     deleteFramebuffer: ReturnType<typeof vi.fn>;

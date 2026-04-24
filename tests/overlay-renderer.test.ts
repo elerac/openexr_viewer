@@ -14,7 +14,7 @@ describe('overlay renderer', () => {
     const layer = createDisplayLayer(1);
 
     renderer.resize(800, 400);
-    renderer.setDisplaySelectionContext(1000, 500, layer, createChannelRgbSelection('R', 'G', 'B'));
+    renderer.setDisplaySelectionContext(1000, 500, layer, createChannelRgbSelection('R', 'G', 'B'), 'rgb');
     renderer.render(createViewerState({
       viewerMode: 'panorama',
       panoramaHfovDeg: 2,
@@ -29,7 +29,7 @@ describe('overlay renderer', () => {
     const layer = createDisplayLayer(2);
 
     renderer.resize(128, 64);
-    renderer.setDisplaySelectionContext(2, 1, layer, createChannelRgbSelection('R', 'G', 'B'));
+    renderer.setDisplaySelectionContext(2, 1, layer, createChannelRgbSelection('R', 'G', 'B'), 'rgb');
     renderer.render(createViewerState({
       viewerMode: 'image',
       zoom: 24,
@@ -48,7 +48,7 @@ describe('overlay renderer', () => {
     const layer = createDisplayLayer(2);
 
     renderer.resize(128, 64);
-    renderer.setDisplaySelectionContext(2, 1, layer, createChannelRgbSelection('R', 'G', 'B'));
+    renderer.setDisplaySelectionContext(2, 1, layer, createChannelRgbSelection('R', 'G', 'B'), 'rgb');
     renderer.render(createViewerState({
       viewerMode: 'image',
       zoom: 28,
@@ -67,7 +67,7 @@ describe('overlay renderer', () => {
     const layer = createDisplayLayer(2);
 
     renderer.resize(128, 64);
-    renderer.setDisplaySelectionContext(2, 1, layer, createChannelRgbSelection('R', 'G', 'B'));
+    renderer.setDisplaySelectionContext(2, 1, layer, createChannelRgbSelection('R', 'G', 'B'), 'rgb');
     renderer.render(createViewerState({
       viewerMode: 'image',
       zoom: 32,

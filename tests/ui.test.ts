@@ -1932,7 +1932,7 @@ describe('opened files actions', () => {
     expect(firstRow.childElementCount).toBe(4);
     expect(actionLabels).toEqual(['Reload beauty.exr', 'Close beauty.exr']);
     expect(openedFilesList.querySelectorAll('button')).toHaveLength(2);
-    expect(document.querySelector('[aria-label=\"Pin cache for beauty.exr\"]')).toBeNull();
+    expect(document.querySelector('[aria-label="Pin cache for beauty.exr"]')).toBeNull();
   });
 });
 
@@ -3229,6 +3229,7 @@ function installFullscreenApiMock(options: { requestBehavior?: 'resolve' | 'reje
       throw new Error('Fullscreen request failed.');
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     fullscreenElement = this;
     document.dispatchEvent(new Event('fullscreenchange'));
   });
@@ -3284,7 +3285,7 @@ function createUiCallbacksBase() {
       width: number;
       height: number;
       orientation: 'horizontal' | 'vertical';
-    }) => createPreviewPixels(),
+    }, _signal: AbortSignal) => createPreviewPixels(),
     onFileSelected: () => {},
     onFolderSelected: () => {},
     onFilesDropped: () => {},
@@ -3358,45 +3359,11 @@ function createHandleDropEvent(type: 'drop' | 'dragover', items: DataTransferIte
 }
 
 function createFileList(files: File[]): FileList {
-  return {
-    length: files.length,
+  const indexedFiles = Object.fromEntries(files.map((file, index) => [String(index), file]));
+  return Object.assign(indexedFiles, {
     item: (index: number) => files[index] ?? null,
-    ...files
-  } as unknown as FileList;
-}
-
-function createFileHandle(file: File): FileSystemFileHandle {
-  return {
-    kind: 'file',
-    name: file.name,
-    getFile: async () => file
-  } as unknown as FileSystemFileHandle;
-}
-
-function createDirectoryHandle(
-  name: string,
-  entries: Array<FileSystemFileHandle | FileSystemDirectoryHandle>
-): FileSystemDirectoryHandle {
-  return {
-    kind: 'directory',
-    name,
-    values: async function* () {
-      for (const entry of entries) {
-        yield entry;
-      }
-    }
-  } as unknown as FileSystemDirectoryHandle;
-}
-
-function createDirectoryDropItem(
-  name: string,
-  entries: Array<FileSystemFileHandle | FileSystemDirectoryHandle>
-): DataTransferItem {
-  const handle = createDirectoryHandle(name, entries);
-  return {
-    kind: 'file',
-    getAsFileSystemHandle: () => Promise.resolve(handle)
-  } as unknown as DataTransferItem;
+    length: files.length
+  }) as unknown as FileList;
 }
 
 interface LegacyMockFileEntry {

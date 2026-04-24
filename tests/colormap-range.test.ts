@@ -11,7 +11,6 @@ import { buildDisplayTexture, computeDisplaySelectionLuminanceRange } from '../s
 import { DisplaySelection } from '../src/types';
 import {
   createChannelRgbSelection,
-  createLayer,
   createLayerFromChannels,
   createStokesSelection
 } from './helpers/state-fixtures';

@@ -4,7 +4,13 @@ import { handleExportColormap, handleExportImage } from './export-actions';
 import { ViewerAppCore } from '../viewer-app-core';
 import type { DisplayController } from '../../controllers/display-controller';
 import type { SessionController } from '../../controllers/session-controller';
-import type { ExportColormapRequest, ExportImageRequest, OpenedImageDropPlacement, PanoramaKeyboardOrbitInput } from '../../types';
+import type {
+  ExportColormapPreviewRequest,
+  ExportColormapRequest,
+  ExportImageRequest,
+  OpenedImageDropPlacement,
+  PanoramaKeyboardOrbitInput
+} from '../../types';
 import type { RenderCacheService } from '../../services/render-cache-service';
 import type { WebGlExrRenderer } from '../../renderer';
 
@@ -20,7 +26,7 @@ interface CreateViewerUiDependencies {
   getRenderer: () => WebGlExrRenderer;
   getInteraction: () => InteractionInputBridge | null;
   resolveColormapExportPixels: (
-    request: ExportColormapRequest,
+    request: ExportColormapPreviewRequest | ExportColormapRequest,
     options?: { signal?: AbortSignal; previewMaxLongestEdge?: number }
   ) => Promise<{ width: number; height: number; data: Uint8ClampedArray }>;
   isDisposed: () => boolean;
