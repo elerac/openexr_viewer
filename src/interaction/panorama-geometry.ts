@@ -1,13 +1,16 @@
 import type { ImagePixel, ViewerState, ViewportInfo } from '../types';
 
 export const MIN_PANORAMA_HFOV_DEG = 1;
-export const MAX_PANORAMA_HFOV_DEG = 120;
+export const MAX_PANORAMA_HFOV_DEG = 180;
 export const DEFAULT_PANORAMA_HFOV_DEG = 100;
 export const MAX_PANORAMA_PITCH_DEG = 89;
 
+const PANORAMA_PERSPECTIVE_HFOV_LIMIT_DEG = 120;
 const PANORAMA_MAX_PROJECTED_ASPECT_RATIO = 4;
 const PANORAMA_MIN_SEED_SEARCH_RADIUS = 4;
 const PANORAMA_MAX_SEED_SEARCH_RADIUS = 128;
+const PANORAMA_WIDE_ANGLE_INVERSION_STEPS = 32;
+const PANORAMA_MAX_CAMERA_THETA_RAD = Math.PI * 0.5;
 const RADIANS_PER_DEGREE = Math.PI / 180;
 
 type PanoramaCameraState = Pick<
@@ -43,9 +46,10 @@ export function getPanoramaVerticalFovDeg(
     return clampPanoramaHfov(hfovDeg);
   }
 
-  const aspect = viewport.width / viewport.height;
-  const halfHorizontal = Math.tan((clampPanoramaHfov(hfovDeg) * RADIANS_PER_DEGREE) * 0.5);
-  return Math.atan(halfHorizontal / Math.max(aspect, Number.EPSILON)) * 2 / RADIANS_PER_DEGREE;
+  const projectionDiameter = getPanoramaProjectionDiameter(viewport, hfovDeg);
+  const verticalEdgeRadius = viewport.height / Math.max(projectionDiameter, Number.EPSILON);
+  const verticalTheta = panoramaScreenRadiusToTheta(verticalEdgeRadius, hfovDeg);
+  return Math.min(PANORAMA_MAX_CAMERA_THETA_RAD, verticalTheta) * 2 / RADIANS_PER_DEGREE;
 }
 
 export function orbitPanorama(
@@ -63,8 +67,9 @@ export function orbitPanorama(
   }
 
   const verticalFovDeg = getPanoramaVerticalFovDeg(state.panoramaHfovDeg, viewport);
+  const projectionDiameter = getPanoramaProjectionDiameter(viewport, state.panoramaHfovDeg);
   const nextYawDeg = normalizePanoramaYaw(
-    state.panoramaYawDeg - (deltaScreenX / viewport.width) * state.panoramaHfovDeg
+    state.panoramaYawDeg - (deltaScreenX / projectionDiameter) * state.panoramaHfovDeg
   );
   const nextPitchDeg = clampPanoramaPitch(
     state.panoramaPitchDeg - (deltaScreenY / viewport.height) * verticalFovDeg
@@ -103,6 +108,10 @@ export function screenToPanoramaPixel(
   }
 
   const ray = screenToPanoramaDirection(screenX, screenY, state, viewport);
+  if (!ray) {
+    return null;
+  }
+
   const longitude = Math.atan2(ray.x, ray.z);
   const latitude = Math.asin(clamp(ray.y, -1, 1));
   const u = fract(0.5 + longitude / (2 * Math.PI));
@@ -181,17 +190,27 @@ function screenToPanoramaDirection(
   screenY: number,
   state: PanoramaCameraState,
   viewport: ViewportInfo
-): { x: number; y: number; z: number } {
-  const xNdc = (screenX / viewport.width) * 2 - 1;
+): { x: number; y: number; z: number } | null {
+  const projectionDiameter = getPanoramaProjectionDiameter(viewport, state.panoramaHfovDeg);
+  const halfProjectionDiameter = projectionDiameter * 0.5;
+  const radialX = (screenX - viewport.width * 0.5) / halfProjectionDiameter;
   // Match the fragment shader's top-origin screen-space Y so probe hits and rendering sample the same texel.
-  const yNdc = (screenY / viewport.height) * 2 - 1;
-  const halfHorizontal = Math.tan((clampPanoramaHfov(state.panoramaHfovDeg) * RADIANS_PER_DEGREE) * 0.5);
-  const halfVertical = Math.tan((getPanoramaVerticalFovDeg(state.panoramaHfovDeg, viewport) * RADIANS_PER_DEGREE) * 0.5);
-  const ray = normalize3({
-    x: xNdc * halfHorizontal,
-    y: yNdc * halfVertical,
-    z: 1
-  });
+  const radialY = (screenY - viewport.height * 0.5) / halfProjectionDiameter;
+  const radius = Math.hypot(radialX, radialY);
+  const theta = panoramaScreenRadiusToTheta(radius, state.panoramaHfovDeg);
+  if (theta > PANORAMA_MAX_CAMERA_THETA_RAD + Number.EPSILON) {
+    return null;
+  }
+
+  const sinTheta = Math.sin(theta);
+  const cosTheta = Math.cos(theta);
+  const ray = radius <= Number.EPSILON
+    ? { x: 0, y: 0, z: 1 }
+    : {
+        x: (radialX / radius) * sinTheta,
+        y: (radialY / radius) * sinTheta,
+        z: cosTheta
+      };
   const pitched = rotatePitch(ray, state.panoramaPitchDeg * RADIANS_PER_DEGREE);
   return rotateYaw(pitched, state.panoramaYawDeg * RADIANS_PER_DEGREE);
 }
@@ -227,22 +246,129 @@ function projectPanoramaDirectionToScreen(
   const yawRad = state.panoramaYawDeg * RADIANS_PER_DEGREE;
   const pitchRad = state.panoramaPitchDeg * RADIANS_PER_DEGREE;
   const cameraDirection = rotatePitch(rotateYaw(direction, -yawRad), -pitchRad);
-  if (cameraDirection.z <= Number.EPSILON) {
+  if (cameraDirection.z < -Number.EPSILON) {
     return null;
   }
 
-  const halfHorizontal = Math.tan((clampPanoramaHfov(state.panoramaHfovDeg) * RADIANS_PER_DEGREE) * 0.5);
-  const halfVertical = Math.tan((getPanoramaVerticalFovDeg(state.panoramaHfovDeg, viewport) * RADIANS_PER_DEGREE) * 0.5);
-  const xNdc = cameraDirection.x / (cameraDirection.z * halfHorizontal);
-  const yNdc = cameraDirection.y / (cameraDirection.z * halfVertical);
-  if (!Number.isFinite(xNdc) || !Number.isFinite(yNdc) || Math.abs(xNdc) > 1 || Math.abs(yNdc) > 1) {
+  const theta = Math.acos(clamp(cameraDirection.z, -1, 1));
+  const radius = panoramaThetaToScreenRadius(theta, state.panoramaHfovDeg);
+  if (radius === null) {
+    return null;
+  }
+
+  const projectionDiameter = getPanoramaProjectionDiameter(viewport, state.panoramaHfovDeg);
+  const halfProjectionDiameter = projectionDiameter * 0.5;
+  const screenRadialLength = Math.hypot(cameraDirection.x, cameraDirection.y);
+  const radialX = screenRadialLength <= Number.EPSILON
+    ? 0
+    : (cameraDirection.x / screenRadialLength) * radius;
+  const radialY = screenRadialLength <= Number.EPSILON
+    ? 0
+    : (cameraDirection.y / screenRadialLength) * radius;
+  const screenX = viewport.width * 0.5 + radialX * halfProjectionDiameter;
+  const screenY = viewport.height * 0.5 + radialY * halfProjectionDiameter;
+  if (
+    !Number.isFinite(screenX) ||
+    !Number.isFinite(screenY) ||
+    screenX < 0 ||
+    screenX > viewport.width ||
+    screenY < 0 ||
+    screenY > viewport.height
+  ) {
     return null;
   }
 
   return {
-    x: (xNdc + 1) * 0.5 * viewport.width,
-    y: (yNdc + 1) * 0.5 * viewport.height
+    x: screenX,
+    y: screenY
   };
+}
+
+export function getPanoramaProjectionDiameter(viewport: ViewportInfo, hfovDeg: number): number {
+  if (viewport.width <= 0 || viewport.height <= 0) {
+    return 0;
+  }
+
+  return lerp(
+    viewport.width,
+    Math.min(viewport.width, viewport.height),
+    getPanoramaWideAngleBlend(hfovDeg)
+  );
+}
+
+function panoramaScreenRadiusToTheta(radius: number, hfovDeg: number): number {
+  const safeRadius = Math.max(0, radius);
+  const clampedHfov = clampPanoramaHfov(hfovDeg);
+  const halfFovRad = clampedHfov * RADIANS_PER_DEGREE * 0.5;
+  if (clampedHfov <= PANORAMA_PERSPECTIVE_HFOV_LIMIT_DEG) {
+    return Math.atan(safeRadius * Math.tan(halfFovRad));
+  }
+
+  const blend = getPanoramaWideAngleBlend(clampedHfov);
+  if (blend >= 1) {
+    return safeRadius * halfFovRad;
+  }
+
+  const perspectiveTheta = Math.atan(safeRadius * Math.tan(halfFovRad));
+  const equidistantTheta = safeRadius * halfFovRad;
+  return lerp(perspectiveTheta, equidistantTheta, blend);
+}
+
+function panoramaThetaToScreenRadius(theta: number, hfovDeg: number): number | null {
+  if (!Number.isFinite(theta) || theta < 0 || theta > PANORAMA_MAX_CAMERA_THETA_RAD + Number.EPSILON) {
+    return null;
+  }
+
+  const clampedTheta = Math.min(PANORAMA_MAX_CAMERA_THETA_RAD, Math.max(0, theta));
+  const clampedHfov = clampPanoramaHfov(hfovDeg);
+  const halfFovRad = clampedHfov * RADIANS_PER_DEGREE * 0.5;
+  if (clampedHfov <= PANORAMA_PERSPECTIVE_HFOV_LIMIT_DEG) {
+    const tanHalfFov = Math.tan(halfFovRad);
+    if (tanHalfFov <= Number.EPSILON) {
+      return null;
+    }
+
+    return Math.tan(clampedTheta) / tanHalfFov;
+  }
+
+  const blend = getPanoramaWideAngleBlend(clampedHfov);
+  if (blend >= 1) {
+    return halfFovRad <= Number.EPSILON ? null : clampedTheta / halfFovRad;
+  }
+
+  let low = 0;
+  let high = 1;
+  while (
+    panoramaScreenRadiusToTheta(high, clampedHfov) < clampedTheta &&
+    high < Number.MAX_SAFE_INTEGER / 2
+  ) {
+    high *= 2;
+  }
+
+  for (let step = 0; step < PANORAMA_WIDE_ANGLE_INVERSION_STEPS; step += 1) {
+    const mid = (low + high) * 0.5;
+    if (panoramaScreenRadiusToTheta(mid, clampedHfov) < clampedTheta) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  return (low + high) * 0.5;
+}
+
+function getPanoramaWideAngleBlend(hfovDeg: number): number {
+  const t = clamp(
+    (hfovDeg - PANORAMA_PERSPECTIVE_HFOV_LIMIT_DEG) /
+      (MAX_PANORAMA_HFOV_DEG - PANORAMA_PERSPECTIVE_HFOV_LIMIT_DEG),
+    0,
+    1
+  );
+  return t * t * (3 - 2 * t);
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
 }
 
 interface PanoramaScreenSample {
@@ -679,19 +805,6 @@ function rotateYaw(
     x: vector.x * cosAngle + vector.z * sinAngle,
     y: vector.y,
     z: -vector.x * sinAngle + vector.z * cosAngle
-  };
-}
-
-function normalize3(vector: { x: number; y: number; z: number }): { x: number; y: number; z: number } {
-  const length = Math.hypot(vector.x, vector.y, vector.z);
-  if (!Number.isFinite(length) || length <= Number.EPSILON) {
-    return { x: 0, y: 0, z: 1 };
-  }
-
-  return {
-    x: vector.x / length,
-    y: vector.y / length,
-    z: vector.z / length
   };
 }
 

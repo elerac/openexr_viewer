@@ -457,6 +457,33 @@ vec3 rotateYaw(vec3 vector, float angleRad) {
   );
 }
 
+float panoramaWideAngleBlend(float hfovDeg) {
+  float t = clamp((hfovDeg - 120.0) / 60.0, 0.0, 1.0);
+  return t * t * (3.0 - 2.0 * t);
+}
+
+float panoramaProjectionDiameter(vec2 viewport, float hfovDeg) {
+  return mix(viewport.x, min(viewport.x, viewport.y), panoramaWideAngleBlend(hfovDeg));
+}
+
+float panoramaScreenRadiusToTheta(float radius, float hfovDeg) {
+  float safeRadius = max(radius, 0.0);
+  float clampedHfov = clamp(hfovDeg, 1.0, 180.0);
+  float halfFovRad = clampedHfov * DEG_TO_RAD * 0.5;
+  if (clampedHfov <= 120.0) {
+    return atan(safeRadius * tan(halfFovRad));
+  }
+
+  float blend = panoramaWideAngleBlend(clampedHfov);
+  if (blend >= 1.0) {
+    return safeRadius * halfFovRad;
+  }
+
+  float perspectiveTheta = atan(safeRadius * tan(halfFovRad));
+  float equidistantTheta = safeRadius * halfFovRad;
+  return mix(perspectiveTheta, equidistantTheta, blend);
+}
+
 void main() {
   vec2 screen = vec2(gl_FragCoord.x - 0.5, uViewport.y - gl_FragCoord.y - 0.5);
 
@@ -465,13 +492,18 @@ void main() {
     return;
   }
 
-  vec2 ndc = vec2(
-    (gl_FragCoord.x / uViewport.x) * 2.0 - 1.0,
-    ((uViewport.y - gl_FragCoord.y) / uViewport.y) * 2.0 - 1.0
-  );
-  float halfHorizontal = tan(clamp(uPanoramaHfovDeg, 1.0, 120.0) * DEG_TO_RAD * 0.5);
-  float halfVertical = halfHorizontal / max(uViewport.x / max(uViewport.y, 1.0), 1e-6);
-  vec3 ray = normalize(vec3(ndc.x * halfHorizontal, ndc.y * halfVertical, 1.0));
+  vec2 samplePosition = vec2(gl_FragCoord.x, uViewport.y - gl_FragCoord.y);
+  float projectionDiameter = max(panoramaProjectionDiameter(uViewport, uPanoramaHfovDeg), 1e-6);
+  vec2 radial = (samplePosition - uViewport * 0.5) / (projectionDiameter * 0.5);
+  float radius = length(radial);
+  float theta = panoramaScreenRadiusToTheta(radius, uPanoramaHfovDeg);
+  if (theta > PI * 0.5 + 1e-6) {
+    outColor = backgroundColor(screen);
+    return;
+  }
+
+  vec2 direction = radius <= 1e-6 ? vec2(0.0) : radial / radius;
+  vec3 ray = vec3(direction * sin(theta), cos(theta));
   ray = rotatePitch(ray, uPanoramaPitchDeg * DEG_TO_RAD);
   ray = rotateYaw(ray, uPanoramaYawDeg * DEG_TO_RAD);
 

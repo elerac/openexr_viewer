@@ -11,6 +11,7 @@ import {
 import {
   clampPanoramaHfov,
   clampPanoramaPitch,
+  getPanoramaVerticalFovDeg,
   normalizePanoramaYaw,
   orbitPanorama,
   projectPanoramaPixelToScreen,
@@ -115,6 +116,57 @@ describe('interaction math', () => {
     ).toEqual({ ix: 300, iy: 100 });
   });
 
+  it('maps max panorama hfov to a square-viewport hemisphere', () => {
+    const viewport = { width: 100, height: 100 };
+    const panoramaState = {
+      ...state,
+      viewerMode: 'panorama' as const,
+      panoramaYawDeg: 0,
+      panoramaPitchDeg: 0,
+      panoramaHfovDeg: 180
+    };
+
+    expect(screenToPanoramaPixel(50, 50, panoramaState, viewport, 360, 180)).toEqual({ ix: 180, iy: 90 });
+    expect(screenToPanoramaPixel(0, 50, panoramaState, viewport, 360, 180)).toEqual({ ix: 90, iy: 90 });
+    expect(screenToPanoramaPixel(100, 50, panoramaState, viewport, 360, 180)).toEqual({ ix: 270, iy: 90 });
+    expect(screenToPanoramaPixel(50, 0, panoramaState, viewport, 360, 180)).toEqual({ ix: 180, iy: 0 });
+    expect(screenToPanoramaPixel(50, 100, panoramaState, viewport, 360, 180)).toEqual({ ix: 180, iy: 179 });
+    expect(screenToPanoramaPixel(0, 0, panoramaState, viewport, 360, 180)).toBeNull();
+    expect(screenToPanoramaPixel(100, 100, panoramaState, viewport, 360, 180)).toBeNull();
+    expect(getPanoramaVerticalFovDeg(180, viewport)).toBe(180);
+  });
+
+  it('fits max panorama hfov to the visible height on a wide viewport', () => {
+    const viewport = { width: 160, height: 90 };
+    const panoramaState = {
+      ...state,
+      viewerMode: 'panorama' as const,
+      panoramaYawDeg: 0,
+      panoramaPitchDeg: 0,
+      panoramaHfovDeg: 180
+    };
+
+    expect(screenToPanoramaPixel(80, 45, panoramaState, viewport, 360, 180)).toEqual({ ix: 180, iy: 90 });
+    expect(screenToPanoramaPixel(35, 45, panoramaState, viewport, 360, 180)).toEqual({ ix: 90, iy: 90 });
+    expect(screenToPanoramaPixel(125, 45, panoramaState, viewport, 360, 180)).toEqual({ ix: 270, iy: 90 });
+    expect(screenToPanoramaPixel(80, 0, panoramaState, viewport, 360, 180)).toEqual({ ix: 180, iy: 0 });
+    expect(screenToPanoramaPixel(80, 90, panoramaState, viewport, 360, 180)).toEqual({ ix: 180, iy: 179 });
+    expect(screenToPanoramaPixel(0, 45, panoramaState, viewport, 360, 180)).toBeNull();
+    expect(screenToPanoramaPixel(160, 45, panoramaState, viewport, 360, 180)).toBeNull();
+    expect(screenToPanoramaPixel(0, 0, panoramaState, viewport, 360, 180)).toBeNull();
+    expect(screenToPanoramaPixel(160, 90, panoramaState, viewport, 360, 180)).toBeNull();
+    expect(getPanoramaVerticalFovDeg(180, viewport)).toBe(180);
+  });
+
+  it('keeps panorama hfov at or below 120 degrees fit to width on wide viewports', () => {
+    const viewport = { width: 160, height: 90 };
+    const expectedVerticalFovDeg = Math.atan(
+      Math.tan(120 * Math.PI / 180 * 0.5) * (viewport.height / viewport.width)
+    ) * 2 / (Math.PI / 180);
+
+    expect(getPanoramaVerticalFovDeg(120, viewport)).toBeCloseTo(expectedVerticalFovDeg);
+  });
+
   it('projects the center panorama pixel near the viewport center', () => {
     const viewport = { width: 800, height: 400 };
     const projected = projectPanoramaPixelToScreen(
@@ -193,6 +245,46 @@ describe('interaction math', () => {
         500
       )
     ).toEqual(pixel);
+  });
+
+  it('roundtrips visible wide-angle panorama projection centers', () => {
+    const viewport = { width: 360, height: 180 };
+    const panoramaState = {
+      ...state,
+      viewerMode: 'panorama' as const,
+      panoramaYawDeg: 0,
+      panoramaPitchDeg: 0,
+      panoramaHfovDeg: 180,
+      displaySelection: createChannelMonoSelection('Y')
+    };
+    const pixel = screenToPanoramaPixel(225, 90, panoramaState, viewport, 360, 180);
+    const projected = pixel
+      ? projectPanoramaPixelToScreen(pixel.ix, pixel.iy, panoramaState, viewport, 360, 180)
+      : null;
+
+    expect(pixel).not.toBeNull();
+    expect(projected).not.toBeNull();
+    expect(
+      screenToPanoramaPixel(
+        projected?.centerX ?? Number.NaN,
+        projected?.centerY ?? Number.NaN,
+        panoramaState,
+        viewport,
+        360,
+        180
+      )
+    ).toEqual(pixel);
+  });
+
+  it('does not project panorama texels behind the wide-angle camera', () => {
+    const viewport = { width: 360, height: 180 };
+    const camera = {
+      panoramaYawDeg: 0,
+      panoramaPitchDeg: 0,
+      panoramaHfovDeg: 180
+    };
+
+    expect(projectPanoramaPixelToScreen(315, 90, camera, viewport, 360, 180)).toBeNull();
   });
 
   it('moves fixed panorama texels upward as positive pitch changes increase', () => {
@@ -347,8 +439,8 @@ describe('interaction math', () => {
     );
 
     expect(minZoom.panoramaHfovDeg).toBe(1);
-    expect(maxZoom.panoramaHfovDeg).toBe(120);
+    expect(maxZoom.panoramaHfovDeg).toBe(180);
     expect(clampPanoramaHfov(0.1)).toBe(1);
-    expect(clampPanoramaHfov(999)).toBe(120);
+    expect(clampPanoramaHfov(999)).toBe(180);
   });
 });

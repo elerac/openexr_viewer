@@ -5,6 +5,7 @@ import type {
   ViewportInfo
 } from '../types';
 import {
+  getPanoramaProjectionDiameter,
   getPanoramaVerticalFovDeg,
   orbitPanorama,
   zoomPanorama
@@ -214,10 +215,11 @@ function getPanoramaKeyboardOrbitStepSizes(
   viewportStepRatio: number
 ): { horizontalStep: number; verticalStep: number } {
   const verticalFovDeg = getPanoramaVerticalFovDeg(horizontalFovDeg, viewport);
+  const projectionDiameter = getPanoramaProjectionDiameter(viewport, horizontalFovDeg);
   return {
     horizontalStep: horizontalFovDeg === 0
       ? 0
-      : viewport.width * viewportStepRatio * (verticalFovDeg / horizontalFovDeg),
+      : projectionDiameter * viewportStepRatio * (verticalFovDeg / horizontalFovDeg),
     verticalStep: viewport.height * viewportStepRatio
   };
 }
