@@ -13,6 +13,10 @@ import {
 } from '../src/ui/layout-split-controller';
 import { buildPartLayerItemsFromChannelNames } from '../src/ui/layer-panel';
 import {
+  buildExportBatchChannelFilenameToken,
+  buildExportBatchOutputFilename
+} from '../src/ui/export-image-batch-dialog';
+import {
   ProgressiveLoadingOverlayDisclosure,
   type LoadingOverlayPhase
 } from '../src/ui/loading-overlay-disclosure';
@@ -1047,7 +1051,15 @@ describe('view menu', () => {
     installUiFixture();
 
     const labels = Array.from(document.querySelectorAll('#file-menu .app-menu-item')).map((item) => item.textContent?.trim());
-    expect(labels).toEqual(['Open...', 'Open Folder...', 'Export...', 'Export Colormap...', 'Reload All', 'Close All']);
+    expect(labels).toEqual([
+      'Open...',
+      'Open Folder...',
+      'Export...',
+      'Export Batch...',
+      'Export Colormap...',
+      'Reload All',
+      'Close All'
+    ]);
   });
 
   it('renders the top menu tabs in file-view-window-gallery-settings order', () => {
@@ -1765,6 +1777,501 @@ describe('view menu', () => {
     expect(error.classList.contains('hidden')).toBe(false);
     expect(submitButton.disabled).toBe(false);
     expect(cancelButton.disabled).toBe(false);
+  });
+
+  it('opens batch export as a separate dialog and submits selected file-channel cells', async () => {
+    installUiFixture();
+
+    const onExportImageBatch = vi.fn<(_: {
+      archiveFilename: string;
+      entries: Array<{ outputFilename: string }>;
+      format: 'png-zip';
+    }, _signal: AbortSignal) => Promise<void>>(async () => undefined);
+    const onResolveExportImageBatchPreview = vi.fn<(_request: {
+      sessionId: string;
+      activeLayer: number;
+      displaySelection: unknown;
+      channelLabel: string;
+    }, _signal: AbortSignal) => Promise<ReturnType<typeof createPreviewPixels>>>(async () => createPreviewPixels());
+    const ui = new ViewerUi(createUiCallbacks({
+      onExportImageBatch,
+      onResolveExportImageBatchPreview
+    }));
+    const rgbSelection = {
+      kind: 'channelRgb' as const,
+      r: 'R',
+      g: 'G',
+      b: 'B',
+      alpha: null
+    };
+    const depthSelection = {
+      kind: 'channelMono' as const,
+      channel: 'Z',
+      alpha: null
+    };
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'beauty.exr' },
+      { id: 'session-2', label: 'depth.exr' }
+    ], 'session-1');
+    ui.setExportTarget({ filename: 'beauty.png' });
+    ui.setExportBatchTarget({
+      archiveFilename: 'openexr-export.zip',
+      activeSessionId: 'session-1',
+      files: [
+        {
+          sessionId: 'session-1',
+          filename: 'beauty.exr',
+          label: 'beauty.exr',
+          sourcePath: 'shots/beauty.exr',
+          thumbnailDataUrl: null,
+          activeLayer: 0,
+          displaySelection: rgbSelection,
+          channels: [
+            {
+              value: 'group:',
+              label: 'RGB',
+              selectionKey: 'channelRgb:R:G:B:',
+              selection: rgbSelection,
+              swatches: ['#ff6570', '#6bd66f', '#51aefe'],
+              mergedOrder: 0,
+              splitOrder: 0
+            },
+            {
+              value: 'channel:Z',
+              label: 'Z',
+              selectionKey: 'channelMono:Z:',
+              selection: depthSelection,
+              swatches: ['#8f83e6'],
+              mergedOrder: 1,
+              splitOrder: 1
+            }
+          ]
+        },
+        {
+          sessionId: 'session-2',
+          filename: 'depth.exr',
+          label: 'depth.exr',
+          sourcePath: 'shots/aovs/depth.exr',
+          thumbnailDataUrl: null,
+          activeLayer: 0,
+          displaySelection: depthSelection,
+          channels: [
+            {
+              value: 'channel:Z',
+              label: 'Z',
+              selectionKey: 'channelMono:Z:',
+              selection: depthSelection,
+              swatches: ['#8f83e6'],
+              mergedOrder: 0,
+              splitOrder: 0
+            }
+          ]
+        }
+      ]
+    });
+
+    const singleExportDialog = document.getElementById('export-dialog-backdrop') as HTMLDivElement;
+    const batchButton = document.getElementById('export-image-batch-button') as HTMLButtonElement;
+    const batchDialog = document.getElementById('export-batch-dialog-backdrop') as HTMLDivElement;
+    const archiveInput = document.getElementById('export-batch-archive-filename-input') as HTMLInputElement;
+    const submitButton = document.getElementById('export-batch-dialog-submit-button') as HTMLButtonElement;
+
+    batchButton.click();
+
+    expect(singleExportDialog.classList.contains('hidden')).toBe(true);
+    expect(batchDialog.classList.contains('hidden')).toBe(false);
+    expect(archiveInput.value).toBe('openexr-export.zip');
+    expect(document.querySelectorAll('.export-batch-cell-disabled')).toHaveLength(1);
+    expect(document.querySelectorAll('.export-batch-cell-swatches')).toHaveLength(0);
+    expect(document.querySelectorAll('.export-batch-cell-preview')).toHaveLength(3);
+
+    await flushBatchPreviewQueue();
+
+    expect(document.querySelectorAll('.export-batch-cell-preview-image')).toHaveLength(3);
+    expect(onResolveExportImageBatchPreview).toHaveBeenCalledTimes(3);
+    expect(onResolveExportImageBatchPreview.mock.calls.map(([request]) => ({
+      sessionId: request.sessionId,
+      activeLayer: request.activeLayer,
+      channelLabel: request.channelLabel,
+      displaySelection: request.displaySelection
+    }))).toEqual([
+      {
+        sessionId: 'session-1',
+        activeLayer: 0,
+        channelLabel: 'RGB',
+        displaySelection: rgbSelection
+      },
+      {
+        sessionId: 'session-1',
+        activeLayer: 0,
+        channelLabel: 'Z',
+        displaySelection: depthSelection
+      },
+      {
+        sessionId: 'session-2',
+        activeLayer: 0,
+        channelLabel: 'Z',
+        displaySelection: depthSelection
+      }
+    ]);
+
+    const depthRowToggle = document.querySelector<HTMLInputElement>(
+      'input[data-batch-toggle="row"][data-session-id="session-2"]'
+    );
+    expect(depthRowToggle).not.toBeNull();
+    depthRowToggle!.click();
+
+    archiveInput.value = 'selected-frames';
+    submitButton.click();
+    await flushMicrotasks();
+
+    expect(onExportImageBatch).toHaveBeenCalledTimes(1);
+    const [request, signal] = onExportImageBatch.mock.calls[0] ?? [];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(request).toMatchObject({
+      archiveFilename: 'selected-frames.zip',
+      format: 'png-zip'
+    });
+    expect(request?.entries.map((entry) => entry.outputFilename)).toEqual([
+      'shots/beauty.RGB.png',
+      'shots/aovs/depth.Z.png'
+    ]);
+    expect(batchDialog.classList.contains('hidden')).toBe(true);
+  });
+
+  it('renders wide and tall batch export thumbnails inside fit-to-frame preview elements', async () => {
+    installUiFixture();
+
+    const onResolveExportImageBatchPreview = vi
+      .fn<(_request: {
+        sessionId: string;
+        activeLayer: number;
+        displaySelection: unknown;
+        channelLabel: string;
+      }, _signal: AbortSignal) => Promise<ReturnType<typeof createPreviewPixels>>>()
+      .mockResolvedValueOnce(createPreviewPixels(96, 12))
+      .mockResolvedValueOnce(createPreviewPixels(12, 96));
+    const ui = new ViewerUi(createUiCallbacks({ onResolveExportImageBatchPreview }));
+    const rgbSelection = {
+      kind: 'channelRgb' as const,
+      r: 'R',
+      g: 'G',
+      b: 'B',
+      alpha: null
+    };
+    const depthSelection = {
+      kind: 'channelMono' as const,
+      channel: 'Z',
+      alpha: null
+    };
+
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'beauty.exr' }], 'session-1');
+    ui.setExportBatchTarget({
+      archiveFilename: 'openexr-export.zip',
+      activeSessionId: 'session-1',
+      files: [{
+        sessionId: 'session-1',
+        filename: 'beauty.exr',
+        label: 'beauty.exr',
+        sourcePath: 'beauty.exr',
+        thumbnailDataUrl: 'data:image/png;base64,filethumbnail',
+        activeLayer: 0,
+        displaySelection: rgbSelection,
+        channels: [
+          {
+            value: 'group:',
+            label: 'RGB',
+            selectionKey: 'channelRgb:R:G:B:',
+            selection: rgbSelection,
+            swatches: ['#ff6570', '#6bd66f', '#51aefe'],
+            mergedOrder: 0,
+            splitOrder: 0
+          },
+          {
+            value: 'channel:Z',
+            label: 'Z',
+            selectionKey: 'channelMono:Z:',
+            selection: depthSelection,
+            swatches: ['#8f83e6'],
+            mergedOrder: 1,
+            splitOrder: 1
+          }
+        ]
+      }]
+    });
+
+    (document.getElementById('export-image-batch-button') as HTMLButtonElement).click();
+    await flushBatchPreviewQueue();
+
+    const previewImages = Array.from(document.querySelectorAll<HTMLImageElement>('.export-batch-cell-preview-image'));
+    expect(previewImages).toHaveLength(2);
+    expect(previewImages.every((image) => image.closest('.export-batch-cell-preview'))).toBe(true);
+    expect(document.querySelector('.export-batch-file-toggle .opened-file-thumbnail')).toBeNull();
+
+    const previewImageRule = readStyleRule('.export-batch-cell-preview-image');
+    expect(previewImageRule).toContain('width: 100%;');
+    expect(previewImageRule).toContain('height: 100%;');
+    expect(previewImageRule).toContain('object-fit: contain;');
+    expect(previewImageRule).toContain('object-position: center;');
+    expect(previewImageRule).not.toContain('object-fit: cover;');
+  });
+
+  it('opens batch export in merged mode and submits the merged RGB default', async () => {
+    installUiFixture();
+
+    const onExportImageBatch = vi.fn<(_: {
+      archiveFilename: string;
+      entries: Array<{ outputFilename: string }>;
+      format: 'png-zip';
+    }, _signal: AbortSignal) => Promise<void>>(async () => undefined);
+    const ui = new ViewerUi(createUiCallbacks({ onExportImageBatch }));
+    const rgbSelection = {
+      kind: 'channelRgb' as const,
+      r: 'R',
+      g: 'G',
+      b: 'B',
+      alpha: null
+    };
+
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'beauty.exr' }], 'session-1');
+    ui.setExportBatchTarget({
+      archiveFilename: 'openexr-export.zip',
+      activeSessionId: 'session-1',
+      files: [{
+        sessionId: 'session-1',
+        filename: 'beauty.exr',
+        label: 'beauty.exr',
+        sourcePath: 'beauty.exr',
+        thumbnailDataUrl: null,
+        activeLayer: 0,
+        displaySelection: rgbSelection,
+        channels: createBatchChannels(['R', 'G', 'B', 'Z'])
+      }]
+    });
+
+    (document.getElementById('export-image-batch-button') as HTMLButtonElement).click();
+
+    const splitToggle = document.getElementById('export-batch-split-toggle-button') as HTMLButtonElement;
+    expect(splitToggle.classList.contains('hidden')).toBe(false);
+    expect(splitToggle.getAttribute('aria-pressed')).toBe('false');
+    expect(getExportBatchColumnLabels()).toEqual(['RGB', 'Z']);
+
+    (document.getElementById('export-batch-dialog-submit-button') as HTMLButtonElement).click();
+    await flushMicrotasks();
+
+    expect(onExportImageBatch).toHaveBeenCalledTimes(1);
+    expect(onExportImageBatch.mock.calls[0]?.[0].entries.map((entry) => entry.outputFilename)).toEqual([
+      'beauty.RGB.png'
+    ]);
+  });
+
+  it('switches batch export to split RGB columns and remaps the RGB default to R', async () => {
+    installUiFixture();
+
+    const onExportImageBatch = vi.fn<(_: {
+      archiveFilename: string;
+      entries: Array<{ outputFilename: string }>;
+      format: 'png-zip';
+    }, _signal: AbortSignal) => Promise<void>>(async () => undefined);
+    const ui = new ViewerUi(createUiCallbacks({ onExportImageBatch }));
+    const rgbaSelection = {
+      kind: 'channelRgb' as const,
+      r: 'R',
+      g: 'G',
+      b: 'B',
+      alpha: 'A'
+    };
+
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'beauty.exr' }], 'session-1');
+    ui.setExportBatchTarget({
+      archiveFilename: 'openexr-export.zip',
+      activeSessionId: 'session-1',
+      files: [{
+        sessionId: 'session-1',
+        filename: 'beauty.exr',
+        label: 'beauty.exr',
+        sourcePath: 'beauty.exr',
+        thumbnailDataUrl: null,
+        activeLayer: 0,
+        displaySelection: rgbaSelection,
+        channels: createBatchChannels(['R', 'G', 'B', 'A'])
+      }]
+    });
+
+    (document.getElementById('export-image-batch-button') as HTMLButtonElement).click();
+    const splitToggle = document.getElementById('export-batch-split-toggle-button') as HTMLButtonElement;
+    splitToggle.click();
+
+    expect(splitToggle.getAttribute('aria-pressed')).toBe('true');
+    expect(getExportBatchColumnLabels()).toEqual(['R', 'G', 'B', 'A']);
+    expect(getCheckedExportBatchCellColumnKeys()).toEqual(['R']);
+
+    (document.getElementById('export-batch-dialog-submit-button') as HTMLButtonElement).click();
+    await flushMicrotasks();
+
+    expect(onExportImageBatch).toHaveBeenCalledTimes(1);
+    expect(onExportImageBatch.mock.calls[0]?.[0].entries.map((entry) => entry.outputFilename)).toEqual([
+      'beauty.R.png'
+    ]);
+  });
+
+  it('dedupes multiple split RGB checks when toggling batch export back to merged mode', async () => {
+    installUiFixture();
+
+    const onExportImageBatch = vi.fn<(_: {
+      archiveFilename: string;
+      entries: Array<{ outputFilename: string }>;
+      format: 'png-zip';
+    }, _signal: AbortSignal) => Promise<void>>(async () => undefined);
+    const ui = new ViewerUi(createUiCallbacks({ onExportImageBatch }));
+    const rgbSelection = {
+      kind: 'channelRgb' as const,
+      r: 'R',
+      g: 'G',
+      b: 'B',
+      alpha: null
+    };
+
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'beauty.exr' }], 'session-1');
+    ui.setExportBatchTarget({
+      archiveFilename: 'openexr-export.zip',
+      activeSessionId: 'session-1',
+      files: [{
+        sessionId: 'session-1',
+        filename: 'beauty.exr',
+        label: 'beauty.exr',
+        sourcePath: 'beauty.exr',
+        thumbnailDataUrl: null,
+        activeLayer: 0,
+        displaySelection: rgbSelection,
+        channels: createBatchChannels(['R', 'G', 'B'])
+      }]
+    });
+
+    (document.getElementById('export-image-batch-button') as HTMLButtonElement).click();
+    const splitToggle = document.getElementById('export-batch-split-toggle-button') as HTMLButtonElement;
+    splitToggle.click();
+
+    const rowToggle = document.querySelector<HTMLInputElement>(
+      'input[data-batch-toggle="row"][data-session-id="session-1"]'
+    );
+    expect(rowToggle).not.toBeNull();
+    rowToggle!.click();
+
+    expect(getCheckedExportBatchCellColumnKeys()).toEqual(['R', 'G', 'B']);
+
+    splitToggle.click();
+
+    expect(splitToggle.getAttribute('aria-pressed')).toBe('false');
+    expect(getExportBatchColumnLabels()).toEqual(['RGB']);
+    expect(getCheckedExportBatchCellColumnKeys()).toEqual(['RGB']);
+
+    (document.getElementById('export-batch-dialog-submit-button') as HTMLButtonElement).click();
+    await flushMicrotasks();
+
+    expect(onExportImageBatch).toHaveBeenCalledTimes(1);
+    expect(onExportImageBatch.mock.calls[0]?.[0].entries.map((entry) => entry.outputFilename)).toEqual([
+      'beauty.RGB.png'
+    ]);
+  });
+
+  it('hides the batch split RGB button when no batch channels can be split', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const depthSelection = {
+      kind: 'channelMono' as const,
+      channel: 'Z',
+      alpha: null
+    };
+
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'depth.exr' }], 'session-1');
+    ui.setExportBatchTarget({
+      archiveFilename: 'openexr-export.zip',
+      activeSessionId: 'session-1',
+      files: [{
+        sessionId: 'session-1',
+        filename: 'depth.exr',
+        label: 'depth.exr',
+        sourcePath: 'depth.exr',
+        thumbnailDataUrl: null,
+        activeLayer: 0,
+        displaySelection: depthSelection,
+        channels: createBatchChannels(['Z'])
+      }]
+    });
+
+    (document.getElementById('export-image-batch-button') as HTMLButtonElement).click();
+
+    const splitToggle = document.getElementById('export-batch-split-toggle-button') as HTMLButtonElement;
+    expect(splitToggle.classList.contains('hidden')).toBe(true);
+    expect(splitToggle.disabled).toBe(true);
+    expect(getExportBatchColumnLabels()).toEqual(['Z']);
+  });
+
+  it('aborts pending batch exports from the dialog cancel button', async () => {
+    installUiFixture();
+
+    const onExportImageBatch = vi.fn<(_: unknown, signal: AbortSignal) => Promise<void>>((_request, signal) => {
+      return new Promise<void>((_resolve, reject) => {
+        signal.addEventListener('abort', () => {
+          reject(signal.reason);
+        }, { once: true });
+      });
+    });
+    const ui = new ViewerUi(createUiCallbacks({ onExportImageBatch }));
+    const rgbSelection = {
+      kind: 'channelRgb' as const,
+      r: 'R',
+      g: 'G',
+      b: 'B',
+      alpha: null
+    };
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'beauty.exr' }], 'session-1');
+    ui.setExportBatchTarget({
+      archiveFilename: 'openexr-export.zip',
+      activeSessionId: 'session-1',
+      files: [{
+        sessionId: 'session-1',
+        filename: 'beauty.exr',
+        label: 'beauty.exr',
+        sourcePath: 'beauty.exr',
+        thumbnailDataUrl: null,
+        activeLayer: 0,
+        displaySelection: rgbSelection,
+        channels: [{
+          value: 'group:',
+          label: 'RGB',
+          selectionKey: 'channelRgb:R:G:B:',
+          selection: rgbSelection,
+          swatches: ['#ff6570', '#6bd66f', '#51aefe'],
+          mergedOrder: 0,
+          splitOrder: 0
+        }]
+      }]
+    });
+
+    (document.getElementById('export-image-batch-button') as HTMLButtonElement).click();
+    (document.getElementById('export-batch-dialog-submit-button') as HTMLButtonElement).click();
+    await flushMicrotasks();
+
+    const signal = onExportImageBatch.mock.calls[0]?.[1] as AbortSignal;
+    expect(signal.aborted).toBe(false);
+
+    (document.getElementById('export-batch-dialog-cancel-button') as HTMLButtonElement).click();
+    await flushMicrotasks();
+
+    expect(signal.aborted).toBe(true);
+    expect((document.getElementById('export-batch-dialog-backdrop') as HTMLDivElement).classList.contains('hidden')).toBe(true);
+  });
+
+  it('builds stable batch export filenames from source paths and channel labels', () => {
+    const used = new Map<string, number>();
+
+    expect(buildExportBatchChannelFilenameToken('Stokes AoLP')).toBe('AoLP');
+    expect(buildExportBatchChannelFilenameToken('S1/S0.(R,G,B)')).toBe('S1_over_S0.RGB');
+    expect(buildExportBatchOutputFilename('shots/a/beauty.exr', 'RGB', used)).toBe('shots/a/beauty.RGB.png');
+    expect(buildExportBatchOutputFilename('shots/a/beauty.exr', 'RGB', used)).toBe('shots/a/beauty.RGB (2).png');
   });
 
   it('requests and renders a colormap export preview when the dialog opens', async () => {
@@ -3761,6 +4268,29 @@ function installUiFixture(): void {
   vi.stubGlobal('ResizeObserver', ResizeObserverMock);
 }
 
+function createBatchChannels(channelNames: string[]) {
+  return buildChannelViewItems(channelNames).map((item) => ({
+    value: item.value,
+    label: item.label,
+    selectionKey: item.selectionKey,
+    selection: item.selection,
+    swatches: item.swatches,
+    mergedOrder: item.mergedOrder,
+    splitOrder: item.splitOrder
+  }));
+}
+
+function getExportBatchColumnLabels(): string[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('.export-batch-channel-label'))
+    .map((element) => element.textContent ?? '');
+}
+
+function getCheckedExportBatchCellColumnKeys(): string[] {
+  return Array.from(document.querySelectorAll<HTMLInputElement>(
+    'input[data-batch-toggle="cell"]:checked'
+  )).map((input) => input.dataset.columnKey ?? '');
+}
+
 function installCanvasRenderingMocks(): void {
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((contextId: string) => {
     if (contextId !== '2d') {
@@ -3775,6 +4305,7 @@ function installCanvasRenderingMocks(): void {
   vi.stubGlobal('ImageData', function(this: object, data: Uint8ClampedArray, width: number, height: number) {
     return { data, width, height };
   } as unknown as typeof ImageData);
+  vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/png;base64,preview');
 }
 
 function mockDesktopLayoutGeometry(
@@ -3973,6 +4504,23 @@ function createUiCallbacksBase() {
     onOpenFolderClick: () => {},
     onExportImage: async (_request: { filename: string; format: 'png' }) => {},
     onResolveExportImagePreview: async (_signal: AbortSignal) => createPreviewPixels(),
+    onExportImageBatch: async (_request: {
+      archiveFilename: string;
+      entries: Array<{
+        sessionId: string;
+        activeLayer: number;
+        displaySelection: unknown;
+        channelLabel: string;
+        outputFilename: string;
+      }>;
+      format: 'png-zip';
+    }, _signal: AbortSignal) => {},
+    onResolveExportImageBatchPreview: async (_request: {
+      sessionId: string;
+      activeLayer: number;
+      displaySelection: unknown;
+      channelLabel: string;
+    }, _signal: AbortSignal) => createPreviewPixels(),
     onExportColormap: async (_request: {
       colormapId: string;
       width: number;
@@ -4032,9 +4580,27 @@ function createPreviewPixels(width = 4, height = 1) {
   };
 }
 
+function readStyleRule(selector: string): string {
+  const css = readFileSync(resolve(process.cwd(), 'src/style.css'), 'utf8');
+  const ruleStart = css.indexOf(`${selector} {`);
+  if (ruleStart < 0) {
+    throw new Error(`Style rule not found: ${selector}`);
+  }
+
+  const bodyStart = css.indexOf('{', ruleStart);
+  const bodyEnd = css.indexOf('}', bodyStart);
+  return css.slice(bodyStart + 1, bodyEnd);
+}
+
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+async function flushBatchPreviewQueue(): Promise<void> {
+  for (let index = 0; index < 8; index += 1) {
+    await flushMicrotasks();
+  }
 }
 
 function createFileDropEvent(type: 'drop' | 'dragover', files: File[] = [new File(['pixels'], 'sample.exr')]): Event {

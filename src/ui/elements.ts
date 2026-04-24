@@ -36,6 +36,7 @@ export interface Elements {
   openFileButton: HTMLButtonElement;
   openFolderButton: HTMLButtonElement;
   exportImageButton: HTMLButtonElement;
+  exportImageBatchButton: HTMLButtonElement;
   exportColormapButton: HTMLButtonElement;
   fileInput: HTMLInputElement;
   folderInput: HTMLInputElement;
@@ -49,6 +50,15 @@ export interface Elements {
   exportDialogError: HTMLElement;
   exportDialogCancelButton: HTMLButtonElement;
   exportDialogSubmitButton: HTMLButtonElement;
+  exportBatchDialogBackdrop: HTMLDivElement;
+  exportBatchDialogForm: HTMLFormElement;
+  exportBatchArchiveFilenameInput: HTMLInputElement;
+  exportBatchSplitToggleButton: HTMLButtonElement;
+  exportBatchMatrix: HTMLElement;
+  exportBatchDialogStatus: HTMLElement;
+  exportBatchDialogError: HTMLElement;
+  exportBatchDialogCancelButton: HTMLButtonElement;
+  exportBatchDialogSubmitButton: HTMLButtonElement;
   folderLoadDialogBackdrop: HTMLDivElement;
   folderLoadDialogForm: HTMLFormElement;
   folderLoadDialogSummary: HTMLElement;
@@ -254,6 +264,21 @@ export type ExportImageDialogElements = Pick<
   | 'exportDialogSubmitButton'
 >;
 
+export type ExportImageBatchDialogElements = Pick<
+  Elements,
+  | 'exportImageBatchButton'
+  | 'fileMenuButton'
+  | 'exportBatchDialogBackdrop'
+  | 'exportBatchDialogForm'
+  | 'exportBatchArchiveFilenameInput'
+  | 'exportBatchSplitToggleButton'
+  | 'exportBatchMatrix'
+  | 'exportBatchDialogStatus'
+  | 'exportBatchDialogError'
+  | 'exportBatchDialogCancelButton'
+  | 'exportBatchDialogSubmitButton'
+>;
+
 export type ExportColormapDialogElements = Pick<
   Elements,
   | 'exportColormapButton'
@@ -377,6 +402,7 @@ export function resolveElements(): Elements {
     openFileButton: requireElement('open-file-button', HTMLButtonElement),
     openFolderButton: requireElement('open-folder-button', HTMLButtonElement),
     exportImageButton: requireElement('export-image-button', HTMLButtonElement),
+    exportImageBatchButton: requireElement('export-image-batch-button', HTMLButtonElement),
     exportColormapButton: requireElement('export-colormap-button', HTMLButtonElement),
     fileInput: requireElement('file-input', HTMLInputElement),
     folderInput: requireElement('folder-input', HTMLInputElement),
@@ -390,6 +416,15 @@ export function resolveElements(): Elements {
     exportDialogError: requireElement('export-dialog-error', HTMLElement),
     exportDialogCancelButton: requireElement('export-dialog-cancel-button', HTMLButtonElement),
     exportDialogSubmitButton: requireElement('export-dialog-submit-button', HTMLButtonElement),
+    exportBatchDialogBackdrop: requireElement('export-batch-dialog-backdrop', HTMLDivElement),
+    exportBatchDialogForm: requireElement('export-batch-dialog-form', HTMLFormElement),
+    exportBatchArchiveFilenameInput: requireElement('export-batch-archive-filename-input', HTMLInputElement),
+    exportBatchSplitToggleButton: requireElement('export-batch-split-toggle-button', HTMLButtonElement),
+    exportBatchMatrix: requireElement('export-batch-matrix', HTMLElement),
+    exportBatchDialogStatus: requireElement('export-batch-dialog-status', HTMLElement),
+    exportBatchDialogError: requireElement('export-batch-dialog-error', HTMLElement),
+    exportBatchDialogCancelButton: requireElement('export-batch-dialog-cancel-button', HTMLButtonElement),
+    exportBatchDialogSubmitButton: requireElement('export-batch-dialog-submit-button', HTMLButtonElement),
     folderLoadDialogBackdrop: requireElement('folder-load-dialog-backdrop', HTMLDivElement),
     folderLoadDialogForm: requireElement('folder-load-dialog-form', HTMLFormElement),
     folderLoadDialogSummary: requireElement('folder-load-dialog-summary', HTMLElement),

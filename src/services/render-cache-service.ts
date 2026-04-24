@@ -327,6 +327,36 @@ export class RenderCacheService implements Disposable {
     return entry.luminanceRangeByRevision.get(buildDisplayLuminanceRevisionKey(state)) ?? null;
   }
 
+  resolveDisplayLuminanceRange(
+    session: OpenedImageSession,
+    state: Pick<ViewerSessionState, 'activeLayer' | 'displaySelection' | 'visualizationMode'>
+  ): DisplayLuminanceRange | null {
+    if (this.disposed) {
+      return null;
+    }
+
+    const layer = session.decoded.layers[state.activeLayer] ?? null;
+    if (!layer || session.decoded.width <= 0 || session.decoded.height <= 0) {
+      return null;
+    }
+
+    const entry = this.getOrCreateEntry(session.id);
+    const revisionKey = buildDisplayLuminanceRevisionKey(state);
+    if (entry.luminanceRangeByRevision.has(revisionKey)) {
+      return entry.luminanceRangeByRevision.get(revisionKey) ?? null;
+    }
+
+    const range = this.getOrComputeDisplayLuminanceRange(
+      layer,
+      session.decoded.width,
+      session.decoded.height,
+      state.displaySelection,
+      state.visualizationMode
+    );
+    entry.luminanceRangeByRevision.set(revisionKey, range);
+    return range;
+  }
+
   setBudgetMb(valueMb: number): void {
     if (this.disposed) {
       return;

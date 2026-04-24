@@ -12,6 +12,9 @@ interface GlobalKeyboardControllerCallbacks {
   isExportImageDialogOpen: () => boolean;
   isExportImageDialogBusy: () => boolean;
   closeExportImageDialog: (restoreFocus?: boolean) => void;
+  isExportImageBatchDialogOpen: () => boolean;
+  isExportImageBatchDialogBusy: () => boolean;
+  closeExportImageBatchDialog: (restoreFocus?: boolean) => void;
   isExportColormapDialogOpen: () => boolean;
   isExportColormapDialogBusy: () => boolean;
   closeExportColormapDialog: (restoreFocus?: boolean) => void;
@@ -42,6 +45,16 @@ export class GlobalKeyboardController implements Disposable {
       if (event.key === 'Escape' && this.callbacks.isExportImageDialogOpen() && !this.callbacks.isExportImageDialogBusy()) {
         event.preventDefault();
         this.callbacks.closeExportImageDialog(true);
+        return;
+      }
+
+      if (
+        event.key === 'Escape' &&
+        this.callbacks.isExportImageBatchDialogOpen() &&
+        !this.callbacks.isExportImageBatchDialogBusy()
+      ) {
+        event.preventDefault();
+        this.callbacks.closeExportImageBatchDialog(true);
         return;
       }
 
@@ -145,6 +158,7 @@ export class GlobalKeyboardController implements Disposable {
       this.isLocalKeyboardNavigationEvent(event) ||
       isEditableKeyboardEvent(event) ||
       this.callbacks.isExportImageDialogOpen() ||
+      this.callbacks.isExportImageBatchDialogOpen() ||
       this.callbacks.isExportColormapDialogOpen() ||
       this.callbacks.isWindowPreviewActive() ||
       this.callbacks.hasOpenMenu()
@@ -196,6 +210,7 @@ export class GlobalKeyboardController implements Disposable {
       event.shiftKey ||
       isEditableKeyboardEvent(event) ||
       this.callbacks.isExportImageDialogOpen() ||
+      this.callbacks.isExportImageBatchDialogOpen() ||
       this.callbacks.isExportColormapDialogOpen() ||
       this.callbacks.getViewerMode() !== 'panorama' ||
       this.callbacks.getOpenedImageCount() === 0 ||

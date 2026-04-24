@@ -2,7 +2,7 @@ import { sameDisplayLuminanceRange } from '../colormap-range';
 import { sameDisplaySelection } from '../display-model';
 import { sameImageRoi } from '../roi';
 import type { ProbeColorPreview, ProbeDisplayValue } from '../probe';
-import type { PixelSample, ViewerSessionState } from '../types';
+import type { ExportImageBatchTarget, PixelSample, ViewerSessionState } from '../types';
 import { samePixel, sameViewState } from '../view-state';
 import type {
   ProbeReadoutModel,
@@ -112,6 +112,24 @@ export function sameExportTarget(
   return a.filename === b.filename;
 }
 
+export function sameExportBatchTarget(
+  a: ExportImageBatchTarget | null,
+  b: ExportImageBatchTarget | null
+): boolean {
+  if (!a && !b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+
+  return (
+    a.archiveFilename === b.archiveFilename &&
+    a.activeSessionId === b.activeSessionId &&
+    sameExportBatchFiles(a.files, b.files)
+  );
+}
+
 export function sameStokesControl(
   a: StokesDegreeModulationControlModel | null,
   b: StokesDegreeModulationControlModel | null
@@ -129,6 +147,49 @@ export function sameStokesControl(
     a.showAolpMode === b.showAolpMode &&
     a.aolpMode === b.aolpMode
   );
+}
+
+function sameExportBatchFiles(
+  a: ExportImageBatchTarget['files'],
+  b: ExportImageBatchTarget['files']
+): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return a.every((item, index) => {
+    const other = b[index];
+    return Boolean(other) &&
+      item.sessionId === other.sessionId &&
+      item.filename === other.filename &&
+      item.label === other.label &&
+      item.sourcePath === other.sourcePath &&
+      item.thumbnailDataUrl === other.thumbnailDataUrl &&
+      item.activeLayer === other.activeLayer &&
+      sameDisplaySelection(item.displaySelection, other.displaySelection) &&
+      sameExportBatchChannels(item.channels, other.channels);
+  });
+}
+
+function sameExportBatchChannels(
+  a: ExportImageBatchTarget['files'][number]['channels'],
+  b: ExportImageBatchTarget['files'][number]['channels']
+): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return a.every((item, index) => {
+    const other = b[index];
+    return Boolean(other) &&
+      item.value === other.value &&
+      item.label === other.label &&
+      item.selectionKey === other.selectionKey &&
+      sameDisplaySelection(item.selection, other.selection) &&
+      item.mergedOrder === other.mergedOrder &&
+      item.splitOrder === other.splitOrder &&
+      sameStringArray(item.swatches, other.swatches);
+  });
 }
 
 export function sameMetadata(

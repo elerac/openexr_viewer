@@ -19,6 +19,7 @@
               <button id="open-file-button" class="app-menu-item" type="button" role="menuitem">Open...</button>
               <button id="open-folder-button" class="app-menu-item" type="button" role="menuitem">Open Folder...</button>
               <button id="export-image-button" class="app-menu-item" type="button" role="menuitem">Export...</button>
+              <button id="export-image-batch-button" class="app-menu-item" type="button" role="menuitem">Export Batch...</button>
               <button id="export-colormap-button" class="app-menu-item" type="button" role="menuitem">Export Colormap...</button>
               <button id="reload-all-opened-images-button" class="app-menu-item" type="button" role="menuitem">Reload All</button>
               <button id="close-all-opened-images-button" class="app-menu-item" type="button" role="menuitem">Close All</button>
@@ -185,6 +186,55 @@
           <div class="app-dialog-actions">
             <button id="export-dialog-cancel-button" type="button">Cancel</button>
             <button id="export-dialog-submit-button" type="submit">Export</button>
+          </div>
+        </form>
+      </div>
+      <div id="export-batch-dialog-backdrop" class="app-dialog-backdrop hidden">
+        <form
+          id="export-batch-dialog-form"
+          class="app-dialog app-dialog--batch"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="export-batch-dialog-title"
+        >
+          <div class="app-dialog-header">
+            <h2 id="export-batch-dialog-title" class="app-dialog-title">Export Batch</h2>
+            <p class="app-dialog-subtitle">Export selected file and channel combinations as a ZIP of PNG images.</p>
+          </div>
+          <div class="app-dialog-body">
+            <label class="app-dialog-field" for="export-batch-archive-filename-input">
+              <span class="app-dialog-field-label">Archive</span>
+              <input id="export-batch-archive-filename-input" type="text" autocomplete="off" spellcheck="false" />
+            </label>
+            <div class="app-dialog-field">
+              <div class="app-dialog-field-heading">
+                <span class="app-dialog-field-label">Images and Channels</span>
+                <button
+                  id="export-batch-split-toggle-button"
+                  class="channel-split-toggle export-batch-split-toggle hidden"
+                  type="button"
+                  aria-pressed="false"
+                  aria-controls="export-batch-matrix"
+                >Split RGB</button>
+              </div>
+              <div
+                id="export-batch-matrix"
+                class="export-batch-matrix"
+                role="region"
+                aria-label="Batch export file and channel selection"
+              ></div>
+            </div>
+            <p
+              id="export-batch-dialog-status"
+              class="app-dialog-preview-status export-batch-dialog-status"
+              role="status"
+              aria-live="polite"
+            ></p>
+            <p id="export-batch-dialog-error" class="app-dialog-error hidden" role="alert"></p>
+          </div>
+          <div class="app-dialog-actions">
+            <button id="export-batch-dialog-cancel-button" type="button">Cancel</button>
+            <button id="export-batch-dialog-submit-button" type="submit">Export</button>
           </div>
         </form>
       </div>

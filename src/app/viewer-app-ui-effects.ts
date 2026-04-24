@@ -22,6 +22,10 @@ export function applyUiEffects(ui: ViewerUi, transition: ViewerUiTransition): vo
     ui.setExportTarget(snapshot.exportTarget);
   }
 
+  if (invalidation & ViewerUiInvalidationFlags.ExportBatchTarget) {
+    ui.setExportBatchTarget(snapshot.exportBatchTarget);
+  }
+
   if (invalidation & ViewerUiInvalidationFlags.Exposure) {
     ui.setExposure(snapshot.exposureEv);
   }

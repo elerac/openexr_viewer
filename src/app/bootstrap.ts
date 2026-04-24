@@ -79,6 +79,12 @@ export async function bootstrapApp(): Promise<AppHandle> {
       }
       return services.renderCache;
     },
+    getRenderer: () => {
+      if (!services) {
+        throw createAbortError('Viewer application has not finished initializing.');
+      }
+      return services.renderer;
+    },
     getInteraction: () => interaction,
     resolveColormapExportPixels,
     resolveImageExportPixels,

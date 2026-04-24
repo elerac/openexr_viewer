@@ -5,6 +5,7 @@ import type { ViewerAppState, ViewerUiSnapshot } from './viewer-app-types';
 import {
   sameColormapOptions,
   sameChannelThumbnailItems,
+  sameExportBatchTarget,
   sameExportTarget,
   sameLayerOptions,
   sameMetadata,
@@ -13,6 +14,7 @@ import {
 } from './viewer-app-equality';
 import {
   buildExportTarget,
+  buildExportBatchTarget,
   buildChannelThumbnailItems,
   buildLayerOptions,
   buildOpenedImageOptions,
@@ -27,24 +29,26 @@ export const enum ViewerUiInvalidationFlags {
   Loading = 1 << 1,
   OpenedImages = 1 << 2,
   ExportTarget = 1 << 3,
-  Exposure = 1 << 4,
-  ViewerMode = 1 << 5,
-  VisualizationMode = 1 << 6,
-  StokesDegreeModulation = 1 << 7,
-  ActiveColormap = 1 << 8,
-  ColormapOptions = 1 << 9,
-  ColormapGradient = 1 << 10,
-  ColormapRange = 1 << 11,
-  LayerOptions = 1 << 12,
-  Metadata = 1 << 13,
-  RgbGroupOptions = 1 << 14,
-  ClearPanels = 1 << 15
+  ExportBatchTarget = 1 << 4,
+  Exposure = 1 << 5,
+  ViewerMode = 1 << 6,
+  VisualizationMode = 1 << 7,
+  StokesDegreeModulation = 1 << 8,
+  ActiveColormap = 1 << 9,
+  ColormapOptions = 1 << 10,
+  ColormapGradient = 1 << 11,
+  ColormapRange = 1 << 12,
+  LayerOptions = 1 << 13,
+  Metadata = 1 << 14,
+  RgbGroupOptions = 1 << 15,
+  ClearPanels = 1 << 16
 }
 
 export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => ViewerUiSnapshot {
   const selectColormapOptions = createColormapOptionsSelector();
   const selectOpenedImageOptions = createOpenedImageOptionsSelector();
   const selectExportTarget = createExportTargetSelector();
+  const selectExportBatchTarget = createExportBatchTargetSelector();
   const selectLayerOptions = createLayerOptionsSelector();
   const selectMetadata = createMetadataSelector();
   const selectRgbGroupChannelNames = createRgbGroupChannelNamesSelector();
@@ -70,6 +74,7 @@ export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => Vie
       activeSessionId: state.activeSessionId,
       openedImageOptions: selectOpenedImageOptions(state),
       exportTarget: selectExportTarget(activeSession),
+      exportBatchTarget: selectExportBatchTarget(state),
       exposureEv: state.sessionState.exposureEv,
       viewerMode: state.sessionState.viewerMode,
       visualizationMode: state.sessionState.visualizationMode,
@@ -129,6 +134,10 @@ export function computeViewerUiInvalidation(
 
   if (!sameExportTarget(previous.exportTarget, next.exportTarget)) {
     flags |= ViewerUiInvalidationFlags.ExportTarget;
+  }
+
+  if (!sameExportBatchTarget(previous.exportBatchTarget, next.exportBatchTarget)) {
+    flags |= ViewerUiInvalidationFlags.ExportBatchTarget;
   }
 
   if (previous.exposureEv !== next.exposureEv) {
@@ -239,6 +248,19 @@ function createExportTargetSelector(): (session: ReturnType<typeof selectActiveS
     }
 
     previousSession = session;
+    previousResult = nextResult;
+    return previousResult;
+  };
+}
+
+function createExportBatchTargetSelector(): (state: ViewerAppState) => ReturnType<typeof buildExportBatchTarget> {
+  let previousResult: ReturnType<typeof buildExportBatchTarget> = null;
+  return (state) => {
+    const nextResult = buildExportBatchTarget(state);
+    if (sameExportBatchTarget(previousResult, nextResult)) {
+      return previousResult;
+    }
+
     previousResult = nextResult;
     return previousResult;
   };
@@ -359,6 +381,7 @@ function sameViewerUiSnapshot(a: ViewerUiSnapshot, b: ViewerUiSnapshot): boolean
     a.activeSessionId === b.activeSessionId &&
     sameOpenedImageOptions(a.openedImageOptions, b.openedImageOptions) &&
     sameExportTarget(a.exportTarget, b.exportTarget) &&
+    sameExportBatchTarget(a.exportBatchTarget, b.exportBatchTarget) &&
     a.exposureEv === b.exposureEv &&
     a.viewerMode === b.viewerMode &&
     a.visualizationMode === b.visualizationMode &&

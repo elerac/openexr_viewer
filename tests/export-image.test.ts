@@ -5,6 +5,7 @@ import { linearToSrgbByte } from '../src/color';
 import {
   buildColormapExportPixels,
   buildExportImagePixels,
+  createPngDataUrlFromPixels,
   createPngBlobFromPixels,
   renderPixelsToCanvas
 } from '../src/export-image';
@@ -184,6 +185,24 @@ describe('export image pixels', () => {
       0,
       0
     );
+  });
+
+  it('encodes preview pixels as a PNG data URL', () => {
+    const putImageData = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      putImageData
+    } as never);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/png;base64,preview');
+    vi.stubGlobal('ImageData', function(this: object, data: Uint8ClampedArray, width: number, height: number) {
+      return { data, width, height };
+    } as unknown as typeof ImageData);
+
+    expect(createPngDataUrlFromPixels({
+      width: 1,
+      height: 1,
+      data: new Uint8ClampedArray([1, 2, 3, 4])
+    })).toBe('data:image/png;base64,preview');
+    expect(putImageData).toHaveBeenCalledTimes(1);
   });
 });
 

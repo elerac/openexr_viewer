@@ -1,15 +1,20 @@
 import { buildChannelViewItems } from '../channel-view-items';
+import { cloneDisplaySelection, sameDisplaySelection } from '../display-model';
 import {
   serializeChannelThumbnailContextKey,
   serializeChannelThumbnailRequestKey
 } from '../channel-thumbnail-keys';
 import { getColormapOptions } from '../colormaps';
-import { sameDisplaySelection } from '../display-model';
 import {
   getStokesDegreeModulationLabel,
   isStokesDegreeModulationParameter
 } from '../stokes';
-import type { DisplayLuminanceRange, OpenedImageSession, ViewerSessionState } from '../types';
+import type {
+  DisplayLuminanceRange,
+  ExportImageBatchTarget,
+  OpenedImageSession,
+  ViewerSessionState
+} from '../types';
 import type {
   StokesDegreeModulationControlModel,
   ViewerAppState,
@@ -52,6 +57,45 @@ export function buildExportTarget(
 
   return {
     filename: buildDefaultExportFilename(session.displayName)
+  };
+}
+
+export function buildExportBatchTarget(state: ViewerAppState): ExportImageBatchTarget | null {
+  if (state.sessions.length === 0) {
+    return null;
+  }
+
+  const openedImageOptions = buildOpenedImageOptions(state);
+  const openedOptionsBySessionId = new Map(openedImageOptions.map((item) => [item.id, item]));
+
+  return {
+    archiveFilename: 'openexr-export.zip',
+    activeSessionId: state.activeSessionId,
+    files: state.sessions.map((session) => {
+      const option = openedOptionsBySessionId.get(session.id);
+      const effectiveState = session.id === state.activeSessionId ? state.sessionState : session.state;
+      const layer = session.decoded.layers[effectiveState.activeLayer] ?? null;
+      return {
+        sessionId: session.id,
+        filename: session.filename,
+        label: option?.label ?? session.displayName,
+        sourcePath: getBatchExportSourcePath(session),
+        thumbnailDataUrl: option?.thumbnailDataUrl ?? null,
+        activeLayer: effectiveState.activeLayer,
+        displaySelection: cloneDisplaySelection(effectiveState.displaySelection),
+        channels: layer
+          ? buildChannelViewItems(layer.channelNames).map((item) => ({
+              value: item.value,
+              label: item.label,
+              selectionKey: item.selectionKey,
+              selection: cloneDisplaySelection(item.selection) ?? item.selection,
+              swatches: [...item.swatches],
+              mergedOrder: item.mergedOrder,
+              splitOrder: item.splitOrder
+            }))
+          : []
+      };
+    })
   };
 }
 
@@ -148,6 +192,15 @@ export function shouldAutoEnterColormapMode(
 export function getSessionSourceDetail(session: OpenedImageSession): string {
   if (session.source.kind === 'url') {
     return session.source.url;
+  }
+
+  const relativePath = session.source.file.webkitRelativePath.trim();
+  return relativePath || session.source.file.name || session.filename;
+}
+
+function getBatchExportSourcePath(session: OpenedImageSession): string {
+  if (session.source.kind !== 'file') {
+    return session.filename;
   }
 
   const relativePath = session.source.file.webkitRelativePath.trim();

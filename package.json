@@ -16,7 +16,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "exrs": "^1.0.3"
+    "exrs": "^1.0.3",
+    "fflate": "^0.8.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

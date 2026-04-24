@@ -4,6 +4,7 @@ import type { ProbeColorPreview } from '../probe';
 import type {
   DecodedLayer,
   DisplayLuminanceRange,
+  ExportImageBatchTarget,
   ExrMetadataEntry,
   ImageRoi,
   OpenedImageDropPlacement,
@@ -179,6 +180,7 @@ export interface ViewerUiSnapshot {
   activeSessionId: string | null;
   openedImageOptions: ViewerOpenedImageOption[];
   exportTarget: { filename: string } | null;
+  exportBatchTarget: ExportImageBatchTarget | null;
   exposureEv: number;
   viewerMode: ViewerSessionState['viewerMode'];
   visualizationMode: ViewerSessionState['visualizationMode'];

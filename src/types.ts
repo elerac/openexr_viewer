@@ -179,6 +179,23 @@ export interface ExportImageRequest {
   format: ExportImageFormat;
 }
 
+export interface ExportImageBatchPreviewRequest {
+  sessionId: string;
+  activeLayer: number;
+  displaySelection: DisplaySelectionModel;
+  channelLabel: string;
+}
+
+export interface ExportImageBatchEntryRequest extends ExportImageBatchPreviewRequest {
+  outputFilename: string;
+}
+
+export interface ExportImageBatchRequest {
+  archiveFilename: string;
+  entries: ExportImageBatchEntryRequest[];
+  format: 'png-zip';
+}
+
 export interface ExportColormapRequest {
   colormapId: string;
   width: number;
@@ -197,4 +214,31 @@ export interface ExportColormapPreviewRequest {
 
 export interface ExportImageTarget {
   filename: string;
+}
+
+export interface ExportImageBatchChannelTarget {
+  value: string;
+  label: string;
+  selectionKey: string;
+  selection: DisplaySelectionModel;
+  swatches: string[];
+  mergedOrder: number | null;
+  splitOrder: number | null;
+}
+
+export interface ExportImageBatchFileTarget {
+  sessionId: string;
+  filename: string;
+  label: string;
+  sourcePath: string;
+  thumbnailDataUrl: string | null;
+  activeLayer: number;
+  displaySelection: DisplaySelectionModel | null;
+  channels: ExportImageBatchChannelTarget[];
+}
+
+export interface ExportImageBatchTarget {
+  archiveFilename: string;
+  activeSessionId: string | null;
+  files: ExportImageBatchFileTarget[];
 }

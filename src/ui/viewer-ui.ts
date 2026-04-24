@@ -12,6 +12,7 @@ import { CollapsibleSectionsController } from './collapsible-sections';
 import { ColormapPanel } from './colormap-panel';
 import { DragDropController } from './drag-drop';
 import { ExportColormapDialogController } from './export-colormap-dialog';
+import { ExportImageBatchDialogController } from './export-image-batch-dialog';
 import { ExportImageDialogController } from './export-image-dialog';
 import { FolderLoadDialogController } from './folder-load-dialog';
 import { GlobalKeyboardController } from './global-keyboard-controller';
@@ -35,6 +36,9 @@ import type {
   ExrMetadataEntry,
   ExportColormapPreviewRequest,
   ExportColormapRequest,
+  ExportImageBatchPreviewRequest,
+  ExportImageBatchRequest,
+  ExportImageBatchTarget,
   ExportImageRequest,
   ExportImageTarget,
   ImageRoi,
@@ -64,6 +68,11 @@ export interface UiCallbacks {
   onOpenFolderClick: () => void;
   onExportImage: (request: ExportImageRequest) => Promise<void>;
   onResolveExportImagePreview: (signal: AbortSignal) => Promise<ExportImagePixels>;
+  onExportImageBatch: (request: ExportImageBatchRequest, signal: AbortSignal) => Promise<void>;
+  onResolveExportImageBatchPreview: (
+    request: ExportImageBatchPreviewRequest,
+    signal: AbortSignal
+  ) => Promise<ExportImagePixels>;
   onExportColormap: (request: ExportColormapRequest) => Promise<void>;
   onResolveExportColormapPreview: (
     request: ExportColormapPreviewRequest,
@@ -117,6 +126,7 @@ export class ViewerUi implements Disposable {
   private readonly globalKeyboardController: GlobalKeyboardController;
   private readonly windowPreviewController: WindowPreviewController;
   private readonly exportImageDialog: ExportImageDialogController;
+  private readonly exportImageBatchDialog: ExportImageBatchDialogController;
   private readonly exportColormapDialog: ExportColormapDialogController;
   private readonly folderLoadDialog: FolderLoadDialogController;
   private readonly probeReadoutController: ProbeReadoutController;
@@ -221,6 +231,11 @@ export class ViewerUi implements Disposable {
       closeExportImageDialog: (restoreFocus) => {
         this.exportImageDialog.close(restoreFocus);
       },
+      isExportImageBatchDialogOpen: () => this.exportImageBatchDialog.isOpen(),
+      isExportImageBatchDialogBusy: () => this.exportImageBatchDialog.isBusy(),
+      closeExportImageBatchDialog: (restoreFocus) => {
+        this.exportImageBatchDialog.close(restoreFocus);
+      },
       isExportColormapDialogOpen: () => this.exportColormapDialog.isOpen(),
       isExportColormapDialogBusy: () => this.exportColormapDialog.isBusy(),
       closeExportColormapDialog: (restoreFocus) => {
@@ -267,6 +282,14 @@ export class ViewerUi implements Disposable {
         return this.callbacks.onResolveExportImagePreview(signal);
       }
     });
+    this.exportImageBatchDialog = new ExportImageBatchDialogController(this.elements, {
+      onExportImageBatch: (request, signal) => {
+        return this.callbacks.onExportImageBatch(request, signal);
+      },
+      onResolveExportImageBatchPreview: (request, signal) => {
+        return this.callbacks.onResolveExportImageBatchPreview(request, signal);
+      }
+    });
     this.exportColormapDialog = new ExportColormapDialogController(this.elements, {
       onExportColormap: (request) => {
         return this.callbacks.onExportColormap(request);
@@ -300,6 +323,7 @@ export class ViewerUi implements Disposable {
     this.disposables.addDisposable(this.globalKeyboardController);
     this.disposables.addDisposable(this.windowPreviewController);
     this.disposables.addDisposable(this.exportImageDialog);
+    this.disposables.addDisposable(this.exportImageBatchDialog);
     this.disposables.addDisposable(this.exportColormapDialog);
     this.disposables.addDisposable(this.folderLoadDialog);
     this.disposables.addDisposable(this.dragDropController);
@@ -335,6 +359,7 @@ export class ViewerUi implements Disposable {
 
     this.clearPanoramaKeyboardOrbitInput();
     this.exportImageDialog.close(false);
+    this.exportImageBatchDialog.close(false);
     this.exportColormapDialog.close(false);
     this.folderLoadDialog.close(false, false);
     this.topMenuController.closeAll(false);
@@ -383,6 +408,7 @@ export class ViewerUi implements Disposable {
     this.updateLoadingOverlayVisibility();
     if (loading) {
       this.exportImageDialog.close(false);
+      this.exportImageBatchDialog.close(false);
       this.exportColormapDialog.close(false);
       this.folderLoadDialog.close(false, false);
     }
@@ -555,6 +581,15 @@ export class ViewerUi implements Disposable {
     this.updateFileMenuItemsDisabled();
   }
 
+  setExportBatchTarget(target: ExportImageBatchTarget | null): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.exportImageBatchDialog.setTarget(target);
+    this.updateFileMenuItemsDisabled();
+  }
+
   clearImageBrowserPanels(): void {
     if (this.disposed) {
       return;
@@ -724,6 +759,8 @@ export class ViewerUi implements Disposable {
     }
 
     this.elements.exportImageButton.disabled = this.isLoading || this.isDisplayBusy || !this.exportImageDialog.hasTarget();
+    this.elements.exportImageBatchButton.disabled =
+      this.isLoading || this.isDisplayBusy || !this.exportImageBatchDialog.hasTarget();
     this.elements.exportColormapButton.disabled = this.isLoading || !this.exportColormapDialog.hasOptions();
   }
 
@@ -754,9 +791,22 @@ export class ViewerUi implements Disposable {
       }
 
       this.clearPanoramaKeyboardOrbitInput();
+      this.exportImageBatchDialog.close(false);
       this.exportColormapDialog.close(false);
       this.topMenuController.closeAll();
       this.exportImageDialog.openDialog();
+    });
+
+    this.disposables.addEventListener(this.elements.exportImageBatchButton, 'click', () => {
+      if (this.elements.exportImageBatchButton.disabled) {
+        return;
+      }
+
+      this.clearPanoramaKeyboardOrbitInput();
+      this.exportImageDialog.close(false);
+      this.exportColormapDialog.close(false);
+      this.topMenuController.closeAll();
+      this.exportImageBatchDialog.openDialog();
     });
 
     this.disposables.addEventListener(this.elements.exportColormapButton, 'click', () => {
@@ -766,6 +816,7 @@ export class ViewerUi implements Disposable {
 
       this.clearPanoramaKeyboardOrbitInput();
       this.exportImageDialog.close(false);
+      this.exportImageBatchDialog.close(false);
       this.topMenuController.closeAll();
       this.exportColormapDialog.openDialog();
     });

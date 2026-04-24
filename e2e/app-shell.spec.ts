@@ -1,7 +1,13 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Download, type Locator, type Page } from '@playwright/test';
+import { unzipSync } from 'fflate';
 import { Buffer } from 'node:buffer';
 import { gotoViewerApp, openGalleryCbox } from './helpers/app';
-import { expectedColormapLabels } from './helpers/exr-fixtures';
+import {
+  buildPortraitRgbExr,
+  buildRgbAuxExr,
+  buildScalarChannelExr,
+  expectedColormapLabels
+} from './helpers/exr-fixtures';
 import { readProbeCoords, resolveViewerPoint, setExposureValue } from './helpers/viewer';
 
 async function expectVisibleShellGap(page: Page, upper: Locator, lower: Locator): Promise<void> {
@@ -35,6 +41,22 @@ async function expectMainPanelTopsAligned(viewer: Locator, imagePanel: Locator, 
 
   expect(Math.abs(imagePanelBox.y - viewerBox.y)).toBeLessThanOrEqual(1);
   expect(Math.abs(rightStackBox.y - viewerBox.y)).toBeLessThanOrEqual(1);
+}
+
+async function readDownloadBytes(download: Download): Promise<Buffer> {
+  const stream = await download.createReadStream();
+  expect(stream).not.toBeNull();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream!) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+function expectPngSignature(bytes: Uint8Array): void {
+  expect(Buffer.from(bytes.subarray(0, 8))).toEqual(
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  );
 }
 
 test('boots an empty app shell with menu actions gated until an image opens', async ({ page }) => {
@@ -339,14 +361,120 @@ test('exports the active image as a png download from the file menu', async ({ p
   await expect(exportDialog).toBeHidden();
   expect(download.suggestedFilename()).toBe('cbox_rgb.png');
 
-  const stream = await download.createReadStream();
-  expect(stream).not.toBeNull();
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream!) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  expectPngSignature(await readDownloadBytes(download));
+});
+
+test('exports selected file-channel cells as one batch zip download', async ({ page }) => {
+  await gotoViewerApp(page);
+
+  const openedImages = page.locator('#opened-images-select');
+  await page.setInputFiles('#file-input', {
+    name: 'rgb_aux.exr',
+    mimeType: 'image/exr',
+    buffer: buildRgbAuxExr()
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('rgb_aux.exr', { timeout: 30000 });
+
+  await page.setInputFiles('#file-input', {
+    name: 'scalar_z.exr',
+    mimeType: 'image/exr',
+    buffer: buildScalarChannelExr()
+  });
+  await expect(openedImages.locator('option')).toHaveCount(2, { timeout: 30000 });
+  await expect(openedImages.locator('option:checked')).toContainText('scalar_z.exr');
+
+  const fileMenuButton = page.getByRole('button', { name: 'File', exact: true });
+  const exportBatchMenuItem = page.locator('#export-image-batch-button');
+  const exportBatchDialog = page.locator('#export-batch-dialog-form');
+  const exportBatchSubmitButton = page.locator('#export-batch-dialog-submit-button');
+
+  await fileMenuButton.click();
+  await expect(exportBatchMenuItem).toBeEnabled();
+  await exportBatchMenuItem.click();
+
+  await expect(exportBatchDialog).toBeVisible();
+  await expect(page.locator('#export-batch-archive-filename-input')).toHaveValue('openexr-export.zip');
+  await expect(page.locator('.export-batch-file-toggle').filter({ hasText: 'rgb_aux.exr' })).toBeVisible();
+  await page.locator('.export-batch-file-toggle').filter({ hasText: 'rgb_aux.exr' }).locator('input').click();
+
+  const downloadPromise = page.waitForEvent('download');
+  await exportBatchSubmitButton.click();
+  const download = await downloadPromise;
+
+  await expect(exportBatchDialog).toBeHidden();
+  expect(download.suggestedFilename()).toBe('openexr-export.zip');
+
+  const zipEntries = unzipSync(await readDownloadBytes(download));
+  expect(Object.keys(zipEntries).sort()).toEqual([
+    'rgb_aux.RGBA.png',
+    'rgb_aux.mask_A.png',
+    'scalar_z.Z.png'
+  ]);
+  for (const entry of Object.values(zipEntries)) {
+    expectPngSignature(entry);
   }
-  const pngBytes = Buffer.concat(chunks);
-  expect(pngBytes.subarray(0, 8)).toEqual(
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-  );
+});
+
+test('fits portrait batch export thumbnails inside their preview frames', async ({ page }) => {
+  await gotoViewerApp(page);
+
+  const openedImages = page.locator('#opened-images-select');
+  await page.setInputFiles('#file-input', {
+    name: 'portrait_rgb.exr',
+    mimeType: 'image/exr',
+    buffer: buildPortraitRgbExr()
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('portrait_rgb.exr', { timeout: 30000 });
+
+  const fileMenuButton = page.getByRole('button', { name: 'File', exact: true });
+  const exportBatchMenuItem = page.locator('#export-image-batch-button');
+
+  await fileMenuButton.click();
+  await expect(exportBatchMenuItem).toBeEnabled();
+  await exportBatchMenuItem.click();
+  await expect(page.locator('#export-batch-dialog-form')).toBeVisible();
+
+  const preview = page.locator('.export-batch-cell-preview').first();
+  const image = preview.locator('.export-batch-cell-preview-image');
+  await expect(image).toHaveAttribute('src', /^data:image\/png;base64,/);
+  await expect(image).toBeVisible();
+
+  const geometry = await preview.evaluate((previewElement) => {
+    const imageElement = previewElement.querySelector<HTMLImageElement>('.export-batch-cell-preview-image');
+    if (!imageElement) {
+      throw new Error('Expected batch thumbnail preview image.');
+    }
+
+    const previewRect = previewElement.getBoundingClientRect();
+    const imageRect = imageElement.getBoundingClientRect();
+    return {
+      preview: {
+        left: previewRect.left,
+        top: previewRect.top,
+        right: previewRect.right,
+        bottom: previewRect.bottom,
+        width: previewRect.width,
+        height: previewRect.height
+      },
+      image: {
+        left: imageRect.left,
+        top: imageRect.top,
+        right: imageRect.right,
+        bottom: imageRect.bottom,
+        width: imageRect.width,
+        height: imageRect.height
+      },
+      naturalWidth: imageElement.naturalWidth,
+      naturalHeight: imageElement.naturalHeight
+    };
+  });
+
+  expect(geometry.naturalHeight).toBeGreaterThan(geometry.naturalWidth);
+  expect(geometry.image.height).toBeGreaterThan(geometry.image.width);
+  expect(geometry.image.width).toBeLessThan(geometry.preview.width - 8);
+  expect(geometry.image.height).toBeLessThanOrEqual(geometry.preview.height + 1);
+  expect(geometry.image.left).toBeGreaterThanOrEqual(geometry.preview.left - 1);
+  expect(geometry.image.top).toBeGreaterThanOrEqual(geometry.preview.top - 1);
+  expect(geometry.image.right).toBeLessThanOrEqual(geometry.preview.right + 1);
+  expect(geometry.image.bottom).toBeLessThanOrEqual(geometry.preview.bottom + 1);
 });

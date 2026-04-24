@@ -146,6 +146,16 @@ export function renderPixelsToCanvas(canvas: HTMLCanvasElement, pixels: ExportIm
   context.putImageData(new ImageData(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height), 0, 0);
 }
 
+export function createPngDataUrlFromPixels(pixels: ExportImagePixels): string {
+  if (typeof document === 'undefined') {
+    throw new Error('Image export previews are only available in a browser environment.');
+  }
+
+  const canvas = document.createElement('canvas');
+  renderPixelsToCanvas(canvas, pixels);
+  return canvas.toDataURL('image/png');
+}
+
 export async function createPngBlobFromPixels(pixels: ExportImagePixels): Promise<Blob> {
   if (typeof document === 'undefined') {
     throw new Error('Image export is only available in a browser environment.');
