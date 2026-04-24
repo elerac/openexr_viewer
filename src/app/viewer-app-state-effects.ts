@@ -20,11 +20,13 @@ export function applySessionResourceEffects(
 ): void {
   switch (transition.intent.type) {
     case 'sessionLoaded': {
+      renderCache.trackSession(transition.intent.session);
       scheduleThumbnailGeneration(core, thumbnailService, transition.intent.session.id, transition.intent.session.state);
       return;
     }
     case 'sessionReloaded': {
       renderCache.discard(transition.intent.sessionId);
+      renderCache.trackSession(transition.intent.session);
       thumbnailService.discard(transition.intent.sessionId);
       scheduleThumbnailGeneration(core, thumbnailService, transition.intent.sessionId, transition.intent.session.state);
       return;

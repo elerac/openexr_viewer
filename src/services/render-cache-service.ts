@@ -2,9 +2,12 @@ import {
   clampDisplayCacheBudgetMb,
   createSessionResourceEntry,
   displayCacheBudgetMbToBytes,
-  getTrackedResidentTextureBytes,
+  estimateDecodedImageBytes,
+  getTrackedResidentBytes,
+  getTrackedResidentChannelBytes,
   readStoredDisplayCacheBudgetMb,
   saveStoredDisplayCacheBudgetMb,
+  type ResidentChannelUpload,
   type ResidentLayerResourceEntry,
   type SessionResourceEntry
 } from '../display-cache';
@@ -57,7 +60,7 @@ interface RenderCacheRenderer {
     height: number,
     layer: DecodedLayer,
     channelNames: string[]
-  ) => string[];
+  ) => ResidentChannelUpload[];
   setDisplaySelectionBindings: (
     sessionId: string,
     layerIndex: number,
@@ -158,22 +161,26 @@ export class RenderCacheService implements Disposable {
       };
     }
 
+    const entry = this.getOrCreateEntry(session.id);
+    this.updateDecodedBytes(entry, session);
+
     const layer = session.decoded.layers[state.activeLayer] ?? null;
     if (!layer || session.decoded.width <= 0 || session.decoded.height <= 0) {
+      this.enforceResidencyBudget();
+      this.syncDisplayCacheUsageUi();
       return {
         textureRevisionKey: '',
         textureDirty: false
       };
     }
 
-    const entry = this.getOrCreateEntry(session.id);
     const textureRevisionKey = buildDisplayTextureRevisionKey(state);
     const binding = buildDisplaySourceBinding(layer, state.displaySelection, state.visualizationMode);
     const requiredChannelNames = getDisplaySourceBindingChannelNames(binding).filter((channelName) => {
       return layer.channelStorage.channelIndexByName[channelName] !== undefined;
     });
     const protectedBinding = this.createProtectedBinding(session.id, state.activeLayer, requiredChannelNames);
-    const residentLayer = this.getOrCreateResidentLayerEntry(entry, state.activeLayer);
+    let residentLayer = this.getOrCreateResidentLayerEntry(entry, state.activeLayer);
     const missingChannelNames = requiredChannelNames.filter((channelName) => {
       return !residentLayer.residentChannels.has(channelName);
     });
@@ -184,15 +191,17 @@ export class RenderCacheService implements Disposable {
 
     if (missingChannelNames.length > 0) {
       this.enforceResidencyBudget({
-        reservedBytes: predictChannelTextureBytes(
+        reservedBytes: predictRetainedChannelBytes(
           session.decoded.width,
           session.decoded.height,
+          layer,
           missingChannelNames.length
         ),
         protectedBinding
       });
+      residentLayer = this.getOrCreateResidentLayerEntry(entry, state.activeLayer);
 
-      const residentChannelNames = this.renderer.ensureLayerChannelsResident(
+      const residentChannelUploads = this.renderer.ensureLayerChannelsResident(
         session.id,
         state.activeLayer,
         session.decoded.width,
@@ -200,10 +209,10 @@ export class RenderCacheService implements Disposable {
         layer,
         missingChannelNames
       );
-      const textureBytes = predictChannelTextureBytes(session.decoded.width, session.decoded.height, 1);
-      for (const channelName of residentChannelNames) {
-        residentLayer.residentChannels.set(channelName, {
-          textureBytes,
+      for (const upload of residentChannelUploads) {
+        residentLayer.residentChannels.set(upload.channelName, {
+          textureBytes: upload.textureBytes,
+          materializedBytes: upload.materializedBytes,
           lastAccessToken: this.takeAccessToken()
         });
       }
@@ -327,6 +336,17 @@ export class RenderCacheService implements Disposable {
     this.enforceResidencyBudget();
     saveStoredDisplayCacheBudgetMb(this.budgetMb);
     this.ui.setDisplayCacheBudget(this.budgetMb);
+    this.syncDisplayCacheUsageUi();
+  }
+
+  trackSession(session: OpenedImageSession): void {
+    if (this.disposed) {
+      return;
+    }
+
+    const entry = this.getOrCreateEntry(session.id);
+    this.updateDecodedBytes(entry, session);
+    this.enforceResidencyBudget();
     this.syncDisplayCacheUsageUi();
   }
 
@@ -523,7 +543,7 @@ export class RenderCacheService implements Disposable {
 
   private syncDisplayCacheUsageUi(): void {
     this.ui.setDisplayCacheUsage(
-      getTrackedResidentTextureBytes([...this.entries.values()]),
+      getTrackedResidentBytes([...this.entries.values()]),
       displayCacheBudgetMbToBytes(this.budgetMb)
     );
   }
@@ -595,7 +615,7 @@ export class RenderCacheService implements Disposable {
   } = {}): void {
     const reservedBytes = Math.max(0, Math.floor(options.reservedBytes ?? 0));
     const budgetBytes = displayCacheBudgetMbToBytes(this.budgetMb);
-    let trackedBytes = getTrackedResidentTextureBytes([...this.entries.values()]);
+    let trackedBytes = getTrackedResidentBytes([...this.entries.values()]);
     if (trackedBytes + reservedBytes <= budgetBytes) {
       return;
     }
@@ -681,7 +701,11 @@ export class RenderCacheService implements Disposable {
       entry.residentLayers.delete(layerIndex);
     }
     this.renderer.discardChannelSourceTexture(sessionId, layerIndex, channelName);
-    return Math.max(0, Math.floor(channel.textureBytes));
+    return getTrackedResidentChannelBytes(channel);
+  }
+
+  private updateDecodedBytes(entry: SessionResourceEntry, session: OpenedImageSession): void {
+    entry.decodedBytes = estimateDecodedImageBytes(session.decoded);
   }
 
   private getOrComputeDisplayLuminanceRange(
@@ -796,8 +820,21 @@ export class RenderCacheService implements Disposable {
   }
 }
 
-function predictChannelTextureBytes(width: number, height: number, channelCount: number): number {
-  return Math.max(0, width * height * channelCount * Float32Array.BYTES_PER_ELEMENT);
+function predictChannelTextureBytes(width: number, height: number): number {
+  return Math.max(0, width * height * Float32Array.BYTES_PER_ELEMENT);
+}
+
+function predictRetainedChannelBytes(
+  width: number,
+  height: number,
+  layer: DecodedLayer,
+  channelCount: number
+): number {
+  const perChannelTextureBytes = predictChannelTextureBytes(width, height);
+  const perChannelMaterializedBytes = layer.channelStorage.kind === 'interleaved-f32'
+    ? predictChannelTextureBytes(width, height)
+    : 0;
+  return Math.max(0, channelCount) * (perChannelTextureBytes + perChannelMaterializedBytes);
 }
 
 function resolveWindowLike(): RenderCacheWindowLike | null {

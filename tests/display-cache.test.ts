@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createInterleavedChannelStorage,
+  createPlanarChannelStorage
+} from '../src/channel-storage';
+import {
   DEFAULT_DISPLAY_CACHE_BUDGET_MB,
   DISPLAY_CACHE_BUDGET_OPTIONS_MB,
   MAX_DISPLAY_CACHE_BUDGET_MB,
@@ -7,42 +11,87 @@ import {
   clampDisplayCacheBudgetMb,
   clearSessionResources,
   createSessionResourceEntry,
-  getTrackedResidentTextureBytes,
+  estimateDecodedImageBytes,
+  getTrackedResidentBytes,
+  getTrackedResidentChannelBytes,
   parseDisplayCacheBudgetStorageValue
 } from '../src/display-cache';
+import type { DecodedExrImage } from '../src/types';
 
 describe('display cache resource accounting', () => {
-  it('tracks resident GPU texture bytes across session layer channels', () => {
+  it('tracks decoded baseline and retained CPU/GPU bytes across session layer channels', () => {
     const sessions = [
       createSessionResourceEntry('a'),
       createSessionResourceEntry('b'),
       createSessionResourceEntry('c')
     ];
+    sessions[0].decodedBytes = 10;
     sessions[0].residentLayers.set(0, {
       residentChannels: new Map([
-        ['R', { textureBytes: 24, lastAccessToken: 1 }]
+        ['R', { textureBytes: 24, materializedBytes: 12, lastAccessToken: 1 }]
       ])
     });
+    sessions[1].decodedBytes = 5;
     sessions[1].residentLayers.set(0, {
       residentChannels: new Map([
-        ['G', { textureBytes: 8, lastAccessToken: 2 }]
+        ['G', { textureBytes: 8, materializedBytes: 0, lastAccessToken: 2 }]
       ])
     });
     sessions[1].residentLayers.set(1, {
       residentChannels: new Map([
-        ['Z', { textureBytes: 4, lastAccessToken: 3 }]
+        ['Z', { textureBytes: 4, materializedBytes: 2, lastAccessToken: 3 }]
       ])
     });
 
-    expect(getTrackedResidentTextureBytes(sessions)).toBe(36);
+    expect(getTrackedResidentBytes(sessions)).toBe(65);
   });
 
-  it('clears pinned state, resident channels, and cached ranges', () => {
+  it('clamps invalid retained channel byte counts', () => {
+    expect(getTrackedResidentChannelBytes({
+      textureBytes: 10.9,
+      materializedBytes: Number.NaN
+    })).toBe(10);
+  });
+
+  it('estimates decoded pixel bytes from interleaved and planar channel storage', () => {
+    const image: DecodedExrImage = {
+      width: 2,
+      height: 1,
+      layers: [
+        {
+          name: 'beauty',
+          channelNames: ['R', 'G', 'B'],
+          channelStorage: createInterleavedChannelStorage(new Float32Array(6), ['R', 'G', 'B']),
+          analysis: {
+            displayLuminanceRangeBySelectionKey: {},
+            finiteRangeByChannel: {}
+          }
+        },
+        {
+          name: 'depth',
+          channelNames: ['Z', 'A'],
+          channelStorage: createPlanarChannelStorage({
+            Z: new Float32Array(2),
+            A: new Float32Array(2)
+          }, ['Z', 'A']),
+          analysis: {
+            displayLuminanceRangeBySelectionKey: {},
+            finiteRangeByChannel: {}
+          }
+        }
+      ]
+    };
+
+    expect(estimateDecodedImageBytes(image)).toBe(40);
+  });
+
+  it('clears pinned state, decoded bytes, resident channels, and cached ranges', () => {
     const session = createSessionResourceEntry('a');
     session.pinned = true;
+    session.decodedBytes = 12;
     session.residentLayers.set(0, {
       residentChannels: new Map([
-        ['R', { textureBytes: 24, lastAccessToken: 7 }]
+        ['R', { textureBytes: 24, materializedBytes: 12, lastAccessToken: 7 }]
       ])
     });
     session.luminanceRangeByRevision.set('rev', { min: 0, max: 1 });
@@ -50,6 +99,7 @@ describe('display cache resource accounting', () => {
     clearSessionResources(session);
 
     expect(session.pinned).toBe(false);
+    expect(session.decodedBytes).toBe(0);
     expect(session.residentLayers.size).toBe(0);
     expect(session.luminanceRangeByRevision.size).toBe(0);
   });

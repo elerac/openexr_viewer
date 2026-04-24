@@ -8,6 +8,7 @@ import { createInitialState } from '../src/viewer-store';
 import {
   createChannelMonoSelection,
   createChannelRgbSelection,
+  createLayerFromChannels,
   createInterleavedLayerFromChannels
 } from './helpers/state-fixtures';
 
@@ -46,8 +47,15 @@ describe('gl image renderer', () => {
       buildDisplaySourceBinding(layer, createChannelMonoSelection('Z', 'A'))
     );
 
-    expect(firstUploadedChannels).toEqual(['R', 'G', 'B']);
-    expect(secondUploadedChannels).toEqual(['Z', 'A']);
+    expect(firstUploadedChannels).toEqual([
+      { channelName: 'R', textureBytes: 8, materializedBytes: 8 },
+      { channelName: 'G', textureBytes: 8, materializedBytes: 8 },
+      { channelName: 'B', textureBytes: 8, materializedBytes: 8 }
+    ]);
+    expect(secondUploadedChannels).toEqual([
+      { channelName: 'Z', textureBytes: 8, materializedBytes: 8 },
+      { channelName: 'A', textureBytes: 8, materializedBytes: 8 }
+    ]);
     expect(texImageCallsAfterFirstUpload).toBe(5);
     expect(gl.texImage2D).toHaveBeenCalledTimes(7);
     expect(gl.createTexture).toHaveBeenCalledTimes(7);
@@ -61,9 +69,14 @@ describe('gl image renderer', () => {
       B: [5, 6]
     });
 
-    renderer.ensureLayerChannelsResident('session-1', 0, 2, 1, layer, ['R', 'G', 'B']);
+    const uploads = renderer.ensureLayerChannelsResident('session-1', 0, 2, 1, layer, ['R', 'G', 'B']);
 
     expect(layer.channelStorage.kind).toBe('interleaved-f32');
+    expect(uploads).toEqual([
+      { channelName: 'R', textureBytes: 8, materializedBytes: 8 },
+      { channelName: 'G', textureBytes: 8, materializedBytes: 8 },
+      { channelName: 'B', textureBytes: 8, materializedBytes: 8 }
+    ]);
     expect(__debugGetMaterializedChannelCount(layer)).toBe(3);
     expect(gl.texImage2D.mock.calls[2]?.[8]).toBe(
       __debugGetMaterializedChannel(layer, 'R')
@@ -74,6 +87,41 @@ describe('gl image renderer', () => {
     expect(gl.texImage2D.mock.calls[4]?.[8]).toBe(
       __debugGetMaterializedChannel(layer, 'B')
     );
+  });
+
+  it('reports planar source uploads without additional materialized CPU bytes', () => {
+    const { renderer } = createHarness();
+    const layer = createLayerFromChannels({
+      R: [1, 2],
+      G: [3, 4]
+    });
+
+    const uploads = renderer.ensureLayerChannelsResident('session-1', 0, 2, 1, layer, ['R', 'G']);
+
+    expect(layer.channelStorage.kind).toBe('planar-f32');
+    expect(uploads).toEqual([
+      { channelName: 'R', textureBytes: 8, materializedBytes: 0 },
+      { channelName: 'G', textureBytes: 8, materializedBytes: 0 }
+    ]);
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
+  });
+
+  it('discards materialized interleaved CPU data when source texture upload fails', () => {
+    const { renderer, gl } = createHarness();
+    const layer = createInterleavedLayerFromChannels({
+      R: [1, 2]
+    });
+    gl.texImage2D.mockImplementationOnce(() => {
+      throw new Error('upload failed');
+    });
+
+    expect(() => {
+      renderer.ensureLayerChannelsResident('session-1', 0, 2, 1, layer, ['R']);
+    }).toThrow('upload failed');
+
+    expect(gl.deleteTexture).toHaveBeenCalledTimes(1);
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
+    expect(getLayerTextureChannels(renderer, 'session-1', 0)).toEqual([]);
   });
 
   it('discards one resident channel at a time and prunes empty session containers', () => {

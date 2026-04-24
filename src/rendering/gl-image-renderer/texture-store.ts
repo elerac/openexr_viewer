@@ -3,6 +3,7 @@ import {
   DISPLAY_SOURCE_SLOT_COUNT,
   type DisplaySourceBinding
 } from '../../display-texture';
+import type { ResidentChannelUpload } from '../../display-cache';
 import type { DecodedLayer } from '../../types';
 import type { GlImageRendererState, LayerSourceTextures } from './types';
 
@@ -38,9 +39,9 @@ export function ensureLayerChannelsResident(
   height: number,
   layer: DecodedLayer,
   channelNames: string[]
-): string[] {
+): ResidentChannelUpload[] {
   const layerTextures = getOrCreateLayerSourceTextures(state, sessionId, layerIndex, width, height, layer);
-  const newlyResidentChannels: string[] = [];
+  const uploads: ResidentChannelUpload[] = [];
 
   for (const channelName of channelNames) {
     if (!channelName || layerTextures.textureByChannel.has(channelName)) {
@@ -56,29 +57,45 @@ export function ensureLayerChannelsResident(
       continue;
     }
 
-    const texture = state.gl.createTexture();
-    if (!texture) {
-      throw new Error('Failed to create source texture.');
-    }
+    const materializedBytes = layer.channelStorage.kind === 'interleaved-f32' ? denseChannel.byteLength : 0;
+    let texture: WebGLTexture | null = null;
+    try {
+      texture = state.gl.createTexture();
+      if (!texture) {
+        throw new Error('Failed to create source texture.');
+      }
 
-    state.gl.bindTexture(state.gl.TEXTURE_2D, texture);
-    configureSourceTexture(state.gl);
-    state.gl.texImage2D(
-      state.gl.TEXTURE_2D,
-      0,
-      state.gl.R32F,
-      width,
-      height,
-      0,
-      state.gl.RED,
-      state.gl.FLOAT,
-      denseChannel
-    );
-    layerTextures.textureByChannel.set(channelName, texture);
-    newlyResidentChannels.push(channelName);
+      state.gl.bindTexture(state.gl.TEXTURE_2D, texture);
+      configureSourceTexture(state.gl);
+      state.gl.texImage2D(
+        state.gl.TEXTURE_2D,
+        0,
+        state.gl.R32F,
+        width,
+        height,
+        0,
+        state.gl.RED,
+        state.gl.FLOAT,
+        denseChannel
+      );
+      layerTextures.textureByChannel.set(channelName, texture);
+      uploads.push({
+        channelName,
+        textureBytes: predictR32fTextureBytes(width, height),
+        materializedBytes
+      });
+    } catch (error) {
+      if (texture) {
+        state.gl.deleteTexture(texture);
+      }
+      if (layer.channelStorage.kind === 'interleaved-f32') {
+        discardMaterializedChannel(layer, channelName);
+      }
+      throw error;
+    }
   }
 
-  return newlyResidentChannels;
+  return uploads;
 }
 
 export function setDisplaySelectionBindings(
@@ -174,6 +191,10 @@ function configureSourceTexture(gl: WebGL2RenderingContext): void {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+}
+
+function predictR32fTextureBytes(width: number, height: number): number {
+  return Math.max(0, width * height * Float32Array.BYTES_PER_ELEMENT);
 }
 
 function getOrCreateLayerSourceTextures(

@@ -1,4 +1,4 @@
-import type { DisplayLuminanceRange } from './types';
+import type { DecodedExrImage, DisplayLuminanceRange } from './types';
 
 export const DISPLAY_CACHE_BUDGET_STORAGE_KEY = 'openexr-viewer:display-cache-budget-mb:v1';
 export const DISPLAY_CACHE_BUDGET_OPTIONS_MB = [64, 128, 256, 512, 1024] as const;
@@ -10,7 +10,14 @@ export const BYTES_PER_MEGABYTE = 1024 * 1024;
 
 export interface ResidentChannelResourceEntry {
   textureBytes: number;
+  materializedBytes: number;
   lastAccessToken: number;
+}
+
+export interface ResidentChannelUpload {
+  channelName: string;
+  textureBytes: number;
+  materializedBytes: number;
 }
 
 export interface ResidentLayerResourceEntry {
@@ -20,6 +27,7 @@ export interface ResidentLayerResourceEntry {
 export interface SessionResourceEntry {
   id: string;
   pinned: boolean;
+  decodedBytes: number;
   residentLayers: Map<number, ResidentLayerResourceEntry>;
   luminanceRangeByRevision: Map<string, DisplayLuminanceRange | null>;
 }
@@ -28,6 +36,7 @@ export function createSessionResourceEntry(id: string): SessionResourceEntry {
   return {
     id,
     pinned: false,
+    decodedBytes: 0,
     residentLayers: new Map<number, ResidentLayerResourceEntry>(),
     luminanceRangeByRevision: new Map<string, DisplayLuminanceRange | null>()
   };
@@ -35,21 +44,42 @@ export function createSessionResourceEntry(id: string): SessionResourceEntry {
 
 export function clearSessionResources(entry: SessionResourceEntry): void {
   entry.pinned = false;
+  entry.decodedBytes = 0;
   entry.residentLayers.clear();
   entry.luminanceRangeByRevision.clear();
 }
 
-export function getTrackedResidentTextureBytes(
-  sessions: Array<Pick<SessionResourceEntry, 'residentLayers'>>
+export function getTrackedResidentChannelBytes(
+  channel: Pick<ResidentChannelResourceEntry, 'textureBytes' | 'materializedBytes'>
+): number {
+  return sanitizeByteCount(channel.textureBytes) + sanitizeByteCount(channel.materializedBytes);
+}
+
+export function getTrackedResidentBytes(
+  sessions: Array<Pick<SessionResourceEntry, 'decodedBytes' | 'residentLayers'>>
 ): number {
   return sessions.reduce((total, session) => {
-    let sessionBytes = 0;
+    let sessionBytes = sanitizeByteCount(session.decodedBytes);
     for (const layer of session.residentLayers.values()) {
       for (const channel of layer.residentChannels.values()) {
-        sessionBytes += Math.max(0, Math.floor(channel.textureBytes));
+        sessionBytes += getTrackedResidentChannelBytes(channel);
       }
     }
     return total + sessionBytes;
+  }, 0);
+}
+
+export function estimateDecodedImageBytes(image: DecodedExrImage): number {
+  return image.layers.reduce((total, layer) => {
+    const storage = layer.channelStorage;
+    if (storage.kind === 'interleaved-f32') {
+      return total + sanitizeByteCount(storage.pixels.byteLength);
+    }
+
+    const layerBytes = Object.values(storage.pixelsByChannel).reduce((layerTotal, pixels) => {
+      return layerTotal + sanitizeByteCount(pixels.byteLength);
+    }, 0);
+    return total + layerBytes;
   }, 0);
 }
 
@@ -110,4 +140,8 @@ export function saveStoredDisplayCacheBudgetMb(valueMb: number): void {
   } catch {
     // Storage can be unavailable in private contexts; keep the runtime budget anyway.
   }
+}
+
+function sanitizeByteCount(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }

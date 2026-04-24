@@ -296,6 +296,7 @@ vi.mock('../src/services/render-cache-service', () => ({
       pending: false
     }));
     readonly getCachedLuminanceRange = vi.fn(() => null);
+    readonly trackSession = vi.fn();
     readonly discard = vi.fn();
     readonly clear = vi.fn();
     readonly setBudgetMb = vi.fn();

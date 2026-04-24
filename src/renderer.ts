@@ -4,6 +4,7 @@ import { ProbeOverlayRenderer } from './rendering/probe-overlay-renderer';
 import type { ExportImagePixels } from './export-image';
 import type { Disposable } from './lifecycle';
 import type { DisplaySourceBinding } from './display-texture';
+import type { ResidentChannelUpload } from './display-cache';
 import type { DecodedLayer, ViewerRenderState, ViewerState, ViewportInfo } from './types';
 import type { ReadExportPixelsArgs } from './rendering/gl-image-renderer';
 
@@ -49,7 +50,7 @@ export class WebGlExrRenderer implements Disposable {
     height: number,
     layer: DecodedLayer,
     channelNames: string[]
-  ): string[] {
+  ): ResidentChannelUpload[] {
     if (this.disposed) {
       return [];
     }

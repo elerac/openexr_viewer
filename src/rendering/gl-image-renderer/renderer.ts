@@ -1,4 +1,5 @@
 import { createEmptyDisplaySourceBinding, type DisplaySourceBinding } from '../../display-texture';
+import type { ResidentChannelUpload } from '../../display-cache';
 import type { ExportImagePixels } from '../../export-image';
 import type { Disposable } from '../../lifecycle';
 import type { DecodedLayer, ViewerState, ViewportInfo } from '../../types';
@@ -61,7 +62,7 @@ export class GlImageRenderer implements Disposable {
     height: number,
     layer: DecodedLayer,
     channelNames: string[]
-  ): string[] {
+  ): ResidentChannelUpload[] {
     if (this.state.disposed) {
       return [];
     }
