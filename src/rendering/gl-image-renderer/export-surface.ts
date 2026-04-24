@@ -8,50 +8,59 @@ export function readExportPixels(
   {
     state: viewerState,
     sourceWidth,
-    sourceHeight
+    sourceHeight,
+    outputWidth: requestedOutputWidth,
+    outputHeight: requestedOutputHeight
   }: ReadExportPixelsArgs
 ): ExportImagePixels {
   if (!state.imageSize || state.imageSize.width !== sourceWidth || state.imageSize.height !== sourceHeight) {
     throw new Error('No prepared image is active for export.');
   }
-  if (sourceWidth <= 0 || sourceHeight <= 0) {
+  if (!Number.isInteger(sourceWidth) || !Number.isInteger(sourceHeight) || sourceWidth <= 0 || sourceHeight <= 0) {
     throw new Error('Export dimensions must be positive.');
   }
 
+  const outputWidth = requestedOutputWidth ?? sourceWidth;
+  const outputHeight = requestedOutputHeight ?? sourceHeight;
+  if (!Number.isInteger(outputWidth) || !Number.isInteger(outputHeight) || outputWidth <= 0 || outputHeight <= 0) {
+    throw new Error('Export output dimensions must be positive.');
+  }
+
   const gl = state.gl;
-  const sourceSurface = getOrCreateExportSurface(gl, state.exportSourceSurface, sourceWidth, sourceHeight);
+  const sourceSurface = getOrCreateExportSurface(gl, state.exportSourceSurface, outputWidth, outputHeight);
   state.exportSourceSurface = sourceSurface;
 
   const preserveAlpha = state.activeBinding.usesImageAlpha;
+  const exportZoom = Math.min(outputWidth / sourceWidth, outputHeight / sourceHeight);
   const exportState: ViewerState = {
     ...viewerState,
     viewerMode: 'image',
-    zoom: 1,
+    zoom: exportZoom,
     panX: sourceWidth * 0.5,
     panY: sourceHeight * 0.5
   };
 
   try {
     gl.bindFramebuffer(gl.FRAMEBUFFER, sourceSurface.framebuffer);
-    gl.viewport(0, 0, sourceWidth, sourceHeight);
+    gl.viewport(0, 0, outputWidth, outputHeight);
     renderImagePass(state, exportState, {
       compositeCheckerboard: false,
       alphaOutputMode: preserveAlpha ? 'straight' : 'opaque',
-      viewportWidth: sourceWidth,
-      viewportHeight: sourceHeight,
+      viewportWidth: outputWidth,
+      viewportHeight: outputHeight,
       viewportLeft: 0,
       viewportTop: 0
     });
 
-    const data = new Uint8ClampedArray(sourceWidth * sourceHeight * 4);
+    const data = new Uint8ClampedArray(outputWidth * outputHeight * 4);
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, sourceSurface.framebuffer);
-    gl.readPixels(0, 0, sourceWidth, sourceHeight, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    gl.readPixels(0, 0, outputWidth, outputHeight, gl.RGBA, gl.UNSIGNED_BYTE, data);
 
-    flipRgbaRowsInPlace(data, sourceWidth, sourceHeight);
+    flipRgbaRowsInPlace(data, outputWidth, outputHeight);
 
     return {
-      width: sourceWidth,
-      height: sourceHeight,
+      width: outputWidth,
+      height: outputHeight,
       data
     };
   } finally {

@@ -1628,6 +1628,104 @@ describe('view menu', () => {
     expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
   });
 
+  it('requests and renders an image export preview when the dialog opens', async () => {
+    installUiFixture();
+
+    const onResolveExportImagePreview = vi.fn(async () => createPreviewPixels(32, 16));
+    const ui = new ViewerUi(createUiCallbacks({ onResolveExportImagePreview }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const exportButton = document.getElementById('export-image-button') as HTMLButtonElement;
+    const dialogBackdrop = document.getElementById('export-dialog-backdrop') as HTMLDivElement;
+    const previewCanvas = document.getElementById('export-preview-canvas') as HTMLCanvasElement;
+    const previewStatus = document.getElementById('export-preview-status') as HTMLElement;
+
+    exportButton.click();
+    await flushMicrotasks();
+
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
+    expect(onResolveExportImagePreview).toHaveBeenCalledWith(expect.any(AbortSignal));
+    expect(previewCanvas.classList.contains('hidden')).toBe(false);
+    expect(previewCanvas.width).toBe(32);
+    expect(previewCanvas.height).toBe(16);
+    expect(previewStatus.classList.contains('hidden')).toBe(true);
+  });
+
+  it('shows image preview failures inline without submitting export', async () => {
+    installUiFixture();
+
+    const onExportImage = vi.fn(async () => undefined);
+    const onResolveExportImagePreview = vi.fn(async () => {
+      throw new Error('Preview unavailable');
+    });
+    const ui = new ViewerUi(createUiCallbacks({ onExportImage, onResolveExportImagePreview }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const exportButton = document.getElementById('export-image-button') as HTMLButtonElement;
+    const previewCanvas = document.getElementById('export-preview-canvas') as HTMLCanvasElement;
+    const previewStatus = document.getElementById('export-preview-status') as HTMLElement;
+    const submitError = document.getElementById('export-dialog-error') as HTMLElement;
+
+    exportButton.click();
+    await flushMicrotasks();
+
+    expect(previewCanvas.classList.contains('hidden')).toBe(true);
+    expect(previewStatus.textContent).toBe('Preview unavailable');
+    expect(submitError.classList.contains('hidden')).toBe(true);
+    expect(onExportImage).not.toHaveBeenCalled();
+  });
+
+  it('aborts pending image previews on close and ignores stale responses after reopen', async () => {
+    installUiFixture();
+
+    const firstPreview = createDeferred<ReturnType<typeof createPreviewPixels>>();
+    const secondPreview = createDeferred<ReturnType<typeof createPreviewPixels>>();
+    const onResolveExportImagePreview = vi
+      .fn<(_: AbortSignal) => Promise<ReturnType<typeof createPreviewPixels>>>()
+      .mockReturnValueOnce(firstPreview.promise)
+      .mockReturnValueOnce(secondPreview.promise);
+    const ui = new ViewerUi(createUiCallbacks({ onResolveExportImagePreview }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const exportButton = document.getElementById('export-image-button') as HTMLButtonElement;
+    const cancelButton = document.getElementById('export-dialog-cancel-button') as HTMLButtonElement;
+    const dialogBackdrop = document.getElementById('export-dialog-backdrop') as HTMLDivElement;
+    const previewCanvas = document.getElementById('export-preview-canvas') as HTMLCanvasElement;
+    const previewStatus = document.getElementById('export-preview-status') as HTMLElement;
+
+    exportButton.click();
+    await flushMicrotasks();
+
+    const initialSignal = onResolveExportImagePreview.mock.calls[0]?.[0] as AbortSignal;
+    cancelButton.click();
+    await flushMicrotasks();
+
+    expect(initialSignal.aborted).toBe(true);
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
+    expect(previewCanvas.classList.contains('hidden')).toBe(true);
+    expect(previewStatus.classList.contains('hidden')).toBe(true);
+
+    exportButton.click();
+    await flushMicrotasks();
+    firstPreview.resolve(createPreviewPixels(10, 5));
+    await flushMicrotasks();
+
+    expect(previewCanvas.classList.contains('hidden')).toBe(true);
+    expect(previewStatus.textContent).toBe('Loading preview...');
+
+    secondPreview.resolve(createPreviewPixels(20, 10));
+    await flushMicrotasks();
+
+    expect(onResolveExportImagePreview).toHaveBeenCalledTimes(2);
+    expect(previewCanvas.classList.contains('hidden')).toBe(false);
+    expect(previewCanvas.width).toBe(20);
+    expect(previewCanvas.height).toBe(10);
+    expect(previewStatus.classList.contains('hidden')).toBe(true);
+  });
+
   it('keeps the export dialog open while the export callback is pending and shows failures inline', async () => {
     installUiFixture();
 
@@ -3874,6 +3972,7 @@ function createUiCallbacksBase() {
     onOpenFileClick: () => {},
     onOpenFolderClick: () => {},
     onExportImage: async (_request: { filename: string; format: 'png' }) => {},
+    onResolveExportImagePreview: async (_signal: AbortSignal) => createPreviewPixels(),
     onExportColormap: async (_request: {
       colormapId: string;
       width: number;

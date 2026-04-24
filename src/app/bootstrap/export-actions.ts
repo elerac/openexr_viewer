@@ -1,5 +1,5 @@
 import { getColormapAsset, loadColormapLut } from '../../colormaps';
-import { buildColormapExportPixels, createPngBlobFromPixels } from '../../export-image';
+import { buildColormapExportPixels, createPngBlobFromPixels, type ExportImagePixels } from '../../export-image';
 import { createAbortError, throwIfAborted } from '../../lifecycle';
 import { RenderCacheService } from '../../services/render-cache-service';
 import { mergeRenderState } from '../../view-state';
@@ -14,16 +14,27 @@ interface ColormapExportResolverOptions {
   previewMaxLongestEdge?: number;
 }
 
+interface ImageExportResolverOptions {
+  signal?: AbortSignal;
+  previewMaxLongestEdge?: number;
+}
+
 interface ColormapExportResolverDependencies {
   core: ViewerAppCore;
   isDisposed: () => boolean;
 }
 
+interface ImageExportResolverDependencies {
+  core: ViewerAppCore;
+  getRenderCache: () => RenderCacheService;
+  getRenderer: () => WebGlExrRenderer;
+  getDisplayController: () => DisplayController;
+  isDisposed: () => boolean;
+}
+
 interface ExportImageActionDependencies {
   core: ViewerAppCore;
-  renderCache: RenderCacheService;
-  renderer: WebGlExrRenderer;
-  displayController: DisplayController;
+  resolveImageExportPixels: ReturnType<typeof createImageExportPixelsResolver>;
   isDisposed: () => boolean;
 }
 
@@ -85,13 +96,69 @@ export function createColormapExportPixelsResolver({
   };
 }
 
+export function createImageExportPixelsResolver({
+  core,
+  getRenderCache,
+  getRenderer,
+  getDisplayController,
+  isDisposed
+}: ImageExportResolverDependencies): (options?: ImageExportResolverOptions) => Promise<ExportImagePixels> {
+  return async (options: ImageExportResolverOptions = {}) => {
+    if (isDisposed()) {
+      throw createAbortError('Viewer application has been disposed.');
+    }
+
+    if (options.signal) {
+      throwIfAborted(options.signal);
+    }
+
+    const state = core.getState();
+    const activeSession = selectActiveSession(state);
+    if (!activeSession) {
+      throw new Error('No image is active.');
+    }
+
+    if (
+      state.sessionState.visualizationMode === 'colormap' &&
+      !getDisplayController().getActiveColormapLutForState(state.sessionState.activeColormapId)
+    ) {
+      throw new Error('The active colormap is not ready for export.');
+    }
+
+    getRenderCache().prepareActiveSession(activeSession, state.sessionState);
+    if (options.signal) {
+      throwIfAborted(options.signal);
+    }
+
+    if (isDisposed()) {
+      throw createAbortError('Viewer application has been disposed.');
+    }
+
+    const outputSize = options.previewMaxLongestEdge
+      ? resolveBoundedImageExportSize(
+        activeSession.decoded.width,
+        activeSession.decoded.height,
+        options.previewMaxLongestEdge
+      )
+      : null;
+
+    return getRenderer().readExportPixels({
+      state: mergeRenderState(state.sessionState, state.interactionState),
+      sourceWidth: activeSession.decoded.width,
+      sourceHeight: activeSession.decoded.height,
+      ...(outputSize ? {
+        outputWidth: outputSize.width,
+        outputHeight: outputSize.height
+      } : {})
+    });
+  };
+}
+
 export async function handleExportImage(
   request: ExportImageRequest,
   {
     core,
-    renderCache,
-    renderer,
-    displayController,
+    resolveImageExportPixels,
     isDisposed
   }: ExportImageActionDependencies
 ): Promise<void> {
@@ -99,25 +166,8 @@ export async function handleExportImage(
     throw createAbortError('Viewer application has been disposed.');
   }
 
-  const activeSession = selectActiveSession(core.getState());
-  if (!activeSession) {
-    const error = new Error('No image is active.');
-    core.dispatch({ type: 'errorSet', message: error.message });
-    throw error;
-  }
-
-  const state = core.getState();
   try {
-    if (state.sessionState.visualizationMode === 'colormap' && !displayController.getActiveColormapLutForState(state.sessionState.activeColormapId)) {
-      throw new Error('The active colormap is not ready for export.');
-    }
-
-    renderCache.prepareActiveSession(activeSession, state.sessionState);
-    const pixels = renderer.readExportPixels({
-      state: mergeRenderState(state.sessionState, state.interactionState),
-      sourceWidth: activeSession.decoded.width,
-      sourceHeight: activeSession.decoded.height
-    });
+    const pixels = await resolveImageExportPixels();
     const blob = await createPngBlobFromPixels(pixels);
     if (isDisposed()) {
       throw createAbortError('Viewer application has been disposed.');
@@ -194,4 +244,12 @@ export function resolveBoundedColormapExportSize(
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale))
   };
+}
+
+export function resolveBoundedImageExportSize(
+  width: number,
+  height: number,
+  maxLongestEdge: number
+): { width: number; height: number } {
+  return resolveBoundedColormapExportSize(width, height, maxLongestEdge);
 }

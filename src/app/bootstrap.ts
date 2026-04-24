@@ -8,7 +8,10 @@ import {
   disposeBootstrapServices,
   type BootstrapServices
 } from './bootstrap/create-services';
-import { createColormapExportPixelsResolver } from './bootstrap/export-actions';
+import {
+  createColormapExportPixelsResolver,
+  createImageExportPixelsResolver
+} from './bootstrap/export-actions';
 import { registerBootstrapEffects } from './bootstrap/register-effects';
 import { createViewerInteraction, initializeViewportLifecycle } from './bootstrap/viewport-lifecycle';
 
@@ -34,6 +37,28 @@ export async function bootstrapApp(): Promise<AppHandle> {
     core,
     isDisposed
   });
+  const resolveImageExportPixels = createImageExportPixelsResolver({
+    core,
+    getRenderCache: () => {
+      if (!services) {
+        throw createAbortError('Viewer application has not finished initializing.');
+      }
+      return services.renderCache;
+    },
+    getRenderer: () => {
+      if (!services) {
+        throw createAbortError('Viewer application has not finished initializing.');
+      }
+      return services.renderer;
+    },
+    getDisplayController: () => {
+      if (!services) {
+        throw createAbortError('Viewer application has not finished initializing.');
+      }
+      return services.displayController;
+    },
+    isDisposed
+  });
   const ui = createViewerUi({
     core,
     getSessionController: () => {
@@ -54,14 +79,9 @@ export async function bootstrapApp(): Promise<AppHandle> {
       }
       return services.renderCache;
     },
-    getRenderer: () => {
-      if (!services) {
-        throw createAbortError('Viewer application has not finished initializing.');
-      }
-      return services.renderer;
-    },
     getInteraction: () => interaction,
     resolveColormapExportPixels,
+    resolveImageExportPixels,
     isDisposed
   });
   const app: AppHandle = {

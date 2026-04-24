@@ -63,6 +63,7 @@ export interface UiCallbacks {
   onOpenFileClick: () => void;
   onOpenFolderClick: () => void;
   onExportImage: (request: ExportImageRequest) => Promise<void>;
+  onResolveExportImagePreview: (signal: AbortSignal) => Promise<ExportImagePixels>;
   onExportColormap: (request: ExportColormapRequest) => Promise<void>;
   onResolveExportColormapPreview: (
     request: ExportColormapPreviewRequest,
@@ -261,6 +262,9 @@ export class ViewerUi implements Disposable {
     this.exportImageDialog = new ExportImageDialogController(this.elements, {
       onExportImage: (request) => {
         return this.callbacks.onExportImage(request);
+      },
+      onResolveExportImagePreview: (signal) => {
+        return this.callbacks.onResolveExportImagePreview(signal);
       }
     });
     this.exportColormapDialog = new ExportColormapDialogController(this.elements, {

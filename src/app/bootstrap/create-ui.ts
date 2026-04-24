@@ -1,6 +1,7 @@
 import { DEFAULT_DISPLAY_CACHE_BUDGET_MB } from '../../display-cache';
 import { ViewerUi, type UiCallbacks } from '../../ui/viewer-ui';
 import { handleExportColormap, handleExportImage } from './export-actions';
+import type { ExportImagePixels } from '../../export-image';
 import { ViewerAppCore } from '../viewer-app-core';
 import type { DisplayController } from '../../controllers/display-controller';
 import type { SessionController } from '../../controllers/session-controller';
@@ -12,7 +13,6 @@ import type {
   PanoramaKeyboardOrbitInput
 } from '../../types';
 import type { RenderCacheService } from '../../services/render-cache-service';
-import type { WebGlExrRenderer } from '../../renderer';
 
 interface InteractionInputBridge {
   setPanoramaKeyboardOrbitInput(input: PanoramaKeyboardOrbitInput): void;
@@ -23,12 +23,14 @@ interface CreateViewerUiDependencies {
   getSessionController: () => SessionController;
   getDisplayController: () => DisplayController;
   getRenderCache: () => RenderCacheService;
-  getRenderer: () => WebGlExrRenderer;
   getInteraction: () => InteractionInputBridge | null;
   resolveColormapExportPixels: (
     request: ExportColormapPreviewRequest | ExportColormapRequest,
     options?: { signal?: AbortSignal; previewMaxLongestEdge?: number }
   ) => Promise<{ width: number; height: number; data: Uint8ClampedArray }>;
+  resolveImageExportPixels: (
+    options?: { signal?: AbortSignal; previewMaxLongestEdge?: number }
+  ) => Promise<ExportImagePixels>;
   isDisposed: () => boolean;
 }
 
@@ -37,9 +39,9 @@ export function createViewerUi({
   getSessionController,
   getDisplayController,
   getRenderCache,
-  getRenderer,
   getInteraction,
   resolveColormapExportPixels,
+  resolveImageExportPixels,
   isDisposed
 }: CreateViewerUiDependencies): ViewerUi {
   const callbacks: UiCallbacks = {
@@ -54,10 +56,14 @@ export function createViewerUi({
     onExportImage: async (request: ExportImageRequest) => {
       await handleExportImage(request, {
         core,
-        renderCache: getRenderCache(),
-        renderer: getRenderer(),
-        displayController: getDisplayController(),
+        resolveImageExportPixels,
         isDisposed
+      });
+    },
+    onResolveExportImagePreview: async (signal) => {
+      return await resolveImageExportPixels({
+        signal,
+        previewMaxLongestEdge: 256
       });
     },
     onExportColormap: async (request: ExportColormapRequest) => {

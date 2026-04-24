@@ -164,6 +164,22 @@
                 <option value="png">PNG</option>
               </select>
             </label>
+            <div class="app-dialog-field">
+              <span class="app-dialog-field-label">Preview</span>
+              <div id="export-preview-stage" class="app-dialog-preview-stage">
+                <canvas
+                  id="export-preview-canvas"
+                  class="app-dialog-preview-canvas hidden"
+                  aria-hidden="true"
+                ></canvas>
+                <p
+                  id="export-preview-status"
+                  class="app-dialog-preview-status hidden"
+                  role="status"
+                  aria-live="polite"
+                ></p>
+              </div>
+            </div>
             <p id="export-dialog-error" class="app-dialog-error hidden" role="alert"></p>
           </div>
           <div class="app-dialog-actions">

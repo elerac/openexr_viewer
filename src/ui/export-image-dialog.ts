@@ -1,9 +1,13 @@
-import { DisposableBag, type Disposable } from '../lifecycle';
+import { renderPixelsToCanvas, type ExportImagePixels } from '../export-image';
+import { DisposableBag, isAbortError, type Disposable } from '../lifecycle';
 import type { ExportImageRequest, ExportImageTarget } from '../types';
 import type { ExportImageDialogElements } from './elements';
 
+const EXPORT_IMAGE_PREVIEW_LOADING_MESSAGE = 'Loading preview...';
+
 interface ExportImageDialogCallbacks {
   onExportImage: (request: ExportImageRequest) => Promise<void>;
+  onResolveExportImagePreview: (signal: AbortSignal) => Promise<ExportImagePixels>;
 }
 
 export class ExportImageDialogController implements Disposable {
@@ -12,6 +16,8 @@ export class ExportImageDialogController implements Disposable {
   private open = false;
   private busy = false;
   private restoreFocusTarget: HTMLElement | null = null;
+  private exportImagePreviewAbortController: AbortController | null = null;
+  private exportImagePreviewRequestToken = 0;
   private disposed = false;
 
   constructor(
@@ -43,6 +49,7 @@ export class ExportImageDialogController implements Disposable {
     }
 
     this.disposed = true;
+    this.cancelPreview();
     this.disposables.dispose();
   }
 
@@ -89,6 +96,7 @@ export class ExportImageDialogController implements Disposable {
     this.elements.exportDialogBackdrop.classList.remove('hidden');
     this.elements.exportFilenameInput.focus();
     this.elements.exportFilenameInput.select();
+    void this.refreshPreview();
   }
 
   close(restoreFocus = true): void {
@@ -101,6 +109,7 @@ export class ExportImageDialogController implements Disposable {
     }
 
     this.open = false;
+    this.resetPreview();
     this.setBusy(false);
     this.setError(null);
     this.elements.exportDialogBackdrop.classList.add('hidden');
@@ -117,6 +126,7 @@ export class ExportImageDialogController implements Disposable {
 
   private resetInputs(): void {
     this.elements.exportFilenameInput.value = '';
+    this.resetPreview();
   }
 
   private setBusy(busy: boolean): void {
@@ -187,6 +197,86 @@ export class ExportImageDialogController implements Disposable {
         this.setBusy(false);
       }
     }
+  }
+
+  private async refreshPreview(): Promise<void> {
+    if (this.disposed || !this.open) {
+      return;
+    }
+
+    this.cancelPreview();
+    const abortController = new AbortController();
+    this.exportImagePreviewAbortController = abortController;
+    const requestToken = ++this.exportImagePreviewRequestToken;
+
+    this.hidePreviewCanvas();
+    this.setPreviewStatus(EXPORT_IMAGE_PREVIEW_LOADING_MESSAGE);
+
+    try {
+      const pixels = await this.callbacks.onResolveExportImagePreview(abortController.signal);
+      if (
+        this.disposed ||
+        !this.open ||
+        abortController.signal.aborted ||
+        requestToken !== this.exportImagePreviewRequestToken
+      ) {
+        return;
+      }
+
+      this.renderPreview(pixels);
+    } catch (error) {
+      if (
+        isAbortError(error) ||
+        this.disposed ||
+        !this.open ||
+        abortController.signal.aborted ||
+        requestToken !== this.exportImagePreviewRequestToken
+      ) {
+        return;
+      }
+
+      this.hidePreviewCanvas();
+      this.setPreviewStatus(error instanceof Error ? error.message : 'Preview failed.');
+    } finally {
+      if (this.exportImagePreviewAbortController === abortController) {
+        this.exportImagePreviewAbortController = null;
+      }
+    }
+  }
+
+  private cancelPreview(): void {
+    this.exportImagePreviewRequestToken += 1;
+    this.exportImagePreviewAbortController?.abort();
+    this.exportImagePreviewAbortController = null;
+  }
+
+  private resetPreview(): void {
+    this.cancelPreview();
+    this.hidePreviewCanvas();
+    this.setPreviewStatus(null);
+  }
+
+  private renderPreview(pixels: ExportImagePixels): void {
+    renderPixelsToCanvas(this.elements.exportPreviewCanvas, pixels);
+    this.elements.exportPreviewCanvas.classList.remove('hidden');
+    this.setPreviewStatus(null);
+  }
+
+  private hidePreviewCanvas(): void {
+    this.elements.exportPreviewCanvas.classList.add('hidden');
+    this.elements.exportPreviewCanvas.width = 0;
+    this.elements.exportPreviewCanvas.height = 0;
+  }
+
+  private setPreviewStatus(message: string | null): void {
+    if (!message) {
+      this.elements.exportPreviewStatus.classList.add('hidden');
+      this.elements.exportPreviewStatus.textContent = '';
+      return;
+    }
+
+    this.elements.exportPreviewStatus.classList.remove('hidden');
+    this.elements.exportPreviewStatus.textContent = message;
   }
 }
 

@@ -333,6 +333,58 @@ describe('gl image renderer', () => {
     expect(lastUniform1iValue(gl, 'uAlphaOutputMode')).toBe(1);
   });
 
+  it('renders bounded export pixels into the requested output dimensions', () => {
+    const { renderer, gl } = createHarness();
+    const layer = createInterleavedLayerFromChannels({
+      R: [1, 0, 0, 1, 1, 0, 0, 1],
+      G: [0, 1, 0, 1, 0, 1, 0, 1],
+      B: [0, 0, 1, 1, 0, 0, 1, 1],
+      A: [1, 0.5, 1, 0.5, 1, 0.5, 1, 0.5]
+    });
+    const state = {
+      ...createInitialState(),
+      displaySelection: createChannelRgbSelection('R', 'G', 'B', 'A'),
+      hoveredPixel: null,
+      draftRoi: null
+    };
+
+    renderer.ensureLayerChannelsResident('session-1', 0, 4, 2, layer, ['R', 'G', 'B', 'A']);
+    renderer.setDisplaySelectionBindings(
+      'session-1',
+      0,
+      4,
+      2,
+      buildDisplaySourceBinding(layer, state.displaySelection)
+    );
+    renderer.resize(320, 180);
+    gl.readPixels.mockImplementation((_x, _y, width, height, _format, _type, data: Uint8ClampedArray) => {
+      expect(width).toBe(2);
+      expect(height).toBe(1);
+      data.set([10, 20, 30, 128, 40, 50, 60, 255]);
+    });
+
+    const pixels = renderer.readExportPixels({
+      state,
+      sourceWidth: 4,
+      sourceHeight: 2,
+      outputWidth: 2,
+      outputHeight: 1
+    });
+
+    expect(pixels).toEqual({
+      width: 2,
+      height: 1,
+      data: new Uint8ClampedArray([10, 20, 30, 128, 40, 50, 60, 255])
+    });
+    expect(gl.viewport).toHaveBeenCalledWith(0, 0, 2, 1);
+    expect(gl.viewport).toHaveBeenLastCalledWith(0, 0, 320, 180);
+    expect(lastUniform2fValue(gl, 'uViewport')).toEqual([2, 1]);
+    expect(lastUniform2fValue(gl, 'uPan')).toEqual([2, 1]);
+    expect(lastUniform1fValue(gl, 'uZoom')).toBe(0.5);
+    expect(lastUniform1iValue(gl, 'uCompositeCheckerboard')).toBe(0);
+    expect(lastUniform1iValue(gl, 'uAlphaOutputMode')).toBe(1);
+  });
+
   it('anchors checkerboard rendering to the viewport origin instead of the canvas origin', () => {
     const { renderer, gl } = createHarness();
     const layer = createInterleavedLayerFromChannels({
@@ -417,6 +469,17 @@ function lastUniform1iValue(
   return calls.at(-1)?.[1] as number | undefined;
 }
 
+function lastUniform1fValue(
+  gl: ReturnType<typeof createWebGlContextMock>,
+  uniformName: string
+): number | undefined {
+  const calls = gl.uniform1f.mock.calls.filter((call) => {
+    const [location] = call as [{ name?: string } | null, ...unknown[]];
+    return location?.name === uniformName;
+  });
+  return calls.at(-1)?.[1] as number | undefined;
+}
+
 function lastUniform2fValue(
   gl: ReturnType<typeof createWebGlContextMock>,
   uniformName: string
@@ -441,6 +504,7 @@ function createWebGlContextMock(): WebGL2RenderingContext & {
   deleteVertexArray: ReturnType<typeof vi.fn>;
   readPixels: ReturnType<typeof vi.fn>;
   uniform1i: ReturnType<typeof vi.fn>;
+  uniform1f: ReturnType<typeof vi.fn>;
   uniform2f: ReturnType<typeof vi.fn>;
   clearColor: ReturnType<typeof vi.fn>;
   clear: ReturnType<typeof vi.fn>;
@@ -539,6 +603,7 @@ function createWebGlContextMock(): WebGL2RenderingContext & {
     createFramebuffer: ReturnType<typeof vi.fn>;
     readPixels: ReturnType<typeof vi.fn>;
     uniform1i: ReturnType<typeof vi.fn>;
+    uniform1f: ReturnType<typeof vi.fn>;
     uniform2f: ReturnType<typeof vi.fn>;
     blitFramebuffer: ReturnType<typeof vi.fn>;
     deleteTexture: ReturnType<typeof vi.fn>;

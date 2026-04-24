@@ -43,6 +43,9 @@ export interface Elements {
   exportDialogForm: HTMLFormElement;
   exportFilenameInput: HTMLInputElement;
   exportFormatSelect: HTMLSelectElement;
+  exportPreviewStage: HTMLDivElement;
+  exportPreviewCanvas: HTMLCanvasElement;
+  exportPreviewStatus: HTMLElement;
   exportDialogError: HTMLElement;
   exportDialogCancelButton: HTMLButtonElement;
   exportDialogSubmitButton: HTMLButtonElement;
@@ -244,6 +247,8 @@ export type ExportImageDialogElements = Pick<
   | 'exportDialogForm'
   | 'exportFilenameInput'
   | 'exportFormatSelect'
+  | 'exportPreviewCanvas'
+  | 'exportPreviewStatus'
   | 'exportDialogError'
   | 'exportDialogCancelButton'
   | 'exportDialogSubmitButton'
@@ -379,6 +384,9 @@ export function resolveElements(): Elements {
     exportDialogForm: requireElement('export-dialog-form', HTMLFormElement),
     exportFilenameInput: requireElement('export-filename-input', HTMLInputElement),
     exportFormatSelect: requireElement('export-format-select', HTMLSelectElement),
+    exportPreviewStage: requireElement('export-preview-stage', HTMLDivElement),
+    exportPreviewCanvas: requireElement('export-preview-canvas', HTMLCanvasElement),
+    exportPreviewStatus: requireElement('export-preview-status', HTMLElement),
     exportDialogError: requireElement('export-dialog-error', HTMLElement),
     exportDialogCancelButton: requireElement('export-dialog-cancel-button', HTMLButtonElement),
     exportDialogSubmitButton: requireElement('export-dialog-submit-button', HTMLButtonElement),

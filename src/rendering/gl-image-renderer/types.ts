@@ -66,6 +66,8 @@ export interface ReadExportPixelsArgs {
   state: ViewerState;
   sourceWidth: number;
   sourceHeight: number;
+  outputWidth?: number;
+  outputHeight?: number;
 }
 
 export interface GlImageRendererState {

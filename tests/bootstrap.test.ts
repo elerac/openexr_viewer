@@ -623,6 +623,70 @@ describe('bootstrap app lifecycle', () => {
     app.dispose();
   });
 
+  it('resolves image preview pixels without creating a blob or triggering a download', async () => {
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
+      observe(): void {}
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    const session = {
+      id: 'session-1',
+      filename: 'image.exr',
+      displayName: 'image.exr',
+      fileSizeBytes: 3,
+      source: {
+        kind: 'url',
+        url: '/image.exr'
+      },
+      decoded: {
+        width: 1024,
+        height: 512,
+        layers: []
+      },
+      state: mocks.coreState.sessionState
+    };
+    const pixels = {
+      width: 256,
+      height: 128,
+      data: new Uint8ClampedArray(256 * 128 * 4)
+    };
+    const mutableCoreState = mocks.coreState as unknown as {
+      activeSessionId: string | null;
+      sessions: unknown[];
+    };
+    mutableCoreState.activeSessionId = 'session-1';
+    mutableCoreState.sessions = [session];
+    mocks.rendererReadExportPixels.mockReturnValue(pixels);
+
+    const { bootstrapApp } = await import('../src/app/bootstrap');
+    const app = await bootstrapApp();
+    const callbacks = mocks.getUiCallbacks() as {
+      onResolveExportImagePreview: (signal: AbortSignal) => Promise<typeof pixels>;
+    };
+    const abortController = new AbortController();
+
+    await expect(callbacks.onResolveExportImagePreview(abortController.signal)).resolves.toEqual(pixels);
+
+    expect(mocks.renderCachePrepareActiveSession).toHaveBeenCalledWith(session, mocks.coreState.sessionState);
+    expect(mocks.rendererReadExportPixels).toHaveBeenCalledWith(expect.objectContaining({
+      sourceWidth: 1024,
+      sourceHeight: 512,
+      outputWidth: 256,
+      outputHeight: 128
+    }));
+    expect(mocks.createPngBlobFromPixels).not.toHaveBeenCalled();
+    expect(anchorClick).not.toHaveBeenCalled();
+
+    app.dispose();
+  });
+
   it('surfaces colormap export failures when no registry is available', async () => {
     class ResizeObserverMock {
       constructor(callback: ResizeObserverCallback) {
@@ -698,6 +762,34 @@ describe('bootstrap app lifecycle', () => {
     expect(mocks.coreDispatch).not.toHaveBeenCalledWith({
       type: 'errorSet',
       message: 'No colormaps are available.'
+    });
+
+    app.dispose();
+  });
+
+  it('surfaces image preview failures without setting a global error', async () => {
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
+      observe(): void {}
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+    const { bootstrapApp } = await import('../src/app/bootstrap');
+    const app = await bootstrapApp();
+    const callbacks = mocks.getUiCallbacks() as {
+      onResolveExportImagePreview: (signal: AbortSignal) => Promise<unknown>;
+    };
+
+    await expect(callbacks.onResolveExportImagePreview(new AbortController().signal)).rejects.toThrow('No image is active.');
+
+    expect(mocks.coreDispatch).not.toHaveBeenCalledWith({
+      type: 'errorSet',
+      message: 'No image is active.'
     });
 
     app.dispose();
