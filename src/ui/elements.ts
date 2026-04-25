@@ -63,6 +63,8 @@ export interface Elements {
   exportBatchSizeField: HTMLDivElement;
   exportBatchWidthInput: HTMLInputElement;
   exportBatchHeightInput: HTMLInputElement;
+  exportBatchSelectAllButton: HTMLButtonElement;
+  exportBatchDeselectAllButton: HTMLButtonElement;
   exportBatchSplitToggleButton: HTMLButtonElement;
   exportBatchMatrix: HTMLElement;
   exportBatchDialogStatus: HTMLElement;
@@ -302,6 +304,8 @@ export type ExportImageBatchDialogElements = Pick<
   | 'exportBatchSizeField'
   | 'exportBatchWidthInput'
   | 'exportBatchHeightInput'
+  | 'exportBatchSelectAllButton'
+  | 'exportBatchDeselectAllButton'
   | 'exportBatchSplitToggleButton'
   | 'exportBatchMatrix'
   | 'exportBatchDialogStatus'
@@ -460,6 +464,8 @@ export function resolveElements(): Elements {
     exportBatchSizeField: requireElement('export-batch-size-field', HTMLDivElement),
     exportBatchWidthInput: requireElement('export-batch-width-input', HTMLInputElement),
     exportBatchHeightInput: requireElement('export-batch-height-input', HTMLInputElement),
+    exportBatchSelectAllButton: requireElement('export-batch-select-all-button', HTMLButtonElement),
+    exportBatchDeselectAllButton: requireElement('export-batch-deselect-all-button', HTMLButtonElement),
     exportBatchSplitToggleButton: requireElement('export-batch-split-toggle-button', HTMLButtonElement),
     exportBatchMatrix: requireElement('export-batch-matrix', HTMLElement),
     exportBatchDialogStatus: requireElement('export-batch-dialog-status', HTMLElement),

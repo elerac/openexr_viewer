@@ -87,6 +87,14 @@ export class ExportImageBatchDialogController implements Disposable {
       void this.handleSubmit();
     });
 
+    this.disposables.addEventListener(this.elements.exportBatchSelectAllButton, 'click', () => {
+      this.handleSelectAll();
+    });
+
+    this.disposables.addEventListener(this.elements.exportBatchDeselectAllButton, 'click', () => {
+      this.handleDeselectAll();
+    });
+
     this.disposables.addEventListener(this.elements.exportBatchSplitToggleButton, 'click', () => {
       this.handleSplitToggle();
     });
@@ -246,6 +254,7 @@ export class ExportImageBatchDialogController implements Disposable {
     this.includeSplitRgbChannels = false;
     this.checkedCellKeys.clear();
     this.setStatus('');
+    this.updateSelectionActionState();
     this.updateSplitToggleState();
   }
 
@@ -268,6 +277,7 @@ export class ExportImageBatchDialogController implements Disposable {
     this.elements.exportBatchWidthInput.disabled = busy;
     this.elements.exportBatchHeightInput.disabled = busy;
     this.updateSplitToggleState();
+    this.updateSelectionActionState();
     this.elements.exportBatchDialogSubmitButton.disabled =
       busy || this.getSelectedEntryCount() === 0 || !this.hasValidScreenshotOutputSize();
     this.elements.exportBatchDialogSubmitButton.textContent = busy ? 'Exporting...' : 'Export';
@@ -298,6 +308,8 @@ export class ExportImageBatchDialogController implements Disposable {
     if (this.busy) {
       return;
     }
+
+    this.updateSelectionActionState();
 
     if (!this.hasValidScreenshotOutputSize()) {
       this.setStatus('Enter a positive width and height.');
@@ -358,6 +370,26 @@ export class ExportImageBatchDialogController implements Disposable {
     );
     this.includeSplitRgbChannels = nextIncludeSplitRgbChannels;
     this.abortPreviewWork({ clearCache: true });
+    this.renderMatrix();
+    this.updateStatus();
+  }
+
+  private handleSelectAll(): void {
+    if (this.disposed || this.busy || !this.target || this.elements.exportBatchSelectAllButton.disabled) {
+      return;
+    }
+
+    this.checkedCellKeys = buildVisibleExportBatchCellKeys(this.target, this.includeSplitRgbChannels);
+    this.renderMatrix();
+    this.updateStatus();
+  }
+
+  private handleDeselectAll(): void {
+    if (this.disposed || this.busy || !this.target || this.elements.exportBatchDeselectAllButton.disabled) {
+      return;
+    }
+
+    this.checkedCellKeys.clear();
     this.renderMatrix();
     this.updateStatus();
   }
@@ -472,12 +504,14 @@ export class ExportImageBatchDialogController implements Disposable {
     this.updateSplitToggleState();
     if (!target || target.files.length === 0) {
       this.elements.exportBatchMatrix.replaceChildren(createExportBatchEmptyState('No open files'));
+      this.updateSelectionActionState();
       return;
     }
 
     const columns = buildExportBatchColumns(target.files, this.includeSplitRgbChannels);
     if (columns.length === 0) {
       this.elements.exportBatchMatrix.replaceChildren(createExportBatchEmptyState('No exportable channels'));
+      this.updateSelectionActionState();
       return;
     }
 
@@ -489,6 +523,7 @@ export class ExportImageBatchDialogController implements Disposable {
     );
     this.elements.exportBatchMatrix.replaceChildren(table);
     this.syncMatrixDisabledState();
+    this.updateSelectionActionState();
     this.queueVisiblePreviews(columns, target);
   }
 
@@ -778,6 +813,25 @@ export class ExportImageBatchDialogController implements Disposable {
     );
   }
 
+  private updateSelectionActionState(): void {
+    const visibleCellKeys = this.target
+      ? buildVisibleExportBatchCellKeys(this.target, this.includeSplitRgbChannels)
+      : new Set<string>();
+    const visibleCellCount = visibleCellKeys.size;
+    let selectedVisibleCellCount = 0;
+
+    for (const key of visibleCellKeys) {
+      if (this.checkedCellKeys.has(key)) {
+        selectedVisibleCellCount += 1;
+      }
+    }
+
+    this.elements.exportBatchSelectAllButton.disabled =
+      this.busy || visibleCellCount === 0 || selectedVisibleCellCount === visibleCellCount;
+    this.elements.exportBatchDeselectAllButton.disabled =
+      this.busy || visibleCellCount === 0 || selectedVisibleCellCount === 0;
+  }
+
   private async handleSubmit(): Promise<void> {
     if (this.disposed || this.busy) {
       return;
@@ -895,6 +949,25 @@ export function buildDefaultExportBatchCheckedCells(
   }
 
   checked.add(serializeCellKey(file.sessionId, getColumnKeyForChannel(channel)));
+  return checked;
+}
+
+export function buildVisibleExportBatchCellKeys(
+  target: ExportImageBatchTarget,
+  includeSplitRgbChannels = false
+): Set<string> {
+  const checked = new Set<string>();
+  const columns = buildExportBatchColumns(target.files, includeSplitRgbChannels);
+
+  for (const file of target.files) {
+    const visibleChannels = getVisibleBatchChannels(file.channels, includeSplitRgbChannels);
+    for (const column of columns) {
+      if (findChannelForColumn(visibleChannels, column.key)) {
+        checked.add(serializeCellKey(file.sessionId, column.key));
+      }
+    }
+  }
+
   return checked;
 }
 

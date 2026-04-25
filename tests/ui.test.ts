@@ -2243,6 +2243,7 @@ describe('view menu', () => {
     const widthInput = document.getElementById('export-batch-width-input') as HTMLInputElement;
     const heightInput = document.getElementById('export-batch-height-input') as HTMLInputElement;
     const archiveInput = document.getElementById('export-batch-archive-filename-input') as HTMLInputElement;
+    const selectAllButton = document.getElementById('export-batch-select-all-button') as HTMLButtonElement;
     const submitButton = document.getElementById('export-batch-dialog-submit-button') as HTMLButtonElement;
 
     screenshotButton.click();
@@ -2288,11 +2289,9 @@ describe('view menu', () => {
       }
     ]);
 
-    const depthRowToggle = document.querySelector<HTMLInputElement>(
-      'input[data-batch-toggle="row"][data-session-id="session-2"]'
-    );
-    expect(depthRowToggle).not.toBeNull();
-    depthRowToggle!.click();
+    expect(getCheckedExportBatchCellColumnKeys()).toEqual(['RGB']);
+    selectAllButton.click();
+    expect(getCheckedExportBatchCellColumnKeys()).toEqual(['RGB', 'Z']);
 
     submitButton.click();
     await flushMicrotasks();
@@ -2628,6 +2627,9 @@ describe('view menu', () => {
     const batchButton = document.getElementById('export-image-batch-button') as HTMLButtonElement;
     const batchDialog = document.getElementById('export-batch-dialog-backdrop') as HTMLDivElement;
     const archiveInput = document.getElementById('export-batch-archive-filename-input') as HTMLInputElement;
+    const selectAllButton = document.getElementById('export-batch-select-all-button') as HTMLButtonElement;
+    const deselectAllButton = document.getElementById('export-batch-deselect-all-button') as HTMLButtonElement;
+    const status = document.getElementById('export-batch-dialog-status') as HTMLElement;
     const submitButton = document.getElementById('export-batch-dialog-submit-button') as HTMLButtonElement;
 
     batchButton.click();
@@ -2638,6 +2640,9 @@ describe('view menu', () => {
     expect(document.querySelectorAll('.export-batch-cell-disabled')).toHaveLength(1);
     expect(document.querySelectorAll('.export-batch-cell-swatches')).toHaveLength(0);
     expect(document.querySelectorAll('.export-batch-cell-preview')).toHaveLength(3);
+    expect(getCheckedExportBatchCellColumnKeys()).toEqual(['RGB']);
+    expect(selectAllButton.disabled).toBe(false);
+    expect(deselectAllButton.disabled).toBe(false);
 
     await flushBatchPreviewQueue();
 
@@ -2669,11 +2674,19 @@ describe('view menu', () => {
       }
     ]);
 
-    const depthRowToggle = document.querySelector<HTMLInputElement>(
-      'input[data-batch-toggle="row"][data-session-id="session-2"]'
-    );
-    expect(depthRowToggle).not.toBeNull();
-    depthRowToggle!.click();
+    selectAllButton.click();
+    expect(getCheckedExportBatchCellColumnKeys()).toEqual(['RGB', 'Z', 'Z']);
+    expect(selectAllButton.disabled).toBe(true);
+    expect(deselectAllButton.disabled).toBe(false);
+
+    deselectAllButton.click();
+    expect(getCheckedExportBatchCellColumnKeys()).toEqual([]);
+    expect(status.textContent).toBe('0 images selected.');
+    expect(submitButton.disabled).toBe(true);
+    expect(selectAllButton.disabled).toBe(false);
+    expect(deselectAllButton.disabled).toBe(true);
+
+    selectAllButton.click();
 
     archiveInput.value = 'selected-frames';
     submitButton.click();
@@ -2688,6 +2701,7 @@ describe('view menu', () => {
     });
     expect(request?.entries.map((entry) => entry.outputFilename)).toEqual([
       'shots/beauty.RGB.png',
+      'shots/beauty.Z.png',
       'shots/aovs/depth.Z.png'
     ]);
     expect(batchDialog.classList.contains('hidden')).toBe(true);
@@ -2819,7 +2833,7 @@ describe('view menu', () => {
     ]);
   });
 
-  it('switches batch export to split RGB columns and remaps the RGB default to R', async () => {
+  it('selects only visible split RGB batch columns after switching to split mode', async () => {
     installUiFixture();
 
     const onExportImageBatch = vi.fn<(_: {
@@ -2854,18 +2868,25 @@ describe('view menu', () => {
 
     (document.getElementById('export-image-batch-button') as HTMLButtonElement).click();
     const splitToggle = document.getElementById('export-batch-split-toggle-button') as HTMLButtonElement;
+    const selectAllButton = document.getElementById('export-batch-select-all-button') as HTMLButtonElement;
     splitToggle.click();
 
     expect(splitToggle.getAttribute('aria-pressed')).toBe('true');
     expect(getExportBatchColumnLabels()).toEqual(['R', 'G', 'B', 'A']);
     expect(getCheckedExportBatchCellColumnKeys()).toEqual(['R']);
 
+    selectAllButton.click();
+    expect(getCheckedExportBatchCellColumnKeys()).toEqual(['R', 'G', 'B', 'A']);
+
     (document.getElementById('export-batch-dialog-submit-button') as HTMLButtonElement).click();
     await flushMicrotasks();
 
     expect(onExportImageBatch).toHaveBeenCalledTimes(1);
     expect(onExportImageBatch.mock.calls[0]?.[0].entries.map((entry) => entry.outputFilename)).toEqual([
-      'beauty.R.png'
+      'beauty.R.png',
+      'beauty.G.png',
+      'beauty.B.png',
+      'beauty.A.png'
     ]);
   });
 

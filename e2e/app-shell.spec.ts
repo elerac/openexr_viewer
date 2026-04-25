@@ -524,7 +524,7 @@ test('exports selected file-channel cells as one batch zip download', async ({ p
   await expect(exportBatchDialog).toBeVisible();
   await expect(page.locator('#export-batch-archive-filename-input')).toHaveValue('openexr-export.zip');
   await expect(page.locator('.export-batch-file-toggle').filter({ hasText: 'rgb_aux.exr' })).toBeVisible();
-  await page.locator('.export-batch-file-toggle').filter({ hasText: 'rgb_aux.exr' }).locator('input').click();
+  await page.locator('#export-batch-select-all-button').click();
 
   const downloadPromise = page.waitForEvent('download');
   await exportBatchSubmitButton.click();

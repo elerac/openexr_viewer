@@ -267,13 +267,27 @@
             <div class="app-dialog-field">
               <div class="app-dialog-field-heading">
                 <span class="app-dialog-field-label">Images and Channels</span>
-                <button
-                  id="export-batch-split-toggle-button"
-                  class="channel-split-toggle export-batch-split-toggle hidden"
-                  type="button"
-                  aria-pressed="false"
-                  aria-controls="export-batch-matrix"
-                >Split RGB</button>
+                <div class="export-batch-selection-actions">
+                  <button
+                    id="export-batch-select-all-button"
+                    class="export-batch-selection-button"
+                    type="button"
+                    aria-controls="export-batch-matrix"
+                  >Select all</button>
+                  <button
+                    id="export-batch-deselect-all-button"
+                    class="export-batch-selection-button"
+                    type="button"
+                    aria-controls="export-batch-matrix"
+                  >Deselect all</button>
+                  <button
+                    id="export-batch-split-toggle-button"
+                    class="channel-split-toggle export-batch-split-toggle hidden"
+                    type="button"
+                    aria-pressed="false"
+                    aria-controls="export-batch-matrix"
+                  >Split RGB</button>
+                </div>
               </div>
               <div
                 id="export-batch-matrix"
