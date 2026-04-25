@@ -930,6 +930,16 @@ export class ViewerUi implements Disposable {
     renderLoadingOverlayPhase(this.elements, phase);
   }
 
+  private startScreenshotSelectionFromAction(): void {
+    if (this.elements.exportScreenshotButton.disabled) {
+      return;
+    }
+
+    this.clearPanoramaKeyboardOrbitInput();
+    this.topMenuController.closeAll();
+    this.startScreenshotSelection();
+  }
+
   private startScreenshotSelection(): void {
     if (this.disposed || this.openedImageCount === 0 || this.isLoading || this.isDisplayBusy) {
       return;
@@ -1139,6 +1149,7 @@ export class ViewerUi implements Disposable {
     this.elements.exportImageButton.disabled = this.isLoading || this.isDisplayBusy || !this.exportImageDialog.hasTarget();
     this.elements.exportScreenshotButton.disabled =
       this.isLoading || this.isDisplayBusy || !this.exportImageDialog.hasTarget();
+    this.elements.appScreenshotButton.disabled = this.elements.exportScreenshotButton.disabled;
     this.elements.exportImageBatchButton.disabled =
       this.isLoading || this.isDisplayBusy || !this.exportImageBatchDialog.hasTarget();
     this.elements.screenshotSelectionExportBatchButton.disabled = this.elements.exportImageBatchButton.disabled;
@@ -1198,13 +1209,11 @@ export class ViewerUi implements Disposable {
     });
 
     this.disposables.addEventListener(this.elements.exportScreenshotButton, 'click', () => {
-      if (this.elements.exportScreenshotButton.disabled) {
-        return;
-      }
+      this.startScreenshotSelectionFromAction();
+    });
 
-      this.clearPanoramaKeyboardOrbitInput();
-      this.topMenuController.closeAll();
-      this.startScreenshotSelection();
+    this.disposables.addEventListener(this.elements.appScreenshotButton, 'click', () => {
+      this.startScreenshotSelectionFromAction();
     });
 
     this.disposables.addEventListener(this.elements.screenshotSelectionCancelButton, 'click', () => {

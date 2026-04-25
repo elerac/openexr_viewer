@@ -127,11 +127,17 @@ output {
   color: var(--text);
 }
 
-.app-fullscreen-button {
+.app-menu-actions {
   flex: 0 0 auto;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.app-menu-icon-button {
   width: 1.72rem;
   height: 1.72rem;
-  margin-left: auto;
   display: inline-grid;
   place-items: center;
   border: 0;
@@ -141,20 +147,20 @@ output {
   color: var(--text-dim);
 }
 
-.app-fullscreen-button:hover:not(:disabled),
-.app-fullscreen-button:focus-visible,
+.app-menu-icon-button:hover:not(:disabled),
+.app-menu-icon-button:focus-visible,
 .app-fullscreen-button[aria-pressed='true'] {
   outline: none;
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--text);
 }
 
-.app-fullscreen-button:disabled {
+.app-menu-icon-button:disabled {
   color: color-mix(in srgb, var(--text-dim) 42%, transparent);
   cursor: not-allowed;
 }
 
-.app-fullscreen-icon {
+.app-menu-icon {
   width: 1.08rem;
   height: 1.08rem;
   fill: none;

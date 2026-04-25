@@ -125,37 +125,56 @@
             </div>
           </div>
         </nav>
-        <button
-          id="app-fullscreen-button"
-          class="app-fullscreen-button"
-          type="button"
-          aria-label="Enter app fullscreen"
-          aria-pressed="false"
-          title="Enter app fullscreen"
-        >
-          <svg
-            class="app-fullscreen-icon app-fullscreen-icon--enter"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            focusable="false"
+        <div class="app-menu-actions" aria-label="Quick actions">
+          <button
+            id="app-screenshot-button"
+            class="app-menu-icon-button app-screenshot-button"
+            type="button"
+            aria-label="Export Screenshot..."
+            title="Export Screenshot..."
           >
-            <path d="M4 9V5a1 1 0 0 1 1-1h4" />
-            <path d="M15 4h4a1 1 0 0 1 1 1v4" />
-            <path d="M20 15v4a1 1 0 0 1-1 1h-4" />
-            <path d="M9 20H5a1 1 0 0 1-1-1v-4" />
-          </svg>
-          <svg
-            class="app-fullscreen-icon app-fullscreen-icon--exit"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            focusable="false"
+            <svg
+              class="app-menu-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M14.5 4h-5L8 6H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3l-1.5-2Z" />
+              <circle cx="12" cy="13" r="3.25" />
+            </svg>
+          </button>
+          <button
+            id="app-fullscreen-button"
+            class="app-menu-icon-button app-fullscreen-button"
+            type="button"
+            aria-label="Enter app fullscreen"
+            aria-pressed="false"
+            title="Enter app fullscreen"
           >
-            <path d="M9 4v4a1 1 0 0 1-1 1H4" />
-            <path d="M20 9h-4a1 1 0 0 1-1-1V4" />
-            <path d="M15 20v-4a1 1 0 0 1 1-1h4" />
-            <path d="M4 15h4a1 1 0 0 1 1 1v4" />
-          </svg>
-        </button>
+            <svg
+              class="app-menu-icon app-fullscreen-icon app-fullscreen-icon--enter"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M4 9V5a1 1 0 0 1 1-1h4" />
+              <path d="M15 4h4a1 1 0 0 1 1 1v4" />
+              <path d="M20 15v4a1 1 0 0 1-1 1h-4" />
+              <path d="M9 20H5a1 1 0 0 1-1-1v-4" />
+            </svg>
+            <svg
+              class="app-menu-icon app-fullscreen-icon app-fullscreen-icon--exit"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M9 4v4a1 1 0 0 1-1 1H4" />
+              <path d="M20 9h-4a1 1 0 0 1-1-1V4" />
+              <path d="M15 20v-4a1 1 0 0 1 1-1h4" />
+              <path d="M4 15h4a1 1 0 0 1 1 1v4" />
+            </svg>
+          </button>
+        </div>
         <input id="file-input" type="file" accept=".exr,image/exr" hidden />
         <input id="folder-input" type="file" accept=".exr,image/exr" webkitdirectory multiple hidden />
       </header>

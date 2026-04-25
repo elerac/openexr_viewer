@@ -1094,6 +1094,27 @@ describe('view menu', () => {
     expect(labels).toEqual(['File', 'View', 'Window', 'Gallery', 'Settings']);
   });
 
+  it('renders the top bar screenshot button before the fullscreen button', () => {
+    installUiFixture();
+
+    new ViewerUi(createUiCallbacks());
+
+    const actions = document.querySelector('.app-menu-actions') as HTMLElement;
+    const screenshotButton = document.getElementById('app-screenshot-button') as HTMLButtonElement;
+    const fullscreenButton = document.getElementById('app-fullscreen-button') as HTMLButtonElement;
+
+    expect(screenshotButton.closest('#app-menu-bar')).not.toBeNull();
+    expect(actions).not.toBeNull();
+    expect(Array.from(actions.children).map((child) => child.id)).toEqual([
+      'app-screenshot-button',
+      'app-fullscreen-button'
+    ]);
+    expect(fullscreenButton.previousElementSibling).toBe(screenshotButton);
+    expect(screenshotButton.getAttribute('aria-label')).toBe('Export Screenshot...');
+    expect(screenshotButton.title).toBe('Export Screenshot...');
+    expect(screenshotButton.querySelectorAll('.app-menu-icon')).toHaveLength(1);
+  });
+
   it('renders the app fullscreen button in the top bar', () => {
     installUiFixture();
     installFullscreenApiMock();
@@ -1584,15 +1605,23 @@ describe('view menu', () => {
 
     const ui = new ViewerUi(createUiCallbacks());
     const exportButton = document.getElementById('export-image-button') as HTMLButtonElement;
+    const exportScreenshotButton = document.getElementById('export-screenshot-button') as HTMLButtonElement;
+    const appScreenshotButton = document.getElementById('app-screenshot-button') as HTMLButtonElement;
 
     expect(exportButton.disabled).toBe(true);
+    expect(exportScreenshotButton.disabled).toBe(true);
+    expect(appScreenshotButton.disabled).toBe(true);
 
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
     ui.setExportTarget({ filename: 'image.png' });
     expect(exportButton.disabled).toBe(false);
+    expect(exportScreenshotButton.disabled).toBe(false);
+    expect(appScreenshotButton.disabled).toBe(false);
 
     ui.setRgbViewLoading(true);
     expect(exportButton.disabled).toBe(true);
+    expect(exportScreenshotButton.disabled).toBe(true);
+    expect(appScreenshotButton.disabled).toBe(true);
   });
 
   it('does not show the loading overlay while display selection is only busy', () => {
@@ -2103,6 +2132,28 @@ describe('view menu', () => {
     }, expect.any(AbortSignal));
 
     dialogCancelButton.click();
+  });
+
+  it('starts screenshot selection from the top bar screenshot button', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+    mockDomRect(viewerContainer, { top: 0, bottom: 100, height: 100, width: 200 });
+
+    const appScreenshotButton = document.getElementById('app-screenshot-button') as HTMLButtonElement;
+    const overlay = document.getElementById('screenshot-selection-overlay') as HTMLDivElement;
+    const selectionBox = document.getElementById('screenshot-selection-box') as HTMLDivElement;
+
+    appScreenshotButton.click();
+
+    expect(overlay.classList.contains('hidden')).toBe(false);
+    expect(selectionBox.classList.contains('hidden')).toBe(false);
+
+    ui.cancelScreenshotSelection();
   });
 
   it('shows square snap feedback and exports the snapped screenshot rectangle', async () => {
