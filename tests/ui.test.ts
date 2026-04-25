@@ -1048,10 +1048,11 @@ describe('panel split sizing', () => {
 });
 
 describe('view menu', () => {
-  it('renders file menu items in open-open-folder-export-screenshot-reload-close order', () => {
+  it('renders file menu items with separators between open, export, and reload groups', () => {
     installUiFixture();
 
-    const labels = Array.from(document.querySelectorAll('#file-menu .app-menu-item')).map((item) => item.textContent?.trim());
+    const fileMenu = document.getElementById('file-menu') as HTMLElement;
+    const labels = Array.from(fileMenu.querySelectorAll('.app-menu-item')).map((item) => item.textContent?.trim());
     expect(labels).toEqual([
       'Open...',
       'Open Folder...',
@@ -1062,6 +1063,28 @@ describe('view menu', () => {
       'Reload All',
       'Close All'
     ]);
+
+    const children = Array.from(fileMenu.children).map((element) =>
+      element.classList.contains('app-menu-separator') ? 'separator' : element.textContent?.trim()
+    );
+    expect(children).toEqual([
+      'Open...',
+      'Open Folder...',
+      'separator',
+      'Export...',
+      'Export Screenshot...',
+      'Export Batch...',
+      'Export Colormap...',
+      'separator',
+      'Reload All',
+      'Close All'
+    ]);
+
+    const separators = Array.from(fileMenu.querySelectorAll('.app-menu-separator'));
+    expect(separators).toHaveLength(2);
+    expect(separators.map((separator) => separator.getAttribute('role'))).toEqual(['separator', 'separator']);
+    expect(separators.map((separator) => separator.getAttribute('aria-orientation'))).toEqual(['horizontal', 'horizontal']);
+    expect(fileMenu.querySelectorAll('.app-menu-separator[role="menuitem"]')).toHaveLength(0);
   });
 
   it('renders the top menu tabs in file-view-window-gallery-settings order', () => {

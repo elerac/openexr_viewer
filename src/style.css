@@ -191,6 +191,12 @@ output {
   min-width: 14.5rem;
 }
 
+.app-menu-separator {
+  height: 1px;
+  margin: 0.2rem 0.12rem;
+  background: var(--panel-border);
+}
+
 .app-menu-item {
   width: 100%;
   border: 0;
