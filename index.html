@@ -8,6 +8,7 @@
   </head>
   <body>
     <div id="app" class="app-shell">
+      <canvas id="spectrum-lattice-canvas" class="spectrum-lattice-canvas hidden" aria-hidden="true"></canvas>
       <header id="app-menu-bar" class="app-menu-bar" aria-label="Application menu">
         <div class="app-menu-title">OpenEXR Viewer</div>
         <nav class="app-menu-nav" aria-label="Main menu">
@@ -587,7 +588,6 @@
         <div id="right-panel-resizer" class="layout-resizer layout-resizer--vertical" role="separator" tabindex="0" aria-label="Resize viewer and inspector panels" aria-orientation="vertical"></div>
 
         <section id="viewer-container" class="viewer-container">
-          <canvas id="spectrum-lattice-canvas" class="spectrum-lattice-canvas hidden" aria-hidden="true"></canvas>
           <canvas id="gl-canvas"></canvas>
           <canvas id="overlay-canvas"></canvas>
           <canvas id="probe-overlay-canvas"></canvas>

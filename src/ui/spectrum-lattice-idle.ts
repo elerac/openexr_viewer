@@ -1,6 +1,8 @@
 import { DisposableBag, type Disposable } from '../lifecycle';
 
 interface SpectrumLatticeIdleElements {
+  appShell: HTMLElement;
+  mainLayout: HTMLElement;
   viewerContainer: HTMLElement;
   canvas: HTMLCanvasElement;
   idle: HTMLElement;
@@ -119,8 +121,8 @@ export class SpectrumLatticeIdleController implements Disposable {
   private targetPointer = { x: 0.5, y: 0.5 };
 
   constructor(private readonly elements: SpectrumLatticeIdleElements) {
-    this.disposables.addEventListener(this.elements.viewerContainer, 'pointermove', (event) => {
-      const rect = this.elements.viewerContainer.getBoundingClientRect();
+    this.disposables.addEventListener(this.elements.appShell, 'pointermove', (event) => {
+      const rect = this.elements.appShell.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) {
         return;
       }
@@ -138,6 +140,8 @@ export class SpectrumLatticeIdleController implements Disposable {
     }
 
     this.visible = visible;
+    this.elements.appShell.classList.toggle('is-spectrum-lattice-idle', visible);
+    this.elements.mainLayout.classList.toggle('is-spectrum-lattice-idle', visible);
     this.elements.viewerContainer.classList.toggle('is-spectrum-lattice-idle', visible);
     this.elements.canvas.classList.toggle('hidden', !visible);
     this.elements.idle.classList.toggle('hidden', !visible);
@@ -156,6 +160,11 @@ export class SpectrumLatticeIdleController implements Disposable {
 
     this.disposed = true;
     this.stop();
+    this.elements.appShell.classList.remove('is-spectrum-lattice-idle');
+    this.elements.mainLayout.classList.remove('is-spectrum-lattice-idle');
+    this.elements.viewerContainer.classList.remove('is-spectrum-lattice-idle');
+    this.elements.canvas.classList.add('hidden');
+    this.elements.idle.classList.add('hidden');
     this.disposables.dispose();
     this.deleteGlResources();
   }

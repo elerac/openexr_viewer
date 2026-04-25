@@ -6,6 +6,14 @@
   --text-dim: #9aa4b4;
   --accent: #4bc0ff;
   --error: #ff6e78;
+  --panel-surface: var(--panel);
+  --panel-tab-surface: color-mix(in srgb, var(--panel) 90%, #000);
+  --panel-tab-hover-surface: color-mix(in srgb, var(--panel) 82%, #000);
+  --panel-backdrop-filter: none;
+  --panel-shadow: none;
+  --top-bar-surface: color-mix(in srgb, var(--panel) 92%, #000);
+  --top-bar-backdrop-filter: none;
+  --top-bar-shadow: none;
 }
 
 :root[data-theme='spectrum-lattice'] {
@@ -20,6 +28,16 @@
   --spectrum-panel: rgba(8, 13, 20, 0.58);
   --spectrum-panel-strong: rgba(10, 16, 24, 0.78);
   --spectrum-line-strong: rgba(255, 255, 255, 0.075);
+  --panel-surface: linear-gradient(180deg, rgba(10, 16, 24, 0.5), rgba(8, 12, 18, 0.24));
+  --panel-tab-surface: rgba(8, 13, 20, 0.46);
+  --panel-tab-hover-surface: rgba(12, 22, 32, 0.6);
+  --panel-backdrop-filter: blur(18px) saturate(1.2);
+  --panel-shadow:
+    0 1.1rem 4.2rem rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --top-bar-surface: var(--panel-surface);
+  --top-bar-backdrop-filter: var(--panel-backdrop-filter);
+  --top-bar-shadow: var(--panel-shadow);
 }
 
 * {
@@ -53,6 +71,8 @@ output {
 }
 
 .app-shell {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -121,13 +141,14 @@ output {
   padding: 0 0.45rem;
   border: 1px solid var(--panel-border);
   border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--panel) 92%, #000);
+  background: var(--top-bar-surface);
+  box-shadow: var(--top-bar-shadow);
+  backdrop-filter: var(--top-bar-backdrop-filter);
+  -webkit-backdrop-filter: var(--top-bar-backdrop-filter);
 }
 
-:root[data-theme='spectrum-lattice'] .app-menu-bar,
 :root[data-theme='spectrum-lattice'] .app-menu-dropdown,
 :root[data-theme='spectrum-lattice'] .display-toolbar,
-:root[data-theme='spectrum-lattice'] .panel-shell,
 :root[data-theme='spectrum-lattice'] .app-dialog,
 :root[data-theme='spectrum-lattice'] .screenshot-selection-controls button {
   backdrop-filter: blur(18px) saturate(1.2);
@@ -362,6 +383,8 @@ output {
 }
 
 .display-toolbar {
+  position: relative;
+  z-index: 1;
   min-height: 2rem;
   display: flex;
   flex-wrap: wrap;
@@ -481,6 +504,8 @@ input[type='range'] {
 }
 
 .error-banner {
+  position: relative;
+  z-index: 1;
   padding: 0.5rem 0.75rem;
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--error) 12%, transparent);
@@ -941,6 +966,9 @@ input[type='range'] {
   --bottom-panel-height: 120px;
   --bottom-panel-tab-height: 18px;
   --bottom-panel-resizer-height: 0.5rem;
+  position: relative;
+  isolation: isolate;
+  z-index: 1;
   flex: 1 1 auto;
   width: 100%;
   align-self: stretch;
@@ -964,12 +992,17 @@ input[type='range'] {
 }
 
 .panel-shell {
+  position: relative;
+  z-index: 1;
   display: flex;
   min-height: 0;
   min-width: 0;
   border: 1px solid var(--panel-border);
   border-radius: 0.5rem;
-  background: var(--panel);
+  background: var(--panel-surface);
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: var(--panel-backdrop-filter);
+  -webkit-backdrop-filter: var(--panel-backdrop-filter);
   overflow: hidden;
 }
 
@@ -992,7 +1025,7 @@ input[type='range'] {
   width: var(--panel-collapse-button-width, 18px);
   padding: 0;
   border: 0;
-  background: color-mix(in srgb, var(--panel) 90%, #000);
+  background: var(--panel-tab-surface);
   color: var(--text-dim);
   display: flex;
   align-items: center;
@@ -1053,7 +1086,7 @@ input[type='range'] {
 .panel-collapse-button:hover,
 .panel-collapse-button:focus-visible {
   color: var(--accent);
-  background: color-mix(in srgb, var(--panel) 82%, #000);
+  background: var(--panel-tab-hover-surface);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
@@ -1158,6 +1191,7 @@ body.is-resizing-panel-rows * {
   --viewer-checker-offset-y: 0px;
   grid-area: viewer;
   position: relative;
+  z-index: 1;
   border: 1px solid var(--panel-border);
   border-radius: 0.5rem;
   overflow: hidden;
@@ -1173,8 +1207,8 @@ body.is-resizing-panel-rows * {
 }
 
 .viewer-container.is-spectrum-lattice-idle {
-  background-color: #05070a;
-  background-image: radial-gradient(circle at 50% 45%, #101724, #05070a 68%);
+  background-color: transparent;
+  background-image: none;
 }
 
 .viewer-container.is-spectrum-lattice-idle::before {

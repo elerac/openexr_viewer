@@ -377,6 +377,8 @@ export class ViewerUi implements Disposable {
     });
     this.collapsibleSectionsController = new CollapsibleSectionsController(this.elements);
     this.spectrumLatticeIdleController = new SpectrumLatticeIdleController({
+      appShell: this.elements.appShell,
+      mainLayout: this.elements.mainLayout,
       viewerContainer: this.elements.viewerContainer,
       canvas: this.elements.spectrumLatticeCanvas,
       idle: this.elements.spectrumLatticeIdle

@@ -1,6 +1,56 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { expectViewerAppReady, gotoViewerApp, openGalleryCbox } from './helpers/app';
 import { dragBy } from './helpers/viewer';
+
+async function readPanelShellVisualState(page: Page): Promise<Array<{
+  id: string;
+  backgroundColor: string;
+  backgroundImage: string;
+  backdropFilter: string;
+  boxShadow: string;
+}>> {
+  return await page.evaluate(() => {
+    return ['image-panel', 'right-stack', 'bottom-panel'].map((id) => {
+      const element = document.getElementById(id);
+      if (!(element instanceof HTMLElement)) {
+        throw new Error(`Missing panel shell: ${id}`);
+      }
+
+      const style = getComputedStyle(element);
+      const webkitStyle = style as CSSStyleDeclaration & { webkitBackdropFilter?: string };
+      return {
+        id,
+        backgroundColor: style.backgroundColor,
+        backgroundImage: style.backgroundImage,
+        backdropFilter: style.backdropFilter || webkitStyle.webkitBackdropFilter || '',
+        boxShadow: style.boxShadow
+      };
+    });
+  });
+}
+
+async function readTopBarVisualState(page: Page): Promise<{
+  backgroundColor: string;
+  backgroundImage: string;
+  backdropFilter: string;
+  boxShadow: string;
+}> {
+  return await page.evaluate(() => {
+    const element = document.getElementById('app-menu-bar');
+    if (!(element instanceof HTMLElement)) {
+      throw new Error('Missing app menu bar.');
+    }
+
+    const style = getComputedStyle(element);
+    const webkitStyle = style as CSSStyleDeclaration & { webkitBackdropFilter?: string };
+    return {
+      backgroundColor: style.backgroundColor,
+      backgroundImage: style.backgroundImage,
+      backdropFilter: style.backdropFilter || webkitStyle.webkitBackdropFilter || '',
+      boxShadow: style.boxShadow
+    };
+  });
+}
 
 test('persists the cache budget and keeps open-file actions limited to reload and close', async ({ page }) => {
   await gotoViewerApp(page);
@@ -53,6 +103,9 @@ test('persists Spectrum lattice and hides the idle surface after an image opens'
   const settingsMenuButton = page.getByRole('button', { name: 'Settings', exact: true });
   const settingsMenu = page.locator('#settings-menu');
   const themeInput = page.locator('#theme-select');
+  const appShell = page.locator('#app');
+  const mainLayout = page.locator('#main-layout');
+  const viewer = page.locator('#viewer-container');
   const defaultIdle = page.locator('#viewer-idle-message');
   const idle = page.locator('#spectrum-lattice-idle');
   const idleCanvas = page.locator('#spectrum-lattice-canvas');
@@ -63,6 +116,14 @@ test('persists Spectrum lattice and hides the idle surface after an image opens'
     'Drop an OpenEXR image here.'
   );
   await expect(idle).toBeHidden();
+  const defaultPanelState = await readPanelShellVisualState(page);
+  expect(defaultPanelState.every((panel) => panel.backgroundColor === 'rgb(23, 29, 38)')).toBe(true);
+  expect(defaultPanelState.every((panel) => panel.backgroundImage === 'none')).toBe(true);
+  expect(defaultPanelState.every((panel) => panel.backdropFilter === 'none' || panel.backdropFilter === '')).toBe(true);
+  const defaultTopBarState = await readTopBarVisualState(page);
+  expect(defaultTopBarState.backgroundImage).toBe('none');
+  expect(defaultTopBarState.backdropFilter === 'none' || defaultTopBarState.backdropFilter === '').toBe(true);
+  expect(defaultTopBarState.boxShadow).toBe('none');
   await settingsMenuButton.click();
   await expect(settingsMenu).toBeVisible();
   await themeInput.selectOption('spectrum-lattice');
@@ -75,6 +136,63 @@ test('persists Spectrum lattice and hides the idle surface after an image opens'
     'Drop an OpenEXR image here.'
   );
   await expect(idleCanvas).toBeVisible();
+  const spectrumPanelState = await readPanelShellVisualState(page);
+  expect(spectrumPanelState.every((panel) => panel.backgroundImage.includes('linear-gradient'))).toBe(true);
+  expect(spectrumPanelState.every((panel) => panel.backdropFilter.includes('blur'))).toBe(true);
+  expect(spectrumPanelState.every((panel) => panel.boxShadow !== 'none')).toBe(true);
+  const spectrumTopBarState = await readTopBarVisualState(page);
+  expect(spectrumTopBarState.backgroundImage.includes('linear-gradient')).toBe(true);
+  expect(spectrumTopBarState.backdropFilter.includes('blur')).toBe(true);
+  expect(spectrumTopBarState.boxShadow).not.toBe('none');
+  const spectrumLayoutGeometry = await page.evaluate(() => {
+    const appShell = document.getElementById('app');
+    const mainLayout = document.getElementById('main-layout');
+    const canvas = document.getElementById('spectrum-lattice-canvas');
+    const viewer = document.getElementById('viewer-container');
+    const appMenuBar = document.getElementById('app-menu-bar');
+    if (
+      !(appShell instanceof HTMLElement) ||
+      !(mainLayout instanceof HTMLElement) ||
+      !(canvas instanceof HTMLCanvasElement) ||
+      !(viewer instanceof HTMLElement) ||
+      !(appMenuBar instanceof HTMLElement)
+    ) {
+      throw new Error('Missing Spectrum layout elements.');
+    }
+
+    const appRect = appShell.getBoundingClientRect();
+    const mainRect = mainLayout.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    const viewerRect = viewer.getBoundingClientRect();
+    const topBarRect = appMenuBar.getBoundingClientRect();
+    const viewerStyle = getComputedStyle(viewer);
+    return {
+      app: { left: appRect.left, top: appRect.top, width: appRect.width, height: appRect.height },
+      main: { left: mainRect.left, top: mainRect.top, width: mainRect.width, height: mainRect.height },
+      canvas: { left: canvasRect.left, top: canvasRect.top, width: canvasRect.width, height: canvasRect.height },
+      viewer: { left: viewerRect.left, top: viewerRect.top, width: viewerRect.width, height: viewerRect.height },
+      topBar: { left: topBarRect.left, top: topBarRect.top, width: topBarRect.width, height: topBarRect.height },
+      canvasParentId: canvas.parentElement?.id,
+      appIdle: appShell.classList.contains('is-spectrum-lattice-idle'),
+      mainIdle: mainLayout.classList.contains('is-spectrum-lattice-idle'),
+      viewerBackgroundColor: viewerStyle.backgroundColor,
+      viewerBackgroundImage: viewerStyle.backgroundImage
+    };
+  });
+  expect(spectrumLayoutGeometry.canvasParentId).toBe('app');
+  expect(spectrumLayoutGeometry.appIdle).toBe(true);
+  expect(spectrumLayoutGeometry.mainIdle).toBe(true);
+  expect(Math.abs(spectrumLayoutGeometry.canvas.left - spectrumLayoutGeometry.app.left)).toBeLessThanOrEqual(1);
+  expect(Math.abs(spectrumLayoutGeometry.canvas.top - spectrumLayoutGeometry.app.top)).toBeLessThanOrEqual(1);
+  expect(Math.abs(spectrumLayoutGeometry.canvas.width - spectrumLayoutGeometry.app.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(spectrumLayoutGeometry.canvas.height - spectrumLayoutGeometry.app.height)).toBeLessThanOrEqual(1);
+  expect(spectrumLayoutGeometry.topBar.top).toBeGreaterThanOrEqual(spectrumLayoutGeometry.canvas.top);
+  expect(spectrumLayoutGeometry.topBar.top + spectrumLayoutGeometry.topBar.height).toBeLessThanOrEqual(
+    spectrumLayoutGeometry.canvas.top + spectrumLayoutGeometry.canvas.height + 1
+  );
+  expect(spectrumLayoutGeometry.canvas.width).toBeGreaterThan(spectrumLayoutGeometry.viewer.width);
+  expect(spectrumLayoutGeometry.viewerBackgroundColor).toBe('rgba(0, 0, 0, 0)');
+  expect(spectrumLayoutGeometry.viewerBackgroundImage).toBe('none');
   await expect.poll(async () => {
     return await page.evaluate(() => ({
       theme: document.documentElement.dataset.theme,
@@ -90,6 +208,9 @@ test('persists Spectrum lattice and hides the idle surface after an image opens'
   await expect(defaultIdle).toBeHidden();
   await expect(idle).toBeVisible();
   await expect(idle.locator('h2')).toHaveCount(0);
+  await expect(appShell).toHaveClass(/is-spectrum-lattice-idle/);
+  await expect(mainLayout).toHaveClass(/is-spectrum-lattice-idle/);
+  await expect(viewer).toHaveClass(/is-spectrum-lattice-idle/);
   await settingsMenuButton.click();
   await expect(settingsMenu).toBeVisible();
   await expect(themeInput).toHaveValue('spectrum-lattice');
@@ -99,6 +220,9 @@ test('persists Spectrum lattice and hides the idle surface after an image opens'
   await expect(defaultIdle).toBeHidden();
   await expect(idle).toBeHidden();
   await expect(idleCanvas).toBeHidden();
+  await expect(appShell).not.toHaveClass(/is-spectrum-lattice-idle/);
+  await expect(mainLayout).not.toHaveClass(/is-spectrum-lattice-idle/);
+  await expect(viewer).not.toHaveClass(/is-spectrum-lattice-idle/);
   await expect.poll(async () => {
     return await page.evaluate(() => document.documentElement.dataset.theme);
   }).toBe('spectrum-lattice');

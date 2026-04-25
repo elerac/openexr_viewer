@@ -1278,6 +1278,8 @@ describe('view menu', () => {
 
     new ViewerUi(createUiCallbacks());
     const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
+    const appShell = document.getElementById('app') as HTMLElement;
+    const mainLayout = document.getElementById('main-layout') as HTMLElement;
     const viewer = document.getElementById('viewer-container') as HTMLElement;
     const defaultIdle = document.getElementById('viewer-idle-message') as HTMLDivElement;
     const idle = document.getElementById('spectrum-lattice-idle') as HTMLDivElement;
@@ -1298,6 +1300,9 @@ describe('view menu', () => {
     expect(themeSelect.value).toBe(SPECTRUM_LATTICE_THEME_ID);
     expect(document.documentElement.dataset.theme).toBe(SPECTRUM_LATTICE_THEME_ID);
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe(SPECTRUM_LATTICE_THEME_ID);
+    expect(canvas.parentElement).toBe(appShell);
+    expect(appShell.classList.contains('is-spectrum-lattice-idle')).toBe(true);
+    expect(mainLayout.classList.contains('is-spectrum-lattice-idle')).toBe(true);
     expect(viewer.classList.contains('is-spectrum-lattice-idle')).toBe(true);
     expect(defaultIdle.classList.contains('hidden')).toBe(true);
     expect(idle.classList.contains('hidden')).toBe(false);
@@ -1329,27 +1334,42 @@ describe('view menu', () => {
 
     const ui = new ViewerUi(createUiCallbacks());
     const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
+    const appShell = document.getElementById('app') as HTMLElement;
+    const mainLayout = document.getElementById('main-layout') as HTMLElement;
     const defaultIdle = document.getElementById('viewer-idle-message') as HTMLElement;
     const idle = document.getElementById('spectrum-lattice-idle') as HTMLElement;
+    const canvas = document.getElementById('spectrum-lattice-canvas') as HTMLElement;
 
     themeSelect.value = SPECTRUM_LATTICE_THEME_ID;
     themeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(appShell.classList.contains('is-spectrum-lattice-idle')).toBe(true);
+    expect(mainLayout.classList.contains('is-spectrum-lattice-idle')).toBe(true);
     expect(defaultIdle.classList.contains('hidden')).toBe(true);
     expect(idle.classList.contains('hidden')).toBe(false);
+    expect(canvas.classList.contains('hidden')).toBe(false);
 
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
 
+    expect(appShell.classList.contains('is-spectrum-lattice-idle')).toBe(false);
+    expect(mainLayout.classList.contains('is-spectrum-lattice-idle')).toBe(false);
     expect(defaultIdle.classList.contains('hidden')).toBe(true);
     expect(idle.classList.contains('hidden')).toBe(true);
+    expect(canvas.classList.contains('hidden')).toBe(true);
 
     ui.setOpenedImageOptions([], null);
+    expect(appShell.classList.contains('is-spectrum-lattice-idle')).toBe(true);
+    expect(mainLayout.classList.contains('is-spectrum-lattice-idle')).toBe(true);
     expect(defaultIdle.classList.contains('hidden')).toBe(true);
     expect(idle.classList.contains('hidden')).toBe(false);
+    expect(canvas.classList.contains('hidden')).toBe(false);
 
     themeSelect.value = 'default';
     themeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(appShell.classList.contains('is-spectrum-lattice-idle')).toBe(false);
+    expect(mainLayout.classList.contains('is-spectrum-lattice-idle')).toBe(false);
     expect(defaultIdle.classList.contains('hidden')).toBe(false);
     expect(idle.classList.contains('hidden')).toBe(true);
+    expect(canvas.classList.contains('hidden')).toBe(true);
   });
 
   it('keeps viewer mode items disabled until an image is active', () => {
