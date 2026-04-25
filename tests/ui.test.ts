@@ -14,7 +14,8 @@ import {
 import { buildPartLayerItemsFromChannelNames } from '../src/ui/layer-panel';
 import {
   buildExportBatchChannelFilenameToken,
-  buildExportBatchOutputFilename
+  buildExportBatchOutputFilename,
+  buildExportBatchScreenshotOutputFilename
 } from '../src/ui/export-image-batch-dialog';
 import {
   ProgressiveLoadingOverlayDisclosure,
@@ -2138,6 +2139,191 @@ describe('view menu', () => {
     dialogCancelButton.click();
   });
 
+  it('opens screenshot batch export from the selection overlay and submits cropped batch entries', async () => {
+    installUiFixture();
+
+    const onExportImageBatch = vi.fn<(_: {
+      archiveFilename: string;
+      entries: Array<{
+        mode?: 'image' | 'screenshot';
+        rect?: { x: number; y: number; width: number; height: number };
+        sourceViewport?: { width: number; height: number };
+        outputWidth?: number;
+        outputHeight?: number;
+        outputFilename: string;
+      }>;
+      format: 'png-zip';
+    }, _signal: AbortSignal) => Promise<void>>(async () => undefined);
+    const onResolveExportImageBatchPreview = vi.fn<(_request: {
+      sessionId: string;
+      activeLayer: number;
+      displaySelection: unknown;
+      channelLabel: string;
+      mode?: 'image' | 'screenshot';
+      outputWidth?: number;
+      outputHeight?: number;
+    }, _signal: AbortSignal) => Promise<ReturnType<typeof createPreviewPixels>>>(async () => createPreviewPixels());
+    const ui = new ViewerUi(createUiCallbacks({
+      onExportImageBatch,
+      onResolveExportImageBatchPreview
+    }));
+    const rgbSelection = {
+      kind: 'channelRgb' as const,
+      r: 'R',
+      g: 'G',
+      b: 'B',
+      alpha: null
+    };
+    const depthSelection = {
+      kind: 'channelMono' as const,
+      channel: 'Z',
+      alpha: null
+    };
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'beauty.exr' },
+      { id: 'session-2', label: 'depth.exr' }
+    ], 'session-1');
+    ui.setExportTarget({ filename: 'beauty.png' });
+    ui.setExportBatchTarget({
+      archiveFilename: 'openexr-export.zip',
+      activeSessionId: 'session-1',
+      files: [
+        {
+          sessionId: 'session-1',
+          filename: 'beauty.exr',
+          label: 'beauty.exr',
+          sourcePath: 'shots/beauty.exr',
+          thumbnailDataUrl: null,
+          activeLayer: 0,
+          displaySelection: rgbSelection,
+          channels: [
+            {
+              value: 'group:',
+              label: 'RGB',
+              selectionKey: 'channelRgb:R:G:B:',
+              selection: rgbSelection,
+              swatches: ['#ff6570', '#6bd66f', '#51aefe'],
+              mergedOrder: 0,
+              splitOrder: 0
+            }
+          ]
+        },
+        {
+          sessionId: 'session-2',
+          filename: 'depth.exr',
+          label: 'depth.exr',
+          sourcePath: 'shots/aovs/depth.exr',
+          thumbnailDataUrl: null,
+          activeLayer: 0,
+          displaySelection: depthSelection,
+          channels: [
+            {
+              value: 'channel:Z',
+              label: 'Z',
+              selectionKey: 'channelMono:Z:',
+              selection: depthSelection,
+              swatches: ['#8f83e6'],
+              mergedOrder: 0,
+              splitOrder: 0
+            }
+          ]
+        }
+      ]
+    });
+
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+    mockDomRect(viewerContainer, { top: 0, bottom: 100, height: 100, width: 200 });
+
+    const screenshotButton = document.getElementById('export-screenshot-button') as HTMLButtonElement;
+    const overlay = document.getElementById('screenshot-selection-overlay') as HTMLDivElement;
+    const overlayBatchButton = document.getElementById('screenshot-selection-export-batch-button') as HTMLButtonElement;
+    const batchDialog = document.getElementById('export-batch-dialog-backdrop') as HTMLDivElement;
+    const title = document.getElementById('export-batch-dialog-title') as HTMLElement;
+    const sizeField = document.getElementById('export-batch-size-field') as HTMLDivElement;
+    const widthInput = document.getElementById('export-batch-width-input') as HTMLInputElement;
+    const heightInput = document.getElementById('export-batch-height-input') as HTMLInputElement;
+    const archiveInput = document.getElementById('export-batch-archive-filename-input') as HTMLInputElement;
+    const submitButton = document.getElementById('export-batch-dialog-submit-button') as HTMLButtonElement;
+
+    screenshotButton.click();
+    ui.setScreenshotSelectionRect({ x: 30, y: 15, width: 140, height: 70 });
+    expect(overlayBatchButton.disabled).toBe(false);
+
+    overlayBatchButton.click();
+
+    expect(batchDialog.classList.contains('hidden')).toBe(false);
+    expect(title.textContent).toBe('Export Screenshot Batch');
+    expect(archiveInput.value).toBe('openexr-screenshot-export.zip');
+    expect(sizeField.classList.contains('hidden')).toBe(false);
+    expect(widthInput.value).toBe('140');
+    expect(heightInput.value).toBe('70');
+
+    widthInput.value = '280';
+    widthInput.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(heightInput.value).toBe('140');
+
+    await flushBatchPreviewQueue();
+
+    expect(onResolveExportImageBatchPreview).toHaveBeenCalledTimes(2);
+    expect(onResolveExportImageBatchPreview.mock.calls.map(([request]) => ({
+      sessionId: request.sessionId,
+      channelLabel: request.channelLabel,
+      mode: request.mode,
+      outputWidth: request.outputWidth,
+      outputHeight: request.outputHeight
+    }))).toEqual([
+      {
+        sessionId: 'session-1',
+        channelLabel: 'RGB',
+        mode: 'screenshot',
+        outputWidth: 280,
+        outputHeight: 140
+      },
+      {
+        sessionId: 'session-2',
+        channelLabel: 'Z',
+        mode: 'screenshot',
+        outputWidth: 280,
+        outputHeight: 140
+      }
+    ]);
+
+    const depthRowToggle = document.querySelector<HTMLInputElement>(
+      'input[data-batch-toggle="row"][data-session-id="session-2"]'
+    );
+    expect(depthRowToggle).not.toBeNull();
+    depthRowToggle!.click();
+
+    submitButton.click();
+    await flushMicrotasks();
+
+    expect(onExportImageBatch).toHaveBeenCalledTimes(1);
+    expect(onExportImageBatch.mock.calls[0]?.[0]).toMatchObject({
+      archiveFilename: 'openexr-screenshot-export.zip',
+      format: 'png-zip',
+      entries: [
+        {
+          mode: 'screenshot',
+          rect: { x: 30, y: 15, width: 140, height: 70 },
+          sourceViewport: { width: 200, height: 100 },
+          outputWidth: 280,
+          outputHeight: 140,
+          outputFilename: 'shots/beauty-screenshot.RGB.png'
+        },
+        {
+          mode: 'screenshot',
+          rect: { x: 30, y: 15, width: 140, height: 70 },
+          sourceViewport: { width: 200, height: 100 },
+          outputWidth: 280,
+          outputHeight: 140,
+          outputFilename: 'shots/aovs/depth-screenshot.Z.png'
+        }
+      ]
+    });
+    expect(batchDialog.classList.contains('hidden')).toBe(true);
+    expect(overlay.classList.contains('hidden')).toBe(true);
+  });
+
   it('cancels screenshot selection from the overlay and Escape without forgetting screenshot info', async () => {
     installUiFixture();
 
@@ -2840,6 +3026,7 @@ describe('view menu', () => {
     expect(buildExportBatchChannelFilenameToken('S1/S0.(R,G,B)')).toBe('S1_over_S0.RGB');
     expect(buildExportBatchOutputFilename('shots/a/beauty.exr', 'RGB', used)).toBe('shots/a/beauty.RGB.png');
     expect(buildExportBatchOutputFilename('shots/a/beauty.exr', 'RGB', used)).toBe('shots/a/beauty.RGB (2).png');
+    expect(buildExportBatchScreenshotOutputFilename('shots/a/beauty.exr', 'RGB', used)).toBe('shots/a/beauty-screenshot.RGB.png');
   });
 
   it('requests and renders a colormap export preview when the dialog opens', async () => {

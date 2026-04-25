@@ -1212,6 +1212,7 @@ body.is-resizing-panel-rows * {
 .screenshot-selection-controls {
   position: absolute;
   display: flex;
+  flex-wrap: wrap;
   gap: 0.45rem;
   pointer-events: auto;
 }

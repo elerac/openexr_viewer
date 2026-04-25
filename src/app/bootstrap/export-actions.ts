@@ -68,6 +68,7 @@ interface ExportImageBatchActionDependencies {
 interface ExportImageBatchPreviewActionDependencies {
   core: ViewerAppCore;
   getRenderCache: () => RenderCacheService;
+  getRenderer: () => WebGlExrRenderer;
   isDisposed: () => boolean;
   previewMaxLongestEdge: number;
 }
@@ -315,6 +316,7 @@ export async function resolveExportImageBatchPreviewPixels(
   {
     core,
     getRenderCache,
+    getRenderer,
     isDisposed,
     previewMaxLongestEdge
   }: ExportImageBatchPreviewActionDependencies
@@ -343,6 +345,7 @@ export async function resolveExportImageBatchPreviewPixels(
       session,
       appState: stateSnapshot,
       renderCache,
+      renderer: getRenderer(),
       lutCache,
       signal,
       previewMaxLongestEdge,
@@ -363,6 +366,10 @@ export async function resolveExportImageBatchPreviewPixels(
     }
 
     throw error instanceof Error ? error : new Error('Batch export preview failed.');
+  } finally {
+    if (request.mode === 'screenshot') {
+      restoreActiveRendererBinding(core, renderCache, getRenderer());
+    }
   }
 }
 
@@ -433,14 +440,32 @@ async function resolveBatchEntryExportPixels({
   renderCache.prepareActiveSession(session, exportState.state);
   throwIfAborted(signal, abortMessage);
 
+  const screenshotRegion = entry.mode === 'screenshot' ? entry : null;
+  const requestedWidth = screenshotRegion?.outputWidth ?? session.decoded.width;
+  const requestedHeight = screenshotRegion?.outputHeight ?? session.decoded.height;
   const outputSize = previewMaxLongestEdge
-    ? resolveBoundedImageExportSize(session.decoded.width, session.decoded.height, previewMaxLongestEdge)
-    : null;
+    ? resolveBoundedImageExportSize(requestedWidth, requestedHeight, previewMaxLongestEdge)
+    : screenshotRegion
+      ? { width: requestedWidth, height: requestedHeight }
+      : null;
+  const renderState = screenshotRegion
+    ? {
+      ...mergeRenderState(exportState.state, createInteractionState(exportState.state)),
+      viewerMode: appState.sessionState.viewerMode,
+      ...appState.interactionState.view
+    }
+    : mergeRenderState(exportState.state, createInteractionState(exportState.state));
 
   const pixels = renderer.readExportPixels({
-    state: mergeRenderState(exportState.state, createInteractionState(exportState.state)),
+    state: renderState,
     sourceWidth: session.decoded.width,
     sourceHeight: session.decoded.height,
+    ...(screenshotRegion ? {
+      screenshot: {
+        rect: screenshotRegion.rect,
+        sourceViewport: screenshotRegion.sourceViewport
+      }
+    } : {}),
     ...(outputSize ? {
       outputWidth: outputSize.width,
       outputHeight: outputSize.height
@@ -455,6 +480,7 @@ async function resolveBatchEntryPreviewPixels({
   session,
   appState,
   renderCache,
+  renderer,
   lutCache,
   signal,
   previewMaxLongestEdge,
@@ -464,11 +490,26 @@ async function resolveBatchEntryPreviewPixels({
   session: OpenedImageSession;
   appState: ViewerAppState;
   renderCache: RenderCacheService;
+  renderer: WebGlExrRenderer;
   lutCache: Map<string, ColormapLut>;
   signal: AbortSignal;
   previewMaxLongestEdge: number;
   abortMessage: string;
 }): Promise<ExportImagePixels> {
+  if (entry.mode === 'screenshot') {
+    return resolveBatchEntryExportPixels({
+      entry,
+      session,
+      appState,
+      renderCache,
+      renderer,
+      lutCache,
+      signal,
+      previewMaxLongestEdge,
+      abortMessage
+    });
+  }
+
   const exportState = await resolveBatchEntryExportState({
     entry,
     session,

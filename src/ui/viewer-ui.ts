@@ -48,6 +48,7 @@ import type {
   ExportImagePreviewRequest,
   ExportImageRequest,
   ExportImageTarget,
+  ExportScreenshotRegion,
   ImageRoi,
   OpenedImageDropPlacement,
   PanoramaKeyboardOrbitInput,
@@ -323,11 +324,22 @@ export class ViewerUi implements Disposable {
       }
     });
     this.exportImageBatchDialog = new ExportImageBatchDialogController(this.elements, {
-      onExportImageBatch: (request, signal) => {
-        return this.callbacks.onExportImageBatch(request, signal);
+      onExportImageBatch: async (request, signal) => {
+        await this.callbacks.onExportImageBatch(request, signal);
+        if (request.entries.some((entry) => entry.mode === 'screenshot')) {
+          this.hideScreenshotSelection();
+        }
       },
       onResolveExportImageBatchPreview: (request, signal) => {
         return this.callbacks.onResolveExportImageBatchPreview(request, signal);
+      },
+      onCancel: (mode) => {
+        if (mode === 'screenshot') {
+          this.hideScreenshotSelection();
+        }
+      },
+      onScreenshotOutputSizeChange: (size) => {
+        this.lastScreenshotOutputSize = { ...size };
       }
     });
     this.exportColormapDialog = new ExportColormapDialogController(this.elements, {
@@ -953,6 +965,42 @@ export class ViewerUi implements Disposable {
       return;
     }
 
+    const region = this.resolveScreenshotExportRegion();
+    if (!region) {
+      return;
+    }
+    this.exportImageDialog.openDialog({
+      filename: buildScreenshotExportFilename(this.exportTarget?.filename ?? 'image.png'),
+      kind: 'screenshot',
+      rect: region.rect,
+      sourceViewport: region.sourceViewport,
+      outputWidth: region.outputWidth,
+      outputHeight: region.outputHeight
+    });
+  }
+
+  private openScreenshotBatchExportDialog(): void {
+    if (!this.screenshotSelection || this.elements.screenshotSelectionExportBatchButton.disabled) {
+      return;
+    }
+
+    const region = this.resolveScreenshotExportRegion();
+    if (!region) {
+      return;
+    }
+    this.exportImageDialog.close(false);
+    this.exportColormapDialog.close(false);
+    this.exportImageBatchDialog.openDialog({
+      mode: 'screenshot',
+      screenshot: region
+    });
+  }
+
+  private resolveScreenshotExportRegion(): ExportScreenshotRegion | null {
+    if (!this.screenshotSelection) {
+      return null;
+    }
+
     const viewport = this.readViewerViewport();
     const previousRect = this.screenshotSelection.rect;
     const rect = clampScreenshotSelectionRect(this.screenshotSelection.rect, viewport);
@@ -964,16 +1012,17 @@ export class ViewerUi implements Disposable {
       rect
     };
     this.lastScreenshotSelectionRect = { ...rect };
-    this.exportImageDialog.openDialog({
-      filename: buildScreenshotExportFilename(this.exportTarget?.filename ?? 'image.png'),
-      kind: 'screenshot',
+    const outputSize = this.lastScreenshotOutputSize ?? {
+      width: Math.max(1, Math.round(rect.width)),
+      height: Math.max(1, Math.round(rect.height))
+    };
+
+    return {
       rect,
       sourceViewport: viewport,
-      ...(this.lastScreenshotOutputSize ? {
-        outputWidth: this.lastScreenshotOutputSize.width,
-        outputHeight: this.lastScreenshotOutputSize.height
-      } : {})
-    });
+      outputWidth: outputSize.width,
+      outputHeight: outputSize.height
+    };
   }
 
   private renderScreenshotSelectionOverlay(): void {
@@ -1001,7 +1050,7 @@ export class ViewerUi implements Disposable {
     this.renderScreenshotSelectionSize(rect, viewport);
     this.renderScreenshotSelectionSquareSnapFeedback();
 
-    const controlsWidth = this.elements.screenshotSelectionControls.offsetWidth || 132;
+    const controlsWidth = this.elements.screenshotSelectionControls.offsetWidth || 244;
     const controlsHeight = this.elements.screenshotSelectionControls.offsetHeight || 34;
     const controlsX = Math.min(
       Math.max(8, rect.x + rect.width - controlsWidth),
@@ -1092,6 +1141,7 @@ export class ViewerUi implements Disposable {
       this.isLoading || this.isDisplayBusy || !this.exportImageDialog.hasTarget();
     this.elements.exportImageBatchButton.disabled =
       this.isLoading || this.isDisplayBusy || !this.exportImageBatchDialog.hasTarget();
+    this.elements.screenshotSelectionExportBatchButton.disabled = this.elements.exportImageBatchButton.disabled;
     this.elements.exportColormapButton.disabled = this.isLoading || !this.exportColormapDialog.hasOptions();
   }
 
@@ -1163,6 +1213,10 @@ export class ViewerUi implements Disposable {
 
     this.disposables.addEventListener(this.elements.screenshotSelectionExportButton, 'click', () => {
       this.openScreenshotExportDialog();
+    });
+
+    this.disposables.addEventListener(this.elements.screenshotSelectionExportBatchButton, 'click', () => {
+      this.openScreenshotBatchExportDialog();
     });
 
     this.disposables.addEventListener(this.elements.exportImageBatchButton, 'click', () => {
@@ -1321,7 +1375,8 @@ export class ViewerUi implements Disposable {
 
     return (
       this.elements.viewerContainer.contains(target) ||
-      (this.exportImageDialog.isOpen() && this.elements.exportDialogBackdrop.contains(target))
+      (this.exportImageDialog.isOpen() && this.elements.exportDialogBackdrop.contains(target)) ||
+      (this.exportImageBatchDialog.isOpen() && this.elements.exportBatchDialogBackdrop.contains(target))
     );
   }
 

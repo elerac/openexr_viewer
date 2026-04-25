@@ -57,7 +57,12 @@ export interface Elements {
   exportDialogSubmitButton: HTMLButtonElement;
   exportBatchDialogBackdrop: HTMLDivElement;
   exportBatchDialogForm: HTMLFormElement;
+  exportBatchDialogTitle: HTMLElement;
+  exportBatchDialogSubtitle: HTMLElement;
   exportBatchArchiveFilenameInput: HTMLInputElement;
+  exportBatchSizeField: HTMLDivElement;
+  exportBatchWidthInput: HTMLInputElement;
+  exportBatchHeightInput: HTMLInputElement;
   exportBatchSplitToggleButton: HTMLButtonElement;
   exportBatchMatrix: HTMLElement;
   exportBatchDialogStatus: HTMLElement;
@@ -168,6 +173,7 @@ export interface Elements {
   screenshotSelectionControls: HTMLDivElement;
   screenshotSelectionCancelButton: HTMLButtonElement;
   screenshotSelectionExportButton: HTMLButtonElement;
+  screenshotSelectionExportBatchButton: HTMLButtonElement;
 }
 
 export type OpenedImagesPanelElements = Pick<
@@ -290,7 +296,12 @@ export type ExportImageBatchDialogElements = Pick<
   | 'fileMenuButton'
   | 'exportBatchDialogBackdrop'
   | 'exportBatchDialogForm'
+  | 'exportBatchDialogTitle'
+  | 'exportBatchDialogSubtitle'
   | 'exportBatchArchiveFilenameInput'
+  | 'exportBatchSizeField'
+  | 'exportBatchWidthInput'
+  | 'exportBatchHeightInput'
   | 'exportBatchSplitToggleButton'
   | 'exportBatchMatrix'
   | 'exportBatchDialogStatus'
@@ -443,7 +454,12 @@ export function resolveElements(): Elements {
     exportDialogSubmitButton: requireElement('export-dialog-submit-button', HTMLButtonElement),
     exportBatchDialogBackdrop: requireElement('export-batch-dialog-backdrop', HTMLDivElement),
     exportBatchDialogForm: requireElement('export-batch-dialog-form', HTMLFormElement),
+    exportBatchDialogTitle: requireElement('export-batch-dialog-title', HTMLElement),
+    exportBatchDialogSubtitle: requireElement('export-batch-dialog-subtitle', HTMLElement),
     exportBatchArchiveFilenameInput: requireElement('export-batch-archive-filename-input', HTMLInputElement),
+    exportBatchSizeField: requireElement('export-batch-size-field', HTMLDivElement),
+    exportBatchWidthInput: requireElement('export-batch-width-input', HTMLInputElement),
+    exportBatchHeightInput: requireElement('export-batch-height-input', HTMLInputElement),
     exportBatchSplitToggleButton: requireElement('export-batch-split-toggle-button', HTMLButtonElement),
     exportBatchMatrix: requireElement('export-batch-matrix', HTMLElement),
     exportBatchDialogStatus: requireElement('export-batch-dialog-status', HTMLElement),
@@ -553,7 +569,8 @@ export function resolveElements(): Elements {
     screenshotSelectionSize: requireElement('screenshot-selection-size', HTMLDivElement),
     screenshotSelectionControls: requireElement('screenshot-selection-controls', HTMLDivElement),
     screenshotSelectionCancelButton: requireElement('screenshot-selection-cancel-button', HTMLButtonElement),
-    screenshotSelectionExportButton: requireElement('screenshot-selection-export-button', HTMLButtonElement)
+    screenshotSelectionExportButton: requireElement('screenshot-selection-export-button', HTMLButtonElement),
+    screenshotSelectionExportBatchButton: requireElement('screenshot-selection-export-batch-button', HTMLButtonElement)
   };
 }
 

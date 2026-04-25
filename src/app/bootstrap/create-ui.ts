@@ -90,6 +90,7 @@ export function createViewerUi({
       return await resolveExportImageBatchPreviewPixels(request, signal, {
         core,
         getRenderCache,
+        getRenderer,
         isDisposed,
         previewMaxLongestEdge: 96
       });

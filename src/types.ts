@@ -206,16 +206,23 @@ export type ExportImagePreviewRequest =
   | { mode?: 'image' }
   | ({ mode: 'screenshot' } & ExportScreenshotRegion);
 
-export interface ExportImageBatchPreviewRequest {
+export interface ExportImageBatchBaseRequest {
   sessionId: string;
   activeLayer: number;
   displaySelection: DisplaySelectionModel;
   channelLabel: string;
 }
 
-export interface ExportImageBatchEntryRequest extends ExportImageBatchPreviewRequest {
+export type ExportImageBatchPreviewRequest =
+  ExportImageBatchBaseRequest &
+  (
+    | { mode?: 'image' }
+    | ({ mode: 'screenshot' } & ExportScreenshotRegion)
+  );
+
+export type ExportImageBatchEntryRequest = ExportImageBatchPreviewRequest & {
   outputFilename: string;
-}
+};
 
 export interface ExportImageBatchRequest {
   archiveFilename: string;

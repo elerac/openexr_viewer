@@ -244,13 +244,26 @@
         >
           <div class="app-dialog-header">
             <h2 id="export-batch-dialog-title" class="app-dialog-title">Export Batch</h2>
-            <p class="app-dialog-subtitle">Export selected file and channel combinations as a ZIP of PNG images.</p>
+            <p id="export-batch-dialog-subtitle" class="app-dialog-subtitle">Export selected file and channel combinations as a ZIP of PNG images.</p>
           </div>
           <div class="app-dialog-body">
             <label class="app-dialog-field" for="export-batch-archive-filename-input">
               <span class="app-dialog-field-label">Archive</span>
               <input id="export-batch-archive-filename-input" type="text" autocomplete="off" spellcheck="false" />
             </label>
+            <div id="export-batch-size-field" class="app-dialog-field hidden">
+              <span class="app-dialog-field-label">Size</span>
+              <div class="app-dialog-field-row">
+                <label class="app-dialog-inline-field" for="export-batch-width-input">
+                  <span>Width</span>
+                  <input id="export-batch-width-input" type="number" min="1" step="1" inputmode="numeric" />
+                </label>
+                <label class="app-dialog-inline-field" for="export-batch-height-input">
+                  <span>Height</span>
+                  <input id="export-batch-height-input" type="number" min="1" step="1" inputmode="numeric" />
+                </label>
+              </div>
+            </div>
             <div class="app-dialog-field">
               <div class="app-dialog-field-heading">
                 <span class="app-dialog-field-label">Images and Channels</span>
@@ -554,6 +567,7 @@
             <div id="screenshot-selection-controls" class="screenshot-selection-controls">
               <button id="screenshot-selection-cancel-button" type="button">Cancel</button>
               <button id="screenshot-selection-export-button" type="button">Export...</button>
+              <button id="screenshot-selection-export-batch-button" type="button">Export Batch...</button>
             </div>
           </div>
           <div id="drop-overlay" class="drop-overlay hidden">Drop .exr file(s) or folder to load</div>

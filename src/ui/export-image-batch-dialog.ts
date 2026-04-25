@@ -11,12 +11,15 @@ import type {
   ExportImageBatchEntryRequest,
   ExportImageBatchPreviewRequest,
   ExportImageBatchRequest,
-  ExportImageBatchTarget
+  ExportImageBatchTarget,
+  ExportScreenshotRegion
 } from '../types';
 import type { ExportImageBatchDialogElements } from './elements';
 
 const DEFAULT_BATCH_ARCHIVE_FILENAME = 'openexr-export.zip';
+const DEFAULT_SCREENSHOT_BATCH_ARCHIVE_FILENAME = 'openexr-screenshot-export.zip';
 const CELL_KEY_SEPARATOR = '\u001f';
+type ExportBatchDialogMode = 'image' | 'screenshot';
 
 interface ExportImageBatchDialogCallbacks {
   onExportImageBatch: (request: ExportImageBatchRequest, signal: AbortSignal) => Promise<void>;
@@ -24,6 +27,13 @@ interface ExportImageBatchDialogCallbacks {
     request: ExportImageBatchPreviewRequest,
     signal: AbortSignal
   ) => Promise<ExportImagePixels>;
+  onCancel?: (mode: ExportBatchDialogMode) => void;
+  onScreenshotOutputSizeChange?: (size: { width: number; height: number }) => void;
+}
+
+export interface ExportImageBatchDialogOpenOptions {
+  mode?: ExportBatchDialogMode;
+  screenshot?: ExportScreenshotRegion;
 }
 
 export interface ExportBatchColumn {
@@ -39,6 +49,9 @@ export class ExportImageBatchDialogController implements Disposable {
   private open = false;
   private busy = false;
   private includeSplitRgbChannels = false;
+  private dialogMode: ExportBatchDialogMode = 'image';
+  private screenshotRegion: ExportScreenshotRegion | null = null;
+  private syncingScreenshotSize = false;
   private restoreFocusTarget: HTMLElement | null = null;
   private abortController: AbortController | null = null;
   private previewAbortController: AbortController | null = null;
@@ -54,18 +67,19 @@ export class ExportImageBatchDialogController implements Disposable {
   ) {
     this.disposables.addEventListener(this.elements.exportBatchDialogBackdrop, 'click', (event) => {
       if (event.target === this.elements.exportBatchDialogBackdrop && !this.busy) {
-        this.close(true);
+        this.cancel(true);
       }
     });
 
     this.disposables.addEventListener(this.elements.exportBatchDialogCancelButton, 'click', () => {
       if (this.busy) {
+        this.callbacks.onCancel?.(this.dialogMode);
         this.abortController?.abort(createAbortError('Batch export cancelled.'));
         this.setStatus('Canceling export...');
         return;
       }
 
-      this.close(true);
+      this.cancel(true);
     });
 
     this.disposables.addEventListener(this.elements.exportBatchDialogForm, 'submit', (event) => {
@@ -79,6 +93,14 @@ export class ExportImageBatchDialogController implements Disposable {
 
     this.disposables.addEventListener(this.elements.exportBatchMatrix, 'change', (event) => {
       this.handleMatrixChange(event);
+    });
+
+    this.disposables.addEventListener(this.elements.exportBatchWidthInput, 'input', () => {
+      this.handleScreenshotSizeInput('width');
+    });
+
+    this.disposables.addEventListener(this.elements.exportBatchHeightInput, 'input', () => {
+      this.handleScreenshotSizeInput('height');
     });
   }
 
@@ -134,12 +156,19 @@ export class ExportImageBatchDialogController implements Disposable {
     }
   }
 
-  openDialog(): void {
+  openDialog(options: ExportImageBatchDialogOpenOptions = {}): void {
     if (this.disposed || !this.target || this.elements.exportImageBatchButton.disabled) {
       return;
     }
 
     this.restoreFocusTarget = this.elements.fileMenuButton;
+    this.dialogMode = options.mode ?? 'image';
+    this.screenshotRegion = this.dialogMode === 'screenshot' && options.screenshot
+      ? cloneScreenshotRegion(options.screenshot)
+      : null;
+    if (this.dialogMode === 'screenshot' && !this.screenshotRegion) {
+      this.dialogMode = 'image';
+    }
     this.includeSplitRgbChannels = false;
     this.setBusy(false);
     this.open = true;
@@ -167,6 +196,9 @@ export class ExportImageBatchDialogController implements Disposable {
     this.setBusy(false);
     this.setError(null);
     this.elements.exportBatchDialogBackdrop.classList.add('hidden');
+    this.dialogMode = 'image';
+    this.screenshotRegion = null;
+    this.syncingScreenshotSize = false;
 
     if (restoreFocus) {
       (this.restoreFocusTarget ?? this.elements.exportImageBatchButton).focus();
@@ -174,8 +206,28 @@ export class ExportImageBatchDialogController implements Disposable {
     this.restoreFocusTarget = null;
   }
 
+  private cancel(restoreFocus = true): void {
+    if (this.disposed || !this.open) {
+      return;
+    }
+
+    const mode = this.dialogMode;
+    this.close(restoreFocus);
+    this.callbacks.onCancel?.(mode);
+  }
+
   private applyTarget(target: ExportImageBatchTarget): void {
-    this.elements.exportBatchArchiveFilenameInput.value = target.archiveFilename || DEFAULT_BATCH_ARCHIVE_FILENAME;
+    this.applyDialogMode();
+    this.elements.exportBatchArchiveFilenameInput.value = this.dialogMode === 'screenshot'
+      ? DEFAULT_SCREENSHOT_BATCH_ARCHIVE_FILENAME
+      : target.archiveFilename || DEFAULT_BATCH_ARCHIVE_FILENAME;
+    if (this.dialogMode === 'screenshot' && this.screenshotRegion) {
+      this.elements.exportBatchWidthInput.value = String(this.screenshotRegion.outputWidth);
+      this.elements.exportBatchHeightInput.value = String(this.screenshotRegion.outputHeight);
+    } else {
+      this.elements.exportBatchWidthInput.value = '';
+      this.elements.exportBatchHeightInput.value = '';
+    }
     if (!targetHasSplitChannelViews(target)) {
       this.includeSplitRgbChannels = false;
     }
@@ -186,12 +238,24 @@ export class ExportImageBatchDialogController implements Disposable {
 
   private resetInputs(): void {
     this.abortPreviewWork({ clearCache: true });
+    this.applyDialogMode();
     this.elements.exportBatchArchiveFilenameInput.value = '';
+    this.elements.exportBatchWidthInput.value = '';
+    this.elements.exportBatchHeightInput.value = '';
     this.elements.exportBatchMatrix.replaceChildren();
     this.includeSplitRgbChannels = false;
     this.checkedCellKeys.clear();
     this.setStatus('');
     this.updateSplitToggleState();
+  }
+
+  private applyDialogMode(): void {
+    const screenshot = this.dialogMode === 'screenshot' && this.screenshotRegion !== null;
+    this.elements.exportBatchDialogTitle.textContent = screenshot ? 'Export Screenshot Batch' : 'Export Batch';
+    this.elements.exportBatchDialogSubtitle.textContent = screenshot
+      ? 'Export selected file and channel screenshots as a ZIP of PNG images.'
+      : 'Export selected file and channel combinations as a ZIP of PNG images.';
+    this.elements.exportBatchSizeField.classList.toggle('hidden', !screenshot);
   }
 
   private setBusy(busy: boolean): void {
@@ -201,8 +265,11 @@ export class ExportImageBatchDialogController implements Disposable {
 
     this.busy = busy;
     this.elements.exportBatchArchiveFilenameInput.disabled = busy;
+    this.elements.exportBatchWidthInput.disabled = busy;
+    this.elements.exportBatchHeightInput.disabled = busy;
     this.updateSplitToggleState();
-    this.elements.exportBatchDialogSubmitButton.disabled = busy || this.getSelectedEntryCount() === 0;
+    this.elements.exportBatchDialogSubmitButton.disabled =
+      busy || this.getSelectedEntryCount() === 0 || !this.hasValidScreenshotOutputSize();
     this.elements.exportBatchDialogSubmitButton.textContent = busy ? 'Exporting...' : 'Export';
     this.elements.exportBatchDialogCancelButton.disabled = false;
     if (!busy && this.open) {
@@ -232,13 +299,49 @@ export class ExportImageBatchDialogController implements Disposable {
       return;
     }
 
+    if (!this.hasValidScreenshotOutputSize()) {
+      this.setStatus('Enter a positive width and height.');
+      this.elements.exportBatchDialogSubmitButton.disabled = true;
+      return;
+    }
+
     const count = this.getSelectedEntryCount();
     this.setStatus(count === 1 ? '1 image selected.' : `${count} images selected.`);
     this.elements.exportBatchDialogSubmitButton.disabled = count === 0;
   }
 
   private getSelectedEntryCount(): number {
-    return this.target ? buildExportBatchEntries(this.target, this.checkedCellKeys, this.includeSplitRgbChannels).length : 0;
+    return this.target
+      ? buildExportBatchEntries(
+        this.target,
+        this.checkedCellKeys,
+        this.includeSplitRgbChannels,
+        this.getScreenshotRegionForRequest()
+      ).length
+      : 0;
+  }
+
+  private hasValidScreenshotOutputSize(): boolean {
+    return this.dialogMode !== 'screenshot' || this.getScreenshotRegionForRequest() !== null;
+  }
+
+  private getScreenshotRegionForRequest(): ExportScreenshotRegion | null {
+    if (this.dialogMode !== 'screenshot' || !this.screenshotRegion) {
+      return null;
+    }
+
+    const outputWidth = parsePositiveInteger(this.elements.exportBatchWidthInput.value);
+    const outputHeight = parsePositiveInteger(this.elements.exportBatchHeightInput.value);
+    if (!outputWidth || !outputHeight) {
+      return null;
+    }
+
+    return {
+      rect: { ...this.screenshotRegion.rect },
+      sourceViewport: { ...this.screenshotRegion.sourceViewport },
+      outputWidth,
+      outputHeight
+    };
   }
 
   private handleSplitToggle(): void {
@@ -284,6 +387,41 @@ export class ExportImageBatchDialogController implements Disposable {
       }
     }
 
+    this.renderMatrix();
+    this.updateStatus();
+  }
+
+  private handleScreenshotSizeInput(source: 'width' | 'height'): void {
+    if (this.disposed || this.syncingScreenshotSize || this.dialogMode !== 'screenshot' || !this.screenshotRegion) {
+      return;
+    }
+
+    const aspectRatio = this.screenshotRegion.rect.width / Math.max(this.screenshotRegion.rect.height, Number.EPSILON);
+    const sourceInput = source === 'width' ? this.elements.exportBatchWidthInput : this.elements.exportBatchHeightInput;
+    const targetInput = source === 'width' ? this.elements.exportBatchHeightInput : this.elements.exportBatchWidthInput;
+    const sourceValue = parsePositiveInteger(sourceInput.value);
+    if (!sourceValue) {
+      this.abortPreviewWork({ clearCache: true });
+      this.renderMatrix();
+      this.updateStatus();
+      return;
+    }
+
+    const nextTargetValue = source === 'width'
+      ? Math.max(1, Math.round(sourceValue / aspectRatio))
+      : Math.max(1, Math.round(sourceValue * aspectRatio));
+
+    this.syncingScreenshotSize = true;
+    targetInput.value = String(nextTargetValue);
+    this.syncingScreenshotSize = false;
+
+    const outputWidth = parsePositiveInteger(this.elements.exportBatchWidthInput.value);
+    const outputHeight = parsePositiveInteger(this.elements.exportBatchHeightInput.value);
+    if (outputWidth && outputHeight) {
+      this.callbacks.onScreenshotOutputSizeChange?.({ width: outputWidth, height: outputHeight });
+    }
+
+    this.abortPreviewWork({ clearCache: true });
     this.renderMatrix();
     this.updateStatus();
   }
@@ -485,8 +623,10 @@ export class ExportImageBatchDialogController implements Disposable {
     _channel: ExportImageBatchChannelTarget
   ): HTMLElement {
     const previewKey = serializeCellKey(file.sessionId, columnKey);
-    const dataUrl = this.previewDataUrlsByKey.get(previewKey);
-    const isPending = this.pendingPreviewKeys.has(previewKey) || !this.previewDataUrlsByKey.has(previewKey);
+    const canPreview = this.hasValidScreenshotOutputSize();
+    const dataUrl = canPreview ? this.previewDataUrlsByKey.get(previewKey) : null;
+    const isPending =
+      canPreview && (this.pendingPreviewKeys.has(previewKey) || !this.previewDataUrlsByKey.has(previewKey));
     return createBatchCellPreview(previewKey, dataUrl, isPending);
   }
 
@@ -525,12 +665,24 @@ export class ExportImageBatchDialogController implements Disposable {
 
     const generation = this.previewGeneration;
     const abortController = this.getPreviewAbortController();
-    const request: ExportImageBatchPreviewRequest = {
+    const screenshot = this.getScreenshotRegionForRequest();
+    if (this.dialogMode === 'screenshot' && !screenshot) {
+      return;
+    }
+
+    const baseRequest = {
       sessionId: file.sessionId,
       activeLayer: file.activeLayer,
       displaySelection: cloneDisplaySelection(channel.selection) ?? channel.selection,
       channelLabel: channel.label
     };
+    const request: ExportImageBatchPreviewRequest = screenshot
+      ? {
+        ...baseRequest,
+        mode: 'screenshot',
+        ...screenshot
+      }
+      : baseRequest;
 
     this.pendingPreviewKeys.add(previewKey);
     this.updatePreviewElements(previewKey);
@@ -643,7 +795,14 @@ export class ExportImageBatchDialogController implements Disposable {
       return;
     }
 
-    const entries = buildExportBatchEntries(target, this.checkedCellKeys, this.includeSplitRgbChannels);
+    const screenshot = this.getScreenshotRegionForRequest();
+    if (this.dialogMode === 'screenshot' && !screenshot) {
+      this.setError('Enter a positive width and height.');
+      this.elements.exportBatchWidthInput.focus();
+      return;
+    }
+
+    const entries = buildExportBatchEntries(target, this.checkedCellKeys, this.includeSplitRgbChannels, screenshot);
     if (entries.length === 0) {
       this.setError('Select at least one image.');
       return;
@@ -742,10 +901,17 @@ export function buildDefaultExportBatchCheckedCells(
 export function buildExportBatchEntries(
   target: ExportImageBatchTarget,
   checkedCellKeys: ReadonlySet<string>,
-  includeSplitRgbChannels = false
+  includeSplitRgbChannels = false,
+  screenshot: ExportScreenshotRegion | null = null
 ): ExportImageBatchEntryRequest[] {
   const columns = buildExportBatchColumns(target.files, includeSplitRgbChannels);
-  const entries: Array<Omit<ExportImageBatchEntryRequest, 'outputFilename'> & { file: ExportImageBatchTarget['files'][number] }> = [];
+  const entries: Array<{
+    file: ExportImageBatchTarget['files'][number];
+    sessionId: string;
+    activeLayer: number;
+    displaySelection: DisplaySelection;
+    channelLabel: string;
+  }> = [];
 
   for (const file of target.files) {
     const visibleChannels = getVisibleBatchChannels(file.channels, includeSplitRgbChannels);
@@ -771,9 +937,29 @@ export function buildExportBatchEntries(
   }
 
   const usedFilenames = new Map<string, number>();
+  if (screenshot) {
+    return entries.map(({ file, ...entry }) => ({
+      ...entry,
+      mode: 'screenshot',
+      rect: { ...screenshot.rect },
+      sourceViewport: { ...screenshot.sourceViewport },
+      outputWidth: screenshot.outputWidth,
+      outputHeight: screenshot.outputHeight,
+      outputFilename: buildExportBatchScreenshotOutputFilename(
+        file.sourcePath || file.filename || file.label,
+        entry.channelLabel,
+        usedFilenames
+      )
+    }));
+  }
+
   return entries.map(({ file, ...entry }) => ({
     ...entry,
-    outputFilename: buildExportBatchOutputFilename(file.sourcePath || file.filename || file.label, entry.channelLabel, usedFilenames)
+    outputFilename: buildExportBatchOutputFilename(
+      file.sourcePath || file.filename || file.label,
+      entry.channelLabel,
+      usedFilenames
+    )
   }));
 }
 
@@ -791,13 +977,30 @@ export function buildExportBatchOutputFilename(
   channelLabel: string,
   usedFilenames: Map<string, number> = new Map()
 ): string {
+  return buildExportBatchOutputFilenameWithSuffix(sourcePath, channelLabel, '', usedFilenames);
+}
+
+export function buildExportBatchScreenshotOutputFilename(
+  sourcePath: string,
+  channelLabel: string,
+  usedFilenames: Map<string, number> = new Map()
+): string {
+  return buildExportBatchOutputFilenameWithSuffix(sourcePath, channelLabel, '-screenshot', usedFilenames);
+}
+
+function buildExportBatchOutputFilenameWithSuffix(
+  sourcePath: string,
+  channelLabel: string,
+  basenameSuffix: string,
+  usedFilenames: Map<string, number>
+): string {
   const normalizedPath = normalizeArchivePath(sourcePath);
   const segments = normalizedPath.split('/').filter((segment) => segment.length > 0);
   const rawBasename = segments.pop() ?? 'image.exr';
   const directory = segments.map(sanitizePathSegment).filter((segment) => segment.length > 0);
   const base = sanitizePathSegment(stripExrExtension(rawBasename)) || 'image';
   const token = buildExportBatchChannelFilenameToken(channelLabel);
-  const filename = `${base}.${token}.png`;
+  const filename = `${base}${basenameSuffix}.${token}.png`;
   const candidate = [...directory, filename].join('/');
   return uniquifyFilename(candidate, usedFilenames);
 }
@@ -834,6 +1037,24 @@ function cloneExportBatchTarget(target: ExportImageBatchTarget): ExportImageBatc
       }))
     }))
   };
+}
+
+function cloneScreenshotRegion(region: ExportScreenshotRegion): ExportScreenshotRegion {
+  return {
+    rect: { ...region.rect },
+    sourceViewport: { ...region.sourceViewport },
+    outputWidth: region.outputWidth,
+    outputHeight: region.outputHeight
+  };
+}
+
+function parsePositiveInteger(value: string): number | null {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
 }
 
 function createExportBatchEmptyState(message: string): HTMLElement {
