@@ -47,12 +47,70 @@ test('persists the cache budget and keeps open-file actions limited to reload an
   await expect(page.getByRole('button', { name: /Pin cache|Unpin cache/ })).toHaveCount(0);
 });
 
+test('persists Spectrum lattice and hides the idle surface after an image opens', async ({ page }) => {
+  await gotoViewerApp(page);
+
+  const settingsMenuButton = page.getByRole('button', { name: 'Settings', exact: true });
+  const settingsMenu = page.locator('#settings-menu');
+  const themeInput = page.locator('#theme-select');
+  const defaultIdle = page.locator('#viewer-idle-message');
+  const idle = page.locator('#spectrum-lattice-idle');
+  const idleCanvas = page.locator('#spectrum-lattice-canvas');
+
+  await expect(defaultIdle).toBeVisible();
+  await expect(defaultIdle.locator('h2')).toHaveCount(0);
+  await expect(defaultIdle.locator('p')).toHaveText(
+    'Drop an OpenEXR image here.'
+  );
+  await expect(idle).toBeHidden();
+  await settingsMenuButton.click();
+  await expect(settingsMenu).toBeVisible();
+  await themeInput.selectOption('spectrum-lattice');
+
+  await expect(themeInput).toHaveValue('spectrum-lattice');
+  await expect(defaultIdle).toBeHidden();
+  await expect(idle).toBeVisible();
+  await expect(idle.locator('h2')).toHaveCount(0);
+  await expect(idle.locator('p')).toHaveText(
+    'Drop an OpenEXR image here.'
+  );
+  await expect(idleCanvas).toBeVisible();
+  await expect.poll(async () => {
+    return await page.evaluate(() => ({
+      theme: document.documentElement.dataset.theme,
+      storedTheme: window.localStorage.getItem('openexr-viewer:theme:v1')
+    }));
+  }).toEqual({
+    theme: 'spectrum-lattice',
+    storedTheme: 'spectrum-lattice'
+  });
+
+  await page.reload();
+  await expectViewerAppReady(page);
+  await expect(defaultIdle).toBeHidden();
+  await expect(idle).toBeVisible();
+  await expect(idle.locator('h2')).toHaveCount(0);
+  await settingsMenuButton.click();
+  await expect(settingsMenu).toBeVisible();
+  await expect(themeInput).toHaveValue('spectrum-lattice');
+  await page.keyboard.press('Escape');
+
+  await openGalleryCbox(page);
+  await expect(defaultIdle).toBeHidden();
+  await expect(idle).toBeHidden();
+  await expect(idleCanvas).toBeHidden();
+  await expect.poll(async () => {
+    return await page.evaluate(() => document.documentElement.dataset.theme);
+  }).toBe('spectrum-lattice');
+});
+
 test('resets settings back to the default budget and panel layout', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await gotoViewerApp(page);
 
   const settingsMenuButton = page.getByRole('button', { name: 'Settings', exact: true });
   const settingsMenu = page.locator('#settings-menu');
+  const themeInput = page.locator('#theme-select');
   const budgetInput = page.locator('#display-cache-budget-input');
   const usageReadout = page.locator('#display-cache-usage');
   const resetSettingsButton = page.getByRole('menuitem', { name: 'Reset Settings', exact: true });
@@ -90,6 +148,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
         rightExpanded: rightCollapseButton.getAttribute('aria-expanded'),
         bottomExpanded: bottomCollapseButton.getAttribute('aria-expanded'),
         storedBudget: window.localStorage.getItem('openexr-viewer:display-cache-budget-mb:v1'),
+        storedTheme: window.localStorage.getItem('openexr-viewer:theme:v1'),
         storedPanel: window.localStorage.getItem('openexr-viewer:panel-splits:v1')
       };
     });
@@ -97,6 +156,8 @@ test('resets settings back to the default budget and panel layout', async ({ pag
 
   await settingsMenuButton.click();
   await expect(settingsMenu).toBeVisible();
+  await themeInput.selectOption('spectrum-lattice');
+  await expect(themeInput).toHaveValue('spectrum-lattice');
   await budgetInput.selectOption('128');
   await expect(budgetInput).toHaveValue('128');
   await expect(usageReadout).toContainText('/ 128 MB');
@@ -121,14 +182,17 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   expect(mutated.rightExpanded).toBe('false');
   expect(mutated.bottomExpanded).toBe('false');
   expect(mutated.storedBudget).toBe('128');
+  expect(mutated.storedTheme).toBe('spectrum-lattice');
 
   await settingsMenuButton.click();
   await expect(settingsMenu).toBeVisible();
+  await expect(themeInput).toHaveValue('spectrum-lattice');
   await expect(budgetInput).toHaveValue('128');
   await resetSettingsButton.click();
 
   await expect(settingsMenu).toBeVisible();
   await expect(settingsMenuButton).toHaveAttribute('aria-expanded', 'true');
+  await expect(themeInput).toHaveValue('default');
   await expect(budgetInput).toHaveValue('256');
   await expect(usageReadout).toContainText('/ 256 MB');
 
@@ -140,6 +204,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   expect(afterReset.rightExpanded).toBe('true');
   expect(afterReset.bottomExpanded).toBe('true');
   expect(afterReset.storedBudget).toBe('256');
+  expect(afterReset.storedTheme).toBe('default');
   expect(JSON.parse(afterReset.storedPanel ?? '{}')).toEqual({
     imagePanelWidth: 220,
     rightPanelWidth: 280,
@@ -154,6 +219,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
 
   await settingsMenuButton.click();
   await expect(settingsMenu).toBeVisible();
+  await expect(themeInput).toHaveValue('default');
   await expect(budgetInput).toHaveValue('256');
   await expect(usageReadout).toContainText('/ 256 MB');
 
@@ -165,6 +231,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   expect(afterReload.rightExpanded).toBe('true');
   expect(afterReload.bottomExpanded).toBe('true');
   expect(afterReload.storedBudget).toBe('256');
+  expect(afterReload.storedTheme).toBe('default');
   expect(JSON.parse(afterReload.storedPanel ?? '{}')).toEqual({
     imagePanelWidth: 220,
     rightPanelWidth: 280,

@@ -28,6 +28,7 @@ export interface Elements {
   galleryMenu: HTMLElement;
   settingsMenuButton: HTMLButtonElement;
   settingsMenu: HTMLElement;
+  themeSelect: HTMLSelectElement;
   resetSettingsButton: HTMLButtonElement;
   imageViewerMenuItem: HTMLButtonElement;
   panoramaViewerMenuItem: HTMLButtonElement;
@@ -163,6 +164,9 @@ export interface Elements {
   roiValidCount: HTMLElement;
   roiStats: HTMLElement;
   clearRoiButton: HTMLButtonElement;
+  viewerIdleMessage: HTMLDivElement;
+  spectrumLatticeCanvas: HTMLCanvasElement;
+  spectrumLatticeIdle: HTMLDivElement;
   glCanvas: HTMLCanvasElement;
   overlayCanvas: HTMLCanvasElement;
   probeOverlayCanvas: HTMLCanvasElement;
@@ -430,6 +434,7 @@ export function resolveElements(): Elements {
     galleryMenu: requireElement('gallery-menu', HTMLElement),
     settingsMenuButton: requireElement('settings-menu-button', HTMLButtonElement),
     settingsMenu: requireElement('settings-menu', HTMLElement),
+    themeSelect: requireElement('theme-select', HTMLSelectElement),
     resetSettingsButton: requireElement('reset-settings-button', HTMLButtonElement),
     imageViewerMenuItem: requireElement('image-viewer-menu-item', HTMLButtonElement),
     panoramaViewerMenuItem: requireElement('panorama-viewer-menu-item', HTMLButtonElement),
@@ -565,6 +570,9 @@ export function resolveElements(): Elements {
     roiValidCount: requireElement('roi-valid-count', HTMLElement),
     roiStats: requireElement('roi-stats', HTMLElement),
     clearRoiButton: requireElement('clear-roi-button', HTMLButtonElement),
+    viewerIdleMessage: requireElement('viewer-idle-message', HTMLDivElement),
+    spectrumLatticeCanvas: requireElement('spectrum-lattice-canvas', HTMLCanvasElement),
+    spectrumLatticeIdle: requireElement('spectrum-lattice-idle', HTMLDivElement),
     glCanvas: requireElement('gl-canvas', HTMLCanvasElement),
     overlayCanvas: requireElement('overlay-canvas', HTMLCanvasElement),
     probeOverlayCanvas: requireElement('probe-overlay-canvas', HTMLCanvasElement),

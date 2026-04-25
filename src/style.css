@@ -8,6 +8,20 @@
   --error: #ff6e78;
 }
 
+:root[data-theme='spectrum-lattice'] {
+  color-scheme: dark;
+  --bg: #05070a;
+  --panel: rgba(8, 13, 20, 0.62);
+  --panel-border: rgba(185, 215, 255, 0.16);
+  --text: rgba(236, 246, 255, 0.92);
+  --text-dim: rgba(190, 210, 230, 0.62);
+  --accent: #86f7ff;
+  --error: #ff7c8a;
+  --spectrum-panel: rgba(8, 13, 20, 0.58);
+  --spectrum-panel-strong: rgba(10, 16, 24, 0.78);
+  --spectrum-line-strong: rgba(255, 255, 255, 0.075);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -25,6 +39,10 @@ body {
 
 body {
   overflow: hidden;
+}
+
+:root[data-theme='spectrum-lattice'] body {
+  background: radial-gradient(circle at 50% 45%, #101724, #05070a 68%);
 }
 
 button,
@@ -50,6 +68,10 @@ output {
   height: 100dvh;
   background: radial-gradient(circle at top right, #1a212b, var(--bg));
   overflow: hidden;
+}
+
+:root[data-theme='spectrum-lattice'] .app-shell:fullscreen {
+  background: radial-gradient(circle at 50% 45%, #101724, #05070a 68%);
 }
 
 .app-shell.is-window-preview {
@@ -100,6 +122,25 @@ output {
   border: 1px solid var(--panel-border);
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--panel) 92%, #000);
+}
+
+:root[data-theme='spectrum-lattice'] .app-menu-bar,
+:root[data-theme='spectrum-lattice'] .app-menu-dropdown,
+:root[data-theme='spectrum-lattice'] .display-toolbar,
+:root[data-theme='spectrum-lattice'] .panel-shell,
+:root[data-theme='spectrum-lattice'] .app-dialog,
+:root[data-theme='spectrum-lattice'] .screenshot-selection-controls button {
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border-color: var(--panel-border);
+  background: linear-gradient(180deg, var(--spectrum-panel-strong), rgba(8, 12, 18, 0.44));
+  box-shadow:
+    0 1.1rem 4.2rem rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+:root[data-theme='spectrum-lattice'] .app-menu-dropdown {
+  background: linear-gradient(180deg, rgba(10, 16, 24, 0.89), rgba(8, 12, 18, 0.69));
 }
 
 .app-menu-title {
@@ -213,7 +254,7 @@ output {
 }
 
 .app-menu-dropdown--settings {
-  min-width: 14.5rem;
+  min-width: 15.5rem;
 }
 
 .app-menu-separator {
@@ -274,6 +315,11 @@ output {
   display: grid;
   gap: 0.4rem;
   padding: 0.16rem 0.12rem;
+}
+
+.app-menu-setting-group > .app-menu-setting-input {
+  width: 100%;
+  min-width: 0;
 }
 
 .app-menu-setting-label {
@@ -397,6 +443,18 @@ select {
   color: var(--text);
   border-radius: 0.375rem;
   padding: 0.35rem 0.55rem;
+}
+
+:root[data-theme='spectrum-lattice'] select,
+:root[data-theme='spectrum-lattice'] input[type='number'],
+:root[data-theme='spectrum-lattice'] .display-toolbar button,
+:root[data-theme='spectrum-lattice'] .control-block button,
+:root[data-theme='spectrum-lattice'] .app-dialog-actions button,
+:root[data-theme='spectrum-lattice'] .export-batch-selection-button,
+:root[data-theme='spectrum-lattice'] .screenshot-selection-controls button {
+  border-color: rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text);
 }
 
 button:hover,
@@ -1114,6 +1172,24 @@ body.is-resizing-panel-rows * {
   background-position: var(--viewer-checker-offset-x) var(--viewer-checker-offset-y);
 }
 
+.viewer-container.is-spectrum-lattice-idle {
+  background-color: #05070a;
+  background-image: radial-gradient(circle at 50% 45%, #101724, #05070a 68%);
+}
+
+.viewer-container.is-spectrum-lattice-idle::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(180, 220, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(180, 220, 255, 0.035) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(circle at center, black, transparent 76%);
+}
+
 .viewer-container:fullscreen {
   border: 0;
   border-radius: 0;
@@ -1136,9 +1212,103 @@ body.is-resizing-panel-rows * {
   height: 100%;
 }
 
+#spectrum-lattice-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+#spectrum-lattice-canvas.spectrum-lattice-canvas--fallback {
+  background:
+    radial-gradient(circle at 52% 42%, rgba(134, 247, 255, 0.18), transparent 34%),
+    repeating-linear-gradient(115deg, rgba(134, 247, 255, 0.08) 0 1px, transparent 1px 16px),
+    linear-gradient(135deg, rgba(136, 104, 255, 0.24), rgba(255, 121, 198, 0.12) 45%, rgba(5, 7, 10, 0.92));
+}
+
+#gl-canvas {
+  z-index: 2;
+}
+
 #overlay-canvas,
 #probe-overlay-canvas {
   pointer-events: none;
+}
+
+#overlay-canvas {
+  z-index: 3;
+}
+
+#probe-overlay-canvas {
+  z-index: 4;
+}
+
+.viewer-idle-message {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  pointer-events: none;
+}
+
+.viewer-idle-message-panel {
+  width: min(42rem, 100%);
+  padding: 2rem;
+  color: var(--text);
+  text-align: center;
+  text-shadow: 0 0.75rem 2rem rgba(0, 0, 0, 0.58);
+}
+
+.viewer-idle-message-panel p,
+.spectrum-lattice-status p {
+  max-width: 34rem;
+  margin: 0 auto;
+  color: rgba(217, 232, 248, 0.68);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.spectrum-lattice-idle {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  pointer-events: none;
+}
+
+.spectrum-lattice-status {
+  width: min(42rem, 100%);
+  padding: 2rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 0.65rem;
+  background:
+    linear-gradient(180deg, rgba(7, 11, 18, 0.72), rgba(7, 10, 14, 0.38)),
+    radial-gradient(circle at 50% 0%, rgba(119, 240, 255, 0.11), transparent 42%);
+  color: var(--text);
+  text-align: center;
+  box-shadow:
+    0 1.1rem 4.2rem rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+
+@media (max-width: 740px) {
+  .viewer-idle-message,
+  .spectrum-lattice-idle {
+    padding: 0.85rem;
+  }
+
+  .viewer-idle-message-panel,
+  .spectrum-lattice-status {
+    padding: 1.25rem;
+  }
 }
 
 .screenshot-selection-overlay {
@@ -1281,6 +1451,7 @@ body.is-resizing-panel-rows * {
 .drop-overlay {
   position: absolute;
   inset: 0;
+  z-index: 7;
   display: grid;
   place-items: center;
   font-size: 1.25rem;

@@ -26,6 +26,7 @@ import { type PanelSplitMetrics } from '../src/ui/panel-layout-types';
 import { formatProbeCoordinates } from '../src/ui/probe-readout';
 import { getListboxOptionIndexAtClientY } from '../src/ui/render-helpers';
 import { ViewerUi } from '../src/ui/viewer-ui';
+import { SPECTRUM_LATTICE_THEME_ID, THEME_STORAGE_KEY } from '../src/theme';
 
 interface ResizeObserverRegistration {
   callback: ResizeObserverCallback;
@@ -38,6 +39,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
+  delete document.documentElement.dataset.theme;
   window.localStorage.clear();
   resizeObserverRegistrations.length = 0;
 });
@@ -1010,11 +1012,13 @@ describe('panel split sizing', () => {
         bottomPanelCollapsed: true
       })
     );
+    window.localStorage.setItem(THEME_STORAGE_KEY, SPECTRUM_LATTICE_THEME_ID);
 
     const onResetSettings = vi.fn();
     new ViewerUi(createUiCallbacks({ onResetSettings }));
 
     const resetSettingsButton = document.getElementById('reset-settings-button') as HTMLButtonElement;
+    const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
     const imageButton = document.getElementById('image-panel-collapse-button') as HTMLButtonElement;
     const rightButton = document.getElementById('right-panel-collapse-button') as HTMLButtonElement;
     const bottomButton = document.getElementById('bottom-panel-collapse-button') as HTMLButtonElement;
@@ -1026,10 +1030,14 @@ describe('panel split sizing', () => {
     expect(mainLayout.style.getPropertyValue('--image-panel-width')).toBe('0px');
     expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('0px');
     expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
+    expect(themeSelect.value).toBe(SPECTRUM_LATTICE_THEME_ID);
 
     resetSettingsButton.click();
 
     expect(onResetSettings).toHaveBeenCalledTimes(1);
+    expect(themeSelect.value).toBe('default');
+    expect(document.documentElement.dataset.theme).toBe('default');
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe('default');
     expect(imageButton.getAttribute('aria-expanded')).toBe('true');
     expect(rightButton.getAttribute('aria-expanded')).toBe('true');
     expect(bottomButton.getAttribute('aria-expanded')).toBe('true');
@@ -1245,6 +1253,103 @@ describe('view menu', () => {
     expect(resetSettingsButton).not.toBeNull();
     expect(resetSettingsButton.textContent?.trim()).toBe('Reset Settings');
     expect(resetSettingsButton.getAttribute('role')).toBe('menuitem');
+  });
+
+  it('renders the theme setting before the memory budget setting', () => {
+    installUiFixture();
+
+    const labels = Array.from(document.querySelectorAll('#settings-menu .app-menu-setting-label'))
+      .map((item) => item.textContent?.trim());
+    const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
+
+    expect(labels).toEqual(['Theme', 'Memory Budget']);
+    expect(Array.from(themeSelect.options).map((option) => option.textContent)).toEqual([
+      'Default',
+      'Spectrum lattice'
+    ]);
+    expect(Array.from(themeSelect.options).map((option) => option.value)).toEqual([
+      'default',
+      SPECTRUM_LATTICE_THEME_ID
+    ]);
+  });
+
+  it('applies and persists the Spectrum lattice theme from Settings', () => {
+    installUiFixture();
+
+    new ViewerUi(createUiCallbacks());
+    const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
+    const viewer = document.getElementById('viewer-container') as HTMLElement;
+    const defaultIdle = document.getElementById('viewer-idle-message') as HTMLDivElement;
+    const idle = document.getElementById('spectrum-lattice-idle') as HTMLDivElement;
+    const canvas = document.getElementById('spectrum-lattice-canvas') as HTMLCanvasElement;
+
+    expect(themeSelect.value).toBe('default');
+    expect(document.documentElement.dataset.theme).toBe('default');
+    expect(defaultIdle.classList.contains('hidden')).toBe(false);
+    expect(defaultIdle.textContent).not.toContain('OpenEXR Viewer');
+    expect(defaultIdle.textContent).toContain(
+      'Drop an OpenEXR image here.'
+    );
+    expect(idle.classList.contains('hidden')).toBe(true);
+
+    themeSelect.value = SPECTRUM_LATTICE_THEME_ID;
+    themeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(themeSelect.value).toBe(SPECTRUM_LATTICE_THEME_ID);
+    expect(document.documentElement.dataset.theme).toBe(SPECTRUM_LATTICE_THEME_ID);
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe(SPECTRUM_LATTICE_THEME_ID);
+    expect(viewer.classList.contains('is-spectrum-lattice-idle')).toBe(true);
+    expect(defaultIdle.classList.contains('hidden')).toBe(true);
+    expect(idle.classList.contains('hidden')).toBe(false);
+    expect(idle.textContent).not.toContain('OpenEXR Viewer');
+    expect(idle.textContent).toContain(
+      'Drop an OpenEXR image here.'
+    );
+    expect(idle.textContent).not.toContain('Spectrum lattice');
+    expect(idle.textContent).not.toContain('Awaiting image stream');
+    expect(idle.textContent).not.toContain('Phase drift');
+    expect(idle.textContent).not.toContain('Pointer offset');
+    expect(canvas.classList.contains('hidden')).toBe(false);
+    expect(canvas.classList.contains('spectrum-lattice-canvas--fallback')).toBe(true);
+  });
+
+  it('reads the stored theme during UI initialization', () => {
+    installUiFixture();
+    window.localStorage.setItem(THEME_STORAGE_KEY, SPECTRUM_LATTICE_THEME_ID);
+
+    new ViewerUi(createUiCallbacks());
+
+    expect((document.getElementById('theme-select') as HTMLSelectElement).value).toBe(SPECTRUM_LATTICE_THEME_ID);
+    expect(document.documentElement.dataset.theme).toBe(SPECTRUM_LATTICE_THEME_ID);
+    expect((document.getElementById('spectrum-lattice-idle') as HTMLElement).classList.contains('hidden')).toBe(false);
+  });
+
+  it('hides the Spectrum lattice idle surface while an image is active', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
+    const defaultIdle = document.getElementById('viewer-idle-message') as HTMLElement;
+    const idle = document.getElementById('spectrum-lattice-idle') as HTMLElement;
+
+    themeSelect.value = SPECTRUM_LATTICE_THEME_ID;
+    themeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(defaultIdle.classList.contains('hidden')).toBe(true);
+    expect(idle.classList.contains('hidden')).toBe(false);
+
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    expect(defaultIdle.classList.contains('hidden')).toBe(true);
+    expect(idle.classList.contains('hidden')).toBe(true);
+
+    ui.setOpenedImageOptions([], null);
+    expect(defaultIdle.classList.contains('hidden')).toBe(true);
+    expect(idle.classList.contains('hidden')).toBe(false);
+
+    themeSelect.value = 'default';
+    themeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(defaultIdle.classList.contains('hidden')).toBe(false);
+    expect(idle.classList.contains('hidden')).toBe(true);
   });
 
   it('keeps viewer mode items disabled until an image is active', () => {
@@ -1579,19 +1684,26 @@ describe('view menu', () => {
     expect(document.activeElement).toBe(fileButton);
   });
 
-  it('focuses the settings controls in select-then-reset order from the keyboard', () => {
+  it('focuses the settings controls in theme-budget-reset order from the keyboard', () => {
     installUiFixture();
 
     new ViewerUi(createUiCallbacks());
     const settingsButton = document.getElementById('settings-menu-button') as HTMLButtonElement;
+    const settingsMenu = document.getElementById('settings-menu') as HTMLElement;
+    const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
     const budgetInput = document.getElementById('display-cache-budget-input') as HTMLSelectElement;
     const resetSettingsButton = document.getElementById('reset-settings-button') as HTMLButtonElement;
+    const focusableSettingsControls = Array.from(
+      settingsMenu.querySelectorAll<HTMLElement>('button, input, select, textarea')
+    );
+
+    expect(focusableSettingsControls).toEqual([themeSelect, budgetInput, resetSettingsButton]);
 
     settingsButton.focus();
     settingsButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
 
     expectTopMenuOpen('settings-menu-button', 'settings-menu');
-    expect(document.activeElement).toBe(budgetInput);
+    expect(document.activeElement).toBe(themeSelect);
 
     settingsButton.focus();
     settingsButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));

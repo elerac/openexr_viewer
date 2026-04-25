@@ -100,6 +100,13 @@
               Settings
             </button>
             <div id="settings-menu" class="app-menu-dropdown app-menu-dropdown--settings hidden" role="menu" aria-labelledby="settings-menu-button">
+              <div id="theme-control" class="app-menu-setting-group">
+                <label class="app-menu-setting-label" for="theme-select">Theme</label>
+                <select id="theme-select" class="app-menu-setting-input">
+                  <option value="default" selected>Default</option>
+                  <option value="spectrum-lattice">Spectrum lattice</option>
+                </select>
+              </div>
               <div id="display-cache-control" class="app-menu-setting-group">
                 <label class="app-menu-setting-label" for="display-cache-budget-input">Memory Budget</label>
                 <div class="app-menu-setting-row">
@@ -580,9 +587,20 @@
         <div id="right-panel-resizer" class="layout-resizer layout-resizer--vertical" role="separator" tabindex="0" aria-label="Resize viewer and inspector panels" aria-orientation="vertical"></div>
 
         <section id="viewer-container" class="viewer-container">
+          <canvas id="spectrum-lattice-canvas" class="spectrum-lattice-canvas hidden" aria-hidden="true"></canvas>
           <canvas id="gl-canvas"></canvas>
           <canvas id="overlay-canvas"></canvas>
           <canvas id="probe-overlay-canvas"></canvas>
+          <div id="viewer-idle-message" class="viewer-idle-message hidden">
+            <div class="viewer-idle-message-panel">
+              <p>Drop an OpenEXR image here.</p>
+            </div>
+          </div>
+          <div id="spectrum-lattice-idle" class="spectrum-lattice-idle hidden" aria-hidden="true">
+            <div class="spectrum-lattice-status">
+              <p>Drop an OpenEXR image here.</p>
+            </div>
+          </div>
           <div id="screenshot-selection-overlay" class="screenshot-selection-overlay hidden" aria-hidden="true">
             <div id="screenshot-selection-mask-top" class="screenshot-selection-mask"></div>
             <div id="screenshot-selection-mask-right" class="screenshot-selection-mask"></div>

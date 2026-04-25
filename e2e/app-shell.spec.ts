@@ -131,6 +131,7 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   const exportMenuItem = page.locator('#export-image-button');
   const reloadAllMenuItem = page.locator('#reload-all-opened-images-button');
   const closeAllMenuItem = page.locator('#close-all-opened-images-button');
+  const themeInput = page.locator('#theme-select');
   const budgetInput = page.locator('#display-cache-budget-input');
   const usageReadout = page.locator('#display-cache-usage');
 
@@ -150,6 +151,11 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   await expect(page.locator('#pan-readout')).toHaveCount(0);
   await expect(openedImages.locator('option')).toHaveCount(0);
   await expect(page.locator('#opened-files-list')).toContainText('No open files');
+  await expect(page.locator('#viewer-idle-message')).toBeVisible();
+  await expect(page.locator('#viewer-idle-message h2')).toHaveCount(0);
+  await expect(page.locator('#viewer-idle-message p')).toHaveText(
+    'Drop an OpenEXR image here.'
+  );
   await expectViewerCheckerBackground(viewer);
 
   await fileMenuButton.click();
@@ -171,6 +177,9 @@ test('boots an empty app shell with menu actions gated until an image opens', as
 
   await settingsMenuButton.click();
   await expect(settingsMenu).toBeVisible();
+  await expect(themeInput).toBeVisible();
+  await expect(themeInput).toHaveValue('default');
+  await expect(themeInput.locator('option')).toHaveText(['Default', 'Spectrum lattice']);
   await expect(budgetInput).toBeVisible();
   await expect(budgetInput).toHaveValue('256');
   await expect(budgetInput.locator('option')).toHaveText(['64', '128', '256', '512', '1024']);
