@@ -374,6 +374,7 @@ test('exports an adjusted image-viewer screenshot region as a png download', asy
   const selectionBox = page.locator('#screenshot-selection-box');
   const overlayExportButton = page.locator('#screenshot-selection-export-button');
   const exportDialog = page.locator('#export-dialog-form');
+  const exportDialogBackdrop = page.locator('#export-dialog-backdrop');
   const exportFilenameInput = page.locator('#export-filename-input');
   const exportSizeField = page.locator('#export-size-field');
   const exportWidthInput = page.locator('#export-width-input');
@@ -413,6 +414,25 @@ test('exports an adjusted image-viewer screenshot region as a png download', asy
   const initialHeight = Number(await exportHeightInput.inputValue());
   expect(initialWidth).toBeGreaterThan(0);
   expect(initialHeight).toBeGreaterThan(0);
+
+  const [widthInputBox, dialogBox] = await Promise.all([
+    exportWidthInput.boundingBox(),
+    exportDialog.boundingBox()
+  ]);
+  if (!widthInputBox || !dialogBox) {
+    throw new Error('Expected screenshot export dialog and width input to be visible.');
+  }
+
+  await page.mouse.move(
+    widthInputBox.x + widthInputBox.width - 4,
+    widthInputBox.y + widthInputBox.height / 2
+  );
+  await page.mouse.down();
+  await page.mouse.move(dialogBox.x - 8, widthInputBox.y + widthInputBox.height / 2, { steps: 4 });
+  await page.mouse.up();
+
+  await expect(exportDialogBackdrop).toBeVisible();
+  await expect(exportDialog).toBeVisible();
 
   const nextWidth = Math.max(80, Math.round(initialWidth * 0.6));
   await exportWidthInput.fill(String(nextWidth));

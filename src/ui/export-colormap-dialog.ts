@@ -5,6 +5,7 @@ import type {
   ExportColormapPreviewRequest,
   ExportColormapRequest
 } from '../types';
+import { bindDialogBackdropDismiss } from './dialog-backdrop';
 import type { ExportColormapDialogElements } from './elements';
 import { syncSelectOptions } from './render-helpers';
 import { normalizeExportFilename } from './export-image-dialog';
@@ -73,11 +74,11 @@ export class ExportColormapDialogController implements Disposable {
       void this.refreshPreview();
     });
 
-    this.disposables.addEventListener(this.elements.exportColormapDialogBackdrop, 'click', (event) => {
-      if (event.target === this.elements.exportColormapDialogBackdrop && !this.busy) {
+    this.disposables.addDisposable(bindDialogBackdropDismiss(this.elements.exportColormapDialogBackdrop, () => {
+      if (!this.busy) {
         this.close(true);
       }
-    });
+    }));
 
     this.disposables.addEventListener(this.elements.exportColormapDialogCancelButton, 'click', () => {
       if (this.busy) {

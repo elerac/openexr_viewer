@@ -2522,6 +2522,39 @@ describe('view menu', () => {
     expect(overlay.classList.contains('hidden')).toBe(true);
   });
 
+  it('keeps the screenshot export dialog open when a size input drag ends on the backdrop', async () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+    mockDomRect(viewerContainer, { top: 0, bottom: 100, height: 100, width: 200 });
+    const screenshotButton = document.getElementById('export-screenshot-button') as HTMLButtonElement;
+    const exportButton = document.getElementById('screenshot-selection-export-button') as HTMLButtonElement;
+    const overlay = document.getElementById('screenshot-selection-overlay') as HTMLDivElement;
+    const dialogBackdrop = document.getElementById('export-dialog-backdrop') as HTMLDivElement;
+    const dialogCancelButton = document.getElementById('export-dialog-cancel-button') as HTMLButtonElement;
+    const widthInput = document.getElementById('export-width-input') as HTMLInputElement;
+
+    screenshotButton.click();
+    expect(overlay.classList.contains('hidden')).toBe(false);
+    exportButton.click();
+    await flushMicrotasks();
+
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
+
+    widthInput.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+    dialogBackdrop.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
+    dialogBackdrop.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }));
+
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
+    expect(overlay.classList.contains('hidden')).toBe(false);
+
+    dialogCancelButton.click();
+  });
+
   it('blocks unrelated app chrome while screenshot selection is active', async () => {
     installUiFixture();
 

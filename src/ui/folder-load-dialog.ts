@@ -4,6 +4,7 @@ import {
   type FolderLoadAdmission,
   type FolderLoadLimits
 } from '../folder-load-limits';
+import { bindDialogBackdropDismiss } from './dialog-backdrop';
 import type { FolderLoadDialogElements } from './elements';
 
 export class FolderLoadDialogController implements Disposable {
@@ -14,11 +15,9 @@ export class FolderLoadDialogController implements Disposable {
   private disposed = false;
 
   constructor(private readonly elements: FolderLoadDialogElements) {
-    this.disposables.addEventListener(this.elements.folderLoadDialogBackdrop, 'click', (event) => {
-      if (event.target === this.elements.folderLoadDialogBackdrop) {
-        this.close(false, true);
-      }
-    });
+    this.disposables.addDisposable(bindDialogBackdropDismiss(this.elements.folderLoadDialogBackdrop, () => {
+      this.close(false, true);
+    }));
 
     this.disposables.addEventListener(this.elements.folderLoadDialogCancelButton, 'click', () => {
       this.close(false, true);

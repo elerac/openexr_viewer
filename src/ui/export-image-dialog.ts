@@ -1,6 +1,7 @@
 import { renderPixelsToCanvas, type ExportImagePixels } from '../export-image';
 import { DisposableBag, isAbortError, type Disposable } from '../lifecycle';
 import type { ExportImagePreviewRequest, ExportImageRequest, ExportImageTarget } from '../types';
+import { bindDialogBackdropDismiss } from './dialog-backdrop';
 import type { ExportImageDialogElements } from './elements';
 
 const EXPORT_IMAGE_PREVIEW_LOADING_MESSAGE = 'Loading preview...';
@@ -31,11 +32,11 @@ export class ExportImageDialogController implements Disposable {
     private readonly elements: ExportImageDialogElements,
     private readonly callbacks: ExportImageDialogCallbacks
   ) {
-    this.disposables.addEventListener(this.elements.exportDialogBackdrop, 'click', (event) => {
-      if (event.target === this.elements.exportDialogBackdrop && !this.busy) {
+    this.disposables.addDisposable(bindDialogBackdropDismiss(this.elements.exportDialogBackdrop, () => {
+      if (!this.busy) {
         this.cancel(true);
       }
-    });
+    }));
 
     this.disposables.addEventListener(this.elements.exportDialogCancelButton, 'click', () => {
       if (this.busy) {

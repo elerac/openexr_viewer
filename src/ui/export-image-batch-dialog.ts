@@ -14,6 +14,7 @@ import type {
   ExportImageBatchTarget,
   ExportScreenshotRegion
 } from '../types';
+import { bindDialogBackdropDismiss } from './dialog-backdrop';
 import type { ExportImageBatchDialogElements } from './elements';
 
 const DEFAULT_BATCH_ARCHIVE_FILENAME = 'openexr-export.zip';
@@ -65,11 +66,11 @@ export class ExportImageBatchDialogController implements Disposable {
     private readonly elements: ExportImageBatchDialogElements,
     private readonly callbacks: ExportImageBatchDialogCallbacks
   ) {
-    this.disposables.addEventListener(this.elements.exportBatchDialogBackdrop, 'click', (event) => {
-      if (event.target === this.elements.exportBatchDialogBackdrop && !this.busy) {
+    this.disposables.addDisposable(bindDialogBackdropDismiss(this.elements.exportBatchDialogBackdrop, () => {
+      if (!this.busy) {
         this.cancel(true);
       }
-    });
+    }));
 
     this.disposables.addEventListener(this.elements.exportBatchDialogCancelButton, 'click', () => {
       if (this.busy) {
