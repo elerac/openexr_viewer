@@ -89,9 +89,35 @@ async function expectActiveScreenshotTarget(locator: Locator): Promise<void> {
   await expect.poll(async () => (await readChromeVisualState(locator)).filter).toBe('none');
 }
 
+async function expectViewerCheckerBackground(viewer: Locator): Promise<void> {
+  const background = await viewer.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return {
+      color: style.backgroundColor,
+      image: style.backgroundImage,
+      size: style.backgroundSize,
+      position: style.backgroundPosition,
+      offsetX: style.getPropertyValue('--viewer-checker-offset-x').trim(),
+      offsetY: style.getPropertyValue('--viewer-checker-offset-y').trim(),
+      rectLeft: rect.left,
+      rectTop: rect.top
+    };
+  });
+
+  expect(background.color).toBe('rgb(23, 23, 23)');
+  expect(background.image).toContain('conic-gradient');
+  expect(background.image).toContain('rgb(31, 31, 31)');
+  expect(background.size).toBe('32px 32px');
+  expect(background.position).toBeTruthy();
+  expect(Number.parseFloat(background.offsetX)).toBeCloseTo(-background.rectLeft, 2);
+  expect(Number.parseFloat(background.offsetY)).toBeCloseTo(-background.rectTop, 2);
+}
+
 test('boots an empty app shell with menu actions gated until an image opens', async ({ page }) => {
   await gotoViewerApp(page);
 
+  const viewer = page.locator('#viewer-container');
   const openedImages = page.locator('#opened-images-select');
   const appMenuTitle = page.locator('.app-menu-title');
   const fileMenuButton = page.getByRole('button', { name: 'File', exact: true });
@@ -124,6 +150,7 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   await expect(page.locator('#pan-readout')).toHaveCount(0);
   await expect(openedImages.locator('option')).toHaveCount(0);
   await expect(page.locator('#opened-files-list')).toContainText('No open files');
+  await expectViewerCheckerBackground(viewer);
 
   await fileMenuButton.click();
   await expect(fileMenu).toBeVisible();

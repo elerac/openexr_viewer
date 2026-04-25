@@ -1093,18 +1093,30 @@ body.is-resizing-panel-rows * {
 }
 
 .viewer-container {
+  --viewer-checker-dark: rgb(23 23 23);
+  --viewer-checker-light: rgb(31 31 31);
+  --viewer-checker-tile: 16px;
+  --viewer-checker-offset-x: 0px;
+  --viewer-checker-offset-y: 0px;
   grid-area: viewer;
   position: relative;
   border: 1px solid var(--panel-border);
   border-radius: 0.5rem;
   overflow: hidden;
-  background: #0b0f15;
+  background-color: var(--viewer-checker-dark);
+  background-image: conic-gradient(
+    var(--viewer-checker-light) 25%,
+    var(--viewer-checker-dark) 0 50%,
+    var(--viewer-checker-light) 0 75%,
+    var(--viewer-checker-dark) 0
+  );
+  background-size: calc(var(--viewer-checker-tile) * 2) calc(var(--viewer-checker-tile) * 2);
+  background-position: var(--viewer-checker-offset-x) var(--viewer-checker-offset-y);
 }
 
 .viewer-container:fullscreen {
   border: 0;
   border-radius: 0;
-  background: #000;
 }
 
 .app-shell.is-window-preview .viewer-container {
@@ -1113,7 +1125,6 @@ body.is-resizing-panel-rows * {
   z-index: 40;
   border: 0;
   border-radius: 0;
-  background: #000;
 }
 
 #gl-canvas,

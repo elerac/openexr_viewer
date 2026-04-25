@@ -110,6 +110,7 @@ export function initializeViewportLifecycle({
       }
     }
     viewerContainerRect = rect;
+    setViewerCheckerOffset(ui.viewerContainer, rect);
     renderer.resize(rect.width, rect.height, rect.left, rect.top);
     renderCurrentView();
   });
@@ -118,6 +119,7 @@ export function initializeViewportLifecycle({
 
   const rect = readViewportClientRect(ui.viewerContainer);
   viewerContainerRect = rect;
+  setViewerCheckerOffset(ui.viewerContainer, rect);
   renderer.resize(rect.width, rect.height, rect.left, rect.top);
   renderCurrentView();
 
@@ -132,4 +134,9 @@ export function readViewportClientRect(element: HTMLElement): ViewportClientRect
     width: Number.isFinite(rect.width) ? rect.width : 0,
     height: Number.isFinite(rect.height) ? rect.height : 0
   };
+}
+
+function setViewerCheckerOffset(element: HTMLElement, rect: ViewportClientRect): void {
+  element.style.setProperty('--viewer-checker-offset-x', `${-rect.left}px`);
+  element.style.setProperty('--viewer-checker-offset-y', `${-rect.top}px`);
 }

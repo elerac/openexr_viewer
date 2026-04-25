@@ -113,6 +113,7 @@ const mocks = vi.hoisted(() => {
   const coreState = createCoreState();
   let uiCallbacks: Record<string, unknown> | null = null;
   let resizeObserverCallback: ResizeObserverCallback | null = null;
+  let viewerContainer: HTMLElement | null = null;
 
   return {
     createCoreState,
@@ -155,6 +156,10 @@ const mocks = vi.hoisted(() => {
     getResizeObserverCallback: () => resizeObserverCallback,
     setResizeObserverCallback: (callback: ResizeObserverCallback | null) => {
       resizeObserverCallback = callback;
+    },
+    getViewerContainer: () => viewerContainer,
+    setViewerContainer: (element: HTMLElement | null) => {
+      viewerContainer = element;
     }
   };
 });
@@ -192,13 +197,16 @@ vi.mock('../src/app/viewer-app-core', () => ({
 
 vi.mock('../src/ui/viewer-ui', () => ({
   ViewerUi: class {
+    readonly viewerContainer: HTMLElement;
+
     constructor(callbacks: Record<string, unknown>) {
+      this.viewerContainer = Object.assign(document.createElement('div'), {
+        getBoundingClientRect: () => ({ ...mocks.viewerRect })
+      });
+      mocks.setViewerContainer(this.viewerContainer);
       mocks.setUiCallbacks(callbacks);
     }
 
-    readonly viewerContainer = Object.assign(document.createElement('div'), {
-      getBoundingClientRect: () => ({ ...mocks.viewerRect })
-    });
     readonly glCanvas = document.createElement('canvas');
     readonly overlayCanvas = document.createElement('canvas');
     readonly probeOverlayCanvas = document.createElement('canvas');
@@ -351,6 +359,7 @@ afterEach(() => {
   mocks.viewerRect.width = 320;
   mocks.viewerRect.height = 180;
   mocks.setResizeObserverCallback(null);
+  mocks.setViewerContainer(null);
   mocks.rendererReadExportPixels.mockImplementation(() => ({
     width: 1,
     height: 1,
@@ -425,6 +434,9 @@ describe('bootstrap app lifecycle', () => {
 
     const { bootstrapApp } = await import('../src/app/bootstrap');
     const app = await bootstrapApp();
+    const viewerContainer = mocks.getViewerContainer();
+    expect(viewerContainer?.style.getPropertyValue('--viewer-checker-offset-x')).toBe('0px');
+    expect(viewerContainer?.style.getPropertyValue('--viewer-checker-offset-y')).toBe('0px');
     mocks.interactionCoordinatorEnqueueViewPatch.mockClear();
 
     mocks.viewerRect.left = 40;
@@ -437,6 +449,8 @@ describe('bootstrap app lifecycle', () => {
       panX: 12.5,
       panY: 25
     });
+    expect(viewerContainer?.style.getPropertyValue('--viewer-checker-offset-x')).toBe('-40px');
+    expect(viewerContainer?.style.getPropertyValue('--viewer-checker-offset-y')).toBe('-10px');
 
     app.dispose();
   });
