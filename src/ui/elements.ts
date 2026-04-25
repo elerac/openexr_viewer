@@ -37,6 +37,7 @@ export interface Elements {
   openFileButton: HTMLButtonElement;
   openFolderButton: HTMLButtonElement;
   exportImageButton: HTMLButtonElement;
+  exportScreenshotButton: HTMLButtonElement;
   exportImageBatchButton: HTMLButtonElement;
   exportColormapButton: HTMLButtonElement;
   fileInput: HTMLInputElement;
@@ -45,6 +46,9 @@ export interface Elements {
   exportDialogForm: HTMLFormElement;
   exportFilenameInput: HTMLInputElement;
   exportFormatSelect: HTMLSelectElement;
+  exportSizeField: HTMLDivElement;
+  exportWidthInput: HTMLInputElement;
+  exportHeightInput: HTMLInputElement;
   exportPreviewStage: HTMLDivElement;
   exportPreviewCanvas: HTMLCanvasElement;
   exportPreviewStatus: HTMLElement;
@@ -154,6 +158,16 @@ export interface Elements {
   glCanvas: HTMLCanvasElement;
   overlayCanvas: HTMLCanvasElement;
   probeOverlayCanvas: HTMLCanvasElement;
+  screenshotSelectionOverlay: HTMLDivElement;
+  screenshotSelectionMaskTop: HTMLDivElement;
+  screenshotSelectionMaskRight: HTMLDivElement;
+  screenshotSelectionMaskBottom: HTMLDivElement;
+  screenshotSelectionMaskLeft: HTMLDivElement;
+  screenshotSelectionBox: HTMLDivElement;
+  screenshotSelectionSize: HTMLDivElement;
+  screenshotSelectionControls: HTMLDivElement;
+  screenshotSelectionCancelButton: HTMLButtonElement;
+  screenshotSelectionExportButton: HTMLButtonElement;
 }
 
 export type OpenedImagesPanelElements = Pick<
@@ -260,6 +274,9 @@ export type ExportImageDialogElements = Pick<
   | 'exportDialogForm'
   | 'exportFilenameInput'
   | 'exportFormatSelect'
+  | 'exportSizeField'
+  | 'exportWidthInput'
+  | 'exportHeightInput'
   | 'exportPreviewCanvas'
   | 'exportPreviewStatus'
   | 'exportDialogError'
@@ -406,6 +423,7 @@ export function resolveElements(): Elements {
     openFileButton: requireElement('open-file-button', HTMLButtonElement),
     openFolderButton: requireElement('open-folder-button', HTMLButtonElement),
     exportImageButton: requireElement('export-image-button', HTMLButtonElement),
+    exportScreenshotButton: requireElement('export-screenshot-button', HTMLButtonElement),
     exportImageBatchButton: requireElement('export-image-batch-button', HTMLButtonElement),
     exportColormapButton: requireElement('export-colormap-button', HTMLButtonElement),
     fileInput: requireElement('file-input', HTMLInputElement),
@@ -414,6 +432,9 @@ export function resolveElements(): Elements {
     exportDialogForm: requireElement('export-dialog-form', HTMLFormElement),
     exportFilenameInput: requireElement('export-filename-input', HTMLInputElement),
     exportFormatSelect: requireElement('export-format-select', HTMLSelectElement),
+    exportSizeField: requireElement('export-size-field', HTMLDivElement),
+    exportWidthInput: requireElement('export-width-input', HTMLInputElement),
+    exportHeightInput: requireElement('export-height-input', HTMLInputElement),
     exportPreviewStage: requireElement('export-preview-stage', HTMLDivElement),
     exportPreviewCanvas: requireElement('export-preview-canvas', HTMLCanvasElement),
     exportPreviewStatus: requireElement('export-preview-status', HTMLElement),
@@ -522,7 +543,17 @@ export function resolveElements(): Elements {
     clearRoiButton: requireElement('clear-roi-button', HTMLButtonElement),
     glCanvas: requireElement('gl-canvas', HTMLCanvasElement),
     overlayCanvas: requireElement('overlay-canvas', HTMLCanvasElement),
-    probeOverlayCanvas: requireElement('probe-overlay-canvas', HTMLCanvasElement)
+    probeOverlayCanvas: requireElement('probe-overlay-canvas', HTMLCanvasElement),
+    screenshotSelectionOverlay: requireElement('screenshot-selection-overlay', HTMLDivElement),
+    screenshotSelectionMaskTop: requireElement('screenshot-selection-mask-top', HTMLDivElement),
+    screenshotSelectionMaskRight: requireElement('screenshot-selection-mask-right', HTMLDivElement),
+    screenshotSelectionMaskBottom: requireElement('screenshot-selection-mask-bottom', HTMLDivElement),
+    screenshotSelectionMaskLeft: requireElement('screenshot-selection-mask-left', HTMLDivElement),
+    screenshotSelectionBox: requireElement('screenshot-selection-box', HTMLDivElement),
+    screenshotSelectionSize: requireElement('screenshot-selection-size', HTMLDivElement),
+    screenshotSelectionControls: requireElement('screenshot-selection-controls', HTMLDivElement),
+    screenshotSelectionCancelButton: requireElement('screenshot-selection-cancel-button', HTMLButtonElement),
+    screenshotSelectionExportButton: requireElement('screenshot-selection-export-button', HTMLButtonElement)
   };
 }
 

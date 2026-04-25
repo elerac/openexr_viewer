@@ -17,6 +17,7 @@ import type {
   ExportColormapRequest,
   ExportImageBatchPreviewRequest,
   ExportImageBatchRequest,
+  ExportImagePreviewRequest,
   ExportImageRequest,
   OpenedImageSession,
   ViewerSessionState
@@ -135,8 +136,14 @@ export function createImageExportPixelsResolver({
   getRenderer,
   getDisplayController,
   isDisposed
-}: ImageExportResolverDependencies): (options?: ImageExportResolverOptions) => Promise<ExportImagePixels> {
-  return async (options: ImageExportResolverOptions = {}) => {
+}: ImageExportResolverDependencies): (
+  request?: ExportImagePreviewRequest | ExportImageRequest,
+  options?: ImageExportResolverOptions
+) => Promise<ExportImagePixels> {
+  return async (
+    request: ExportImagePreviewRequest | ExportImageRequest = { mode: 'image' },
+    options: ImageExportResolverOptions = {}
+  ) => {
     if (isDisposed()) {
       throw createAbortError('Viewer application has been disposed.');
     }
@@ -167,18 +174,25 @@ export function createImageExportPixelsResolver({
       throw createAbortError('Viewer application has been disposed.');
     }
 
+    const screenshotRegion = request.mode === 'screenshot' ? request : null;
+    const requestedWidth = screenshotRegion?.outputWidth ?? activeSession.decoded.width;
+    const requestedHeight = screenshotRegion?.outputHeight ?? activeSession.decoded.height;
     const outputSize = options.previewMaxLongestEdge
-      ? resolveBoundedImageExportSize(
-        activeSession.decoded.width,
-        activeSession.decoded.height,
-        options.previewMaxLongestEdge
-      )
-      : null;
+      ? resolveBoundedImageExportSize(requestedWidth, requestedHeight, options.previewMaxLongestEdge)
+      : screenshotRegion
+        ? { width: requestedWidth, height: requestedHeight }
+        : null;
 
     return getRenderer().readExportPixels({
       state: mergeRenderState(state.sessionState, state.interactionState),
       sourceWidth: activeSession.decoded.width,
       sourceHeight: activeSession.decoded.height,
+      ...(screenshotRegion ? {
+        screenshot: {
+          rect: screenshotRegion.rect,
+          sourceViewport: screenshotRegion.sourceViewport
+        }
+      } : {}),
       ...(outputSize ? {
         outputWidth: outputSize.width,
         outputHeight: outputSize.height
@@ -200,7 +214,7 @@ export async function handleExportImage(
   }
 
   try {
-    const pixels = await resolveImageExportPixels();
+    const pixels = await resolveImageExportPixels(request);
     const blob = await createPngBlobFromPixels(pixels);
     if (isDisposed()) {
       throw createAbortError('Viewer application has been disposed.');

@@ -62,6 +62,19 @@ export function createViewerInteraction({
         type: 'roiSet',
         roi
       });
+    },
+    getScreenshotSelection: () => ui.getScreenshotSelectionInteractionState(),
+    onScreenshotSelectionRectChange: (update) => {
+      ui.setScreenshotSelectionRect(update.rect, { squareSnapped: update.squareSnapped });
+    },
+    onScreenshotSelectionHandleHover: (handle) => {
+      ui.setScreenshotSelectionHandle(handle);
+    },
+    onScreenshotSelectionResizeActiveChange: (active) => {
+      ui.setScreenshotSelectionResizeActive(active);
+    },
+    onScreenshotSelectionSquareSnapChange: (active) => {
+      ui.setScreenshotSelectionSquareSnapActive(active);
     }
   });
 }

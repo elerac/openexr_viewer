@@ -18,6 +18,8 @@ interface GlobalKeyboardControllerCallbacks {
   isExportColormapDialogOpen: () => boolean;
   isExportColormapDialogBusy: () => boolean;
   closeExportColormapDialog: (restoreFocus?: boolean) => void;
+  isScreenshotSelectionActive: () => boolean;
+  cancelScreenshotSelection: () => void;
   isFolderLoadDialogOpen: () => boolean;
   closeFolderLoadDialog: (restoreFocus?: boolean) => void;
   isWindowPreviewActive: () => boolean;
@@ -77,6 +79,12 @@ export class GlobalKeyboardController implements Disposable {
       if (event.key === 'Escape' && this.callbacks.isWindowPreviewActive()) {
         event.preventDefault();
         this.callbacks.setWindowPreviewEnabled(false);
+        return;
+      }
+
+      if (event.key === 'Escape' && this.callbacks.isScreenshotSelectionActive()) {
+        event.preventDefault();
+        this.callbacks.cancelScreenshotSelection();
         return;
       }
 
@@ -160,6 +168,7 @@ export class GlobalKeyboardController implements Disposable {
       this.callbacks.isExportImageDialogOpen() ||
       this.callbacks.isExportImageBatchDialogOpen() ||
       this.callbacks.isExportColormapDialogOpen() ||
+      this.callbacks.isScreenshotSelectionActive() ||
       this.callbacks.isWindowPreviewActive() ||
       this.callbacks.hasOpenMenu()
     ) {
@@ -212,6 +221,7 @@ export class GlobalKeyboardController implements Disposable {
       this.callbacks.isExportImageDialogOpen() ||
       this.callbacks.isExportImageBatchDialogOpen() ||
       this.callbacks.isExportColormapDialogOpen() ||
+      this.callbacks.isScreenshotSelectionActive() ||
       this.callbacks.getViewerMode() !== 'panorama' ||
       this.callbacks.getOpenedImageCount() === 0 ||
       this.callbacks.isWindowPreviewActive() ||

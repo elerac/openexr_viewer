@@ -15,6 +15,7 @@ import type {
   ExportColormapRequest,
   ExportImageBatchPreviewRequest,
   ExportImageBatchRequest,
+  ExportImagePreviewRequest,
   ExportImageRequest,
   OpenedImageDropPlacement,
   PanoramaKeyboardOrbitInput
@@ -38,6 +39,7 @@ interface CreateViewerUiDependencies {
     options?: { signal?: AbortSignal; previewMaxLongestEdge?: number }
   ) => Promise<{ width: number; height: number; data: Uint8ClampedArray }>;
   resolveImageExportPixels: (
+    request?: ExportImagePreviewRequest | ExportImageRequest,
     options?: { signal?: AbortSignal; previewMaxLongestEdge?: number }
   ) => Promise<ExportImagePixels>;
   isDisposed: () => boolean;
@@ -70,8 +72,8 @@ export function createViewerUi({
         isDisposed
       });
     },
-    onResolveExportImagePreview: async (signal) => {
-      return await resolveImageExportPixels({
+    onResolveExportImagePreview: async (request, signal) => {
+      return await resolveImageExportPixels(request, {
         signal,
         previewMaxLongestEdge: 256
       });

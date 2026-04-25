@@ -78,6 +78,16 @@ function setCommonUniforms(
     options.viewportLeft ?? state.viewportOrigin.left,
     options.viewportTop ?? state.viewportOrigin.top
   );
+  gl.uniform2f(
+    uniforms.outputSize,
+    options.outputWidth ?? options.viewportWidth ?? state.viewport.width,
+    options.outputHeight ?? options.viewportHeight ?? state.viewport.height
+  );
+  gl.uniform2f(
+    uniforms.screenOrigin,
+    options.screenOriginX ?? 0,
+    options.screenOriginY ?? 0
+  );
 
   const width = state.imageSize?.width ?? 0;
   const height = state.imageSize?.height ?? 0;

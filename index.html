@@ -19,6 +19,7 @@
               <button id="open-file-button" class="app-menu-item" type="button" role="menuitem">Open...</button>
               <button id="open-folder-button" class="app-menu-item" type="button" role="menuitem">Open Folder...</button>
               <button id="export-image-button" class="app-menu-item" type="button" role="menuitem">Export...</button>
+              <button id="export-screenshot-button" class="app-menu-item" type="button" role="menuitem">Export Screenshot...</button>
               <button id="export-image-batch-button" class="app-menu-item" type="button" role="menuitem">Export Batch...</button>
               <button id="export-colormap-button" class="app-menu-item" type="button" role="menuitem">Export Colormap...</button>
               <button id="reload-all-opened-images-button" class="app-menu-item" type="button" role="menuitem">Reload All</button>
@@ -196,6 +197,19 @@
                 <option value="png">PNG</option>
               </select>
             </label>
+            <div id="export-size-field" class="app-dialog-field hidden">
+              <span class="app-dialog-field-label">Size</span>
+              <div class="app-dialog-field-row">
+                <label class="app-dialog-inline-field" for="export-width-input">
+                  <span>Width</span>
+                  <input id="export-width-input" type="number" min="1" step="1" inputmode="numeric" />
+                </label>
+                <label class="app-dialog-inline-field" for="export-height-input">
+                  <span>Height</span>
+                  <input id="export-height-input" type="number" min="1" step="1" inputmode="numeric" />
+                </label>
+              </div>
+            </div>
             <div class="app-dialog-field">
               <span class="app-dialog-field-label">Preview</span>
               <div id="export-preview-stage" class="app-dialog-preview-stage">
@@ -521,6 +535,27 @@
           <canvas id="gl-canvas"></canvas>
           <canvas id="overlay-canvas"></canvas>
           <canvas id="probe-overlay-canvas"></canvas>
+          <div id="screenshot-selection-overlay" class="screenshot-selection-overlay hidden" aria-hidden="true">
+            <div id="screenshot-selection-mask-top" class="screenshot-selection-mask"></div>
+            <div id="screenshot-selection-mask-right" class="screenshot-selection-mask"></div>
+            <div id="screenshot-selection-mask-bottom" class="screenshot-selection-mask"></div>
+            <div id="screenshot-selection-mask-left" class="screenshot-selection-mask"></div>
+            <div id="screenshot-selection-box" class="screenshot-selection-box">
+              <span class="screenshot-selection-handle screenshot-selection-handle--nw"></span>
+              <span class="screenshot-selection-handle screenshot-selection-handle--n"></span>
+              <span class="screenshot-selection-handle screenshot-selection-handle--ne"></span>
+              <span class="screenshot-selection-handle screenshot-selection-handle--e"></span>
+              <span class="screenshot-selection-handle screenshot-selection-handle--se"></span>
+              <span class="screenshot-selection-handle screenshot-selection-handle--s"></span>
+              <span class="screenshot-selection-handle screenshot-selection-handle--sw"></span>
+              <span class="screenshot-selection-handle screenshot-selection-handle--w"></span>
+            </div>
+            <div id="screenshot-selection-size" class="screenshot-selection-size hidden"></div>
+            <div id="screenshot-selection-controls" class="screenshot-selection-controls">
+              <button id="screenshot-selection-cancel-button" type="button">Cancel</button>
+              <button id="screenshot-selection-export-button" type="button">Export...</button>
+            </div>
+          </div>
           <div id="drop-overlay" class="drop-overlay hidden">Drop .exr file(s) or folder to load</div>
           <div id="loading-overlay" class="loading-overlay hidden" role="status" aria-live="polite">
             <div class="loading-spinner" aria-hidden="true"></div>

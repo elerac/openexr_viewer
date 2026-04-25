@@ -110,6 +110,148 @@ describe('viewer interaction roi gestures', () => {
     expect(harness.onCommitRoi).not.toHaveBeenCalled();
     expect(harness.onViewChange).toHaveBeenCalled();
   });
+
+  it('edits screenshot selection instead of panning, probing, or drawing ROI', () => {
+    const harness = createHarness({}, {
+      screenshotRect: { x: 20, y: 20, width: 40, height: 30 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', { pointerId: 1, clientX: 40, clientY: 35 });
+    dispatchPointer(harness.element, 'pointermove', { pointerId: 1, clientX: 50, clientY: 45 });
+    dispatchPointer(harness.element, 'pointerup', { pointerId: 1, clientX: 50, clientY: 45 });
+
+    expect(harness.onScreenshotSelectionRectChange).toHaveBeenCalledWith({
+      rect: {
+        x: 30,
+        y: 30,
+        width: 40,
+        height: 30
+      },
+      squareSnapped: false
+    });
+    expect(harness.onViewChange).not.toHaveBeenCalled();
+    expect(harness.onToggleLockPixel).not.toHaveBeenCalled();
+    expect(harness.onDraftRoi).not.toHaveBeenCalled();
+    expect(harness.onCommitRoi).not.toHaveBeenCalled();
+  });
+
+  it('edits screenshot selection in panorama mode instead of orbiting', () => {
+    const harness = createHarness({
+      viewerMode: 'panorama'
+    }, {
+      screenshotRect: { x: 20, y: 20, width: 40, height: 30 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', { pointerId: 1, clientX: 60, clientY: 35 });
+    dispatchPointer(harness.element, 'pointermove', { pointerId: 1, clientX: 75, clientY: 35 });
+    dispatchPointer(harness.element, 'pointerup', { pointerId: 1, clientX: 75, clientY: 35 });
+
+    expect(harness.onScreenshotSelectionRectChange).toHaveBeenCalledWith({
+      rect: {
+        x: 20,
+        y: 20,
+        width: 55,
+        height: 30
+      },
+      squareSnapped: false
+    });
+    expect(harness.onViewChange).not.toHaveBeenCalled();
+  });
+
+  it('snaps near-square screenshot resize drags and reports active snap feedback', () => {
+    const harness = createHarness({}, {
+      screenshotRect: { x: 20, y: 20, width: 40, height: 40 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', { pointerId: 1, clientX: 60, clientY: 60 });
+    dispatchPointer(harness.element, 'pointermove', { pointerId: 1, clientX: 72, clientY: 70 });
+
+    expect(harness.onScreenshotSelectionRectChange).toHaveBeenCalledWith({
+      rect: {
+        x: 20,
+        y: 20,
+        width: 51,
+        height: 51
+      },
+      squareSnapped: true
+    });
+    expect(harness.onScreenshotSelectionSquareSnapChange).toHaveBeenCalledWith(true);
+  });
+
+  it('preserves screenshot selection aspect ratio while resizing with shift held', () => {
+    const harness = createHarness({}, {
+      screenshotRect: { x: 20, y: 20, width: 80, height: 40 },
+      viewport: { width: 200, height: 160 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', { pointerId: 1, clientX: 100, clientY: 60 });
+    dispatchPointer(harness.element, 'pointermove', {
+      pointerId: 1,
+      clientX: 140,
+      clientY: 65,
+      shiftKey: true
+    });
+
+    expect(harness.onScreenshotSelectionRectChange).toHaveBeenCalledWith({
+      rect: {
+        x: 20,
+        y: 20,
+        width: 120,
+        height: 60
+      },
+      squareSnapped: false
+    });
+    expect(harness.onScreenshotSelectionSquareSnapChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('clears screenshot square snap feedback on pointer up', () => {
+    const harness = createHarness({}, {
+      screenshotRect: { x: 20, y: 20, width: 40, height: 40 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', { pointerId: 1, clientX: 60, clientY: 60 });
+    dispatchPointer(harness.element, 'pointermove', { pointerId: 1, clientX: 72, clientY: 70 });
+    dispatchPointer(harness.element, 'pointerup', { pointerId: 1, clientX: 72, clientY: 70 });
+
+    expect(harness.onScreenshotSelectionSquareSnapChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('does not activate screenshot square snap feedback for move drags', () => {
+    const harness = createHarness({}, {
+      screenshotRect: { x: 20, y: 20, width: 40, height: 40 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', { pointerId: 1, clientX: 40, clientY: 40 });
+    dispatchPointer(harness.element, 'pointermove', { pointerId: 1, clientX: 50, clientY: 50 });
+    dispatchPointer(harness.element, 'pointerup', { pointerId: 1, clientX: 50, clientY: 50 });
+
+    expect(harness.onScreenshotSelectionSquareSnapChange).not.toHaveBeenCalledWith(true);
+  });
+
+  it('reports active screenshot resize only for edge and corner drags', () => {
+    const moveHarness = createHarness({}, {
+      screenshotRect: { x: 20, y: 20, width: 40, height: 30 }
+    });
+
+    dispatchPointer(moveHarness.element, 'pointerdown', { pointerId: 1, clientX: 40, clientY: 35 });
+    dispatchPointer(moveHarness.element, 'pointermove', { pointerId: 1, clientX: 50, clientY: 45 });
+    dispatchPointer(moveHarness.element, 'pointerup', { pointerId: 1, clientX: 50, clientY: 45 });
+
+    expect(moveHarness.onScreenshotSelectionResizeActiveChange).toHaveBeenCalledWith(false);
+
+    const resizeHarness = createHarness({}, {
+      screenshotRect: { x: 20, y: 20, width: 40, height: 30 }
+    });
+
+    dispatchPointer(resizeHarness.element, 'pointerdown', { pointerId: 1, clientX: 60, clientY: 35 });
+    dispatchPointer(resizeHarness.element, 'pointermove', { pointerId: 1, clientX: 72, clientY: 35 });
+
+    expect(resizeHarness.onScreenshotSelectionResizeActiveChange).toHaveBeenCalledWith(true);
+
+    dispatchPointer(resizeHarness.element, 'pointerup', { pointerId: 1, clientX: 72, clientY: 35 });
+
+    expect(resizeHarness.onScreenshotSelectionResizeActiveChange).toHaveBeenLastCalledWith(false);
+  });
 });
 
 describe('viewer interaction panorama keyboard orbit', () => {
@@ -336,6 +478,7 @@ function createHarness(
   options: {
     imageSize?: { width: number; height: number } | null;
     viewport?: { width: number; height: number };
+    screenshotRect?: { x: number; y: number; width: number; height: number } | null;
   } = {}
 ) {
   const element = document.createElement('div');
@@ -383,6 +526,13 @@ function createHarness(
   const onToggleLockPixel = vi.fn();
   const onDraftRoi = vi.fn();
   const onCommitRoi = vi.fn();
+  let screenshotRect = options.screenshotRect ?? null;
+  const onScreenshotSelectionRectChange = vi.fn((update) => {
+    screenshotRect = update.rect;
+  });
+  const onScreenshotSelectionHandleHover = vi.fn();
+  const onScreenshotSelectionResizeActiveChange = vi.fn();
+  const onScreenshotSelectionSquareSnapChange = vi.fn();
   let frameCallback: FrameRequestCallback | null = null;
   let nextFrameId = 1;
   const cancelFrame = vi.fn((frameId: number) => {
@@ -399,7 +549,15 @@ function createHarness(
     onHoverPixel,
     onToggleLockPixel,
     onDraftRoi,
-    onCommitRoi
+    onCommitRoi,
+    getScreenshotSelection: () => ({
+      active: screenshotRect !== null,
+      rect: screenshotRect
+    }),
+    onScreenshotSelectionRectChange,
+    onScreenshotSelectionHandleHover,
+    onScreenshotSelectionResizeActiveChange,
+    onScreenshotSelectionSquareSnapChange
   }, {
     scheduleFrame: (callback) => {
       frameCallback = callback;
@@ -417,6 +575,11 @@ function createHarness(
     onToggleLockPixel,
     onDraftRoi,
     onCommitRoi,
+    onScreenshotSelectionRectChange,
+    onScreenshotSelectionHandleHover,
+    onScreenshotSelectionResizeActiveChange,
+    onScreenshotSelectionSquareSnapChange,
+    getScreenshotRect: () => screenshotRect,
     flushFrame: (timestamp: number) => {
       const callback = frameCallback;
       frameCallback = null;

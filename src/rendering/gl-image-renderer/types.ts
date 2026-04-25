@@ -1,10 +1,12 @@
 import type { DisplaySourceBinding } from '../../display-texture';
 import type { ExportImagePixels } from '../../export-image';
-import type { DecodedLayer, ViewerState, ViewportInfo } from '../../types';
+import type { DecodedLayer, ViewerState, ViewportInfo, ViewportRect } from '../../types';
 
 export interface CommonUniforms {
   viewport: WebGLUniformLocation;
   viewportOrigin: WebGLUniformLocation;
+  outputSize: WebGLUniformLocation;
+  screenOrigin: WebGLUniformLocation;
   imageSize: WebGLUniformLocation;
   exposure: WebGLUniformLocation;
   useColormap: WebGLUniformLocation;
@@ -60,6 +62,10 @@ export interface RenderPassOptions {
   viewportHeight?: number;
   viewportLeft?: number;
   viewportTop?: number;
+  outputWidth?: number;
+  outputHeight?: number;
+  screenOriginX?: number;
+  screenOriginY?: number;
 }
 
 export interface ReadExportPixelsArgs {
@@ -68,6 +74,10 @@ export interface ReadExportPixelsArgs {
   sourceHeight: number;
   outputWidth?: number;
   outputHeight?: number;
+  screenshot?: {
+    rect: ViewportRect;
+    sourceViewport: ViewportInfo;
+  };
 }
 
 export interface GlImageRendererState {

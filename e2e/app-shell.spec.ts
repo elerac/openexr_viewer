@@ -364,6 +364,135 @@ test('exports the active image as a png download from the file menu', async ({ p
   expectPngSignature(await readDownloadBytes(download));
 });
 
+test('exports an adjusted image-viewer screenshot region as a png download', async ({ page }) => {
+  await gotoViewerApp(page);
+  await openGalleryCbox(page);
+
+  const fileMenuButton = page.getByRole('button', { name: 'File', exact: true });
+  const exportScreenshotMenuItem = page.locator('#export-screenshot-button');
+  const selectionOverlay = page.locator('#screenshot-selection-overlay');
+  const selectionBox = page.locator('#screenshot-selection-box');
+  const overlayExportButton = page.locator('#screenshot-selection-export-button');
+  const exportDialog = page.locator('#export-dialog-form');
+  const exportFilenameInput = page.locator('#export-filename-input');
+  const exportSizeField = page.locator('#export-size-field');
+  const exportWidthInput = page.locator('#export-width-input');
+  const exportHeightInput = page.locator('#export-height-input');
+  const exportSubmitButton = page.locator('#export-dialog-submit-button');
+
+  await fileMenuButton.click();
+  await exportScreenshotMenuItem.click();
+
+  await expect(selectionOverlay).toBeVisible();
+  await expect(selectionBox).toBeVisible();
+
+  const initialBox = await selectionBox.boundingBox();
+  if (!initialBox) {
+    throw new Error('Expected screenshot selection box to be visible.');
+  }
+
+  await page.mouse.move(initialBox.x + initialBox.width, initialBox.y + initialBox.height);
+  await page.mouse.down();
+  await page.mouse.move(initialBox.x + initialBox.width - 48, initialBox.y + initialBox.height - 24, { steps: 4 });
+  await page.mouse.up();
+
+  const resizedBox = await selectionBox.boundingBox();
+  if (!resizedBox) {
+    throw new Error('Expected resized screenshot selection box to be visible.');
+  }
+  expect(resizedBox.width).toBeLessThan(initialBox.width);
+  expect(resizedBox.height).toBeLessThan(initialBox.height);
+
+  await overlayExportButton.click();
+
+  await expect(exportDialog).toBeVisible();
+  await expect(exportFilenameInput).toHaveValue('cbox_rgb-screenshot.png');
+  await expect(exportSizeField).toBeVisible();
+
+  const initialWidth = Number(await exportWidthInput.inputValue());
+  const initialHeight = Number(await exportHeightInput.inputValue());
+  expect(initialWidth).toBeGreaterThan(0);
+  expect(initialHeight).toBeGreaterThan(0);
+
+  const nextWidth = Math.max(80, Math.round(initialWidth * 0.6));
+  await exportWidthInput.fill(String(nextWidth));
+  const nextHeight = Number(await exportHeightInput.inputValue());
+  expect(nextHeight).toBeGreaterThan(0);
+  expect(nextHeight).not.toBe(initialHeight);
+  expect(nextHeight / nextWidth).toBeCloseTo(initialHeight / initialWidth, 1);
+
+  const downloadPromise = page.waitForEvent('download');
+  await exportSubmitButton.click();
+  const download = await downloadPromise;
+
+  await expect(exportDialog).toBeHidden();
+  await expect(selectionOverlay).toBeHidden();
+  expect(download.suggestedFilename()).toBe('cbox_rgb-screenshot.png');
+
+  expectPngSignature(await readDownloadBytes(download));
+});
+
+test('exports a panorama-viewer screenshot region as a png download', async ({ page }) => {
+  await gotoViewerApp(page);
+  await openGalleryCbox(page);
+
+  const fileMenuButton = page.getByRole('button', { name: 'File', exact: true });
+  const viewMenuButton = page.getByRole('button', { name: 'View', exact: true });
+  const panoramaMenuItem = page.locator('#panorama-viewer-menu-item');
+  const exportScreenshotMenuItem = page.locator('#export-screenshot-button');
+  const selectionOverlay = page.locator('#screenshot-selection-overlay');
+  const overlayExportButton = page.locator('#screenshot-selection-export-button');
+  const exportDialog = page.locator('#export-dialog-form');
+  const exportSizeField = page.locator('#export-size-field');
+  const exportSubmitButton = page.locator('#export-dialog-submit-button');
+
+  await viewMenuButton.click();
+  await panoramaMenuItem.click();
+  await expect(panoramaMenuItem).toHaveAttribute('aria-checked', 'true');
+
+  await fileMenuButton.click();
+  await exportScreenshotMenuItem.click();
+
+  await expect(selectionOverlay).toBeVisible();
+  await overlayExportButton.click();
+
+  await expect(exportDialog).toBeVisible();
+  await expect(exportSizeField).toBeVisible();
+
+  const downloadPromise = page.waitForEvent('download');
+  await exportSubmitButton.click();
+  const download = await downloadPromise;
+
+  await expect(exportDialog).toBeHidden();
+  await expect(selectionOverlay).toBeHidden();
+  expect(download.suggestedFilename()).toBe('cbox_rgb-screenshot.png');
+
+  expectPngSignature(await readDownloadBytes(download));
+});
+
+test('cancels screenshot mode when screenshot export dialog is canceled', async ({ page }) => {
+  await gotoViewerApp(page);
+  await openGalleryCbox(page);
+
+  const fileMenuButton = page.getByRole('button', { name: 'File', exact: true });
+  const exportScreenshotMenuItem = page.locator('#export-screenshot-button');
+  const selectionOverlay = page.locator('#screenshot-selection-overlay');
+  const overlayExportButton = page.locator('#screenshot-selection-export-button');
+  const exportDialog = page.locator('#export-dialog-form');
+  const exportCancelButton = page.locator('#export-dialog-cancel-button');
+
+  await fileMenuButton.click();
+  await exportScreenshotMenuItem.click();
+  await expect(selectionOverlay).toBeVisible();
+
+  await overlayExportButton.click();
+  await expect(exportDialog).toBeVisible();
+
+  await exportCancelButton.click();
+  await expect(exportDialog).toBeHidden();
+  await expect(selectionOverlay).toBeHidden();
+});
+
 test('exports selected file-channel cells as one batch zip download', async ({ page }) => {
   await gotoViewerApp(page);
 

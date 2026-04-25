@@ -1047,7 +1047,7 @@ describe('panel split sizing', () => {
 });
 
 describe('view menu', () => {
-  it('renders file menu items in open-open-folder-export-reload-close order', () => {
+  it('renders file menu items in open-open-folder-export-screenshot-reload-close order', () => {
     installUiFixture();
 
     const labels = Array.from(document.querySelectorAll('#file-menu .app-menu-item')).map((item) => item.textContent?.trim());
@@ -1055,6 +1055,7 @@ describe('view menu', () => {
       'Open...',
       'Open Folder...',
       'Export...',
+      'Export Screenshot...',
       'Export Batch...',
       'Export Colormap...',
       'Reload All',
@@ -1772,7 +1773,7 @@ describe('view menu', () => {
     await flushMicrotasks();
 
     expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
-    expect(onResolveExportImagePreview).toHaveBeenCalledWith(expect.any(AbortSignal));
+    expect(onResolveExportImagePreview).toHaveBeenCalledWith({ mode: 'image' }, expect.any(AbortSignal));
     expect(previewCanvas.classList.contains('hidden')).toBe(false);
     expect(previewCanvas.width).toBe(32);
     expect(previewCanvas.height).toBe(16);
@@ -1810,7 +1811,7 @@ describe('view menu', () => {
     const firstPreview = createDeferred<ReturnType<typeof createPreviewPixels>>();
     const secondPreview = createDeferred<ReturnType<typeof createPreviewPixels>>();
     const onResolveExportImagePreview = vi
-      .fn<(_: AbortSignal) => Promise<ReturnType<typeof createPreviewPixels>>>()
+      .fn<(_: unknown, _signal: AbortSignal) => Promise<ReturnType<typeof createPreviewPixels>>>()
       .mockReturnValueOnce(firstPreview.promise)
       .mockReturnValueOnce(secondPreview.promise);
     const ui = new ViewerUi(createUiCallbacks({ onResolveExportImagePreview }));
@@ -1826,7 +1827,7 @@ describe('view menu', () => {
     exportButton.click();
     await flushMicrotasks();
 
-    const initialSignal = onResolveExportImagePreview.mock.calls[0]?.[0] as AbortSignal;
+    const initialSignal = onResolveExportImagePreview.mock.calls[0]?.[1] as AbortSignal;
     cancelButton.click();
     await flushMicrotasks();
 
@@ -1858,7 +1859,7 @@ describe('view menu', () => {
 
     const deferred = createDeferred<void>();
     const onExportImage = vi
-      .fn<(_: { filename: string; format: 'png' }) => Promise<void>>()
+      .fn<(_: unknown) => Promise<void>>()
       .mockReturnValueOnce(deferred.promise)
       .mockRejectedValueOnce(new Error('Encode failed'));
     const ui = new ViewerUi(createUiCallbacks({ onExportImage }));
@@ -1892,6 +1893,458 @@ describe('view menu', () => {
     expect(error.classList.contains('hidden')).toBe(false);
     expect(submitButton.disabled).toBe(false);
     expect(cancelButton.disabled).toBe(false);
+  });
+
+  it('exports an aspect-locked screenshot selection from the viewer overlay', async () => {
+    installUiFixture();
+
+    const onExportImage = vi.fn(async () => undefined);
+    const onResolveExportImagePreview = vi.fn(async () => createPreviewPixels(32, 16));
+    const ui = new ViewerUi(createUiCallbacks({ onExportImage, onResolveExportImagePreview }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+    mockDomRect(viewerContainer, { top: 0, bottom: 100, height: 100, width: 200 });
+
+    const screenshotButton = document.getElementById('export-screenshot-button') as HTMLButtonElement;
+    const overlay = document.getElementById('screenshot-selection-overlay') as HTMLDivElement;
+    const selectionBox = document.getElementById('screenshot-selection-box') as HTMLDivElement;
+    const selectionSize = document.getElementById('screenshot-selection-size') as HTMLDivElement;
+    const overlayExportButton = document.getElementById('screenshot-selection-export-button') as HTMLButtonElement;
+    const dialogBackdrop = document.getElementById('export-dialog-backdrop') as HTMLDivElement;
+    const filenameInput = document.getElementById('export-filename-input') as HTMLInputElement;
+    const sizeField = document.getElementById('export-size-field') as HTMLDivElement;
+    const widthInput = document.getElementById('export-width-input') as HTMLInputElement;
+    const heightInput = document.getElementById('export-height-input') as HTMLInputElement;
+    const dialogCancelButton = document.getElementById('export-dialog-cancel-button') as HTMLButtonElement;
+    const submitButton = document.getElementById('export-dialog-submit-button') as HTMLButtonElement;
+
+    screenshotButton.click();
+
+    expect(overlay.classList.contains('hidden')).toBe(false);
+    expect(selectionBox.style.left).toBe('30px');
+    expect(selectionBox.style.top).toBe('15px');
+    expect(selectionBox.style.width).toBe('140px');
+    expect(selectionBox.style.height).toBe('70px');
+    expect(selectionSize.classList.contains('hidden')).toBe(true);
+
+    ui.setScreenshotSelectionResizeActive(true);
+    ui.setScreenshotSelectionRect({ x: 30, y: 15, width: 92, height: 46 });
+
+    expect(selectionSize.classList.contains('hidden')).toBe(false);
+    expect(selectionSize.textContent).toBe('92 x 46');
+
+    ui.setScreenshotSelectionResizeActive(false);
+
+    expect(selectionSize.classList.contains('hidden')).toBe(true);
+    ui.setScreenshotSelectionRect({ x: 30, y: 15, width: 140, height: 70 });
+
+    overlayExportButton.click();
+    await flushMicrotasks();
+
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
+    expect(filenameInput.value).toBe('image-screenshot.png');
+    expect(sizeField.classList.contains('hidden')).toBe(false);
+    expect(widthInput.value).toBe('140');
+    expect(heightInput.value).toBe('70');
+    expect(onResolveExportImagePreview).toHaveBeenCalledWith({
+      mode: 'screenshot',
+      rect: { x: 30, y: 15, width: 140, height: 70 },
+      sourceViewport: { width: 200, height: 100 },
+      outputWidth: 140,
+      outputHeight: 70
+    }, expect.any(AbortSignal));
+
+    widthInput.value = '280';
+    widthInput.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(heightInput.value).toBe('140');
+
+    submitButton.click();
+    await flushMicrotasks();
+
+    expect(onExportImage).toHaveBeenCalledWith({
+      filename: 'image-screenshot.png',
+      format: 'png',
+      mode: 'screenshot',
+      rect: { x: 30, y: 15, width: 140, height: 70 },
+      sourceViewport: { width: 200, height: 100 },
+      outputWidth: 280,
+      outputHeight: 140
+    });
+    expect(overlay.classList.contains('hidden')).toBe(true);
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
+
+    screenshotButton.click();
+
+    expect(overlay.classList.contains('hidden')).toBe(false);
+    expect(selectionBox.style.left).toBe('30px');
+    expect(selectionBox.style.top).toBe('15px');
+    expect(selectionBox.style.width).toBe('140px');
+    expect(selectionBox.style.height).toBe('70px');
+
+    ui.setScreenshotSelectionRect({ x: 40, y: 20, width: 140, height: 70 });
+
+    expect(selectionBox.style.left).toBe('40px');
+    expect(selectionBox.style.top).toBe('20px');
+    expect(selectionBox.style.width).toBe('140px');
+    expect(selectionBox.style.height).toBe('70px');
+
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image.exr' },
+      { id: 'session-2', label: 'second.exr' }
+    ], 'session-2');
+    ui.setExportTarget({ filename: 'second.png' });
+
+    expect(overlay.classList.contains('hidden')).toBe(false);
+    expect(selectionBox.style.left).toBe('40px');
+    expect(selectionBox.style.top).toBe('20px');
+    expect(selectionBox.style.width).toBe('140px');
+    expect(selectionBox.style.height).toBe('70px');
+
+    const channelNames = ['Y', 'A'];
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelMono',
+      channel: 'Y',
+      alpha: null
+    }, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    })));
+
+    expect(overlay.classList.contains('hidden')).toBe(false);
+    expect(selectionBox.style.left).toBe('40px');
+    expect(selectionBox.style.top).toBe('20px');
+    expect(selectionBox.style.width).toBe('140px');
+    expect(selectionBox.style.height).toBe('70px');
+
+    overlayExportButton.click();
+    await flushMicrotasks();
+
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
+    expect(filenameInput.value).toBe('second-screenshot.png');
+    expect(widthInput.value).toBe('280');
+    expect(heightInput.value).toBe('140');
+    expect(onResolveExportImagePreview).toHaveBeenLastCalledWith({
+      mode: 'screenshot',
+      rect: { x: 40, y: 20, width: 140, height: 70 },
+      sourceViewport: { width: 200, height: 100 },
+      outputWidth: 280,
+      outputHeight: 140
+    }, expect.any(AbortSignal));
+
+    dialogCancelButton.click();
+    expect(overlay.classList.contains('hidden')).toBe(true);
+
+    screenshotButton.click();
+    expect(overlay.classList.contains('hidden')).toBe(false);
+    expect(selectionBox.style.left).toBe('40px');
+    expect(selectionBox.style.top).toBe('20px');
+    expect(selectionBox.style.width).toBe('140px');
+    expect(selectionBox.style.height).toBe('70px');
+
+    overlayExportButton.click();
+    await flushMicrotasks();
+
+    expect(widthInput.value).toBe('280');
+    expect(heightInput.value).toBe('140');
+    expect(onResolveExportImagePreview).toHaveBeenLastCalledWith({
+      mode: 'screenshot',
+      rect: { x: 40, y: 20, width: 140, height: 70 },
+      sourceViewport: { width: 200, height: 100 },
+      outputWidth: 280,
+      outputHeight: 140
+    }, expect.any(AbortSignal));
+
+    dialogCancelButton.click();
+    screenshotButton.click();
+    ui.setScreenshotSelectionRect({ x: 40, y: 20, width: 120, height: 60 });
+
+    expect(selectionBox.style.left).toBe('40px');
+    expect(selectionBox.style.top).toBe('20px');
+    expect(selectionBox.style.width).toBe('120px');
+    expect(selectionBox.style.height).toBe('60px');
+
+    overlayExportButton.click();
+    await flushMicrotasks();
+
+    expect(widthInput.value).toBe('120');
+    expect(heightInput.value).toBe('60');
+    expect(onResolveExportImagePreview).toHaveBeenLastCalledWith({
+      mode: 'screenshot',
+      rect: { x: 40, y: 20, width: 120, height: 60 },
+      sourceViewport: { width: 200, height: 100 },
+      outputWidth: 120,
+      outputHeight: 60
+    }, expect.any(AbortSignal));
+
+    dialogCancelButton.click();
+  });
+
+  it('shows square snap feedback and exports the snapped screenshot rectangle', async () => {
+    installUiFixture();
+
+    const onResolveExportImagePreview = vi.fn(async () => createPreviewPixels(32, 32));
+    const ui = new ViewerUi(createUiCallbacks({ onResolveExportImagePreview }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+    mockDomRect(viewerContainer, { top: 0, bottom: 160, height: 160, width: 200 });
+
+    const screenshotButton = document.getElementById('export-screenshot-button') as HTMLButtonElement;
+    const selectionBox = document.getElementById('screenshot-selection-box') as HTMLDivElement;
+    const selectionSize = document.getElementById('screenshot-selection-size') as HTMLDivElement;
+    const overlayExportButton = document.getElementById('screenshot-selection-export-button') as HTMLButtonElement;
+    const widthInput = document.getElementById('export-width-input') as HTMLInputElement;
+    const heightInput = document.getElementById('export-height-input') as HTMLInputElement;
+    const dialogCancelButton = document.getElementById('export-dialog-cancel-button') as HTMLButtonElement;
+
+    screenshotButton.click();
+    ui.setScreenshotSelectionResizeActive(true);
+    ui.setScreenshotSelectionRect({ x: 40, y: 24, width: 88, height: 88 }, { squareSnapped: true });
+
+    expect(selectionBox.classList.contains('is-square-snapped')).toBe(true);
+    expect(selectionSize.classList.contains('is-square-snapped')).toBe(true);
+    expect(selectionSize.classList.contains('hidden')).toBe(false);
+    expect(selectionSize.textContent).toBe('1:1 · 88 x 88');
+
+    ui.setScreenshotSelectionSquareSnapActive(false);
+
+    expect(selectionBox.classList.contains('is-square-snapped')).toBe(false);
+    expect(selectionSize.classList.contains('is-square-snapped')).toBe(false);
+    expect(selectionSize.textContent).toBe('88 x 88');
+
+    ui.setScreenshotSelectionSquareSnapActive(true);
+    ui.setScreenshotSelectionResizeActive(false);
+
+    expect(selectionBox.classList.contains('is-square-snapped')).toBe(false);
+    expect(selectionSize.classList.contains('is-square-snapped')).toBe(false);
+    expect(selectionSize.classList.contains('hidden')).toBe(true);
+
+    overlayExportButton.click();
+    await flushMicrotasks();
+
+    expect(widthInput.value).toBe('88');
+    expect(heightInput.value).toBe('88');
+    expect(onResolveExportImagePreview).toHaveBeenLastCalledWith({
+      mode: 'screenshot',
+      rect: { x: 40, y: 24, width: 88, height: 88 },
+      sourceViewport: { width: 200, height: 160 },
+      outputWidth: 88,
+      outputHeight: 88
+    }, expect.any(AbortSignal));
+
+    dialogCancelButton.click();
+  });
+
+  it('cancels screenshot selection from the overlay and Escape without forgetting screenshot info', async () => {
+    installUiFixture();
+
+    const onResolveExportImagePreview = vi.fn(async () => createPreviewPixels(32, 16));
+    const ui = new ViewerUi(createUiCallbacks({ onResolveExportImagePreview }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+    mockDomRect(viewerContainer, { top: 0, bottom: 100, height: 100, width: 200 });
+    const screenshotButton = document.getElementById('export-screenshot-button') as HTMLButtonElement;
+    const cancelButton = document.getElementById('screenshot-selection-cancel-button') as HTMLButtonElement;
+    const exportButton = document.getElementById('screenshot-selection-export-button') as HTMLButtonElement;
+    const dialogCancelButton = document.getElementById('export-dialog-cancel-button') as HTMLButtonElement;
+    const overlay = document.getElementById('screenshot-selection-overlay') as HTMLDivElement;
+    const selectionBox = document.getElementById('screenshot-selection-box') as HTMLDivElement;
+    const filenameInput = document.getElementById('export-filename-input') as HTMLInputElement;
+    const widthInput = document.getElementById('export-width-input') as HTMLInputElement;
+    const heightInput = document.getElementById('export-height-input') as HTMLInputElement;
+
+    screenshotButton.click();
+    expect(overlay.classList.contains('hidden')).toBe(false);
+    ui.setScreenshotSelectionRect({ x: 40, y: 20, width: 120, height: 60 });
+
+    exportButton.click();
+    await flushMicrotasks();
+    widthInput.value = '240';
+    widthInput.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(heightInput.value).toBe('120');
+    await flushMicrotasks();
+    expect(onResolveExportImagePreview).toHaveBeenLastCalledWith({
+      mode: 'screenshot',
+      rect: { x: 40, y: 20, width: 120, height: 60 },
+      sourceViewport: { width: 200, height: 100 },
+      outputWidth: 240,
+      outputHeight: 120
+    }, expect.any(AbortSignal));
+
+    dialogCancelButton.click();
+    expect(overlay.classList.contains('hidden')).toBe(true);
+
+    screenshotButton.click();
+    expect(overlay.classList.contains('hidden')).toBe(false);
+    expect(selectionBox.style.left).toBe('40px');
+    expect(selectionBox.style.top).toBe('20px');
+    expect(selectionBox.style.width).toBe('120px');
+    expect(selectionBox.style.height).toBe('60px');
+    cancelButton.click();
+    expect(overlay.classList.contains('hidden')).toBe(true);
+
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image.exr' },
+      { id: 'session-2', label: 'second.exr' }
+    ], 'session-2');
+    ui.setExportTarget({ filename: 'second.png' });
+    const channelNames = ['Y', 'A'];
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelMono',
+      channel: 'Y',
+      alpha: null
+    }, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    })));
+    ui.setRgbViewLoading(true);
+    ui.setRgbViewLoading(false);
+
+    screenshotButton.click();
+    expect(overlay.classList.contains('hidden')).toBe(false);
+    expect(selectionBox.style.left).toBe('40px');
+    expect(selectionBox.style.top).toBe('20px');
+    expect(selectionBox.style.width).toBe('120px');
+    expect(selectionBox.style.height).toBe('60px');
+
+    exportButton.click();
+    await flushMicrotasks();
+    expect(filenameInput.value).toBe('second-screenshot.png');
+    expect(widthInput.value).toBe('240');
+    expect(heightInput.value).toBe('120');
+    expect(onResolveExportImagePreview).toHaveBeenLastCalledWith({
+      mode: 'screenshot',
+      rect: { x: 40, y: 20, width: 120, height: 60 },
+      sourceViewport: { width: 200, height: 100 },
+      outputWidth: 240,
+      outputHeight: 120
+    }, expect.any(AbortSignal));
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(overlay.classList.contains('hidden')).toBe(true);
+
+    screenshotButton.click();
+    exportButton.click();
+    await flushMicrotasks();
+    expect(widthInput.value).toBe('240');
+    expect(heightInput.value).toBe('120');
+
+    dialogCancelButton.click();
+  });
+
+  it('cancels screenshot selection from the export dialog backdrop', async () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+    mockDomRect(viewerContainer, { top: 0, bottom: 100, height: 100, width: 200 });
+    const screenshotButton = document.getElementById('export-screenshot-button') as HTMLButtonElement;
+    const exportButton = document.getElementById('screenshot-selection-export-button') as HTMLButtonElement;
+    const overlay = document.getElementById('screenshot-selection-overlay') as HTMLDivElement;
+    const dialogBackdrop = document.getElementById('export-dialog-backdrop') as HTMLDivElement;
+
+    screenshotButton.click();
+    expect(overlay.classList.contains('hidden')).toBe(false);
+    exportButton.click();
+    await flushMicrotasks();
+
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
+    dialogBackdrop.click();
+
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
+    expect(overlay.classList.contains('hidden')).toBe(true);
+  });
+
+  it('blocks unrelated app chrome while screenshot selection is active', async () => {
+    installUiFixture();
+
+    const onOpenFileClick = vi.fn();
+    const onResetView = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenFileClick, onResetView }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+    mockDomRect(viewerContainer, { top: 0, bottom: 100, height: 100, width: 200 });
+    const appShell = document.getElementById('app') as HTMLElement;
+    const screenshotButton = document.getElementById('export-screenshot-button') as HTMLButtonElement;
+    const openFileButton = document.getElementById('open-file-button') as HTMLButtonElement;
+    const toolbarResetButton = document.getElementById('toolbar-reset-view-button') as HTMLButtonElement;
+    const overlay = document.getElementById('screenshot-selection-overlay') as HTMLDivElement;
+    const overlayExportButton = document.getElementById('screenshot-selection-export-button') as HTMLButtonElement;
+    const dialogBackdrop = document.getElementById('export-dialog-backdrop') as HTMLDivElement;
+
+    screenshotButton.click();
+    expect(overlay.classList.contains('hidden')).toBe(false);
+    expect(appShell.classList.contains('is-screenshot-selecting')).toBe(true);
+
+    openFileButton.click();
+    toolbarResetButton.click();
+
+    expect(onOpenFileClick).not.toHaveBeenCalled();
+    expect(onResetView).not.toHaveBeenCalled();
+
+    overlayExportButton.click();
+    await flushMicrotasks();
+
+    expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
+    (document.getElementById('export-dialog-cancel-button') as HTMLButtonElement).click();
+  });
+
+  it('clears remembered screenshot info when all opened images close', async () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+    mockDomRect(viewerContainer, { top: 0, bottom: 100, height: 100, width: 200 });
+    const screenshotButton = document.getElementById('export-screenshot-button') as HTMLButtonElement;
+    const cancelButton = document.getElementById('screenshot-selection-cancel-button') as HTMLButtonElement;
+    const exportButton = document.getElementById('screenshot-selection-export-button') as HTMLButtonElement;
+    const dialogCancelButton = document.getElementById('export-dialog-cancel-button') as HTMLButtonElement;
+    const overlay = document.getElementById('screenshot-selection-overlay') as HTMLDivElement;
+    const selectionBox = document.getElementById('screenshot-selection-box') as HTMLDivElement;
+    const widthInput = document.getElementById('export-width-input') as HTMLInputElement;
+    const heightInput = document.getElementById('export-height-input') as HTMLInputElement;
+
+    screenshotButton.click();
+    ui.setScreenshotSelectionRect({ x: 40, y: 20, width: 120, height: 60 });
+    exportButton.click();
+    await flushMicrotasks();
+    widthInput.value = '240';
+    widthInput.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(heightInput.value).toBe('120');
+    dialogCancelButton.click();
+    cancelButton.click();
+    expect(overlay.classList.contains('hidden')).toBe(true);
+
+    ui.setOpenedImageOptions([], null);
+    ui.setExportTarget(null);
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    screenshotButton.click();
+    expect(selectionBox.style.left).toBe('30px');
+    expect(selectionBox.style.top).toBe('15px');
+    expect(selectionBox.style.width).toBe('140px');
+    expect(selectionBox.style.height).toBe('70px');
+
+    exportButton.click();
+    await flushMicrotasks();
+    expect(widthInput.value).toBe('140');
+    expect(heightInput.value).toBe('70');
+
+    dialogCancelButton.click();
   });
 
   it('opens batch export as a separate dialog and submits selected file-channel cells', async () => {
@@ -4623,8 +5076,8 @@ function createUiCallbacksBase() {
   return {
     onOpenFileClick: () => {},
     onOpenFolderClick: () => {},
-    onExportImage: async (_request: { filename: string; format: 'png' }) => {},
-    onResolveExportImagePreview: async (_signal: AbortSignal) => createPreviewPixels(),
+    onExportImage: async (_request: unknown) => {},
+    onResolveExportImagePreview: async (_request: unknown, _signal: AbortSignal) => createPreviewPixels(),
     onExportImageBatch: async (_request: {
       archiveFilename: string;
       entries: Array<{

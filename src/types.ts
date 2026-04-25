@@ -170,14 +170,41 @@ export interface ViewportInfo {
   height: number;
 }
 
+export interface ViewportRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export type ExportImageFormat = 'png';
 export type ExportColormapFormat = 'png';
 export type ExportColormapOrientation = 'horizontal' | 'vertical';
 
-export interface ExportImageRequest {
+export interface ExportScreenshotRegion {
+  rect: ViewportRect;
+  sourceViewport: ViewportInfo;
+  outputWidth: number;
+  outputHeight: number;
+}
+
+export interface ExportFullImageRequest {
   filename: string;
   format: ExportImageFormat;
+  mode?: 'image';
 }
+
+export interface ExportScreenshotRequest extends ExportScreenshotRegion {
+  filename: string;
+  format: ExportImageFormat;
+  mode: 'screenshot';
+}
+
+export type ExportImageRequest = ExportFullImageRequest | ExportScreenshotRequest;
+
+export type ExportImagePreviewRequest =
+  | { mode?: 'image' }
+  | ({ mode: 'screenshot' } & ExportScreenshotRegion);
 
 export interface ExportImageBatchPreviewRequest {
   sessionId: string;
@@ -212,9 +239,16 @@ export interface ExportColormapPreviewRequest {
   orientation: ExportColormapOrientation;
 }
 
-export interface ExportImageTarget {
-  filename: string;
-}
+export type ExportImageTarget =
+  | {
+      filename: string;
+      kind?: 'image';
+    }
+  | ({
+      filename: string;
+      kind: 'screenshot';
+    } & Pick<ExportScreenshotRegion, 'rect' | 'sourceViewport'> &
+      Partial<Pick<ExportScreenshotRegion, 'outputWidth' | 'outputHeight'>>);
 
 export interface ExportImageBatchChannelTarget {
   value: string;

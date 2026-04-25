@@ -17,6 +17,11 @@ import { ExportImageBatchDialogController } from './export-image-batch-dialog';
 import { ExportImageDialogController } from './export-image-dialog';
 import { FolderLoadDialogController } from './folder-load-dialog';
 import { GlobalKeyboardController } from './global-keyboard-controller';
+import {
+  clampScreenshotSelectionRect,
+  createDefaultScreenshotSelectionRect,
+  type ScreenshotSelectionHandle
+} from '../interaction/screenshot-selection';
 import { resolveElements, type Elements } from './elements';
 import { setMetadata } from './metadata-panel';
 import { type LayerOptionItem, type OpenedImageOptionItem } from './image-browser-types';
@@ -40,6 +45,7 @@ import type {
   ExportImageBatchPreviewRequest,
   ExportImageBatchRequest,
   ExportImageBatchTarget,
+  ExportImagePreviewRequest,
   ExportImageRequest,
   ExportImageTarget,
   ImageRoi,
@@ -49,6 +55,8 @@ import type {
   RoiStats,
   StokesAolpDegreeModulationMode,
   ViewerMode,
+  ViewportInfo,
+  ViewportRect,
   VisualizationMode
 } from '../types';
 import type { ProbeColorPreview } from '../probe';
@@ -68,7 +76,10 @@ export interface UiCallbacks {
   onOpenFileClick: () => void;
   onOpenFolderClick: () => void;
   onExportImage: (request: ExportImageRequest) => Promise<void>;
-  onResolveExportImagePreview: (signal: AbortSignal) => Promise<ExportImagePixels>;
+  onResolveExportImagePreview: (
+    request: ExportImagePreviewRequest,
+    signal: AbortSignal
+  ) => Promise<ExportImagePixels>;
   onExportImageBatch: (request: ExportImageBatchRequest, signal: AbortSignal) => Promise<void>;
   onResolveExportImageBatchPreview: (
     request: ExportImageBatchPreviewRequest,
@@ -138,6 +149,13 @@ export class ViewerUi implements Disposable {
   private isDisplayBusy = false;
   private isDisplayOverlayLoading = false;
   private openedImageCount = 0;
+  private activeSessionId: string | null = null;
+  private exportTarget: ExportImageTarget | null = null;
+  private screenshotSelection: { rect: ViewportRect; hoverHandle: ScreenshotSelectionHandle | null } | null = null;
+  private lastScreenshotSelectionRect: ViewportRect | null = null;
+  private lastScreenshotOutputSize: { width: number; height: number } | null = null;
+  private screenshotSelectionResizeActive = false;
+  private screenshotSelectionSquareSnapped = false;
   private includeSplitRgbChannels = false;
   private channelThumbnailItems: ChannelThumbnailOptionItem[] = [];
   private rgbGroupChannelNames: string[] = [];
@@ -236,7 +254,7 @@ export class ViewerUi implements Disposable {
       isExportImageDialogOpen: () => this.exportImageDialog.isOpen(),
       isExportImageDialogBusy: () => this.exportImageDialog.isBusy(),
       closeExportImageDialog: (restoreFocus) => {
-        this.exportImageDialog.close(restoreFocus);
+        this.exportImageDialog.cancel(restoreFocus);
       },
       isExportImageBatchDialogOpen: () => this.exportImageBatchDialog.isOpen(),
       isExportImageBatchDialogBusy: () => this.exportImageBatchDialog.isBusy(),
@@ -247,6 +265,10 @@ export class ViewerUi implements Disposable {
       isExportColormapDialogBusy: () => this.exportColormapDialog.isBusy(),
       closeExportColormapDialog: (restoreFocus) => {
         this.exportColormapDialog.close(restoreFocus);
+      },
+      isScreenshotSelectionActive: () => this.isScreenshotSelectionActive(),
+      cancelScreenshotSelection: () => {
+        this.cancelScreenshotSelection();
       },
       isFolderLoadDialogOpen: () => this.folderLoadDialog.isOpen(),
       closeFolderLoadDialog: (restoreFocus) => {
@@ -282,11 +304,22 @@ export class ViewerUi implements Disposable {
     });
     this.windowPreviewController = new WindowPreviewController(this.elements);
     this.exportImageDialog = new ExportImageDialogController(this.elements, {
-      onExportImage: (request) => {
-        return this.callbacks.onExportImage(request);
+      onExportImage: async (request) => {
+        await this.callbacks.onExportImage(request);
+        if (request.mode === 'screenshot') {
+          this.hideScreenshotSelection();
+        }
       },
-      onResolveExportImagePreview: (signal) => {
-        return this.callbacks.onResolveExportImagePreview(signal);
+      onCancel: (target) => {
+        if (target?.kind === 'screenshot') {
+          this.hideScreenshotSelection();
+        }
+      },
+      onScreenshotOutputSizeChange: (size) => {
+        this.lastScreenshotOutputSize = { ...size };
+      },
+      onResolveExportImagePreview: (request, signal) => {
+        return this.callbacks.onResolveExportImagePreview(request, signal);
       }
     });
     this.exportImageBatchDialog = new ExportImageBatchDialogController(this.elements, {
@@ -369,6 +402,8 @@ export class ViewerUi implements Disposable {
     this.exportImageDialog.close(false);
     this.exportImageBatchDialog.close(false);
     this.exportColormapDialog.close(false);
+    this.clearScreenshotSelectionMemory();
+    this.hideScreenshotSelection();
     this.folderLoadDialog.close(false, false);
     this.topMenuController.closeAll(false);
     this.dragDropController.showOverlay(false);
@@ -400,6 +435,7 @@ export class ViewerUi implements Disposable {
     this.isLoading = loading;
     if (loading) {
       this.clearPanoramaKeyboardOrbitInput();
+      this.hideScreenshotSelection();
     }
     this.elements.openFileButton.disabled = loading;
     this.elements.openFolderButton.disabled = loading;
@@ -454,6 +490,9 @@ export class ViewerUi implements Disposable {
 
     this.isDisplayBusy = displayBusy;
     this.isDisplayOverlayLoading = overlayLoading;
+    if (displayBusy) {
+      this.hideScreenshotSelection();
+    }
     this.channelPanel.setRgbViewLoading(displayBusy);
     this.renderChannelViewControls();
     this.updateFileMenuItemsDisabled();
@@ -489,6 +528,9 @@ export class ViewerUi implements Disposable {
       return;
     }
 
+    if (this.viewerMode !== mode) {
+      this.hideScreenshotSelection();
+    }
     if (mode !== 'panorama') {
       this.clearPanoramaKeyboardOrbitInput();
     }
@@ -565,7 +607,10 @@ export class ViewerUi implements Disposable {
 
     if (items.length === 0) {
       this.clearPanoramaKeyboardOrbitInput();
+      this.clearScreenshotSelectionMemory();
+      this.hideScreenshotSelection();
     }
+    this.activeSessionId = activeId;
     this.openedImageCount = items.length;
     this.openedImagesPanel.setOpenedImageOptions(items, activeId);
     this.colormapPanel.setOpenedImageCount(this.openedImagesPanel.getOpenedImageCount());
@@ -578,6 +623,9 @@ export class ViewerUi implements Disposable {
     if (items.length === 0) {
       this.setViewerMode('image');
     }
+    if (this.screenshotSelection) {
+      this.renderScreenshotSelectionOverlay();
+    }
   }
 
   setExportTarget(target: ExportImageTarget | null): void {
@@ -585,8 +633,117 @@ export class ViewerUi implements Disposable {
       return;
     }
 
+    this.exportTarget = target ? { ...target } : null;
     this.exportImageDialog.setTarget(target);
     this.updateFileMenuItemsDisabled();
+  }
+
+  getScreenshotSelectionInteractionState(): { active: boolean; rect: ViewportRect | null } {
+    return {
+      active: this.screenshotSelection !== null,
+      rect: this.screenshotSelection ? { ...this.screenshotSelection.rect } : null
+    };
+  }
+
+  setScreenshotSelectionRect(rect: ViewportRect, options: { squareSnapped?: boolean } = {}): void {
+    if (this.disposed || !this.screenshotSelection) {
+      return;
+    }
+
+    const viewport = this.readViewerViewport();
+    const previousRect = this.screenshotSelection.rect;
+    const nextRect = clampScreenshotSelectionRect(rect, viewport);
+    if (!sameViewportRectSize(previousRect, nextRect)) {
+      this.lastScreenshotOutputSize = null;
+    }
+    this.screenshotSelection = {
+      ...this.screenshotSelection,
+      rect: nextRect
+    };
+    if (options.squareSnapped !== undefined) {
+      this.screenshotSelectionSquareSnapped = options.squareSnapped;
+    }
+    this.lastScreenshotSelectionRect = { ...nextRect };
+    this.renderScreenshotSelectionOverlay();
+  }
+
+  setScreenshotSelectionHandle(handle: ScreenshotSelectionHandle | null): void {
+    if (this.disposed || !this.screenshotSelection || this.screenshotSelection.hoverHandle === handle) {
+      return;
+    }
+
+    this.screenshotSelection = {
+      ...this.screenshotSelection,
+      hoverHandle: handle
+    };
+    this.renderScreenshotSelectionCursor();
+  }
+
+  setScreenshotSelectionResizeActive(active: boolean): void {
+    if (this.disposed || this.screenshotSelectionResizeActive === active) {
+      return;
+    }
+
+    this.screenshotSelectionResizeActive = active;
+    if (active && this.screenshotSelection) {
+      this.renderScreenshotSelectionOverlay();
+    } else {
+      this.screenshotSelectionSquareSnapped = false;
+      this.elements.screenshotSelectionSize.classList.add('hidden');
+      this.renderScreenshotSelectionSquareSnapFeedback();
+    }
+  }
+
+  setScreenshotSelectionSquareSnapActive(active: boolean): void {
+    if (this.disposed || this.screenshotSelectionSquareSnapped === active) {
+      return;
+    }
+
+    this.screenshotSelectionSquareSnapped = active;
+    if (this.screenshotSelectionResizeActive && this.screenshotSelection) {
+      this.renderScreenshotSelectionOverlay();
+    } else {
+      this.renderScreenshotSelectionSquareSnapFeedback();
+    }
+  }
+
+  isScreenshotSelectionActive(): boolean {
+    return this.screenshotSelection !== null;
+  }
+
+  cancelScreenshotSelection(): void {
+    this.hideScreenshotSelection();
+  }
+
+  private clearScreenshotSelectionMemory(): void {
+    this.lastScreenshotSelectionRect = null;
+    this.lastScreenshotOutputSize = null;
+  }
+
+  private hideScreenshotSelection(): void {
+    this.elements.appShell.classList.remove('is-screenshot-selecting');
+    if (!this.screenshotSelection) {
+      return;
+    }
+
+    this.screenshotSelection = null;
+    this.screenshotSelectionResizeActive = false;
+    this.screenshotSelectionSquareSnapped = false;
+    this.elements.screenshotSelectionOverlay.classList.add('hidden');
+    this.elements.screenshotSelectionSize.classList.add('hidden');
+    this.renderScreenshotSelectionSquareSnapFeedback();
+    this.elements.viewerContainer.classList.remove(
+      'is-screenshot-selecting',
+      'is-screenshot-handle-move',
+      'is-screenshot-handle-edge-n',
+      'is-screenshot-handle-edge-e',
+      'is-screenshot-handle-edge-s',
+      'is-screenshot-handle-edge-w',
+      'is-screenshot-handle-corner-nw',
+      'is-screenshot-handle-corner-ne',
+      'is-screenshot-handle-corner-se',
+      'is-screenshot-handle-corner-sw'
+    );
   }
 
   setExportBatchTarget(target: ExportImageBatchTarget | null): void {
@@ -761,12 +918,178 @@ export class ViewerUi implements Disposable {
     renderLoadingOverlayPhase(this.elements, phase);
   }
 
+  private startScreenshotSelection(): void {
+    if (this.disposed || this.openedImageCount === 0 || this.isLoading || this.isDisplayBusy) {
+      return;
+    }
+
+    const viewport = this.readViewerViewport();
+    const previousRect = this.lastScreenshotSelectionRect;
+    const rect = this.lastScreenshotSelectionRect
+      ? clampScreenshotSelectionRect(this.lastScreenshotSelectionRect, viewport)
+      : createDefaultScreenshotSelectionRect(viewport);
+    if (previousRect && !sameViewportRectSize(previousRect, rect)) {
+      this.lastScreenshotOutputSize = null;
+    }
+    this.screenshotSelection = {
+      rect,
+      hoverHandle: null
+    };
+    this.screenshotSelectionResizeActive = false;
+    this.screenshotSelectionSquareSnapped = false;
+    this.lastScreenshotSelectionRect = { ...rect };
+    this.exportImageDialog.close(false);
+    this.exportImageBatchDialog.close(false);
+    this.exportColormapDialog.close(false);
+    this.topMenuController.closeAll(false);
+    this.elements.screenshotSelectionOverlay.classList.remove('hidden');
+    this.elements.appShell.classList.add('is-screenshot-selecting');
+    this.elements.viewerContainer.classList.add('is-screenshot-selecting');
+    this.renderScreenshotSelectionOverlay();
+  }
+
+  private openScreenshotExportDialog(): void {
+    if (!this.screenshotSelection || this.elements.exportScreenshotButton.disabled) {
+      return;
+    }
+
+    const viewport = this.readViewerViewport();
+    const previousRect = this.screenshotSelection.rect;
+    const rect = clampScreenshotSelectionRect(this.screenshotSelection.rect, viewport);
+    if (!sameViewportRectSize(previousRect, rect)) {
+      this.lastScreenshotOutputSize = null;
+    }
+    this.screenshotSelection = {
+      ...this.screenshotSelection,
+      rect
+    };
+    this.lastScreenshotSelectionRect = { ...rect };
+    this.exportImageDialog.openDialog({
+      filename: buildScreenshotExportFilename(this.exportTarget?.filename ?? 'image.png'),
+      kind: 'screenshot',
+      rect,
+      sourceViewport: viewport,
+      ...(this.lastScreenshotOutputSize ? {
+        outputWidth: this.lastScreenshotOutputSize.width,
+        outputHeight: this.lastScreenshotOutputSize.height
+      } : {})
+    });
+  }
+
+  private renderScreenshotSelectionOverlay(): void {
+    const selection = this.screenshotSelection;
+    if (!selection) {
+      return;
+    }
+
+    const viewport = this.readViewerViewport();
+    const previousRect = selection.rect;
+    const rect = clampScreenshotSelectionRect(selection.rect, viewport);
+    if (!sameViewportRectSize(previousRect, rect)) {
+      this.lastScreenshotOutputSize = null;
+    }
+    this.screenshotSelection = { ...selection, rect };
+    this.lastScreenshotSelectionRect = { ...rect };
+    const right = Math.max(0, viewport.width - rect.x - rect.width);
+    const bottom = Math.max(0, viewport.height - rect.y - rect.height);
+
+    setBoxStyle(this.elements.screenshotSelectionMaskTop, 0, 0, viewport.width, rect.y);
+    setBoxStyle(this.elements.screenshotSelectionMaskRight, rect.x + rect.width, rect.y, right, rect.height);
+    setBoxStyle(this.elements.screenshotSelectionMaskBottom, 0, rect.y + rect.height, viewport.width, bottom);
+    setBoxStyle(this.elements.screenshotSelectionMaskLeft, 0, rect.y, rect.x, rect.height);
+    setBoxStyle(this.elements.screenshotSelectionBox, rect.x, rect.y, rect.width, rect.height);
+    this.renderScreenshotSelectionSize(rect, viewport);
+    this.renderScreenshotSelectionSquareSnapFeedback();
+
+    const controlsWidth = this.elements.screenshotSelectionControls.offsetWidth || 132;
+    const controlsHeight = this.elements.screenshotSelectionControls.offsetHeight || 34;
+    const controlsX = Math.min(
+      Math.max(8, rect.x + rect.width - controlsWidth),
+      Math.max(8, viewport.width - controlsWidth - 8)
+    );
+    const belowY = rect.y + rect.height + 8;
+    const controlsY = belowY + controlsHeight <= viewport.height
+      ? belowY
+      : Math.max(8, rect.y - controlsHeight - 8);
+    setBoxStyle(this.elements.screenshotSelectionControls, controlsX, controlsY, controlsWidth, controlsHeight);
+    this.renderScreenshotSelectionCursor();
+  }
+
+  private renderScreenshotSelectionSize(rect: ViewportRect, viewport: ViewportInfo): void {
+    const sizeElement = this.elements.screenshotSelectionSize;
+    if (!this.screenshotSelectionResizeActive) {
+      sizeElement.classList.add('hidden');
+      sizeElement.classList.remove('is-square-snapped');
+      return;
+    }
+
+    const squareSnapped = this.shouldShowScreenshotSelectionSquareSnapFeedback();
+    const prefix = squareSnapped ? '1:1 · ' : '';
+    sizeElement.textContent =
+      `${prefix}${Math.max(1, Math.round(rect.width))} x ${Math.max(1, Math.round(rect.height))}`;
+    sizeElement.classList.toggle('is-square-snapped', squareSnapped);
+    sizeElement.classList.remove('hidden');
+    const labelWidth = sizeElement.offsetWidth || 72;
+    const labelHeight = sizeElement.offsetHeight || 24;
+    const x = clamp(
+      rect.x + (rect.width - labelWidth) * 0.5,
+      8,
+      Math.max(8, viewport.width - labelWidth - 8)
+    );
+    const outsideTop = rect.y - labelHeight - 8;
+    const y = outsideTop >= 8
+      ? outsideTop
+      : clamp(rect.y + 8, 8, Math.max(8, viewport.height - labelHeight - 8));
+    setPositionStyle(sizeElement, x, y);
+  }
+
+  private renderScreenshotSelectionSquareSnapFeedback(): void {
+    const active = this.shouldShowScreenshotSelectionSquareSnapFeedback();
+    this.elements.screenshotSelectionBox.classList.toggle('is-square-snapped', active);
+    this.elements.screenshotSelectionSize.classList.toggle('is-square-snapped', active);
+  }
+
+  private shouldShowScreenshotSelectionSquareSnapFeedback(): boolean {
+    return this.screenshotSelectionResizeActive && this.screenshotSelectionSquareSnapped;
+  }
+
+  private renderScreenshotSelectionCursor(): void {
+    const handle = this.screenshotSelection?.hoverHandle ?? null;
+    const handleClassNames = [
+      'is-screenshot-handle-move',
+      'is-screenshot-handle-edge-n',
+      'is-screenshot-handle-edge-e',
+      'is-screenshot-handle-edge-s',
+      'is-screenshot-handle-edge-w',
+      'is-screenshot-handle-corner-nw',
+      'is-screenshot-handle-corner-ne',
+      'is-screenshot-handle-corner-se',
+      'is-screenshot-handle-corner-sw'
+    ];
+
+    this.elements.viewerContainer.classList.toggle('is-screenshot-selecting', this.screenshotSelection !== null);
+    this.elements.viewerContainer.classList.remove(...handleClassNames);
+    if (handle) {
+      this.elements.viewerContainer.classList.add(`is-screenshot-handle-${handle}`);
+    }
+  }
+
+  private readViewerViewport(): ViewportInfo {
+    const rect = this.elements.viewerContainer.getBoundingClientRect();
+    return {
+      width: Math.max(1, Math.floor(Number.isFinite(rect.width) ? rect.width : 1)),
+      height: Math.max(1, Math.floor(Number.isFinite(rect.height) ? rect.height : 1))
+    };
+  }
+
   private updateFileMenuItemsDisabled(): void {
     if (this.disposed) {
       return;
     }
 
     this.elements.exportImageButton.disabled = this.isLoading || this.isDisplayBusy || !this.exportImageDialog.hasTarget();
+    this.elements.exportScreenshotButton.disabled =
+      this.isLoading || this.isDisplayBusy || !this.exportImageDialog.hasTarget();
     this.elements.exportImageBatchButton.disabled =
       this.isLoading || this.isDisplayBusy || !this.exportImageBatchDialog.hasTarget();
     this.elements.exportColormapButton.disabled = this.isLoading || !this.exportColormapDialog.hasOptions();
@@ -783,6 +1106,25 @@ export class ViewerUi implements Disposable {
   }
 
   private bindEvents(): void {
+    this.disposables.addEventListener(document, 'pointerdown', this.onScreenshotSelectionPointerGuard, {
+      capture: true
+    });
+    this.disposables.addEventListener(document, 'mousedown', this.onScreenshotSelectionPointerGuard, {
+      capture: true
+    });
+    this.disposables.addEventListener(document, 'click', this.onScreenshotSelectionPointerGuard, {
+      capture: true
+    });
+    this.disposables.addEventListener(document, 'dblclick', this.onScreenshotSelectionPointerGuard, {
+      capture: true
+    });
+    this.disposables.addEventListener(document, 'contextmenu', this.onScreenshotSelectionPointerGuard, {
+      capture: true
+    });
+    this.disposables.addEventListener(document, 'keydown', this.onScreenshotSelectionKeyboardGuard, {
+      capture: true
+    });
+
     this.disposables.addEventListener(this.elements.openFileButton, 'click', () => {
       this.topMenuController.closeAll();
       this.callbacks.onOpenFileClick();
@@ -803,6 +1145,24 @@ export class ViewerUi implements Disposable {
       this.exportColormapDialog.close(false);
       this.topMenuController.closeAll();
       this.exportImageDialog.openDialog();
+    });
+
+    this.disposables.addEventListener(this.elements.exportScreenshotButton, 'click', () => {
+      if (this.elements.exportScreenshotButton.disabled) {
+        return;
+      }
+
+      this.clearPanoramaKeyboardOrbitInput();
+      this.topMenuController.closeAll();
+      this.startScreenshotSelection();
+    });
+
+    this.disposables.addEventListener(this.elements.screenshotSelectionCancelButton, 'click', () => {
+      this.cancelScreenshotSelection();
+    });
+
+    this.disposables.addEventListener(this.elements.screenshotSelectionExportButton, 'click', () => {
+      this.openScreenshotExportDialog();
     });
 
     this.disposables.addEventListener(this.elements.exportImageBatchButton, 'click', () => {
@@ -930,6 +1290,47 @@ export class ViewerUi implements Disposable {
     });
   }
 
+  private readonly onScreenshotSelectionPointerGuard = (event: Event): void => {
+    if (!this.screenshotSelection || this.isAllowedScreenshotSelectionTarget(event.target)) {
+      return;
+    }
+
+    this.blockScreenshotSelectionEvent(event);
+  };
+
+  private readonly onScreenshotSelectionKeyboardGuard = (event: KeyboardEvent): void => {
+    if (
+      !this.screenshotSelection ||
+      event.key === 'Escape' ||
+      this.isAllowedScreenshotSelectionTarget(event.target)
+    ) {
+      return;
+    }
+
+    this.blockScreenshotSelectionEvent(event);
+  };
+
+  private isAllowedScreenshotSelectionTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof Node)) {
+      return false;
+    }
+
+    if (target instanceof HTMLAnchorElement && target.hasAttribute('download')) {
+      return true;
+    }
+
+    return (
+      this.elements.viewerContainer.contains(target) ||
+      (this.exportImageDialog.isOpen() && this.elements.exportDialogBackdrop.contains(target))
+    );
+  }
+
+  private blockScreenshotSelectionEvent(event: Event): void {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    this.topMenuController.closeAll(false);
+  }
+
   private bindResetViewButton(button: HTMLButtonElement): void {
     this.disposables.addEventListener(button, 'click', () => {
       if (button.disabled) {
@@ -954,6 +1355,31 @@ function toFiles(files: FileList | null | undefined): File[] {
     return [];
   }
   return Array.from(files);
+}
+
+function setBoxStyle(element: HTMLElement, x: number, y: number, width: number, height: number): void {
+  element.style.left = `${x}px`;
+  element.style.top = `${y}px`;
+  element.style.width = `${Math.max(0, width)}px`;
+  element.style.height = `${Math.max(0, height)}px`;
+}
+
+function setPositionStyle(element: HTMLElement, x: number, y: number): void {
+  element.style.left = `${x}px`;
+  element.style.top = `${y}px`;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function sameViewportRectSize(a: ViewportRect, b: ViewportRect): boolean {
+  return a.width === b.width && a.height === b.height;
+}
+
+function buildScreenshotExportFilename(filename: string): string {
+  const normalized = filename.toLocaleLowerCase().endsWith('.png') ? filename : `${filename}.png`;
+  return normalized.replace(/\.png$/i, '-screenshot.png');
 }
 
 function readStoredDisplayToolbarVisible(): boolean {

@@ -467,6 +467,19 @@ input[type='range'] {
   gap: 0.75rem;
 }
 
+.app-dialog-inline-field {
+  min-width: 0;
+  display: grid;
+  gap: 0.28rem;
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.app-dialog-inline-field input {
+  width: 100%;
+}
+
 .app-dialog-field-heading {
   display: flex;
   align-items: center;
@@ -1071,6 +1084,142 @@ body.is-resizing-panel-rows * {
 #overlay-canvas,
 #probe-overlay-canvas {
   pointer-events: none;
+}
+
+.screenshot-selection-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.viewer-container.is-screenshot-selecting {
+  cursor: crosshair;
+}
+
+.viewer-container.is-screenshot-selecting.is-screenshot-handle-move {
+  cursor: move;
+}
+
+.viewer-container.is-screenshot-selecting.is-screenshot-handle-edge-n,
+.viewer-container.is-screenshot-selecting.is-screenshot-handle-edge-s {
+  cursor: ns-resize;
+}
+
+.viewer-container.is-screenshot-selecting.is-screenshot-handle-edge-e,
+.viewer-container.is-screenshot-selecting.is-screenshot-handle-edge-w {
+  cursor: ew-resize;
+}
+
+.viewer-container.is-screenshot-selecting.is-screenshot-handle-corner-nw,
+.viewer-container.is-screenshot-selecting.is-screenshot-handle-corner-se {
+  cursor: nwse-resize;
+}
+
+.viewer-container.is-screenshot-selecting.is-screenshot-handle-corner-ne,
+.viewer-container.is-screenshot-selecting.is-screenshot-handle-corner-sw {
+  cursor: nesw-resize;
+}
+
+.screenshot-selection-mask {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.48);
+}
+
+.screenshot-selection-box {
+  position: absolute;
+  border: 1.5px solid rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.58),
+    0 0 0 9999px rgba(0, 0, 0, 0);
+}
+
+.screenshot-selection-box.is-square-snapped {
+  border-color: #7dd3fc;
+  box-shadow:
+    0 0 0 1px rgba(3, 7, 18, 0.78),
+    0 0 0 9999px rgba(0, 0, 0, 0),
+    0 0 0.85rem rgba(125, 211, 252, 0.62);
+}
+
+.screenshot-selection-size {
+  position: absolute;
+  min-width: 4.5rem;
+  padding: 0.22rem 0.5rem;
+  border-radius: 0.35rem;
+  background: rgba(13, 17, 24, 0.86);
+  box-shadow: 0 0.22rem 0.7rem rgba(0, 0, 0, 0.32);
+  color: #f8fbff;
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: center;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.screenshot-selection-size.is-square-snapped {
+  background: rgba(8, 29, 42, 0.92);
+  outline: 1px solid rgba(125, 211, 252, 0.72);
+  color: #effcff;
+}
+
+.screenshot-selection-handle {
+  position: absolute;
+  width: 0.68rem;
+  height: 0.68rem;
+  border: 1px solid rgba(0, 0, 0, 0.75);
+  border-radius: 50%;
+  background: #f8fbff;
+  box-shadow: 0 0.08rem 0.24rem rgba(0, 0, 0, 0.42);
+  transform: translate(-50%, -50%);
+}
+
+.screenshot-selection-handle--nw,
+.screenshot-selection-handle--n,
+.screenshot-selection-handle--ne {
+  top: 0;
+}
+
+.screenshot-selection-handle--sw,
+.screenshot-selection-handle--s,
+.screenshot-selection-handle--se {
+  top: 100%;
+}
+
+.screenshot-selection-handle--nw,
+.screenshot-selection-handle--w,
+.screenshot-selection-handle--sw {
+  left: 0;
+}
+
+.screenshot-selection-handle--ne,
+.screenshot-selection-handle--e,
+.screenshot-selection-handle--se {
+  left: 100%;
+}
+
+.screenshot-selection-handle--n,
+.screenshot-selection-handle--s {
+  left: 50%;
+}
+
+.screenshot-selection-handle--w,
+.screenshot-selection-handle--e {
+  top: 50%;
+}
+
+.screenshot-selection-controls {
+  position: absolute;
+  display: flex;
+  gap: 0.45rem;
+  pointer-events: auto;
+}
+
+.screenshot-selection-controls button {
+  padding: 0.32rem 0.55rem;
+  background: color-mix(in srgb, var(--panel) 94%, #000);
+  box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.28);
 }
 
 .drop-overlay {

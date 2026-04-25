@@ -1,4 +1,5 @@
-import type { ImagePixel, ViewerState, ViewportInfo } from '../types';
+import type { ImagePixel, ViewerState, ViewportInfo, ViewportRect } from '../types';
+import type { ScreenshotSelectionDragUpdate, ScreenshotSelectionHandle } from './screenshot-selection';
 
 export interface ImageSize {
   width: number;
@@ -8,6 +9,11 @@ export interface ImageSize {
 export interface PointerPosition {
   x: number;
   y: number;
+}
+
+export interface ScreenshotSelectionInteractionState {
+  active: boolean;
+  rect: ViewportRect | null;
 }
 
 export interface InteractionCallbacks {
@@ -24,6 +30,11 @@ export interface InteractionCallbacks {
   onToggleLockPixel: (pixel: ImagePixel | null) => void;
   onDraftRoi: (roi: ViewerState['draftRoi']) => void;
   onCommitRoi: (roi: ViewerState['roi']) => void;
+  getScreenshotSelection?: () => ScreenshotSelectionInteractionState;
+  onScreenshotSelectionRectChange?: (update: ScreenshotSelectionDragUpdate) => void;
+  onScreenshotSelectionHandleHover?: (handle: ScreenshotSelectionHandle | null) => void;
+  onScreenshotSelectionResizeActiveChange?: (active: boolean) => void;
+  onScreenshotSelectionSquareSnapChange?: (active: boolean) => void;
 }
 
 export interface InteractionDependencies {

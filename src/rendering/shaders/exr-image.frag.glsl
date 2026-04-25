@@ -5,6 +5,8 @@ uniform sampler2D uSourceTextures[12];
 uniform sampler2D uColormapTexture;
 uniform vec2 uViewport;
 uniform vec2 uViewportOrigin;
+uniform vec2 uOutputSize;
+uniform vec2 uScreenOrigin;
 uniform vec2 uImageSize;
 uniform vec2 uPan;
 uniform float uZoom;
@@ -436,7 +438,7 @@ DisplaySample readDisplaySample(ivec2 pixel) {
 }
 
 void main() {
-  vec2 screen = vec2(gl_FragCoord.x - 0.5, uViewport.y - gl_FragCoord.y - 0.5);
+  vec2 screen = uScreenOrigin + vec2(gl_FragCoord.x - 0.5, uOutputSize.y - gl_FragCoord.y - 0.5);
   vec2 imagePos = uPan + (screen - uViewport * 0.5) / uZoom;
 
   if (imagePos.x < 0.0 || imagePos.y < 0.0 || imagePos.x >= uImageSize.x || imagePos.y >= uImageSize.y) {

@@ -1,23 +1,30 @@
 import { renderPixelsToCanvas, type ExportImagePixels } from '../export-image';
 import { DisposableBag, isAbortError, type Disposable } from '../lifecycle';
-import type { ExportImageRequest, ExportImageTarget } from '../types';
+import type { ExportImagePreviewRequest, ExportImageRequest, ExportImageTarget } from '../types';
 import type { ExportImageDialogElements } from './elements';
 
 const EXPORT_IMAGE_PREVIEW_LOADING_MESSAGE = 'Loading preview...';
 
 interface ExportImageDialogCallbacks {
   onExportImage: (request: ExportImageRequest) => Promise<void>;
-  onResolveExportImagePreview: (signal: AbortSignal) => Promise<ExportImagePixels>;
+  onCancel?: (target: ExportImageTarget | null) => void;
+  onScreenshotOutputSizeChange?: (size: { width: number; height: number }) => void;
+  onResolveExportImagePreview: (
+    request: ExportImagePreviewRequest,
+    signal: AbortSignal
+  ) => Promise<ExportImagePixels>;
 }
 
 export class ExportImageDialogController implements Disposable {
   private readonly disposables = new DisposableBag();
   private exportTarget: ExportImageTarget | null = null;
+  private dialogTarget: ExportImageTarget | null = null;
   private open = false;
   private busy = false;
   private restoreFocusTarget: HTMLElement | null = null;
   private exportImagePreviewAbortController: AbortController | null = null;
   private exportImagePreviewRequestToken = 0;
+  private syncingScreenshotSize = false;
   private disposed = false;
 
   constructor(
@@ -26,7 +33,7 @@ export class ExportImageDialogController implements Disposable {
   ) {
     this.disposables.addEventListener(this.elements.exportDialogBackdrop, 'click', (event) => {
       if (event.target === this.elements.exportDialogBackdrop && !this.busy) {
-        this.close(true);
+        this.cancel(true);
       }
     });
 
@@ -34,12 +41,20 @@ export class ExportImageDialogController implements Disposable {
       if (this.busy) {
         return;
       }
-      this.close(true);
+      this.cancel(true);
     });
 
     this.disposables.addEventListener(this.elements.exportDialogForm, 'submit', (event) => {
       event.preventDefault();
       void this.handleSubmit();
+    });
+
+    this.disposables.addEventListener(this.elements.exportWidthInput, 'input', () => {
+      this.handleScreenshotSizeInput('width');
+    });
+
+    this.disposables.addEventListener(this.elements.exportHeightInput, 'input', () => {
+      this.handleScreenshotSizeInput('height');
     });
   }
 
@@ -70,7 +85,7 @@ export class ExportImageDialogController implements Disposable {
       return;
     }
 
-    this.exportTarget = target ? { ...target } : null;
+    this.exportTarget = cloneExportImageTarget(target);
     if (!this.exportTarget) {
       this.close(false);
       this.resetInputs();
@@ -79,17 +94,19 @@ export class ExportImageDialogController implements Disposable {
     }
   }
 
-  openDialog(): void {
+  openDialog(targetOverride: ExportImageTarget | null = null): void {
     if (this.disposed) {
       return;
     }
 
-    if (!this.exportTarget || this.elements.exportImageButton.disabled) {
+    const target = cloneExportImageTarget(targetOverride ?? this.exportTarget);
+    if (!target || (!targetOverride && this.elements.exportImageButton.disabled)) {
       return;
     }
 
     this.restoreFocusTarget = this.elements.fileMenuButton;
-    this.applyTarget(this.exportTarget);
+    this.dialogTarget = target;
+    this.applyTarget(target);
     this.setError(null);
     this.setBusy(false);
     this.open = true;
@@ -109,6 +126,7 @@ export class ExportImageDialogController implements Disposable {
     }
 
     this.open = false;
+    this.dialogTarget = null;
     this.resetPreview();
     this.setBusy(false);
     this.setError(null);
@@ -120,12 +138,35 @@ export class ExportImageDialogController implements Disposable {
     this.restoreFocusTarget = null;
   }
 
+  cancel(restoreFocus = true): void {
+    if (this.disposed || this.busy || !this.open) {
+      return;
+    }
+
+    const target = cloneExportImageTarget(this.dialogTarget ?? this.exportTarget);
+    this.close(restoreFocus);
+    this.callbacks.onCancel?.(target);
+  }
+
   private applyTarget(target: ExportImageTarget): void {
     this.elements.exportFilenameInput.value = target.filename;
+    if (isScreenshotTarget(target)) {
+      const size = buildDefaultScreenshotOutputSize(target);
+      this.elements.exportSizeField.classList.remove('hidden');
+      this.elements.exportWidthInput.value = String(size.width);
+      this.elements.exportHeightInput.value = String(size.height);
+    } else {
+      this.elements.exportSizeField.classList.add('hidden');
+      this.elements.exportWidthInput.value = '';
+      this.elements.exportHeightInput.value = '';
+    }
   }
 
   private resetInputs(): void {
     this.elements.exportFilenameInput.value = '';
+    this.elements.exportSizeField.classList.add('hidden');
+    this.elements.exportWidthInput.value = '';
+    this.elements.exportHeightInput.value = '';
     this.resetPreview();
   }
 
@@ -136,6 +177,8 @@ export class ExportImageDialogController implements Disposable {
 
     this.busy = busy;
     this.elements.exportFilenameInput.disabled = busy;
+    this.elements.exportWidthInput.disabled = busy;
+    this.elements.exportHeightInput.disabled = busy;
     this.elements.exportDialogCancelButton.disabled = busy;
     this.elements.exportDialogSubmitButton.disabled = busy;
     this.elements.exportDialogSubmitButton.textContent = busy ? 'Exporting...' : 'Export';
@@ -162,7 +205,7 @@ export class ExportImageDialogController implements Disposable {
       return;
     }
 
-    const target = this.exportTarget;
+    const target = this.dialogTarget ?? this.exportTarget;
     if (!target || this.busy) {
       return;
     }
@@ -174,12 +217,14 @@ export class ExportImageDialogController implements Disposable {
       return;
     }
 
-    const request = parseExportImageRequest({
+    const request = parseExportImageRequest(target, {
       filename,
-      format: this.elements.exportFormatSelect.value
+      format: this.elements.exportFormatSelect.value,
+      width: this.elements.exportWidthInput.value,
+      height: this.elements.exportHeightInput.value
     });
     if (!request) {
-      this.setError('Export failed.');
+      this.setError(isScreenshotTarget(target) ? 'Enter a positive width and height.' : 'Export failed.');
       return;
     }
 
@@ -199,12 +244,62 @@ export class ExportImageDialogController implements Disposable {
     }
   }
 
+  private handleScreenshotSizeInput(source: 'width' | 'height'): void {
+    if (this.disposed || this.syncingScreenshotSize) {
+      return;
+    }
+
+    const target = this.dialogTarget ?? this.exportTarget;
+    if (!isScreenshotTarget(target)) {
+      return;
+    }
+
+    const aspectRatio = target.rect.width / Math.max(target.rect.height, Number.EPSILON);
+    const sourceInput = source === 'width' ? this.elements.exportWidthInput : this.elements.exportHeightInput;
+    const targetInput = source === 'width' ? this.elements.exportHeightInput : this.elements.exportWidthInput;
+    const sourceValue = parsePositiveInteger(sourceInput.value);
+    if (!sourceValue) {
+      this.resetPreview();
+      this.setPreviewStatus('Enter a positive width and height.');
+      return;
+    }
+
+    const nextTargetValue = source === 'width'
+      ? Math.max(1, Math.round(sourceValue / aspectRatio))
+      : Math.max(1, Math.round(sourceValue * aspectRatio));
+
+    this.syncingScreenshotSize = true;
+    targetInput.value = String(nextTargetValue);
+    this.syncingScreenshotSize = false;
+
+    const outputWidth = parsePositiveInteger(this.elements.exportWidthInput.value);
+    const outputHeight = parsePositiveInteger(this.elements.exportHeightInput.value);
+    if (outputWidth && outputHeight) {
+      this.callbacks.onScreenshotOutputSizeChange?.({ width: outputWidth, height: outputHeight });
+    }
+
+    if (this.open) {
+      void this.refreshPreview();
+    }
+  }
+
   private async refreshPreview(): Promise<void> {
     if (this.disposed || !this.open) {
       return;
     }
 
     this.cancelPreview();
+    const target = this.dialogTarget ?? this.exportTarget;
+    const previewRequest = target ? parseExportImagePreviewRequest(target, {
+      width: this.elements.exportWidthInput.value,
+      height: this.elements.exportHeightInput.value
+    }) : null;
+    if (!previewRequest) {
+      this.hidePreviewCanvas();
+      this.setPreviewStatus('Enter a positive width and height.');
+      return;
+    }
+
     const abortController = new AbortController();
     this.exportImagePreviewAbortController = abortController;
     const requestToken = ++this.exportImagePreviewRequestToken;
@@ -213,7 +308,7 @@ export class ExportImageDialogController implements Disposable {
     this.setPreviewStatus(EXPORT_IMAGE_PREVIEW_LOADING_MESSAGE);
 
     try {
-      const pixels = await this.callbacks.onResolveExportImagePreview(abortController.signal);
+      const pixels = await this.callbacks.onResolveExportImagePreview(previewRequest, abortController.signal);
       if (
         this.disposed ||
         !this.open ||
@@ -305,13 +400,116 @@ export function normalizeExportFilename(value: string): string {
   return trimmed.toLocaleLowerCase().endsWith('.png') ? trimmed : `${trimmed}.png`;
 }
 
-function parseExportImageRequest(args: { filename: string; format: string }): ExportImageRequest | null {
+function parseExportImageRequest(
+  target: ExportImageTarget,
+  args: { filename: string; format: string; width: string; height: string }
+): ExportImageRequest | null {
   if (args.format !== 'png') {
     return null;
+  }
+
+  if (isScreenshotTarget(target)) {
+    const outputWidth = parsePositiveInteger(args.width);
+    const outputHeight = parsePositiveInteger(args.height);
+    if (!outputWidth || !outputHeight) {
+      return null;
+    }
+
+    return {
+      filename: args.filename,
+      format: 'png',
+      mode: 'screenshot',
+      rect: { ...target.rect },
+      sourceViewport: { ...target.sourceViewport },
+      outputWidth,
+      outputHeight
+    };
   }
 
   return {
     filename: args.filename,
     format: 'png'
   };
+}
+
+function parseExportImagePreviewRequest(
+  target: ExportImageTarget,
+  args: { width: string; height: string }
+): ExportImagePreviewRequest | null {
+  if (!isScreenshotTarget(target)) {
+    return { mode: 'image' };
+  }
+
+  const outputWidth = parsePositiveInteger(args.width);
+  const outputHeight = parsePositiveInteger(args.height);
+  if (!outputWidth || !outputHeight) {
+    return null;
+  }
+
+  return {
+    mode: 'screenshot',
+    rect: { ...target.rect },
+    sourceViewport: { ...target.sourceViewport },
+    outputWidth,
+    outputHeight
+  };
+}
+
+function buildDefaultScreenshotOutputSize(
+  target: Extract<ExportImageTarget, { kind: 'screenshot' }>
+): { width: number; height: number } {
+  const outputWidth = target.outputWidth;
+  const outputHeight = target.outputHeight;
+  if (
+    typeof outputWidth === 'number' &&
+    Number.isInteger(outputWidth) &&
+    outputWidth > 0 &&
+    typeof outputHeight === 'number' &&
+    Number.isInteger(outputHeight) &&
+    outputHeight > 0
+  ) {
+    return {
+      width: outputWidth,
+      height: outputHeight
+    };
+  }
+
+  return {
+    width: Math.max(1, Math.round(target.rect.width)),
+    height: Math.max(1, Math.round(target.rect.height))
+  };
+}
+
+function cloneExportImageTarget(target: ExportImageTarget | null): ExportImageTarget | null {
+  if (!target) {
+    return null;
+  }
+
+  if (isScreenshotTarget(target)) {
+    return {
+      filename: target.filename,
+      kind: 'screenshot',
+      rect: { ...target.rect },
+      sourceViewport: { ...target.sourceViewport },
+      outputWidth: target.outputWidth,
+      outputHeight: target.outputHeight
+    };
+  }
+
+  return { ...target };
+}
+
+function isScreenshotTarget(
+  target: ExportImageTarget | null | undefined
+): target is Extract<ExportImageTarget, { kind: 'screenshot' }> {
+  return target?.kind === 'screenshot';
+}
+
+function parsePositiveInteger(value: string): number | null {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
 }

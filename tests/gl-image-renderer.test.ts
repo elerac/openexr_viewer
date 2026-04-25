@@ -385,6 +385,102 @@ describe('gl image renderer', () => {
     expect(lastUniform1iValue(gl, 'uAlphaOutputMode')).toBe(1);
   });
 
+  it('renders screenshot exports from the selected image viewer region', () => {
+    const { renderer, gl } = createHarness();
+    const layer = createInterleavedLayerFromChannels({
+      R: [1, 0, 0, 1],
+      G: [0, 1, 0, 1],
+      B: [0, 0, 1, 1]
+    });
+    const state = {
+      ...createInitialState(),
+      zoom: 3,
+      panX: 8,
+      panY: 9,
+      displaySelection: createChannelRgbSelection('R', 'G', 'B'),
+      hoveredPixel: null,
+      draftRoi: null
+    };
+
+    renderer.ensureLayerChannelsResident('session-1', 0, 2, 2, layer, ['R', 'G', 'B']);
+    renderer.setDisplaySelectionBindings(
+      'session-1',
+      0,
+      2,
+      2,
+      buildDisplaySourceBinding(layer, state.displaySelection)
+    );
+    gl.readPixels.mockImplementation((_x, _y, width, height, _format, _type, data: Uint8ClampedArray) => {
+      expect(width).toBe(40);
+      expect(height).toBe(20);
+      data.fill(255);
+    });
+
+    renderer.readExportPixels({
+      state,
+      sourceWidth: 2,
+      sourceHeight: 2,
+      outputWidth: 40,
+      outputHeight: 20,
+      screenshot: {
+        rect: { x: 10, y: 5, width: 20, height: 10 },
+        sourceViewport: { width: 100, height: 50 }
+      }
+    });
+
+    expect(lastUniform2fValue(gl, 'uViewport')).toEqual([200, 100]);
+    expect(lastUniform2fValue(gl, 'uOutputSize')).toEqual([40, 20]);
+    expect(lastUniform2fValue(gl, 'uScreenOrigin')).toEqual([20, 10]);
+    expect(lastUniform2fValue(gl, 'uPan')).toEqual([8, 9]);
+    expect(lastUniform1fValue(gl, 'uZoom')).toBe(6);
+  });
+
+  it('renders screenshot exports through the panorama pass when panorama mode is active', () => {
+    const { renderer, gl } = createHarness();
+    const layer = createInterleavedLayerFromChannels({
+      R: [1, 0, 0, 1],
+      G: [0, 1, 0, 1],
+      B: [0, 0, 1, 1]
+    });
+    const state = {
+      ...createInitialState(),
+      viewerMode: 'panorama' as const,
+      panoramaYawDeg: 17,
+      panoramaPitchDeg: 4,
+      panoramaHfovDeg: 90,
+      displaySelection: createChannelRgbSelection('R', 'G', 'B'),
+      hoveredPixel: null,
+      draftRoi: null
+    };
+
+    renderer.ensureLayerChannelsResident('session-1', 0, 2, 2, layer, ['R', 'G', 'B']);
+    renderer.setDisplaySelectionBindings(
+      'session-1',
+      0,
+      2,
+      2,
+      buildDisplaySourceBinding(layer, state.displaySelection)
+    );
+
+    renderer.readExportPixels({
+      state,
+      sourceWidth: 2,
+      sourceHeight: 2,
+      outputWidth: 40,
+      outputHeight: 20,
+      screenshot: {
+        rect: { x: 10, y: 5, width: 20, height: 10 },
+        sourceViewport: { width: 100, height: 50 }
+      }
+    });
+
+    expect(lastUniform2fValue(gl, 'uViewport')).toEqual([200, 100]);
+    expect(lastUniform2fValue(gl, 'uScreenOrigin')).toEqual([20, 10]);
+    expect(lastUniform1fValue(gl, 'uPanoramaYawDeg')).toBe(17);
+    expect(lastUniform1fValue(gl, 'uPanoramaPitchDeg')).toBe(4);
+    expect(lastUniform1fValue(gl, 'uPanoramaHfovDeg')).toBe(90);
+  });
+
   it('anchors checkerboard rendering to the viewport origin instead of the canvas origin', () => {
     const { renderer, gl } = createHarness();
     const layer = createInterleavedLayerFromChannels({

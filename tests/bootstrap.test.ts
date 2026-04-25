@@ -683,11 +683,11 @@ describe('bootstrap app lifecycle', () => {
     const { bootstrapApp } = await import('../src/app/bootstrap');
     const app = await bootstrapApp();
     const callbacks = mocks.getUiCallbacks() as {
-      onResolveExportImagePreview: (signal: AbortSignal) => Promise<typeof pixels>;
+      onResolveExportImagePreview: (request: unknown, signal: AbortSignal) => Promise<typeof pixels>;
     };
     const abortController = new AbortController();
 
-    await expect(callbacks.onResolveExportImagePreview(abortController.signal)).resolves.toEqual(pixels);
+    await expect(callbacks.onResolveExportImagePreview({ mode: 'image' }, abortController.signal)).resolves.toEqual(pixels);
 
     expect(mocks.renderCachePrepareActiveSession).toHaveBeenCalledWith(session, mocks.coreState.sessionState);
     expect(mocks.rendererReadExportPixels).toHaveBeenCalledWith(expect.objectContaining({
@@ -1343,10 +1343,10 @@ describe('bootstrap app lifecycle', () => {
     const { bootstrapApp } = await import('../src/app/bootstrap');
     const app = await bootstrapApp();
     const callbacks = mocks.getUiCallbacks() as {
-      onResolveExportImagePreview: (signal: AbortSignal) => Promise<unknown>;
+      onResolveExportImagePreview: (request: unknown, signal: AbortSignal) => Promise<unknown>;
     };
 
-    await expect(callbacks.onResolveExportImagePreview(new AbortController().signal)).rejects.toThrow('No image is active.');
+    await expect(callbacks.onResolveExportImagePreview({ mode: 'image' }, new AbortController().signal)).rejects.toThrow('No image is active.');
 
     expect(mocks.coreDispatch).not.toHaveBeenCalledWith({
       type: 'errorSet',
