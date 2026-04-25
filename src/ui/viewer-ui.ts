@@ -1146,10 +1146,19 @@ export class ViewerUi implements Disposable {
       return;
     }
 
-    this.elements.exportImageButton.disabled = this.isLoading || this.isDisplayBusy || !this.exportImageDialog.hasTarget();
+    const hasExportTarget = this.exportImageDialog.hasTarget();
+    const screenshotDisabledByDisplayBusy = !this.isLoading && this.isDisplayBusy && hasExportTarget;
+
+    this.elements.exportImageButton.disabled = this.isLoading || this.isDisplayBusy || !hasExportTarget;
     this.elements.exportScreenshotButton.disabled =
-      this.isLoading || this.isDisplayBusy || !this.exportImageDialog.hasTarget();
+      this.isLoading || this.isDisplayBusy || !hasExportTarget;
     this.elements.appScreenshotButton.disabled = this.elements.exportScreenshotButton.disabled;
+    this.elements.appScreenshotButton.classList.toggle('is-display-busy-disabled', screenshotDisabledByDisplayBusy);
+    if (screenshotDisabledByDisplayBusy) {
+      this.elements.appScreenshotButton.setAttribute('aria-busy', 'true');
+    } else {
+      this.elements.appScreenshotButton.removeAttribute('aria-busy');
+    }
     this.elements.exportImageBatchButton.disabled =
       this.isLoading || this.isDisplayBusy || !this.exportImageBatchDialog.hasTarget();
     this.elements.screenshotSelectionExportBatchButton.disabled = this.elements.exportImageBatchButton.disabled;

@@ -160,6 +160,10 @@ output {
   cursor: not-allowed;
 }
 
+.app-screenshot-button.is-display-busy-disabled:disabled {
+  color: var(--text-dim);
+}
+
 .app-menu-icon {
   width: 1.08rem;
   height: 1.08rem;

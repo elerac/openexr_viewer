@@ -1611,17 +1611,33 @@ describe('view menu', () => {
     expect(exportButton.disabled).toBe(true);
     expect(exportScreenshotButton.disabled).toBe(true);
     expect(appScreenshotButton.disabled).toBe(true);
+    expect(appScreenshotButton.classList.contains('is-display-busy-disabled')).toBe(false);
+    expect(appScreenshotButton.hasAttribute('aria-busy')).toBe(false);
 
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
     ui.setExportTarget({ filename: 'image.png' });
     expect(exportButton.disabled).toBe(false);
     expect(exportScreenshotButton.disabled).toBe(false);
     expect(appScreenshotButton.disabled).toBe(false);
+    expect(appScreenshotButton.classList.contains('is-display-busy-disabled')).toBe(false);
+    expect(appScreenshotButton.hasAttribute('aria-busy')).toBe(false);
 
     ui.setRgbViewLoading(true);
     expect(exportButton.disabled).toBe(true);
     expect(exportScreenshotButton.disabled).toBe(true);
     expect(appScreenshotButton.disabled).toBe(true);
+    expect(appScreenshotButton.classList.contains('is-display-busy-disabled')).toBe(true);
+    expect(appScreenshotButton.getAttribute('aria-busy')).toBe('true');
+
+    ui.setRgbViewLoading(false);
+    expect(appScreenshotButton.disabled).toBe(false);
+    expect(appScreenshotButton.classList.contains('is-display-busy-disabled')).toBe(false);
+    expect(appScreenshotButton.hasAttribute('aria-busy')).toBe(false);
+
+    ui.setExportTarget(null);
+    expect(appScreenshotButton.disabled).toBe(true);
+    expect(appScreenshotButton.classList.contains('is-display-busy-disabled')).toBe(false);
+    expect(appScreenshotButton.hasAttribute('aria-busy')).toBe(false);
   });
 
   it('does not show the loading overlay while display selection is only busy', () => {
