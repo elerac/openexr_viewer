@@ -112,9 +112,7 @@ test('persists Spectrum lattice and hides the idle surface after an image opens'
 
   await expect(defaultIdle).toBeVisible();
   await expect(defaultIdle.locator('h2')).toHaveCount(0);
-  await expect(defaultIdle.locator('p')).toHaveText(
-    'Drop an OpenEXR image here.'
-  );
+  await expect(defaultIdle.locator('p')).toHaveCount(0);
   await expect(idle).toBeHidden();
   const defaultPanelState = await readPanelShellVisualState(page);
   expect(defaultPanelState.every((panel) => panel.backgroundColor === 'rgb(23, 29, 38)')).toBe(true);
@@ -132,9 +130,7 @@ test('persists Spectrum lattice and hides the idle surface after an image opens'
   await expect(defaultIdle).toBeHidden();
   await expect(idle).toBeVisible();
   await expect(idle.locator('h2')).toHaveCount(0);
-  await expect(idle.locator('p')).toHaveText(
-    'Drop an OpenEXR image here.'
-  );
+  await expect(idle.locator('p')).toHaveCount(0);
   await expect(idleCanvas).toBeVisible();
   const spectrumPanelState = await readPanelShellVisualState(page);
   expect(spectrumPanelState.every((panel) => panel.backgroundImage.includes('linear-gradient'))).toBe(true);

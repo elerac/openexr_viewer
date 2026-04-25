@@ -153,9 +153,7 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   await expect(page.locator('#opened-files-list')).toContainText('No open files');
   await expect(page.locator('#viewer-idle-message')).toBeVisible();
   await expect(page.locator('#viewer-idle-message h2')).toHaveCount(0);
-  await expect(page.locator('#viewer-idle-message p')).toHaveText(
-    'Drop an OpenEXR image here.'
-  );
+  await expect(page.locator('#viewer-idle-message p')).toHaveCount(0);
   await expectViewerCheckerBackground(viewer);
 
   await fileMenuButton.click();

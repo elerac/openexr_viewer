@@ -1289,9 +1289,7 @@ describe('view menu', () => {
     expect(document.documentElement.dataset.theme).toBe('default');
     expect(defaultIdle.classList.contains('hidden')).toBe(false);
     expect(defaultIdle.textContent).not.toContain('OpenEXR Viewer');
-    expect(defaultIdle.textContent).toContain(
-      'Drop an OpenEXR image here.'
-    );
+    expect(defaultIdle.querySelector('p')).toBeNull();
     expect(idle.classList.contains('hidden')).toBe(true);
 
     themeSelect.value = SPECTRUM_LATTICE_THEME_ID;
@@ -1307,9 +1305,7 @@ describe('view menu', () => {
     expect(defaultIdle.classList.contains('hidden')).toBe(true);
     expect(idle.classList.contains('hidden')).toBe(false);
     expect(idle.textContent).not.toContain('OpenEXR Viewer');
-    expect(idle.textContent).toContain(
-      'Drop an OpenEXR image here.'
-    );
+    expect(idle.querySelector('p')).toBeNull();
     expect(idle.textContent).not.toContain('Spectrum lattice');
     expect(idle.textContent).not.toContain('Awaiting image stream');
     expect(idle.textContent).not.toContain('Phase drift');
