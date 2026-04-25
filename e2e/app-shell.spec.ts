@@ -59,6 +59,36 @@ function expectPngSignature(bytes: Uint8Array): void {
   );
 }
 
+async function readChromeVisualState(locator: Locator): Promise<{
+  opacity: number;
+  pointerEvents: string;
+  filter: string;
+}> {
+  return locator.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      opacity: Number.parseFloat(style.opacity),
+      pointerEvents: style.pointerEvents,
+      filter: style.filter
+    };
+  });
+}
+
+async function expectInactiveScreenshotChrome(locator: Locator): Promise<void> {
+  await expect.poll(async () => (await readChromeVisualState(locator)).opacity).toBeCloseTo(0.46, 2);
+  await expect.poll(async () => (await readChromeVisualState(locator)).pointerEvents).toBe('none');
+  await expect.poll(async () => (await readChromeVisualState(locator)).filter).toContain('grayscale');
+  const state = await readChromeVisualState(locator);
+  expect(state.filter).toContain('saturate');
+  expect(state.filter).toContain('brightness');
+}
+
+async function expectActiveScreenshotTarget(locator: Locator): Promise<void> {
+  await expect.poll(async () => (await readChromeVisualState(locator)).opacity).toBeCloseTo(1, 2);
+  await expect.poll(async () => (await readChromeVisualState(locator)).pointerEvents).toBe('auto');
+  await expect.poll(async () => (await readChromeVisualState(locator)).filter).toBe('none');
+}
+
 test('boots an empty app shell with menu actions gated until an image opens', async ({ page }) => {
   await gotoViewerApp(page);
 
@@ -450,6 +480,71 @@ test('exports an adjusted image-viewer screenshot region as a png download', asy
   expect(download.suggestedFilename()).toBe('cbox_rgb-screenshot.png');
 
   expectPngSignature(await readDownloadBytes(download));
+});
+
+test('marks non-viewer chrome inactive while screenshot selection is active', async ({ page }) => {
+  await gotoViewerApp(page);
+  await openGalleryCbox(page);
+
+  const appShell = page.locator('#app');
+  const fileMenuButton = page.getByRole('button', { name: 'File', exact: true });
+  const windowMenuButton = page.getByRole('button', { name: 'Window', exact: true });
+  const toolbarMenuItem = page.locator('#window-toolbar-menu-item');
+  const exportScreenshotMenuItem = page.locator('#export-screenshot-button');
+  const displayToolbar = page.locator('#display-toolbar');
+  const appMenuBar = page.locator('#app-menu-bar');
+  const rightStack = page.locator('#right-stack');
+  const imagePanel = page.locator('#image-panel');
+  const bottomPanel = page.locator('#bottom-panel');
+  const imagePanelResizer = page.locator('#image-panel-resizer');
+  const rightPanelResizer = page.locator('#right-panel-resizer');
+  const bottomPanelResizer = page.locator('#bottom-panel-resizer');
+  const selectionOverlay = page.locator('#screenshot-selection-overlay');
+  const selectionControls = page.locator('#screenshot-selection-controls');
+  const selectionCancelButton = page.locator('#screenshot-selection-cancel-button');
+
+  await windowMenuButton.click();
+  await toolbarMenuItem.click();
+  await expect(displayToolbar).toBeVisible();
+
+  await fileMenuButton.click();
+  await exportScreenshotMenuItem.click();
+
+  await expect(selectionOverlay).toBeVisible();
+  await expect(appShell).toHaveClass(/is-screenshot-selecting/);
+
+  for (const inactiveChrome of [
+    appMenuBar,
+    displayToolbar,
+    rightStack,
+    imagePanel,
+    bottomPanel,
+    imagePanelResizer,
+    rightPanelResizer,
+    bottomPanelResizer
+  ]) {
+    await expectInactiveScreenshotChrome(inactiveChrome);
+  }
+
+  await expectActiveScreenshotTarget(selectionControls);
+  await expectActiveScreenshotTarget(selectionCancelButton);
+
+  await selectionCancelButton.click();
+
+  await expect(selectionOverlay).toBeHidden();
+  await expect(appShell).not.toHaveClass(/is-screenshot-selecting/);
+  for (const restoredChrome of [
+    appMenuBar,
+    displayToolbar,
+    rightStack,
+    imagePanel,
+    bottomPanel,
+    imagePanelResizer,
+    rightPanelResizer,
+    bottomPanelResizer
+  ]) {
+    await expectActiveScreenshotTarget(restoredChrome);
+  }
 });
 
 test('exports a panorama-viewer screenshot region as a png download', async ({ page }) => {

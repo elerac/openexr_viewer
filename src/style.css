@@ -74,6 +74,21 @@ output {
   height: 100dvh;
 }
 
+.app-shell.is-screenshot-selecting .app-menu-bar,
+.app-shell.is-screenshot-selecting .display-toolbar,
+.app-shell.is-screenshot-selecting .error-banner,
+.app-shell.is-screenshot-selecting .image-panel-shell,
+.app-shell.is-screenshot-selecting .right-stack,
+.app-shell.is-screenshot-selecting .bottom-panel-shell,
+.app-shell.is-screenshot-selecting .layout-resizer {
+  opacity: 0.46;
+  filter: grayscale(0.65) saturate(0.45) brightness(0.82);
+  pointer-events: none;
+  transition:
+    opacity 120ms ease,
+    filter 120ms ease;
+}
+
 .app-menu-bar {
   position: relative;
   z-index: 20;
