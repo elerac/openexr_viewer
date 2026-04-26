@@ -101,6 +101,19 @@ export function createEmptyListMessage(message: string): HTMLElement {
   return element;
 }
 
+export function renderEmptyListMessage(container: HTMLElement, message: string): void {
+  const existing = container.children.length === 1 ? container.firstElementChild : null;
+  if (
+    existing instanceof HTMLElement &&
+    existing.classList.contains('image-browser-empty') &&
+    existing.textContent === message
+  ) {
+    return;
+  }
+
+  container.replaceChildren(createEmptyListMessage(message));
+}
+
 export function findClosestListRow(target: EventTarget | null, datasetKey: string): HTMLElement | null {
   if (!(target instanceof Element)) {
     return null;

@@ -4,7 +4,6 @@ import type { OpenedImageDropPlacement } from '../types';
 import type { OpenedImagesPanelElements } from './elements';
 import {
   applyListboxRowSizing,
-  createEmptyListMessage,
   findClosestListRow,
   focusSelectedImageBrowserRow,
   getImageBrowserRows,
@@ -12,6 +11,7 @@ import {
   getListboxOptionIndexAtClientY,
   handleImageBrowserListKeyDown,
   isFocusWithinElement,
+  renderEmptyListMessage,
   type ListboxHitTestMetrics,
   renderKeyedChildren,
   syncSelectOptions
@@ -302,7 +302,7 @@ export class OpenedImagesPanel implements Disposable {
     this.elements.openedFilesList.classList.toggle('is-disabled', disabled);
 
     if (this.openedImageItems.length === 0) {
-      this.elements.openedFilesList.replaceChildren(createEmptyListMessage('No open files'));
+      renderEmptyListMessage(this.elements.openedFilesList, 'No open files');
       return;
     }
 

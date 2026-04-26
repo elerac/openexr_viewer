@@ -10,11 +10,11 @@ import type { DisplaySelection } from '../types';
 import type { ChannelPanelElements } from './elements';
 import {
   applyListboxRowSizing,
-  createEmptyListMessage,
   findClosestListRow,
   focusSelectedImageBrowserRow,
   handleImageBrowserListKeyDown,
   isFocusWithinElement,
+  renderEmptyListMessage,
   renderKeyedChildren,
   syncSelectOptions
 } from './render-helpers';
@@ -31,7 +31,6 @@ export class ChannelPanel implements Disposable {
   private readonly disposables = new DisposableBag();
   private isLoading = false;
   private isRgbViewLoading = false;
-  private hasActiveImage = false;
   private restoreRgbGroupFocusAfterLoading = false;
   private restoreChannelViewFocusAfterLoading = false;
   private hasSplitChannelViews = false;
@@ -203,7 +202,6 @@ export class ChannelPanel implements Disposable {
       return;
     }
 
-    this.hasActiveImage = true;
     const hadFocus = document.activeElement === this.elements.rgbGroupSelect;
     this.channelViewItems = [...items];
     this.selectedValue = this.channelViewItems.some((item) => item.value === selectedValue)
@@ -241,7 +239,6 @@ export class ChannelPanel implements Disposable {
       return;
     }
 
-    this.hasActiveImage = false;
     this.channelViewItems = [];
     this.selectedValue = '';
     this.hasSplitChannelViews = false;
@@ -259,11 +256,7 @@ export class ChannelPanel implements Disposable {
     this.elements.channelViewList.classList.toggle('is-disabled', disabled);
 
     if (this.channelViewItems.length === 0) {
-      if (this.hasActiveImage) {
-        this.elements.channelViewList.replaceChildren(createEmptyListMessage('No channels'));
-      } else {
-        this.elements.channelViewList.replaceChildren();
-      }
+      renderEmptyListMessage(this.elements.channelViewList, 'No channels');
       return;
     }
 

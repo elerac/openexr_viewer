@@ -6,12 +6,76 @@
     <title>OpenEXR Viewer</title>
     <script>
       (() => {
+        const panelSplitRanges = {
+          imagePanelWidth: { min: 160, max: 420 },
+          rightPanelWidth: { min: 240, max: 520 },
+          bottomPanelHeight: { min: 72, max: 360 }
+        };
+        const setInitialPanelSplitProperty = (name, value) => {
+          document.documentElement.style.setProperty(name, value);
+        };
+        const readInitialPanelSplitSize = (record, key) => {
+          const value = record[key];
+          const range = panelSplitRanges[key];
+          if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+            return null;
+          }
+
+          return Math.max(range.min, Math.min(range.max, value));
+        };
+
         try {
           if (window.localStorage.getItem('openexr-viewer:theme:v1') === 'spectrum-lattice') {
             document.documentElement.dataset.theme = 'spectrum-lattice';
           }
         } catch {
           // Runtime theme initialization handles storage failures after app boot.
+        }
+
+        try {
+          const storedPanelSplits = window.localStorage.getItem('openexr-viewer:panel-splits:v1');
+          if (!storedPanelSplits) {
+            return;
+          }
+
+          const parsed = JSON.parse(storedPanelSplits);
+          const record = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+          const imagePanelCollapsed = record.imagePanelCollapsed === true;
+          const rightPanelCollapsed = record.rightPanelCollapsed === true;
+          const bottomPanelCollapsed = record.bottomPanelCollapsed === true;
+          const imagePanelWidth = readInitialPanelSplitSize(record, 'imagePanelWidth');
+          const rightPanelWidth = readInitialPanelSplitSize(record, 'rightPanelWidth');
+          const bottomPanelHeight = readInitialPanelSplitSize(record, 'bottomPanelHeight');
+
+          if (imagePanelCollapsed || imagePanelWidth !== null) {
+            setInitialPanelSplitProperty(
+              '--initial-image-panel-width',
+              `${Math.round(imagePanelCollapsed ? 0 : imagePanelWidth)}px`
+            );
+          }
+          if (rightPanelCollapsed || rightPanelWidth !== null) {
+            setInitialPanelSplitProperty(
+              '--initial-right-panel-width',
+              `${Math.round(rightPanelCollapsed ? 0 : rightPanelWidth)}px`
+            );
+          }
+          if (bottomPanelCollapsed || bottomPanelHeight !== null) {
+            setInitialPanelSplitProperty(
+              '--initial-bottom-panel-height',
+              `${Math.round(bottomPanelCollapsed ? 0 : bottomPanelHeight)}px`
+            );
+          }
+          if (imagePanelCollapsed) {
+            setInitialPanelSplitProperty('--initial-image-panel-resizer-width', '0px');
+          }
+          if (rightPanelCollapsed) {
+            setInitialPanelSplitProperty('--initial-right-panel-resizer-width', '0px');
+          }
+          if (bottomPanelCollapsed) {
+            setInitialPanelSplitProperty('--initial-bottom-panel-resizer-height', '0px');
+          }
+        } catch {
+          // Runtime panel layout initialization handles storage failures after app boot.
         }
       })();
     </script>
@@ -31,13 +95,13 @@
               <button id="open-file-button" class="app-menu-item" type="button" role="menuitem">Open...</button>
               <button id="open-folder-button" class="app-menu-item" type="button" role="menuitem">Open Folder...</button>
               <div class="app-menu-separator" role="separator" aria-orientation="horizontal"></div>
-              <button id="export-image-button" class="app-menu-item" type="button" role="menuitem">Export...</button>
-              <button id="export-screenshot-button" class="app-menu-item" type="button" role="menuitem">Export Screenshot...</button>
-              <button id="export-image-batch-button" class="app-menu-item" type="button" role="menuitem">Export Batch...</button>
+              <button id="export-image-button" class="app-menu-item" type="button" role="menuitem" disabled>Export...</button>
+              <button id="export-screenshot-button" class="app-menu-item" type="button" role="menuitem" disabled>Export Screenshot...</button>
+              <button id="export-image-batch-button" class="app-menu-item" type="button" role="menuitem" disabled>Export Batch...</button>
               <button id="export-colormap-button" class="app-menu-item" type="button" role="menuitem">Export Colormap...</button>
               <div class="app-menu-separator" role="separator" aria-orientation="horizontal"></div>
-              <button id="reload-all-opened-images-button" class="app-menu-item" type="button" role="menuitem">Reload All</button>
-              <button id="close-all-opened-images-button" class="app-menu-item" type="button" role="menuitem">Close All</button>
+              <button id="reload-all-opened-images-button" class="app-menu-item" type="button" role="menuitem" disabled>Reload All</button>
+              <button id="close-all-opened-images-button" class="app-menu-item" type="button" role="menuitem" disabled>Close All</button>
             </div>
           </div>
           <div class="app-menu">
@@ -148,6 +212,7 @@
             type="button"
             aria-label="Export Screenshot..."
             title="Export Screenshot..."
+            disabled
           >
             <svg
               class="app-menu-icon"
@@ -650,13 +715,15 @@
               </div>
               <div
                 id="opened-files-list"
-                class="image-browser-list image-browser-list--files"
+                class="image-browser-list image-browser-list--files is-disabled"
                 role="listbox"
                 aria-label="Open files"
                 aria-describedby="opened-files-reorder-hint"
-              ></div>
+              >
+                <p class="image-browser-empty">No open files</p>
+              </div>
               <p id="opened-files-reorder-hint" class="visually-hidden">Drag rows to reorder open files.</p>
-              <select id="opened-images-select" class="compat-select" multiple aria-hidden="true" tabindex="-1"></select>
+              <select id="opened-images-select" class="compat-select" multiple aria-hidden="true" tabindex="-1" disabled></select>
             </section>
 
             <section class="image-browser-section" aria-labelledby="channel-view-heading">
@@ -666,15 +733,17 @@
                 </button>
                 <h3 id="channel-view-heading">Channel View</h3>
                 <span id="channel-view-count" class="image-browser-count">0</span>
-                <button id="rgb-split-toggle-button" class="channel-split-toggle hidden" type="button" aria-pressed="false" aria-controls="rgb-group-select">Split RGB</button>
+                <button id="rgb-split-toggle-button" class="channel-split-toggle hidden" type="button" aria-pressed="false" aria-controls="rgb-group-select" disabled>Split RGB</button>
               </div>
-              <div id="channel-view-list" class="image-browser-list" role="listbox" aria-label="Channel view"></div>
-              <select id="rgb-group-select" class="compat-select" multiple aria-hidden="true" tabindex="-1"></select>
+              <div id="channel-view-list" class="image-browser-list is-disabled" role="listbox" aria-label="Channel view">
+                <p class="image-browser-empty">No channels</p>
+              </div>
+              <select id="rgb-group-select" class="compat-select" multiple aria-hidden="true" tabindex="-1" disabled></select>
             </section>
 
             <div id="layer-control" class="control-block compat-control hidden">
               <label for="layer-select">Layer</label>
-              <select id="layer-select" class="compat-select" multiple aria-hidden="true" tabindex="-1"></select>
+              <select id="layer-select" class="compat-select" multiple aria-hidden="true" tabindex="-1" disabled></select>
             </div>
 
             <section class="image-browser-section" aria-labelledby="parts-layers-heading">
@@ -685,7 +754,7 @@
                 <h3 id="parts-layers-heading">Parts / Layers</h3>
                 <span id="parts-layers-count" class="image-browser-count">0</span>
               </div>
-              <div id="parts-layers-list" class="image-browser-list" role="listbox" aria-label="Parts and layers"></div>
+              <div id="parts-layers-list" class="image-browser-list is-disabled" role="listbox" aria-label="Parts and layers"></div>
             </section>
           </aside>
         </div>
@@ -722,6 +791,20 @@
       </main>
     </div>
 
+    <script>
+      (() => {
+        const viewerContainer = document.getElementById('viewer-container');
+        if (!(viewerContainer instanceof HTMLElement)) {
+          return;
+        }
+
+        const rect = viewerContainer.getBoundingClientRect();
+        const left = Number.isFinite(rect.left) ? rect.left : 0;
+        const top = Number.isFinite(rect.top) ? rect.top : 0;
+        viewerContainer.style.setProperty('--viewer-checker-offset-x', `${-left}px`);
+        viewerContainer.style.setProperty('--viewer-checker-offset-y', `${-top}px`);
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

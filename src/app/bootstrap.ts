@@ -126,8 +126,6 @@ export async function bootstrapApp(): Promise<AppHandle> {
       isDisposed
     }));
 
-    await services.displayController.initialize();
-
     interaction = createViewerInteraction({
       core,
       ui,
@@ -141,6 +139,8 @@ export async function bootstrapApp(): Promise<AppHandle> {
       interactionCoordinator: services.interactionCoordinator,
       isDisposed
     });
+
+    await services.displayController.initialize();
 
     window.addEventListener('beforeunload', onBeforeUnload);
   } catch (error) {

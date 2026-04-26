@@ -127,6 +127,383 @@ async function hasOverlayCanvasPixels(page: Page): Promise<boolean> {
   });
 }
 
+async function gotoViewerAppWithoutRuntime(
+  page: Page,
+  storedPanelSplits: Record<string, unknown>
+): Promise<void> {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.addInitScript((storedValue) => {
+    window.localStorage.setItem('openexr-viewer:panel-splits:v1', JSON.stringify(storedValue));
+  }, storedPanelSplits);
+  await page.route('**/*', async (route) => {
+    if (route.request().resourceType() === 'script') {
+      await route.fulfill({
+        contentType: 'application/javascript',
+        body: ''
+      });
+      return;
+    }
+
+    await route.continue();
+  });
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/', { waitUntil: 'load' });
+}
+
+async function readInitialPanelLayout(page: Page): Promise<{
+  initialImagePanelWidth: string;
+  initialImagePanelResizerWidth: string;
+  imageWidth: number;
+  imageResizerWidth: number;
+}> {
+  return await page.evaluate(() => {
+    const imagePanelContent = document.getElementById('image-panel-content');
+    const imagePanelResizer = document.getElementById('image-panel-resizer');
+    if (!(imagePanelContent instanceof HTMLElement) || !(imagePanelResizer instanceof HTMLElement)) {
+      throw new Error('Missing initial panel layout elements.');
+    }
+
+    return {
+      initialImagePanelWidth: document.documentElement.style.getPropertyValue('--initial-image-panel-width'),
+      initialImagePanelResizerWidth: document.documentElement.style.getPropertyValue(
+        '--initial-image-panel-resizer-width'
+      ),
+      imageWidth: imagePanelContent.getBoundingClientRect().width,
+      imageResizerWidth: imagePanelResizer.getBoundingClientRect().width
+    };
+  });
+}
+
+async function readViewerCheckerOffsetState(page: Page): Promise<{
+  rectLeft: number;
+  rectTop: number;
+  rectWidth: number;
+  rectHeight: number;
+  checkerOffsetX: number;
+  checkerOffsetY: number;
+  checkerBackgroundPosition: string;
+  glCanvasWidth: number;
+  glCanvasHeight: number;
+}> {
+  return await page.evaluate(() => {
+    const viewer = document.getElementById('viewer-container');
+    const glCanvas = document.getElementById('gl-canvas');
+    if (!(viewer instanceof HTMLElement) || !(glCanvas instanceof HTMLCanvasElement)) {
+      throw new Error('Missing viewer checker offset elements.');
+    }
+
+    const rect = viewer.getBoundingClientRect();
+    const style = getComputedStyle(viewer);
+    const checkerStyle = getComputedStyle(viewer, '::after');
+    return {
+      rectLeft: rect.left,
+      rectTop: rect.top,
+      rectWidth: rect.width,
+      rectHeight: rect.height,
+      checkerOffsetX: Number.parseFloat(style.getPropertyValue('--viewer-checker-offset-x')),
+      checkerOffsetY: Number.parseFloat(style.getPropertyValue('--viewer-checker-offset-y')),
+      checkerBackgroundPosition: checkerStyle.backgroundPosition,
+      glCanvasWidth: glCanvas.width,
+      glCanvasHeight: glCanvas.height
+    };
+  });
+}
+
+async function gotoViewerAppWithDelayedRuntime(page: Page): Promise<() => Promise<void>> {
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  let releaseRuntime!: () => void;
+  let runtimeScriptRequested!: () => void;
+  let hasBlockedRuntimeScript = false;
+  const runtimeBlock = new Promise<void>((resolve) => {
+    releaseRuntime = resolve;
+  });
+  const runtimeScriptRequest = new Promise<void>((resolve) => {
+    runtimeScriptRequested = resolve;
+  });
+
+  await page.route('**/*', async (route) => {
+    if (!hasBlockedRuntimeScript && route.request().resourceType() === 'script') {
+      hasBlockedRuntimeScript = true;
+      runtimeScriptRequested();
+      await runtimeBlock;
+    }
+
+    await route.continue();
+  });
+
+  const navigation = page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/', { waitUntil: 'load' });
+  await page.waitForSelector('#parts-layers-list', { state: 'attached' });
+  await runtimeScriptRequest;
+
+  return async () => {
+    releaseRuntime();
+    await navigation;
+    await page.unroute('**/*');
+  };
+}
+
+async function gotoViewerAppWithDelayedColormapManifest(page: Page): Promise<() => Promise<void>> {
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  let releaseManifest!: () => void;
+  let manifestRequested!: () => void;
+  const manifestBlock = new Promise<void>((resolve) => {
+    releaseManifest = resolve;
+  });
+  const manifestRequest = new Promise<void>((resolve) => {
+    manifestRequested = resolve;
+  });
+
+  await page.route('**/colormaps/manifest.json', async (route) => {
+    manifestRequested();
+    await manifestBlock;
+    await route.continue();
+  });
+
+  await page.goto(process.env.PLAYWRIGHT_APP_PATH ?? '/', { waitUntil: 'domcontentloaded' });
+  await manifestRequest;
+
+  return async () => {
+    releaseManifest();
+    await page.waitForLoadState('load');
+    await page.unroute('**/colormaps/manifest.json');
+  };
+}
+
+async function readLeftPanelStartupGeometry(page: Page): Promise<{
+  openedFilesText: string;
+  openedFilesListHeight: number;
+  channelViewText: string;
+  channelViewHeadingTop: number;
+  channelViewListTop: number;
+  channelViewListHeight: number;
+  partsLayersHeadingTop: number;
+  partsLayersListTop: number;
+  partsLayersListHeight: number;
+}> {
+  return await page.evaluate(() => {
+    const readElement = (id: string): HTMLElement => {
+      const element = document.getElementById(id);
+      if (!(element instanceof HTMLElement)) {
+        throw new Error(`Missing left panel element: ${id}`);
+      }
+
+      return element;
+    };
+    const readRect = (id: string): DOMRect => readElement(id).getBoundingClientRect();
+    const round = (value: number): number => Math.round(value * 100) / 100;
+    const openedFilesElement = readElement('opened-files-list');
+    const channelViewElement = readElement('channel-view-list');
+    const openedFilesList = readRect('opened-files-list');
+    const channelViewHeading = readRect('channel-view-heading');
+    const channelViewList = readRect('channel-view-list');
+    const partsLayersHeading = readRect('parts-layers-heading');
+    const partsLayersList = readRect('parts-layers-list');
+
+    return {
+      openedFilesText: openedFilesElement.textContent ?? '',
+      openedFilesListHeight: round(openedFilesList.height),
+      channelViewText: channelViewElement.textContent ?? '',
+      channelViewHeadingTop: round(channelViewHeading.top),
+      channelViewListTop: round(channelViewList.top),
+      channelViewListHeight: round(channelViewList.height),
+      partsLayersHeadingTop: round(partsLayersHeading.top),
+      partsLayersListTop: round(partsLayersList.top),
+      partsLayersListHeight: round(partsLayersList.height)
+    };
+  });
+}
+
+async function readInitialEmptyAppState(page: Page): Promise<{
+  openedFilesText: string;
+  openedFilesDisabled: boolean;
+  openedFilesListHeight: number;
+  openedFilesBackingSelectDisabled: boolean;
+  channelViewText: string;
+  channelViewDisabled: boolean;
+  channelViewListHeight: number;
+  channelViewBackingSelectDisabled: boolean;
+  rgbSplitToggleDisabled: boolean;
+  partsLayersText: string;
+  partsLayersDisabled: boolean;
+  partsLayersListHeight: number;
+  layerSelectDisabled: boolean;
+  appScreenshotDisabled: boolean;
+  exportImageDisabled: boolean;
+  exportScreenshotDisabled: boolean;
+  exportImageBatchDisabled: boolean;
+  reloadAllDisabled: boolean;
+  closeAllDisabled: boolean;
+}> {
+  return await page.evaluate(() => {
+    const openedFilesList = document.getElementById('opened-files-list');
+    const openedImagesSelect = document.getElementById('opened-images-select');
+    const channelViewList = document.getElementById('channel-view-list');
+    const rgbGroupSelect = document.getElementById('rgb-group-select');
+    const rgbSplitToggleButton = document.getElementById('rgb-split-toggle-button');
+    const partsLayersList = document.getElementById('parts-layers-list');
+    const layerSelect = document.getElementById('layer-select');
+    const appScreenshotButton = document.getElementById('app-screenshot-button');
+    const exportImageButton = document.getElementById('export-image-button');
+    const exportScreenshotButton = document.getElementById('export-screenshot-button');
+    const exportImageBatchButton = document.getElementById('export-image-batch-button');
+    const reloadAllOpenedImagesButton = document.getElementById('reload-all-opened-images-button');
+    const closeAllOpenedImagesButton = document.getElementById('close-all-opened-images-button');
+    if (
+      !(openedFilesList instanceof HTMLElement) ||
+      !(openedImagesSelect instanceof HTMLSelectElement) ||
+      !(channelViewList instanceof HTMLElement) ||
+      !(rgbGroupSelect instanceof HTMLSelectElement) ||
+      !(rgbSplitToggleButton instanceof HTMLButtonElement) ||
+      !(partsLayersList instanceof HTMLElement) ||
+      !(layerSelect instanceof HTMLSelectElement) ||
+      !(appScreenshotButton instanceof HTMLButtonElement) ||
+      !(exportImageButton instanceof HTMLButtonElement) ||
+      !(exportScreenshotButton instanceof HTMLButtonElement) ||
+      !(exportImageBatchButton instanceof HTMLButtonElement) ||
+      !(reloadAllOpenedImagesButton instanceof HTMLButtonElement) ||
+      !(closeAllOpenedImagesButton instanceof HTMLButtonElement)
+    ) {
+      throw new Error('Missing initial empty app state elements.');
+    }
+
+    return {
+      openedFilesText: openedFilesList.textContent ?? '',
+      openedFilesDisabled: openedFilesList.classList.contains('is-disabled'),
+      openedFilesListHeight: openedFilesList.getBoundingClientRect().height,
+      openedFilesBackingSelectDisabled: openedImagesSelect.disabled,
+      channelViewText: channelViewList.textContent ?? '',
+      channelViewDisabled: channelViewList.classList.contains('is-disabled'),
+      channelViewListHeight: channelViewList.getBoundingClientRect().height,
+      channelViewBackingSelectDisabled: rgbGroupSelect.disabled,
+      rgbSplitToggleDisabled: rgbSplitToggleButton.disabled,
+      partsLayersText: partsLayersList.textContent ?? '',
+      partsLayersDisabled: partsLayersList.classList.contains('is-disabled'),
+      partsLayersListHeight: partsLayersList.getBoundingClientRect().height,
+      layerSelectDisabled: layerSelect.disabled,
+      appScreenshotDisabled: appScreenshotButton.disabled,
+      exportImageDisabled: exportImageButton.disabled,
+      exportScreenshotDisabled: exportScreenshotButton.disabled,
+      exportImageBatchDisabled: exportImageBatchButton.disabled,
+      reloadAllDisabled: reloadAllOpenedImagesButton.disabled,
+      closeAllDisabled: closeAllOpenedImagesButton.disabled
+    };
+  });
+}
+
+function expectCheckerOffsetAnchoredToViewport(state: Awaited<ReturnType<typeof readViewerCheckerOffsetState>>): void {
+  expect(state.rectLeft).toBeGreaterThan(0);
+  expect(state.rectTop).toBeGreaterThan(0);
+  expect(Math.abs(state.checkerOffsetX + state.rectLeft)).toBeLessThanOrEqual(0.01);
+  expect(Math.abs(state.checkerOffsetY + state.rectTop)).toBeLessThanOrEqual(0.01);
+  expect(state.checkerBackgroundPosition).not.toBe('0px 0px');
+}
+
+test('renders empty app state before the app runtime starts', async ({ page }) => {
+  await gotoViewerAppWithoutRuntime(page, {});
+
+  const state = await readInitialEmptyAppState(page);
+
+  expect(state.openedFilesText).toContain('No open files');
+  expect(state.openedFilesDisabled).toBe(true);
+  expect(state.openedFilesBackingSelectDisabled).toBe(true);
+  expect(state.channelViewText).toContain('No channels');
+  expect(state.channelViewDisabled).toBe(true);
+  expect(Math.abs(state.channelViewListHeight - state.openedFilesListHeight)).toBeLessThanOrEqual(1);
+  expect(state.channelViewBackingSelectDisabled).toBe(true);
+  expect(state.rgbSplitToggleDisabled).toBe(true);
+  expect(state.partsLayersText.trim()).toBe('');
+  expect(state.partsLayersDisabled).toBe(true);
+  expect(Math.abs(state.partsLayersListHeight - state.openedFilesListHeight)).toBeLessThanOrEqual(1);
+  expect(state.layerSelectDisabled).toBe(true);
+  expect(state.appScreenshotDisabled).toBe(true);
+  expect(state.exportImageDisabled).toBe(true);
+  expect(state.exportScreenshotDisabled).toBe(true);
+  expect(state.exportImageBatchDisabled).toBe(true);
+  expect(state.reloadAllDisabled).toBe(true);
+  expect(state.closeAllDisabled).toBe(true);
+});
+
+test('anchors the default checkerboard before the app runtime starts', async ({ page }) => {
+  await gotoViewerAppWithoutRuntime(page, {});
+
+  expectCheckerOffsetAnchoredToViewport(await readViewerCheckerOffsetState(page));
+});
+
+test('keeps left panel empty-list geometry stable while the app runtime starts', async ({ page }) => {
+  const releaseRuntime = await gotoViewerAppWithDelayedRuntime(page);
+  const beforeRuntime = await readLeftPanelStartupGeometry(page);
+
+  await releaseRuntime();
+
+  const afterRuntime = await readLeftPanelStartupGeometry(page);
+  const stableKeys = [
+    'channelViewHeadingTop',
+    'channelViewListTop',
+    'partsLayersHeadingTop',
+    'partsLayersListTop'
+  ] as const;
+
+  expect(beforeRuntime.openedFilesText).toContain('No open files');
+  expect(beforeRuntime.channelViewText).toContain('No channels');
+  expect(afterRuntime.openedFilesText).toContain('No open files');
+  expect(afterRuntime.channelViewText).toContain('No channels');
+  expect(Math.abs(beforeRuntime.channelViewListHeight - beforeRuntime.openedFilesListHeight)).toBeLessThanOrEqual(1);
+  expect(Math.abs(beforeRuntime.partsLayersListHeight - beforeRuntime.openedFilesListHeight)).toBeLessThanOrEqual(1);
+  for (const key of stableKeys) {
+    expect(Math.abs(afterRuntime[key] - beforeRuntime[key])).toBeLessThanOrEqual(1);
+  }
+});
+
+test('anchors the default checkerboard while colormap initialization is pending', async ({ page }) => {
+  const releaseManifest = await gotoViewerAppWithDelayedColormapManifest(page);
+
+  try {
+    const state = await readViewerCheckerOffsetState(page);
+    expectCheckerOffsetAnchoredToViewport(state);
+    expect(state.glCanvasWidth).toBe(Math.floor(state.rectWidth));
+    expect(state.glCanvasHeight).toBe(Math.floor(state.rectHeight));
+  } finally {
+    await releaseManifest();
+  }
+});
+
+test('applies persisted left panel width before the app runtime starts', async ({ page }) => {
+  await gotoViewerAppWithoutRuntime(page, {
+    imagePanelWidth: 340,
+    rightPanelWidth: 300,
+    bottomPanelHeight: 140,
+    imagePanelCollapsed: false,
+    rightPanelCollapsed: false,
+    bottomPanelCollapsed: false
+  });
+
+  const layout = await readInitialPanelLayout(page);
+
+  expect(layout.initialImagePanelWidth).toBe('340px');
+  expect(layout.initialImagePanelResizerWidth).toBe('');
+  expect(layout.imageWidth).toBeCloseTo(340, 0);
+  expect(layout.imageResizerWidth).toBeGreaterThanOrEqual(7);
+});
+
+test('applies persisted collapsed left panel before the app runtime starts', async ({ page }) => {
+  await gotoViewerAppWithoutRuntime(page, {
+    imagePanelWidth: 340,
+    rightPanelWidth: 300,
+    bottomPanelHeight: 140,
+    imagePanelCollapsed: true,
+    rightPanelCollapsed: false,
+    bottomPanelCollapsed: false
+  });
+
+  const layout = await readInitialPanelLayout(page);
+
+  expect(layout.initialImagePanelWidth).toBe('0px');
+  expect(layout.initialImagePanelResizerWidth).toBe('0px');
+  expect(layout.imageWidth).toBeLessThan(1);
+  expect(layout.imageResizerWidth).toBeLessThan(1);
+});
+
 test('persists the cache budget and keeps open-file actions limited to reload and close', async ({ page }) => {
   await gotoViewerApp(page);
 

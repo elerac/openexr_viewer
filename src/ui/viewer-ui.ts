@@ -462,6 +462,9 @@ export class ViewerUi implements Disposable {
     if (this.disposed) {
       return;
     }
+    if (this.isLoading === loading) {
+      return;
+    }
 
     this.isLoading = loading;
     if (loading) {
@@ -525,7 +528,9 @@ export class ViewerUi implements Disposable {
       this.hideScreenshotSelection();
     }
     this.channelPanel.setRgbViewLoading(displayBusy);
-    this.renderChannelViewControls();
+    if (this.hasActiveChannelImage) {
+      this.renderChannelViewControls();
+    }
     this.updateFileMenuItemsDisabled();
     this.updateLoadingOverlayVisibility();
   }

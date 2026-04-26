@@ -3,9 +3,9 @@ import { DisposableBag, type Disposable } from '../lifecycle';
 import type { LayerPanelElements } from './elements';
 import {
   applyListboxRowSizing,
-  createEmptyListMessage,
   findClosestListRow,
   handleImageBrowserListKeyDown,
+  renderEmptyListMessage,
   renderKeyedChildren,
   syncSelectOptions
 } from './render-helpers';
@@ -191,7 +191,7 @@ export class LayerPanel implements Disposable {
 
     if (visibleItems.length === 0) {
       if (this.hasActiveImage) {
-        this.elements.partsLayersList.replaceChildren(createEmptyListMessage('No parts'));
+        renderEmptyListMessage(this.elements.partsLayersList, 'No parts');
       } else {
         this.elements.partsLayersList.replaceChildren();
       }

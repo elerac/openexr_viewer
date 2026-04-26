@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ChannelPanel } from '../src/ui/channel-panel';
 import { LayerPanel } from '../src/ui/layer-panel';
+import { renderEmptyListMessage } from '../src/ui/render-helpers';
 
 describe('image browser panels', () => {
   it('clears parts/layers rows without rendering a placeholder when there is no active image', () => {
@@ -31,7 +32,7 @@ describe('image browser panels', () => {
     expect(list.classList.contains('is-disabled')).toBe(true);
   });
 
-  it('clears channel view rows without rendering a placeholder when there is no active image', () => {
+  it('keeps the channel view no-channels placeholder when there is no active image', () => {
     const list = document.createElement('div');
     const count = document.createElement('span');
     const panel = new ChannelPanel(
@@ -54,8 +55,8 @@ describe('image browser panels', () => {
     panel.clearForNoImage();
 
     expect(count.textContent).toBe('0');
-    expect(list.textContent).toBe('');
-    expect(list.children).toHaveLength(0);
+    expect(list.textContent).toBe('No channels');
+    expect(list.children).toHaveLength(1);
     expect(list.classList.contains('is-disabled')).toBe(true);
   });
 
@@ -94,5 +95,16 @@ describe('image browser panels', () => {
     expect(channelList.textContent).toBe('No channels');
     expect(layerList.classList.contains('is-disabled')).toBe(true);
     expect(channelList.classList.contains('is-disabled')).toBe(true);
+  });
+
+  it('keeps an identical empty placeholder node during repeated renders', () => {
+    const list = document.createElement('div');
+
+    renderEmptyListMessage(list, 'No open files');
+    const firstPlaceholder = list.firstElementChild;
+    renderEmptyListMessage(list, 'No open files');
+
+    expect(list.firstElementChild).toBe(firstPlaceholder);
+    expect(list.textContent).toBe('No open files');
   });
 });
