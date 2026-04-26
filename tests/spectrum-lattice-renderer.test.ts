@@ -50,7 +50,7 @@ describe('SpectrumLatticeRenderer', () => {
     animation.flushNext(3300);
     expect(animation.queuedFrameCount()).toBe(0);
     expect(animation.cancelAnimationFrame).toHaveBeenCalledTimes(1);
-    expect(readBrightnessUniforms(gl).at(-1)).toBeCloseTo(0.55);
+    expect(readBrightnessUniforms(gl).at(-1)).toBeCloseTo(0.6);
     expect(blends.at(-1)).toEqual({ checkerOpacity: 1, gridOpacity: 0 });
   });
 
