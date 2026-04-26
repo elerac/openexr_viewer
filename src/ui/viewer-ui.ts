@@ -19,8 +19,10 @@ import { FolderLoadDialogController } from './folder-load-dialog';
 import { GlobalKeyboardController } from './global-keyboard-controller';
 import {
   clampScreenshotSelectionRect,
+  createEmptySnapGuide,
   createDefaultScreenshotSelectionRect,
-  type ScreenshotSelectionHandle
+  type ScreenshotSelectionHandle,
+  type ScreenshotSelectionSnapGuide
 } from '../interaction/screenshot-selection';
 import { resolveElements, type Elements } from './elements';
 import { setMetadata } from './metadata-panel';
@@ -170,6 +172,7 @@ export class ViewerUi implements Disposable {
   private lastScreenshotOutputSize: { width: number; height: number } | null = null;
   private screenshotSelectionResizeActive = false;
   private screenshotSelectionSquareSnapped = false;
+  private screenshotSelectionSnapGuide: ScreenshotSelectionSnapGuide = createEmptySnapGuide();
   private includeSplitRgbChannels = false;
   private channelThumbnailItems: ChannelThumbnailOptionItem[] = [];
   private rgbGroupChannelNames: string[] = [];
@@ -735,7 +738,13 @@ export class ViewerUi implements Disposable {
     };
   }
 
-  setScreenshotSelectionRect(rect: ViewportRect, options: { squareSnapped?: boolean } = {}): void {
+  setScreenshotSelectionRect(
+    rect: ViewportRect,
+    options: {
+      squareSnapped?: boolean;
+      snapGuide?: ScreenshotSelectionSnapGuide;
+    } = {}
+  ): void {
     if (this.disposed || !this.screenshotSelection) {
       return;
     }
@@ -753,8 +762,22 @@ export class ViewerUi implements Disposable {
     if (options.squareSnapped !== undefined) {
       this.screenshotSelectionSquareSnapped = options.squareSnapped;
     }
+    this.screenshotSelectionSnapGuide = options.snapGuide
+      ? { ...options.snapGuide }
+      : createEmptySnapGuide();
     this.lastScreenshotSelectionRect = { ...nextRect };
     this.renderScreenshotSelectionOverlay();
+  }
+
+  setScreenshotSelectionSnapGuide(guide: ScreenshotSelectionSnapGuide): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.screenshotSelectionSnapGuide = { ...guide };
+    if (this.screenshotSelection) {
+      this.renderScreenshotSelectionSnapGuide(this.readViewerViewport());
+    }
   }
 
   setScreenshotSelectionHandle(handle: ScreenshotSelectionHandle | null): void {
@@ -779,8 +802,10 @@ export class ViewerUi implements Disposable {
       this.renderScreenshotSelectionOverlay();
     } else {
       this.screenshotSelectionSquareSnapped = false;
+      this.screenshotSelectionSnapGuide = createEmptySnapGuide();
       this.elements.screenshotSelectionSize.classList.add('hidden');
       this.renderScreenshotSelectionSquareSnapFeedback();
+      this.renderScreenshotSelectionSnapGuide(this.readViewerViewport());
     }
   }
 
@@ -819,9 +844,11 @@ export class ViewerUi implements Disposable {
     this.screenshotSelection = null;
     this.screenshotSelectionResizeActive = false;
     this.screenshotSelectionSquareSnapped = false;
+    this.screenshotSelectionSnapGuide = createEmptySnapGuide();
     this.elements.screenshotSelectionOverlay.classList.add('hidden');
     this.elements.screenshotSelectionSize.classList.add('hidden');
     this.renderScreenshotSelectionSquareSnapFeedback();
+    this.renderScreenshotSelectionSnapGuide(this.readViewerViewport());
     this.elements.viewerContainer.classList.remove(
       'is-screenshot-selecting',
       'is-screenshot-handle-move',
@@ -1037,6 +1064,7 @@ export class ViewerUi implements Disposable {
     };
     this.screenshotSelectionResizeActive = false;
     this.screenshotSelectionSquareSnapped = false;
+    this.screenshotSelectionSnapGuide = createEmptySnapGuide();
     this.lastScreenshotSelectionRect = { ...rect };
     this.exportImageDialog.close(false);
     this.exportImageBatchDialog.close(false);
@@ -1135,6 +1163,7 @@ export class ViewerUi implements Disposable {
     setBoxStyle(this.elements.screenshotSelectionMaskBottom, 0, rect.y + rect.height, viewport.width, bottom);
     setBoxStyle(this.elements.screenshotSelectionMaskLeft, 0, rect.y, rect.x, rect.height);
     setBoxStyle(this.elements.screenshotSelectionBox, rect.x, rect.y, rect.width, rect.height);
+    this.renderScreenshotSelectionSnapGuide(viewport);
     this.renderScreenshotSelectionSize(rect, viewport);
     this.renderScreenshotSelectionSquareSnapFeedback();
 
@@ -1184,6 +1213,26 @@ export class ViewerUi implements Disposable {
     const active = this.shouldShowScreenshotSelectionSquareSnapFeedback();
     this.elements.screenshotSelectionBox.classList.toggle('is-square-snapped', active);
     this.elements.screenshotSelectionSize.classList.toggle('is-square-snapped', active);
+  }
+
+  private renderScreenshotSelectionSnapGuide(viewport: ViewportInfo): void {
+    const { x, y } = this.screenshotSelectionSnapGuide;
+    const vertical = this.elements.screenshotSelectionGuideVertical;
+    const horizontal = this.elements.screenshotSelectionGuideHorizontal;
+
+    if (this.screenshotSelection && x !== null) {
+      setBoxStyle(vertical, x, 0, 1, viewport.height);
+      vertical.classList.remove('hidden');
+    } else {
+      vertical.classList.add('hidden');
+    }
+
+    if (this.screenshotSelection && y !== null) {
+      setBoxStyle(horizontal, 0, y, viewport.width, 1);
+      horizontal.classList.remove('hidden');
+    } else {
+      horizontal.classList.add('hidden');
+    }
   }
 
   private shouldShowScreenshotSelectionSquareSnapFeedback(): boolean {

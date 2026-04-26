@@ -1380,6 +1380,23 @@ body.is-resizing-panel-rows * {
   background: rgba(0, 0, 0, 0.48);
 }
 
+.screenshot-selection-guide {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(125, 211, 252, 0.86);
+  box-shadow:
+    0 0 0 1px rgba(3, 7, 18, 0.42),
+    0 0 0.65rem rgba(125, 211, 252, 0.56);
+}
+
+.screenshot-selection-guide--vertical {
+  transform: translateX(-0.5px);
+}
+
+.screenshot-selection-guide--horizontal {
+  transform: translateY(-0.5px);
+}
+
 .screenshot-selection-box {
   position: absolute;
   border: 1.5px solid rgba(255, 255, 255, 0.96);

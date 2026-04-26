@@ -3,6 +3,8 @@ import type { PointerPosition } from './shared';
 
 export const SCREENSHOT_SELECTION_MIN_SIZE = 16;
 export const SCREENSHOT_SELECTION_SQUARE_SNAP_THRESHOLD = 12;
+export const SCREENSHOT_SELECTION_CENTER_SNAP_THRESHOLD = 12;
+export const SCREENSHOT_SELECTION_EDGE_SNAP_THRESHOLD = 12;
 
 const DEFAULT_SELECTION_VIEWPORT_RATIO = 0.7;
 const HANDLE_HIT_RADIUS = 8;
@@ -27,10 +29,23 @@ export interface ScreenshotSelectionDrag {
 export interface ScreenshotSelectionDragUpdate {
   rect: ViewportRect;
   squareSnapped: boolean;
+  snapGuide: ScreenshotSelectionSnapGuide;
 }
 
 export interface ScreenshotSelectionDragOptions {
   preserveAspectRatio?: boolean;
+  centerSnapTarget?: PointerPosition | null;
+  edgeSnapTargets?: ScreenshotSelectionEdgeSnapTargets | null;
+}
+
+export interface ScreenshotSelectionSnapGuide {
+  x: number | null;
+  y: number | null;
+}
+
+export interface ScreenshotSelectionEdgeSnapTargets {
+  x: number[];
+  y: number[];
 }
 
 export function createDefaultScreenshotSelectionRect(viewport: ViewportInfo): ViewportRect {
@@ -117,13 +132,16 @@ export function updateScreenshotSelectionRectFromDrag(
   const deltaX = point.x - drag.startPoint.x;
   const deltaY = point.y - drag.startPoint.y;
   if (drag.handle === 'move') {
+    const rect = clampScreenshotSelectionRect({
+      ...drag.startRect,
+      x: drag.startRect.x + deltaX,
+      y: drag.startRect.y + deltaY
+    }, viewport);
+    const snapped = snapScreenshotSelectionMoveToAlignment(rect, viewport, options);
     return {
-      rect: clampScreenshotSelectionRect({
-        ...drag.startRect,
-        x: drag.startRect.x + deltaX,
-        y: drag.startRect.y + deltaY
-      }, viewport),
-      squareSnapped: false
+      rect: snapped.rect,
+      squareSnapped: false,
+      snapGuide: snapped.snapGuide
     };
   }
 
@@ -162,7 +180,8 @@ function resizeScreenshotSelectionRect(
         minWidth,
         minHeight
       ),
-      squareSnapped: false
+      squareSnapped: false,
+      snapGuide: createEmptySnapGuide()
     };
   }
 
@@ -198,9 +217,287 @@ function resizeScreenshotSelectionRect(
     minHeight
   );
 
-  return squareSnappedRect
-    ? { rect: squareSnappedRect, squareSnapped: true }
-    : { rect: resizedRect, squareSnapped: false };
+  if (squareSnappedRect) {
+    return {
+      rect: squareSnappedRect,
+      squareSnapped: true,
+      snapGuide: createEmptySnapGuide()
+    };
+  }
+
+  const snapped = snapScreenshotSelectionResizeToAlignment(
+    resizedRect,
+    handle,
+    viewportBounds,
+    minWidth,
+    minHeight,
+    options
+  );
+  return {
+    rect: snapped.rect,
+    squareSnapped: false,
+    snapGuide: snapped.snapGuide
+  };
+}
+
+function snapScreenshotSelectionMoveToAlignment(
+  rect: ViewportRect,
+  viewport: ViewportInfo,
+  options: ScreenshotSelectionDragOptions
+): { rect: ViewportRect; snapGuide: ScreenshotSelectionSnapGuide } {
+  const xSnap = resolveMoveAxisSnap(
+    rect.x,
+    rect.width,
+    viewport.width,
+    isCenterSnapTargetInsideViewport(options.centerSnapTarget, viewport) ? options.centerSnapTarget.x : null,
+    options.edgeSnapTargets?.x ?? []
+  );
+  const ySnap = resolveMoveAxisSnap(
+    rect.y,
+    rect.height,
+    viewport.height,
+    isCenterSnapTargetInsideViewport(options.centerSnapTarget, viewport) ? options.centerSnapTarget.y : null,
+    options.edgeSnapTargets?.y ?? []
+  );
+
+  return {
+    rect: {
+      ...rect,
+      x: xSnap.origin,
+      y: ySnap.origin
+    },
+    snapGuide: {
+      x: xSnap.guide,
+      y: ySnap.guide
+    }
+  };
+}
+
+function snapScreenshotSelectionResizeToAlignment(
+  rect: ViewportRect,
+  handle: Exclude<ScreenshotSelectionHandle, 'move'>,
+  viewport: ViewportInfo,
+  minWidth: number,
+  minHeight: number,
+  options: ScreenshotSelectionDragOptions
+): { rect: ViewportRect; snapGuide: ScreenshotSelectionSnapGuide } {
+  const horizontalEdge = resolveHorizontalResizeEdge(handle);
+  const verticalEdge = resolveVerticalResizeEdge(handle);
+  const xSnap = resolveResizeAxisSnap(
+    rect.x,
+    rect.x + rect.width,
+    viewport.width,
+    minWidth,
+    horizontalEdge,
+    isCenterSnapTargetInsideViewport(options.centerSnapTarget, viewport) ? options.centerSnapTarget.x : null,
+    options.edgeSnapTargets?.x ?? []
+  );
+  const ySnap = resolveResizeAxisSnap(
+    rect.y,
+    rect.y + rect.height,
+    viewport.height,
+    minHeight,
+    verticalEdge,
+    isCenterSnapTargetInsideViewport(options.centerSnapTarget, viewport) ? options.centerSnapTarget.y : null,
+    options.edgeSnapTargets?.y ?? []
+  );
+
+  return {
+    rect: {
+      x: xSnap.start,
+      y: ySnap.start,
+      width: xSnap.end - xSnap.start,
+      height: ySnap.end - ySnap.start
+    },
+    snapGuide: {
+      x: xSnap.guide,
+      y: ySnap.guide
+    }
+  };
+}
+
+type ResizeAxisEdge = 'start' | 'end' | null;
+
+interface AxisSnapCandidate {
+  distance: number;
+  guide: number;
+}
+
+interface MoveAxisSnapCandidate extends AxisSnapCandidate {
+  origin: number;
+}
+
+interface ResizeAxisSnapCandidate extends AxisSnapCandidate {
+  start: number;
+  end: number;
+}
+
+function resolveMoveAxisSnap(
+  origin: number,
+  size: number,
+  viewportSize: number,
+  centerTarget: number | null,
+  edgeTargets: number[]
+): { origin: number; guide: number | null } {
+  let candidate: MoveAxisSnapCandidate | null = null;
+  const center = origin + size * 0.5;
+
+  if (isFiniteViewportCoordinate(centerTarget, viewportSize)) {
+    candidate = chooseMoveAxisSnapCandidate(candidate, {
+      distance: Math.abs(center - centerTarget),
+      origin: centerTarget - size * 0.5,
+      guide: centerTarget
+    }, viewportSize, size, SCREENSHOT_SELECTION_CENTER_SNAP_THRESHOLD);
+  }
+
+  for (const target of edgeTargets) {
+    if (!isFiniteViewportCoordinate(target, viewportSize)) {
+      continue;
+    }
+
+    candidate = chooseMoveAxisSnapCandidate(candidate, {
+      distance: Math.abs(origin - target),
+      origin: target,
+      guide: target
+    }, viewportSize, size, SCREENSHOT_SELECTION_EDGE_SNAP_THRESHOLD);
+    candidate = chooseMoveAxisSnapCandidate(candidate, {
+      distance: Math.abs(origin + size - target),
+      origin: target - size,
+      guide: target
+    }, viewportSize, size, SCREENSHOT_SELECTION_EDGE_SNAP_THRESHOLD);
+  }
+
+  return candidate ? { origin: candidate.origin, guide: candidate.guide } : { origin, guide: null };
+}
+
+function resolveResizeAxisSnap(
+  start: number,
+  end: number,
+  viewportSize: number,
+  minSize: number,
+  edge: ResizeAxisEdge,
+  centerTarget: number | null,
+  edgeTargets: number[]
+): { start: number; end: number; guide: number | null } {
+  if (!edge) {
+    return { start, end, guide: null };
+  }
+
+  let candidate: ResizeAxisSnapCandidate | null = null;
+  const center = (start + end) * 0.5;
+
+  if (isFiniteViewportCoordinate(centerTarget, viewportSize)) {
+    candidate = chooseResizeAxisSnapCandidate(candidate, buildCenterResizeAxisSnapCandidate(
+      start,
+      end,
+      edge,
+      centerTarget,
+      Math.abs(center - centerTarget)
+    ), viewportSize, minSize, SCREENSHOT_SELECTION_CENTER_SNAP_THRESHOLD);
+  }
+
+  const draggedValue = edge === 'start' ? start : end;
+  for (const target of edgeTargets) {
+    if (!isFiniteViewportCoordinate(target, viewportSize)) {
+      continue;
+    }
+
+    candidate = chooseResizeAxisSnapCandidate(candidate, {
+      distance: Math.abs(draggedValue - target),
+      start: edge === 'start' ? target : start,
+      end: edge === 'end' ? target : end,
+      guide: target
+    }, viewportSize, minSize, SCREENSHOT_SELECTION_EDGE_SNAP_THRESHOLD);
+  }
+
+  return candidate
+    ? { start: candidate.start, end: candidate.end, guide: candidate.guide }
+    : { start, end, guide: null };
+}
+
+function buildCenterResizeAxisSnapCandidate(
+  start: number,
+  end: number,
+  edge: Exclude<ResizeAxisEdge, null>,
+  target: number,
+  distance: number
+): ResizeAxisSnapCandidate {
+  if (edge === 'start') {
+    return {
+      distance,
+      start: end - 2 * (end - target),
+      end,
+      guide: target
+    };
+  }
+
+  return {
+    distance,
+    start,
+    end: start + 2 * (target - start),
+    guide: target
+  };
+}
+
+function chooseMoveAxisSnapCandidate(
+  current: MoveAxisSnapCandidate | null,
+  candidate: MoveAxisSnapCandidate,
+  viewportSize: number,
+  size: number,
+  threshold: number
+): MoveAxisSnapCandidate | null {
+  if (
+    candidate.distance > threshold ||
+    candidate.origin < 0 ||
+    candidate.origin + size > viewportSize
+  ) {
+    return current;
+  }
+
+  return !current || candidate.distance < current.distance ? candidate : current;
+}
+
+function chooseResizeAxisSnapCandidate(
+  current: ResizeAxisSnapCandidate | null,
+  candidate: ResizeAxisSnapCandidate,
+  viewportSize: number,
+  minSize: number,
+  threshold: number
+): ResizeAxisSnapCandidate | null {
+  if (
+    candidate.distance > threshold ||
+    candidate.start < 0 ||
+    candidate.end > viewportSize ||
+    candidate.end - candidate.start < minSize
+  ) {
+    return current;
+  }
+
+  return !current || candidate.distance < current.distance ? candidate : current;
+}
+
+function resolveHorizontalResizeEdge(handle: Exclude<ScreenshotSelectionHandle, 'move'>): ResizeAxisEdge {
+  if (handle === 'edge-w' || handle === 'corner-nw' || handle === 'corner-sw') {
+    return 'start';
+  }
+  if (handle === 'edge-e' || handle === 'corner-ne' || handle === 'corner-se') {
+    return 'end';
+  }
+  return null;
+}
+
+function resolveVerticalResizeEdge(handle: Exclude<ScreenshotSelectionHandle, 'move'>): ResizeAxisEdge {
+  if (handle === 'edge-n' || handle === 'corner-nw' || handle === 'corner-ne') {
+    return 'start';
+  }
+  if (handle === 'edge-s' || handle === 'corner-sw' || handle === 'corner-se') {
+    return 'end';
+  }
+  return null;
+}
+
+function isFiniteViewportCoordinate(value: number | null | undefined, max: number): value is number {
+  return value !== null && value !== undefined && Number.isFinite(value) && value >= 0 && value <= max;
 }
 
 function resizeScreenshotSelectionRectWithAspectRatio(
@@ -465,6 +762,28 @@ function chooseSquareSide(width: number, height: number, minSide: number, maxSid
   }
 
   return clamp((width + height) * 0.5, minSide, maxSide);
+}
+
+function isCenterSnapTargetInsideViewport(
+  target: PointerPosition | null | undefined,
+  viewport: ViewportInfo
+): target is PointerPosition {
+  return Boolean(
+    target &&
+      Number.isFinite(target.x) &&
+      Number.isFinite(target.y) &&
+      target.x >= 0 &&
+      target.x <= viewport.width &&
+      target.y >= 0 &&
+      target.y <= viewport.height
+  );
+}
+
+export function createEmptySnapGuide(): ScreenshotSelectionSnapGuide {
+  return {
+    x: null,
+    y: null
+  };
 }
 
 function sanitizeCoordinate(value: number): number {

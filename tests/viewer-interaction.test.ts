@@ -118,17 +118,18 @@ describe('viewer interaction roi gestures', () => {
     });
 
     dispatchPointer(harness.element, 'pointerdown', { pointerId: 1, clientX: 40, clientY: 35 });
-    dispatchPointer(harness.element, 'pointermove', { pointerId: 1, clientX: 50, clientY: 45 });
-    dispatchPointer(harness.element, 'pointerup', { pointerId: 1, clientX: 50, clientY: 45 });
+    dispatchPointer(harness.element, 'pointermove', { pointerId: 1, clientX: 50, clientY: 28 });
+    dispatchPointer(harness.element, 'pointerup', { pointerId: 1, clientX: 50, clientY: 28 });
 
     expect(harness.onScreenshotSelectionRectChange).toHaveBeenCalledWith({
       rect: {
         x: 30,
-        y: 30,
+        y: 13,
         width: 40,
         height: 30
       },
-      squareSnapped: false
+      squareSnapped: false,
+      snapGuide: { x: 50, y: null }
     });
     expect(harness.onViewChange).not.toHaveBeenCalled();
     expect(harness.onToggleLockPixel).not.toHaveBeenCalled();
@@ -151,12 +152,108 @@ describe('viewer interaction roi gestures', () => {
       rect: {
         x: 20,
         y: 20,
-        width: 55,
+        width: 60,
         height: 30
       },
-      squareSnapped: false
+      squareSnapped: false,
+      snapGuide: { x: 50, y: null }
     });
     expect(harness.onViewChange).not.toHaveBeenCalled();
+  });
+
+  it('snaps screenshot moves to the rendered image center in image mode', () => {
+    const harness = createHarness({
+      panX: 4
+    }, {
+      screenshotRect: { x: 10, y: 20, width: 40, height: 20 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', { pointerId: 1, clientX: 20, clientY: 30 });
+    dispatchPointer(harness.element, 'pointermove', { pointerId: 1, clientX: 48, clientY: 50 });
+
+    expect(harness.onScreenshotSelectionRectChange).toHaveBeenCalledWith({
+      rect: {
+        x: 40,
+        y: 40,
+        width: 40,
+        height: 20
+      },
+      squareSnapped: false,
+      snapGuide: { x: 60, y: 50 }
+    });
+  });
+
+  it('snaps panorama screenshot moves to the fisheye projection center', () => {
+    const harness = createHarness({
+      viewerMode: 'panorama',
+      panoramaYawDeg: 90,
+      panoramaPitchDeg: 20
+    }, {
+      screenshotRect: { x: 10, y: 20, width: 40, height: 20 },
+      imageSize: { width: 360, height: 180 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', { pointerId: 1, clientX: 20, clientY: 30 });
+    dispatchPointer(harness.element, 'pointermove', { pointerId: 1, clientX: 38, clientY: 50 });
+
+    expect(harness.onScreenshotSelectionRectChange).toHaveBeenCalledWith({
+      rect: {
+        x: 30,
+        y: 40,
+        width: 40,
+        height: 20
+      },
+      squareSnapped: false,
+      snapGuide: { x: 50, y: 50 }
+    });
+
+    dispatchPointer(harness.element, 'pointerup', { pointerId: 1, clientX: 38, clientY: 50 });
+    expect(harness.onScreenshotSelectionSnapGuideChange).toHaveBeenCalledWith({ x: null, y: null });
+  });
+
+  it('snaps screenshot moves to rendered image edges in image mode', () => {
+    const harness = createHarness({}, {
+      screenshotRect: { x: 20, y: 20, width: 40, height: 20 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', { pointerId: 1, clientX: 30, clientY: 30 });
+    dispatchPointer(harness.element, 'pointermove', { pointerId: 1, clientX: 68, clientY: 30 });
+
+    expect(harness.onScreenshotSelectionRectChange).toHaveBeenCalledWith({
+      rect: {
+        x: 60,
+        y: 20,
+        width: 40,
+        height: 20
+      },
+      squareSnapped: false,
+      snapGuide: { x: 100, y: null }
+    });
+  });
+
+  it('snaps panorama screenshot moves to fisheye projection edges', () => {
+    const harness = createHarness({
+      viewerMode: 'panorama',
+      panoramaHfovDeg: 180
+    }, {
+      screenshotRect: { x: 80, y: 20, width: 40, height: 20 },
+      imageSize: { width: 360, height: 180 },
+      viewport: { width: 160, height: 90 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', { pointerId: 1, clientX: 90, clientY: 30 });
+    dispatchPointer(harness.element, 'pointermove', { pointerId: 1, clientX: 94, clientY: 30 });
+
+    expect(harness.onScreenshotSelectionRectChange).toHaveBeenCalledWith({
+      rect: {
+        x: 85,
+        y: 20,
+        width: 40,
+        height: 20
+      },
+      squareSnapped: false,
+      snapGuide: { x: 125, y: null }
+    });
   });
 
   it('snaps near-square screenshot resize drags and reports active snap feedback', () => {
@@ -174,7 +271,8 @@ describe('viewer interaction roi gestures', () => {
         width: 51,
         height: 51
       },
-      squareSnapped: true
+      squareSnapped: true,
+      snapGuide: { x: null, y: null }
     });
     expect(harness.onScreenshotSelectionSquareSnapChange).toHaveBeenCalledWith(true);
   });
@@ -200,7 +298,8 @@ describe('viewer interaction roi gestures', () => {
         width: 120,
         height: 60
       },
-      squareSnapped: false
+      squareSnapped: false,
+      snapGuide: { x: null, y: null }
     });
     expect(harness.onScreenshotSelectionSquareSnapChange).toHaveBeenLastCalledWith(false);
   });
@@ -634,6 +733,7 @@ function createHarness(
   const onScreenshotSelectionHandleHover = vi.fn();
   const onScreenshotSelectionResizeActiveChange = vi.fn();
   const onScreenshotSelectionSquareSnapChange = vi.fn();
+  const onScreenshotSelectionSnapGuideChange = vi.fn();
   let frameCallback: FrameRequestCallback | null = null;
   let nextFrameId = 1;
   const cancelFrame = vi.fn((frameId: number) => {
@@ -658,7 +758,8 @@ function createHarness(
     onScreenshotSelectionRectChange,
     onScreenshotSelectionHandleHover,
     onScreenshotSelectionResizeActiveChange,
-    onScreenshotSelectionSquareSnapChange
+    onScreenshotSelectionSquareSnapChange,
+    onScreenshotSelectionSnapGuideChange
   }, {
     scheduleFrame: (callback) => {
       frameCallback = callback;
@@ -680,6 +781,7 @@ function createHarness(
     onScreenshotSelectionHandleHover,
     onScreenshotSelectionResizeActiveChange,
     onScreenshotSelectionSquareSnapChange,
+    onScreenshotSelectionSnapGuideChange,
     getScreenshotRect: () => screenshotRect,
     flushFrame: (timestamp: number) => {
       const callback = frameCallback;

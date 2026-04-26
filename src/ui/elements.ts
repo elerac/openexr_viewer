@@ -177,6 +177,8 @@ export interface Elements {
   screenshotSelectionMaskRight: HTMLDivElement;
   screenshotSelectionMaskBottom: HTMLDivElement;
   screenshotSelectionMaskLeft: HTMLDivElement;
+  screenshotSelectionGuideVertical: HTMLDivElement;
+  screenshotSelectionGuideHorizontal: HTMLDivElement;
   screenshotSelectionBox: HTMLDivElement;
   screenshotSelectionSize: HTMLDivElement;
   screenshotSelectionControls: HTMLDivElement;
@@ -592,6 +594,8 @@ export function resolveElements(): Elements {
     screenshotSelectionMaskRight: requireElement('screenshot-selection-mask-right', HTMLDivElement),
     screenshotSelectionMaskBottom: requireElement('screenshot-selection-mask-bottom', HTMLDivElement),
     screenshotSelectionMaskLeft: requireElement('screenshot-selection-mask-left', HTMLDivElement),
+    screenshotSelectionGuideVertical: requireElement('screenshot-selection-guide-vertical', HTMLDivElement),
+    screenshotSelectionGuideHorizontal: requireElement('screenshot-selection-guide-horizontal', HTMLDivElement),
     screenshotSelectionBox: requireElement('screenshot-selection-box', HTMLDivElement),
     screenshotSelectionSize: requireElement('screenshot-selection-size', HTMLDivElement),
     screenshotSelectionControls: requireElement('screenshot-selection-controls', HTMLDivElement),

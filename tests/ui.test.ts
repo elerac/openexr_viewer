@@ -2549,6 +2549,58 @@ describe('view menu', () => {
     dialogCancelButton.click();
   });
 
+  it('shows snap guide lines while a screenshot selection is snapped', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+    mockDomRect(viewerContainer, { top: 0, bottom: 160, height: 160, width: 200 });
+
+    const screenshotButton = document.getElementById('export-screenshot-button') as HTMLButtonElement;
+    const verticalGuide = document.getElementById('screenshot-selection-guide-vertical') as HTMLDivElement;
+    const horizontalGuide = document.getElementById('screenshot-selection-guide-horizontal') as HTMLDivElement;
+
+    screenshotButton.click();
+
+    expect(verticalGuide.classList.contains('hidden')).toBe(true);
+    expect(horizontalGuide.classList.contains('hidden')).toBe(true);
+
+    ui.setScreenshotSelectionRect({ x: 40, y: 24, width: 120, height: 60 }, {
+      snapGuide: { x: 100, y: 80 }
+    });
+
+    expect(verticalGuide.classList.contains('hidden')).toBe(false);
+    expect(verticalGuide.style.left).toBe('100px');
+    expect(verticalGuide.style.top).toBe('0px');
+    expect(verticalGuide.style.width).toBe('1px');
+    expect(verticalGuide.style.height).toBe('160px');
+    expect(horizontalGuide.classList.contains('hidden')).toBe(false);
+    expect(horizontalGuide.style.left).toBe('0px');
+    expect(horizontalGuide.style.top).toBe('80px');
+    expect(horizontalGuide.style.width).toBe('200px');
+    expect(horizontalGuide.style.height).toBe('1px');
+
+    ui.setScreenshotSelectionSnapGuide({ x: null, y: null });
+
+    expect(verticalGuide.classList.contains('hidden')).toBe(true);
+    expect(horizontalGuide.classList.contains('hidden')).toBe(true);
+
+    ui.setScreenshotSelectionRect({ x: 40, y: 24, width: 120, height: 60 }, {
+      snapGuide: { x: 100, y: null }
+    });
+
+    expect(verticalGuide.classList.contains('hidden')).toBe(false);
+    expect(horizontalGuide.classList.contains('hidden')).toBe(true);
+
+    ui.cancelScreenshotSelection();
+
+    expect(verticalGuide.classList.contains('hidden')).toBe(true);
+    expect(horizontalGuide.classList.contains('hidden')).toBe(true);
+  });
+
   it('opens screenshot batch export from the selection overlay and submits cropped batch entries', async () => {
     installUiFixture();
 

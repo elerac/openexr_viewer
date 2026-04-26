@@ -71,7 +71,10 @@ export function createViewerInteraction({
     },
     getScreenshotSelection: () => ui.getScreenshotSelectionInteractionState(),
     onScreenshotSelectionRectChange: (update) => {
-      ui.setScreenshotSelectionRect(update.rect, { squareSnapped: update.squareSnapped });
+      ui.setScreenshotSelectionRect(update.rect, {
+        squareSnapped: update.squareSnapped,
+        snapGuide: update.snapGuide
+      });
     },
     onScreenshotSelectionHandleHover: (handle) => {
       ui.setScreenshotSelectionHandle(handle);
@@ -81,6 +84,9 @@ export function createViewerInteraction({
     },
     onScreenshotSelectionSquareSnapChange: (active) => {
       ui.setScreenshotSelectionSquareSnapActive(active);
+    },
+    onScreenshotSelectionSnapGuideChange: (guide) => {
+      ui.setScreenshotSelectionSnapGuide(guide);
     }
   });
 }

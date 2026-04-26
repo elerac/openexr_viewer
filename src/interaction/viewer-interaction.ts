@@ -4,10 +4,13 @@ import type {
   PanoramaKeyboardOrbitInput,
   ViewerKeyboardNavigationDirection,
   ViewerKeyboardNavigationInput,
+  ViewportInfo,
   ViewerState
 } from '../types';
+import { imageToScreen } from './image-geometry';
 import { ImageKeyboardPanController, panImageFromDrag, zoomImageFromWheel } from './image-mode';
 import { orbitPanoramaFromDrag, PanoramaKeyboardOrbitController, zoomPanoramaFromWheel } from './panorama-mode';
+import { getPanoramaProjectionDiameter } from './panorama-geometry';
 import { resolveProbePixel } from './probe-mode';
 import {
   commitRoiFromDrag,
@@ -16,9 +19,11 @@ import {
   updateDraftRoiFromDrag
 } from './roi-mode';
 import {
+  createEmptySnapGuide,
   resolveScreenshotSelectionHandle,
   updateScreenshotSelectionRectFromDrag,
-  type ScreenshotSelectionDrag
+  type ScreenshotSelectionDrag,
+  type ScreenshotSelectionEdgeSnapTargets
 } from './screenshot-selection';
 import type { InteractionCallbacks, InteractionDependencies, PointerPosition } from './shared';
 
@@ -232,7 +237,10 @@ export class ViewerInteraction {
           this.screenshotDrag,
           point,
           this.callbacks.getViewport(),
-          { preserveAspectRatio: event.shiftKey }
+          {
+            preserveAspectRatio: event.shiftKey,
+            ...this.resolveScreenshotSelectionSnapTargets()
+          }
         );
         this.callbacks.onScreenshotSelectionRectChange?.(update);
         this.callbacks.onScreenshotSelectionSquareSnapChange?.(update.squareSnapped);
@@ -359,6 +367,7 @@ export class ViewerInteraction {
     this.screenshotDrag = null;
     if (wasScreenshotDrag) {
       this.callbacks.onScreenshotSelectionSquareSnapChange?.(false);
+      this.callbacks.onScreenshotSelectionSnapGuideChange?.(createEmptySnapGuide());
     }
     if (wasScreenshotResize) {
       this.callbacks.onScreenshotSelectionResizeActiveChange?.(false);
@@ -373,9 +382,80 @@ export class ViewerInteraction {
     };
   }
 
+  private resolveScreenshotSelectionSnapTargets(): {
+    centerSnapTarget: PointerPosition | null;
+    edgeSnapTargets: ScreenshotSelectionEdgeSnapTargets | null;
+  } {
+    const viewport = this.callbacks.getViewport();
+    if (!isValidViewport(viewport)) {
+      return { centerSnapTarget: null, edgeSnapTargets: null };
+    }
+
+    const state = this.callbacks.getState();
+    if (state.viewerMode === 'panorama') {
+      const projectionDiameter = getPanoramaProjectionDiameter(viewport, state.panoramaHfovDeg);
+      const halfProjectionDiameter = projectionDiameter * 0.5;
+      return {
+        centerSnapTarget: {
+          x: viewport.width * 0.5,
+          y: viewport.height * 0.5
+        },
+        edgeSnapTargets: {
+          x: filterViewportCoordinates([
+            viewport.width * 0.5 - halfProjectionDiameter,
+            viewport.width * 0.5 + halfProjectionDiameter
+          ], viewport.width),
+          y: filterViewportCoordinates([
+            viewport.height * 0.5 - halfProjectionDiameter,
+            viewport.height * 0.5 + halfProjectionDiameter
+          ], viewport.height)
+        }
+      };
+    }
+
+    if (state.viewerMode !== 'image') {
+      return { centerSnapTarget: null, edgeSnapTargets: null };
+    }
+
+    const imageSize = this.callbacks.getImageSize();
+    if (!imageSize || imageSize.width <= 0 || imageSize.height <= 0) {
+      return { centerSnapTarget: null, edgeSnapTargets: null };
+    }
+
+    const centerTarget = imageToScreen(imageSize.width * 0.5, imageSize.height * 0.5, state, viewport);
+    const topLeft = imageToScreen(0, 0, state, viewport);
+    const bottomRight = imageToScreen(imageSize.width, imageSize.height, state, viewport);
+    return {
+      centerSnapTarget: isPointInsideViewport(centerTarget, viewport) ? centerTarget : null,
+      edgeSnapTargets: {
+        x: filterViewportCoordinates([topLeft.x, bottomRight.x], viewport.width),
+        y: filterViewportCoordinates([topLeft.y, bottomRight.y], viewport.height)
+      }
+    };
+  }
+
   private getScreenshotSelection() {
     return this.callbacks.getScreenshotSelection?.() ?? { active: false, rect: null };
   }
+}
+
+function isValidViewport(viewport: ViewportInfo): boolean {
+  return viewport.width > 0 && viewport.height > 0;
+}
+
+function isPointInsideViewport(point: PointerPosition, viewport: ViewportInfo): boolean {
+  return (
+    Number.isFinite(point.x) &&
+    Number.isFinite(point.y) &&
+    point.x >= 0 &&
+    point.x <= viewport.width &&
+    point.y >= 0 &&
+    point.y <= viewport.height
+  );
+}
+
+function filterViewportCoordinates(values: number[], max: number): number[] {
+  return values.filter((value) => Number.isFinite(value) && value >= 0 && value <= max);
 }
 
 function createViewerKeyboardNavigationInput(): ViewerKeyboardNavigationInput {

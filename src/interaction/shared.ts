@@ -1,5 +1,9 @@
 import type { ImagePixel, ViewerState, ViewportInfo, ViewportRect } from '../types';
-import type { ScreenshotSelectionDragUpdate, ScreenshotSelectionHandle } from './screenshot-selection';
+import type {
+  ScreenshotSelectionDragUpdate,
+  ScreenshotSelectionHandle,
+  ScreenshotSelectionSnapGuide
+} from './screenshot-selection';
 
 export interface ImageSize {
   width: number;
@@ -35,6 +39,7 @@ export interface InteractionCallbacks {
   onScreenshotSelectionHandleHover?: (handle: ScreenshotSelectionHandle | null) => void;
   onScreenshotSelectionResizeActiveChange?: (active: boolean) => void;
   onScreenshotSelectionSquareSnapChange?: (active: boolean) => void;
+  onScreenshotSelectionSnapGuideChange?: (guide: ScreenshotSelectionSnapGuide) => void;
 }
 
 export interface InteractionDependencies {
