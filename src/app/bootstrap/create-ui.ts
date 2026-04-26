@@ -18,13 +18,13 @@ import type {
   ExportImagePreviewRequest,
   ExportImageRequest,
   OpenedImageDropPlacement,
-  PanoramaKeyboardOrbitInput
+  ViewerKeyboardNavigationInput
 } from '../../types';
 import type { RenderCacheService } from '../../services/render-cache-service';
 import type { WebGlExrRenderer } from '../../renderer';
 
 interface InteractionInputBridge {
-  setPanoramaKeyboardOrbitInput(input: PanoramaKeyboardOrbitInput): void;
+  setViewerKeyboardNavigationInput(input: ViewerKeyboardNavigationInput): void;
 }
 
 interface CreateViewerUiDependencies {
@@ -148,8 +148,8 @@ export function createViewerUi({
     onExposureChange: (value) => {
       core.dispatch({ type: 'exposureSet', exposureEv: value });
     },
-    onPanoramaKeyboardOrbitInputChange: (input) => {
-      getInteraction()?.setPanoramaKeyboardOrbitInput(input);
+    onViewerKeyboardNavigationInputChange: (input) => {
+      getInteraction()?.setViewerKeyboardNavigationInput(input);
     },
     onAutoFitImageOnSelectChange: (enabled) => {
       core.dispatch({ type: 'autoFitImageOnSelectSet', enabled });

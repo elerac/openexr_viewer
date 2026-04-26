@@ -61,7 +61,7 @@ const mocks = vi.hoisted(() => {
   const uiDispose = vi.fn();
   const rendererDispose = vi.fn();
   const interactionDestroy = vi.fn();
-  const interactionSetPanoramaKeyboardOrbitInput = vi.fn();
+  const interactionSetViewerKeyboardNavigationInput = vi.fn();
   const interactionCoordinatorDispose = vi.fn();
   const sessionDispose = vi.fn();
   const displayDispose = vi.fn();
@@ -131,7 +131,7 @@ const mocks = vi.hoisted(() => {
     uiDispose,
     rendererDispose,
     interactionDestroy,
-    interactionSetPanoramaKeyboardOrbitInput,
+    interactionSetViewerKeyboardNavigationInput,
     interactionCoordinatorDispose,
     sessionDispose,
     displayDispose,
@@ -290,7 +290,7 @@ vi.mock('../src/interaction/image-geometry', () => ({
 vi.mock('../src/interaction/viewer-interaction', () => ({
   ViewerInteraction: class {
     readonly destroy = mocks.interactionDestroy;
-    readonly setPanoramaKeyboardOrbitInput = mocks.interactionSetPanoramaKeyboardOrbitInput;
+    readonly setViewerKeyboardNavigationInput = mocks.interactionSetViewerKeyboardNavigationInput;
   }
 }));
 
@@ -597,7 +597,7 @@ describe('bootstrap app lifecycle', () => {
     app.dispose();
   });
 
-  it('routes panorama keyboard orbit callbacks to the live interaction instance', async () => {
+  it('routes viewer keyboard navigation callbacks to the live interaction instance', async () => {
     class ResizeObserverMock {
       constructor(callback: ResizeObserverCallback) {
         mocks.setResizeObserverCallback(callback);
@@ -612,7 +612,7 @@ describe('bootstrap app lifecycle', () => {
     const { bootstrapApp } = await import('../src/app/bootstrap');
     const app = await bootstrapApp();
     const callbacks = mocks.getUiCallbacks() as {
-      onPanoramaKeyboardOrbitInputChange: (input: {
+      onViewerKeyboardNavigationInputChange: (input: {
         up: boolean;
         left: boolean;
         down: boolean;
@@ -620,14 +620,14 @@ describe('bootstrap app lifecycle', () => {
       }) => void;
     };
 
-    callbacks.onPanoramaKeyboardOrbitInputChange({
+    callbacks.onViewerKeyboardNavigationInputChange({
       up: false,
       left: false,
       down: false,
       right: true
     });
 
-    expect(mocks.interactionSetPanoramaKeyboardOrbitInput).toHaveBeenCalledWith({
+    expect(mocks.interactionSetViewerKeyboardNavigationInput).toHaveBeenCalledWith({
       up: false,
       left: false,
       down: false,

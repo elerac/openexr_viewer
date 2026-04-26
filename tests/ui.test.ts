@@ -4997,12 +4997,12 @@ describe('global panel arrow navigation', () => {
     expect((document.getElementById('opened-images-select') as HTMLSelectElement).value).toBe('session-1');
   });
 
-  it('starts and releases panorama orbit input on global w/a/s/d keydown and keyup', () => {
+  it('starts and releases viewer keyboard navigation input on global w/a/s/d keydown and keyup', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
 
-    const onPanoramaKeyboardOrbitInputChange = vi.fn();
-    const ui = new ViewerUi(createUiCallbacks({ onPanoramaKeyboardOrbitInputChange }));
+    const onViewerKeyboardNavigationInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardNavigationInputChange }));
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
     ui.setViewerMode('panorama');
 
@@ -5011,7 +5011,7 @@ describe('global panel arrow navigation', () => {
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', bubbles: true }));
     document.body.dispatchEvent(new KeyboardEvent('keyup', { key: 'd', bubbles: true }));
 
-    expect(onPanoramaKeyboardOrbitInputChange.mock.calls).toEqual([
+    expect(onViewerKeyboardNavigationInputChange.mock.calls).toEqual([
       [{ up: true, left: false, down: false, right: false }],
       [{ up: false, left: false, down: false, right: false }],
       [{ up: false, left: false, down: false, right: true }],
@@ -5019,47 +5019,47 @@ describe('global panel arrow navigation', () => {
     ]);
   });
 
-  it('ignores repeated panorama keydown events after the first pressed-state transition', () => {
+  it('ignores repeated viewer keyboard navigation keydown events after the first pressed-state transition', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
 
-    const onPanoramaKeyboardOrbitInputChange = vi.fn();
-    const ui = new ViewerUi(createUiCallbacks({ onPanoramaKeyboardOrbitInputChange }));
+    const onViewerKeyboardNavigationInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardNavigationInputChange }));
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
     ui.setViewerMode('panorama');
 
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', bubbles: true }));
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', bubbles: true, repeat: true }));
 
-    expect(onPanoramaKeyboardOrbitInputChange.mock.calls).toEqual([
+    expect(onViewerKeyboardNavigationInputChange.mock.calls).toEqual([
       [{ up: false, left: false, down: false, right: true }]
     ]);
   });
 
-  it('clears active panorama orbit input on window blur', () => {
+  it('clears active viewer keyboard navigation input on window blur', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
 
-    const onPanoramaKeyboardOrbitInputChange = vi.fn();
-    const ui = new ViewerUi(createUiCallbacks({ onPanoramaKeyboardOrbitInputChange }));
+    const onViewerKeyboardNavigationInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardNavigationInputChange }));
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
     ui.setViewerMode('panorama');
 
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', bubbles: true }));
     window.dispatchEvent(new Event('blur'));
 
-    expect(onPanoramaKeyboardOrbitInputChange.mock.calls).toEqual([
+    expect(onViewerKeyboardNavigationInputChange.mock.calls).toEqual([
       [{ up: false, left: false, down: false, right: true }],
       [{ up: false, left: false, down: false, right: false }]
     ]);
   });
 
-  it('clears active panorama orbit input when the document becomes hidden', () => {
+  it('clears active viewer keyboard navigation input when the document becomes hidden', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
 
-    const onPanoramaKeyboardOrbitInputChange = vi.fn();
-    const ui = new ViewerUi(createUiCallbacks({ onPanoramaKeyboardOrbitInputChange }));
+    const onViewerKeyboardNavigationInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardNavigationInputChange }));
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
     ui.setViewerMode('panorama');
 
@@ -5070,54 +5070,54 @@ describe('global panel arrow navigation', () => {
     });
     document.dispatchEvent(new Event('visibilitychange'));
 
-    expect(onPanoramaKeyboardOrbitInputChange.mock.calls).toEqual([
+    expect(onViewerKeyboardNavigationInputChange.mock.calls).toEqual([
       [{ up: false, left: false, down: false, right: true }],
       [{ up: false, left: false, down: false, right: false }]
     ]);
   });
 
-  it('clears active panorama orbit input when switching out of panorama mode', () => {
+  it('clears active viewer keyboard navigation input when switching viewer modes', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
 
-    const onPanoramaKeyboardOrbitInputChange = vi.fn();
-    const ui = new ViewerUi(createUiCallbacks({ onPanoramaKeyboardOrbitInputChange }));
+    const onViewerKeyboardNavigationInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardNavigationInputChange }));
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
     ui.setViewerMode('panorama');
 
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', bubbles: true }));
     ui.setViewerMode('image');
 
-    expect(onPanoramaKeyboardOrbitInputChange.mock.calls).toEqual([
+    expect(onViewerKeyboardNavigationInputChange.mock.calls).toEqual([
       [{ up: false, left: false, down: false, right: true }],
       [{ up: false, left: false, down: false, right: false }]
     ]);
   });
 
-  it('clears active panorama orbit input when the active image list becomes empty', () => {
+  it('clears active viewer keyboard navigation input when the active image list becomes empty', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
 
-    const onPanoramaKeyboardOrbitInputChange = vi.fn();
-    const ui = new ViewerUi(createUiCallbacks({ onPanoramaKeyboardOrbitInputChange }));
+    const onViewerKeyboardNavigationInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardNavigationInputChange }));
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
     ui.setViewerMode('panorama');
 
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', bubbles: true }));
     ui.setOpenedImageOptions([], null);
 
-    expect(onPanoramaKeyboardOrbitInputChange.mock.calls).toEqual([
+    expect(onViewerKeyboardNavigationInputChange.mock.calls).toEqual([
       [{ up: false, left: false, down: false, right: true }],
       [{ up: false, left: false, down: false, right: false }]
     ]);
   });
 
-  it('clears active panorama orbit input when the export dialog opens and ignores further input while open', () => {
+  it('clears active viewer keyboard navigation input when the export dialog opens and ignores further input while open', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
 
-    const onPanoramaKeyboardOrbitInputChange = vi.fn();
-    const ui = new ViewerUi(createUiCallbacks({ onPanoramaKeyboardOrbitInputChange }));
+    const onViewerKeyboardNavigationInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardNavigationInputChange }));
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
     ui.setViewerMode('panorama');
     ui.setExportTarget({ filename: 'image.png' });
@@ -5126,18 +5126,18 @@ describe('global panel arrow navigation', () => {
     (document.getElementById('export-image-button') as HTMLButtonElement).click();
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', bubbles: true }));
 
-    expect(onPanoramaKeyboardOrbitInputChange.mock.calls).toEqual([
+    expect(onViewerKeyboardNavigationInputChange.mock.calls).toEqual([
       [{ up: false, left: false, down: false, right: true }],
       [{ up: false, left: false, down: false, right: false }]
     ]);
   });
 
-  it('clears active panorama orbit input when a top menu opens and ignores further input while open', () => {
+  it('clears active viewer keyboard navigation input when a top menu opens and ignores further input while open', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
 
-    const onPanoramaKeyboardOrbitInputChange = vi.fn();
-    const ui = new ViewerUi(createUiCallbacks({ onPanoramaKeyboardOrbitInputChange }));
+    const onViewerKeyboardNavigationInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardNavigationInputChange }));
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
     ui.setViewerMode('panorama');
 
@@ -5145,32 +5145,36 @@ describe('global panel arrow navigation', () => {
     (document.getElementById('file-menu-button') as HTMLButtonElement).click();
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', bubbles: true }));
 
-    expect(onPanoramaKeyboardOrbitInputChange.mock.calls).toEqual([
+    expect(onViewerKeyboardNavigationInputChange.mock.calls).toEqual([
       [{ up: false, left: false, down: false, right: true }],
       [{ up: false, left: false, down: false, right: false }]
     ]);
   });
 
-  it('ignores global w/a/s/d while image mode is active', () => {
+  it('starts viewer keyboard navigation input while image mode is active', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
 
-    const onPanoramaKeyboardOrbitInputChange = vi.fn();
-    const ui = new ViewerUi(createUiCallbacks({ onPanoramaKeyboardOrbitInputChange }));
+    const onViewerKeyboardNavigationInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardNavigationInputChange }));
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
     ui.setViewerMode('image');
 
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', bubbles: true }));
+    document.body.dispatchEvent(new KeyboardEvent('keyup', { key: 'd', bubbles: true }));
 
-    expect(onPanoramaKeyboardOrbitInputChange).not.toHaveBeenCalled();
+    expect(onViewerKeyboardNavigationInputChange.mock.calls).toEqual([
+      [{ up: false, left: false, down: false, right: true }],
+      [{ up: false, left: false, down: false, right: false }]
+    ]);
   });
 
   it('ignores global w/a/s/d from editable controls', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
 
-    const onPanoramaKeyboardOrbitInputChange = vi.fn();
-    const ui = new ViewerUi(createUiCallbacks({ onPanoramaKeyboardOrbitInputChange }));
+    const onViewerKeyboardNavigationInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardNavigationInputChange }));
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
     ui.setViewerMode('panorama');
 
@@ -5179,7 +5183,7 @@ describe('global panel arrow navigation', () => {
     input.focus();
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', bubbles: true }));
 
-    expect(onPanoramaKeyboardOrbitInputChange).not.toHaveBeenCalled();
+    expect(onViewerKeyboardNavigationInputChange).not.toHaveBeenCalled();
   });
 
   it('does not handle a focused strip tile twice when the local handler already consumed the arrow key', () => {
@@ -5683,7 +5687,7 @@ function createUiCallbacksBase() {
     onReorderOpenedImage: () => {},
     onDisplayCacheBudgetChange: () => {},
     onExposureChange: () => {},
-    onPanoramaKeyboardOrbitInputChange: () => {},
+    onViewerKeyboardNavigationInputChange: () => {},
     onAutoFitImageOnSelectChange: () => {},
     onAutoFitImage: () => {},
     onViewerModeChange: () => {},

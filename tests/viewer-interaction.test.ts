@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { screenToImage } from '../src/interaction/image-geometry';
 import { getPanoramaVerticalFovDeg, screenToPanoramaPixel } from '../src/interaction/panorama-geometry';
 import { ViewerInteraction } from '../src/interaction/viewer-interaction';
 import { createChannelRgbSelection, createViewerState } from './helpers/state-fixtures';
@@ -251,6 +252,106 @@ describe('viewer interaction roi gestures', () => {
     dispatchPointer(resizeHarness.element, 'pointerup', { pointerId: 1, clientX: 72, clientY: 35 });
 
     expect(resizeHarness.onScreenshotSelectionResizeActiveChange).toHaveBeenLastCalledWith(false);
+  });
+});
+
+describe('viewer interaction image keyboard panning', () => {
+  it('pans image horizontally with left and right keyboard input', () => {
+    const harness = createHarness();
+
+    harness.interaction.handleViewerKeyboardNavigation('right');
+    expect(harness.getState().panX).toBeCloseTo(5.25);
+
+    harness.interaction.handleViewerKeyboardNavigation('left');
+    expect(harness.getState().panX).toBeCloseTo(5);
+  });
+
+  it('pans image vertically with up and down keyboard input', () => {
+    const harness = createHarness();
+
+    harness.interaction.handleViewerKeyboardNavigation('up');
+    expect(harness.getState().panY).toBeCloseTo(4.75);
+
+    harness.interaction.handleViewerKeyboardNavigation('down');
+    expect(harness.getState().panY).toBeCloseTo(5);
+  });
+
+  it('keeps tap nudge behavior and advances continuously while an image pan key is held', () => {
+    const harness = createHarness();
+
+    harness.interaction.setViewerKeyboardNavigationInput(createViewerKeyboardNavigationInput({ right: true }));
+    expect(harness.getState().panX).toBeCloseTo(5.25);
+    expect(harness.hasScheduledFrame()).toBe(true);
+
+    harness.flushFrame(1000);
+    expect(harness.getState().panX).toBeCloseTo(5.25);
+
+    harness.flushFrame(1020);
+    expect(harness.getState().panX).toBeCloseTo(5.55);
+    expect(harness.hasScheduledFrame()).toBe(true);
+
+    harness.interaction.setViewerKeyboardNavigationInput(createViewerKeyboardNavigationInput());
+    expect(harness.hasScheduledFrame()).toBe(false);
+
+    harness.flushFrame(1040);
+    expect(harness.getState().panX).toBeCloseTo(5.55);
+  });
+
+  it('cancels opposite held image pan keys on each axis', () => {
+    const harness = createHarness();
+
+    harness.interaction.setViewerKeyboardNavigationInput(createViewerKeyboardNavigationInput({
+      left: true,
+      right: true,
+      up: true,
+      down: true
+    }));
+
+    expect(harness.getState().panX).toBe(5);
+    expect(harness.getState().panY).toBe(5);
+
+    harness.flushFrame(1000);
+    harness.flushFrame(1020);
+
+    expect(harness.getState().panX).toBe(5);
+    expect(harness.getState().panY).toBe(5);
+    expect(harness.onViewChange).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op when image keyboard panning has no active image or no valid viewport', () => {
+    const noImageHarness = createHarness({}, {
+      imageSize: null
+    });
+    noImageHarness.interaction.handleViewerKeyboardNavigation('right');
+    expect(noImageHarness.onViewChange).not.toHaveBeenCalled();
+    expect(noImageHarness.onHoverPixel).not.toHaveBeenCalled();
+
+    const invalidViewportHarness = createHarness({}, {
+      viewport: { width: 0, height: 0 }
+    });
+    invalidViewportHarness.interaction.handleViewerKeyboardNavigation('right');
+    expect(invalidViewportHarness.onViewChange).not.toHaveBeenCalled();
+    expect(invalidViewportHarness.onHoverPixel).not.toHaveBeenCalled();
+  });
+
+  it('refreshes image hover from the last pointer position after keyboard panning', () => {
+    const harness = createHarness({}, {
+      imageSize: { width: 20, height: 20 },
+      viewport: { width: 200, height: 100 }
+    });
+
+    dispatchPointer(harness.element, 'pointermove', {
+      pointerId: 1,
+      clientX: 50,
+      clientY: 50
+    });
+    harness.onHoverPixel.mockClear();
+
+    harness.interaction.handleViewerKeyboardNavigation('right');
+
+    const expected = screenToImage(50, 50, harness.getState(), { width: 200, height: 100 }, 20, 20);
+    expect(expected).not.toBeNull();
+    expect(harness.onHoverPixel).toHaveBeenCalledWith(expected);
   });
 });
 
@@ -591,6 +692,21 @@ function createHarness(
 }
 
 function createPanoramaKeyboardOrbitInput(overrides: Partial<{
+  up: boolean;
+  left: boolean;
+  down: boolean;
+  right: boolean;
+}> = {}) {
+  return {
+    up: false,
+    left: false,
+    down: false,
+    right: false,
+    ...overrides
+  };
+}
+
+function createViewerKeyboardNavigationInput(overrides: Partial<{
   up: boolean;
   left: boolean;
   down: boolean;

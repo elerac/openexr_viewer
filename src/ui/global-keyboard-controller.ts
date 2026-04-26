@@ -1,7 +1,7 @@
 import { DisposableBag, type Disposable } from '../lifecycle';
 import type {
-  PanoramaKeyboardOrbitDirection,
-  PanoramaKeyboardOrbitInput,
+  ViewerKeyboardNavigationDirection,
+  ViewerKeyboardNavigationInput,
   ViewerMode
 } from '../types';
 import type { GlobalKeyboardControllerElements } from './elements';
@@ -27,7 +27,7 @@ interface GlobalKeyboardControllerCallbacks {
   hasOpenMenu: () => boolean;
   getViewerMode: () => ViewerMode;
   getOpenedImageCount: () => number;
-  onPanoramaKeyboardOrbitInputChange: (input: PanoramaKeyboardOrbitInput) => void;
+  onViewerKeyboardNavigationInputChange: (input: ViewerKeyboardNavigationInput) => void;
   routeVerticalNavigation: (target: VerticalNavigationTarget, delta: -1 | 1) => boolean;
   routeHorizontalNavigation: (delta: -1 | 1) => boolean;
   canRouteChannelViewNavigation: () => boolean;
@@ -35,7 +35,7 @@ interface GlobalKeyboardControllerCallbacks {
 
 export class GlobalKeyboardController implements Disposable {
   private readonly disposables = new DisposableBag();
-  private panoramaKeyboardOrbitInput = createPanoramaKeyboardOrbitInput();
+  private viewerKeyboardNavigationInput = createViewerKeyboardNavigationInput();
   private verticalNavigationTarget: VerticalNavigationTarget = 'openedFiles';
   private disposed = false;
 
@@ -88,7 +88,7 @@ export class GlobalKeyboardController implements Disposable {
         return;
       }
 
-      if (this.handleGlobalPanoramaKeyboardOrbitKeyDown(event)) {
+      if (this.handleGlobalViewerKeyboardNavigationKeyDown(event)) {
         return;
       }
 
@@ -110,16 +110,16 @@ export class GlobalKeyboardController implements Disposable {
     });
 
     this.disposables.addEventListener(document, 'keyup', (event) => {
-      this.handleGlobalPanoramaKeyboardOrbitKeyUp(event);
+      this.handleGlobalViewerKeyboardNavigationKeyUp(event);
     });
 
     this.disposables.addEventListener(window, 'blur', () => {
-      this.clearPanoramaKeyboardOrbitInput();
+      this.clearViewerKeyboardNavigationInput();
     });
 
     this.disposables.addEventListener(document, 'visibilitychange', () => {
       if (document.visibilityState !== 'visible') {
-        this.clearPanoramaKeyboardOrbitInput();
+        this.clearViewerKeyboardNavigationInput();
       }
     });
   }
@@ -133,14 +133,14 @@ export class GlobalKeyboardController implements Disposable {
     this.disposables.dispose();
   }
 
-  clearPanoramaKeyboardOrbitInput(): void {
-    if (!hasPanoramaKeyboardOrbitInput(this.panoramaKeyboardOrbitInput)) {
+  clearViewerKeyboardNavigationInput(): void {
+    if (!hasViewerKeyboardNavigationInput(this.viewerKeyboardNavigationInput)) {
       return;
     }
 
-    this.panoramaKeyboardOrbitInput = createPanoramaKeyboardOrbitInput();
-    this.callbacks.onPanoramaKeyboardOrbitInputChange({
-      ...this.panoramaKeyboardOrbitInput
+    this.viewerKeyboardNavigationInput = createViewerKeyboardNavigationInput();
+    this.callbacks.onViewerKeyboardNavigationInputChange({
+      ...this.viewerKeyboardNavigationInput
     });
   }
 
@@ -210,7 +210,7 @@ export class GlobalKeyboardController implements Disposable {
     return false;
   }
 
-  private handleGlobalPanoramaKeyboardOrbitKeyDown(event: KeyboardEvent): boolean {
+  private handleGlobalViewerKeyboardNavigationKeyDown(event: KeyboardEvent): boolean {
     if (
       event.defaultPrevented ||
       event.altKey ||
@@ -222,7 +222,6 @@ export class GlobalKeyboardController implements Disposable {
       this.callbacks.isExportImageBatchDialogOpen() ||
       this.callbacks.isExportColormapDialogOpen() ||
       this.callbacks.isScreenshotSelectionActive() ||
-      this.callbacks.getViewerMode() !== 'panorama' ||
       this.callbacks.getOpenedImageCount() === 0 ||
       this.callbacks.isWindowPreviewActive() ||
       this.callbacks.hasOpenMenu()
@@ -230,7 +229,12 @@ export class GlobalKeyboardController implements Disposable {
       return false;
     }
 
-    const direction = getPanoramaKeyboardOrbitDirection(event.key);
+    const viewerMode = this.callbacks.getViewerMode();
+    if (viewerMode !== 'image' && viewerMode !== 'panorama') {
+      return false;
+    }
+
+    const direction = getViewerKeyboardNavigationDirection(event.key);
     if (!direction) {
       return false;
     }
@@ -240,39 +244,39 @@ export class GlobalKeyboardController implements Disposable {
       return true;
     }
 
-    this.setPanoramaKeyboardOrbitDirectionPressed(direction, true);
+    this.setViewerKeyboardNavigationDirectionPressed(direction, true);
     return true;
   }
 
-  private handleGlobalPanoramaKeyboardOrbitKeyUp(event: KeyboardEvent): boolean {
+  private handleGlobalViewerKeyboardNavigationKeyUp(event: KeyboardEvent): boolean {
     if (event.defaultPrevented) {
       return false;
     }
 
-    const direction = getPanoramaKeyboardOrbitDirection(event.key);
-    if (!direction || !this.panoramaKeyboardOrbitInput[direction]) {
+    const direction = getViewerKeyboardNavigationDirection(event.key);
+    if (!direction || !this.viewerKeyboardNavigationInput[direction]) {
       return false;
     }
 
     event.preventDefault();
-    this.setPanoramaKeyboardOrbitDirectionPressed(direction, false);
+    this.setViewerKeyboardNavigationDirectionPressed(direction, false);
     return true;
   }
 
-  private setPanoramaKeyboardOrbitDirectionPressed(
-    direction: PanoramaKeyboardOrbitDirection,
+  private setViewerKeyboardNavigationDirectionPressed(
+    direction: ViewerKeyboardNavigationDirection,
     pressed: boolean
   ): void {
-    if (this.panoramaKeyboardOrbitInput[direction] === pressed) {
+    if (this.viewerKeyboardNavigationInput[direction] === pressed) {
       return;
     }
 
-    this.panoramaKeyboardOrbitInput = {
-      ...this.panoramaKeyboardOrbitInput,
+    this.viewerKeyboardNavigationInput = {
+      ...this.viewerKeyboardNavigationInput,
       [direction]: pressed
     };
-    this.callbacks.onPanoramaKeyboardOrbitInputChange({
-      ...this.panoramaKeyboardOrbitInput
+    this.callbacks.onViewerKeyboardNavigationInputChange({
+      ...this.viewerKeyboardNavigationInput
     });
   }
 
@@ -339,7 +343,7 @@ function isEditableKeyboardEvent(event: KeyboardEvent): boolean {
   return typeof event.composedPath === 'function' && event.composedPath().some((target) => isEditableEventTarget(target));
 }
 
-function createPanoramaKeyboardOrbitInput(): PanoramaKeyboardOrbitInput {
+function createViewerKeyboardNavigationInput(): ViewerKeyboardNavigationInput {
   return {
     up: false,
     left: false,
@@ -348,11 +352,11 @@ function createPanoramaKeyboardOrbitInput(): PanoramaKeyboardOrbitInput {
   };
 }
 
-function hasPanoramaKeyboardOrbitInput(input: PanoramaKeyboardOrbitInput): boolean {
+function hasViewerKeyboardNavigationInput(input: ViewerKeyboardNavigationInput): boolean {
   return input.up || input.left || input.down || input.right;
 }
 
-function getPanoramaKeyboardOrbitDirection(key: string): PanoramaKeyboardOrbitDirection | null {
+function getViewerKeyboardNavigationDirection(key: string): ViewerKeyboardNavigationDirection | null {
   switch (key) {
     case 'w':
     case 'W':

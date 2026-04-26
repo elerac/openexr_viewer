@@ -2,9 +2,11 @@ import type {
   ImagePixel,
   PanoramaKeyboardOrbitDirection,
   PanoramaKeyboardOrbitInput,
+  ViewerKeyboardNavigationDirection,
+  ViewerKeyboardNavigationInput,
   ViewerState
 } from '../types';
-import { panImageFromDrag, zoomImageFromWheel } from './image-mode';
+import { ImageKeyboardPanController, panImageFromDrag, zoomImageFromWheel } from './image-mode';
 import { orbitPanoramaFromDrag, PanoramaKeyboardOrbitController, zoomPanoramaFromWheel } from './panorama-mode';
 import { resolveProbePixel } from './probe-mode';
 import {
@@ -27,6 +29,7 @@ type DragMode = 'pan' | 'roi' | 'screenshot' | null;
 export class ViewerInteraction {
   private readonly element: HTMLElement;
   private readonly callbacks: InteractionCallbacks;
+  private readonly imageKeyboardPan: ImageKeyboardPanController;
   private readonly panoramaKeyboardOrbit: PanoramaKeyboardOrbitController;
   private dragging = false;
   private movedDuringDrag = false;
@@ -43,6 +46,14 @@ export class ViewerInteraction {
   ) {
     this.element = element;
     this.callbacks = callbacks;
+    this.imageKeyboardPan = new ImageKeyboardPanController({
+      getState: callbacks.getState,
+      getViewport: callbacks.getViewport,
+      getImageSize: callbacks.getImageSize,
+      onViewChange: callbacks.onViewChange,
+      onHoverPixel: callbacks.onHoverPixel,
+      getLastPointerInElement: () => this.lastPointerInElement
+    }, dependencies);
     this.panoramaKeyboardOrbit = new PanoramaKeyboardOrbitController({
       getState: callbacks.getState,
       getViewport: callbacks.getViewport,
@@ -65,6 +76,7 @@ export class ViewerInteraction {
     this.element.removeEventListener('pointermove', this.onPointerMove);
     this.element.removeEventListener('pointerup', this.onPointerUp);
     this.element.removeEventListener('pointerleave', this.onPointerLeave);
+    this.imageKeyboardPan.destroy();
     this.panoramaKeyboardOrbit.destroy();
   }
 
@@ -74,6 +86,36 @@ export class ViewerInteraction {
 
   setPanoramaKeyboardOrbitInput(input: PanoramaKeyboardOrbitInput): void {
     this.panoramaKeyboardOrbit.setInput(input);
+  }
+
+  handleViewerKeyboardNavigation(direction: ViewerKeyboardNavigationDirection): void {
+    const state = this.callbacks.getState();
+    if (state.viewerMode === 'image') {
+      this.imageKeyboardPan.handle(direction);
+      return;
+    }
+
+    if (state.viewerMode === 'panorama') {
+      this.panoramaKeyboardOrbit.handle(direction);
+    }
+  }
+
+  setViewerKeyboardNavigationInput(input: ViewerKeyboardNavigationInput): void {
+    const state = this.callbacks.getState();
+    if (state.viewerMode === 'image') {
+      this.panoramaKeyboardOrbit.setInput(createViewerKeyboardNavigationInput());
+      this.imageKeyboardPan.setInput(input);
+      return;
+    }
+
+    if (state.viewerMode === 'panorama') {
+      this.imageKeyboardPan.setInput(createViewerKeyboardNavigationInput());
+      this.panoramaKeyboardOrbit.setInput(input);
+      return;
+    }
+
+    this.imageKeyboardPan.setInput(createViewerKeyboardNavigationInput());
+    this.panoramaKeyboardOrbit.setInput(createViewerKeyboardNavigationInput());
   }
 
   private readonly onWheel = (event: WheelEvent): void => {
@@ -334,4 +376,13 @@ export class ViewerInteraction {
   private getScreenshotSelection() {
     return this.callbacks.getScreenshotSelection?.() ?? { active: false, rect: null };
   }
+}
+
+function createViewerKeyboardNavigationInput(): ViewerKeyboardNavigationInput {
+  return {
+    up: false,
+    left: false,
+    down: false,
+    right: false
+  };
 }

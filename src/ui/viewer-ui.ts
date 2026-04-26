@@ -51,10 +51,10 @@ import type {
   ExportScreenshotRegion,
   ImageRoi,
   OpenedImageDropPlacement,
-  PanoramaKeyboardOrbitInput,
   PixelSample,
   RoiStats,
   StokesAolpDegreeModulationMode,
+  ViewerKeyboardNavigationInput,
   ViewerMode,
   ViewportInfo,
   ViewportRect,
@@ -113,7 +113,7 @@ export interface UiCallbacks {
   ) => void;
   onDisplayCacheBudgetChange: (mb: number) => void;
   onExposureChange: (value: number) => void;
-  onPanoramaKeyboardOrbitInputChange: (input: PanoramaKeyboardOrbitInput) => void;
+  onViewerKeyboardNavigationInputChange: (input: ViewerKeyboardNavigationInput) => void;
   onAutoFitImageOnSelectChange: (enabled: boolean) => void;
   onAutoFitImage: () => void;
   onViewerModeChange: (mode: ViewerMode) => void;
@@ -256,7 +256,7 @@ export class ViewerUi implements Disposable {
     this.topBarTooltipController = new TopBarTooltipController(this.elements);
     this.topMenuController = new TopMenuController(this.elements, {
       onBeforeOpenMenu: () => {
-        this.clearPanoramaKeyboardOrbitInput();
+        this.clearViewerKeyboardNavigationInput();
       }
     });
     this.appFullscreenController = new AppFullscreenController(this.elements, {
@@ -295,8 +295,8 @@ export class ViewerUi implements Disposable {
       hasOpenMenu: () => this.topMenuController.hasOpenMenu(),
       getViewerMode: () => this.viewerMode,
       getOpenedImageCount: () => this.openedImageCount,
-      onPanoramaKeyboardOrbitInputChange: (input) => {
-        this.callbacks.onPanoramaKeyboardOrbitInputChange(input);
+      onViewerKeyboardNavigationInputChange: (input) => {
+        this.callbacks.onViewerKeyboardNavigationInputChange(input);
       },
       routeVerticalNavigation: (target, delta) => {
         if (target === 'channelView') {
@@ -439,7 +439,7 @@ export class ViewerUi implements Disposable {
       return;
     }
 
-    this.clearPanoramaKeyboardOrbitInput();
+    this.clearViewerKeyboardNavigationInput();
     this.exportImageDialog.close(false);
     this.exportImageBatchDialog.close(false);
     this.exportColormapDialog.close(false);
@@ -478,7 +478,7 @@ export class ViewerUi implements Disposable {
 
     this.isLoading = loading;
     if (loading) {
-      this.clearPanoramaKeyboardOrbitInput();
+      this.clearViewerKeyboardNavigationInput();
       this.hideScreenshotSelection();
     }
     this.elements.openFileButton.disabled = loading;
@@ -604,9 +604,7 @@ export class ViewerUi implements Disposable {
 
     if (this.viewerMode !== mode) {
       this.hideScreenshotSelection();
-    }
-    if (mode !== 'panorama') {
-      this.clearPanoramaKeyboardOrbitInput();
+      this.clearViewerKeyboardNavigationInput();
     }
     this.viewerMode = mode;
     this.elements.imageViewerMenuItem.setAttribute('aria-checked', mode === 'image' ? 'true' : 'false');
@@ -680,7 +678,7 @@ export class ViewerUi implements Disposable {
     }
 
     if (items.length === 0) {
-      this.clearPanoramaKeyboardOrbitInput();
+      this.clearViewerKeyboardNavigationInput();
       this.clearScreenshotSelectionMemory();
       this.hideScreenshotSelection();
     }
@@ -973,8 +971,8 @@ export class ViewerUi implements Disposable {
     this.dragDropController.showOverlay(show);
   }
 
-  private clearPanoramaKeyboardOrbitInput(): void {
-    this.globalKeyboardController.clearPanoramaKeyboardOrbitInput();
+  private clearViewerKeyboardNavigationInput(): void {
+    this.globalKeyboardController.clearViewerKeyboardNavigationInput();
   }
 
   private updateLoadingOverlayVisibility(): void {
@@ -998,7 +996,7 @@ export class ViewerUi implements Disposable {
       return;
     }
 
-    this.clearPanoramaKeyboardOrbitInput();
+    this.clearViewerKeyboardNavigationInput();
     this.topMenuController.closeAll();
     this.startScreenshotSelection();
   }
@@ -1273,7 +1271,7 @@ export class ViewerUi implements Disposable {
         return;
       }
 
-      this.clearPanoramaKeyboardOrbitInput();
+      this.clearViewerKeyboardNavigationInput();
       this.exportImageBatchDialog.close(false);
       this.exportColormapDialog.close(false);
       this.topMenuController.closeAll();
@@ -1314,7 +1312,7 @@ export class ViewerUi implements Disposable {
         return;
       }
 
-      this.clearPanoramaKeyboardOrbitInput();
+      this.clearViewerKeyboardNavigationInput();
       this.exportImageDialog.close(false);
       this.exportColormapDialog.close(false);
       this.topMenuController.closeAll();
@@ -1326,7 +1324,7 @@ export class ViewerUi implements Disposable {
         return;
       }
 
-      this.clearPanoramaKeyboardOrbitInput();
+      this.clearViewerKeyboardNavigationInput();
       this.exportImageDialog.close(false);
       this.exportImageBatchDialog.close(false);
       this.topMenuController.closeAll();

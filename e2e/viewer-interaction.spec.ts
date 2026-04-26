@@ -3,6 +3,66 @@ import { gotoViewerApp, openGalleryCbox } from './helpers/app';
 import { buildScalarChannelExr, buildSpectralExr } from './helpers/exr-fixtures';
 import { dragViewerRoi, readProbeCoords } from './helpers/viewer';
 
+test('pans image view with global w/a/s/d keys while keeping the probe in sync', async ({ page }) => {
+  await gotoViewerApp(page);
+  await openGalleryCbox(page);
+
+  const viewer = page.locator('#viewer-container');
+  const probeCoords = page.locator('#probe-coords');
+
+  await viewer.hover();
+  await expect.poll(async () => await readProbeCoords(probeCoords)).not.toBeNull();
+  const initialCoords = await readProbeCoords(probeCoords);
+  if (!initialCoords) {
+    throw new Error('Expected probe coordinates after hovering the viewer.');
+  }
+
+  await page.keyboard.press('d');
+  await expect.poll(async () => {
+    const coords = await readProbeCoords(probeCoords);
+    return coords
+      ? coords.x !== initialCoords.x || coords.y !== initialCoords.y
+      : false;
+  }).toBe(true);
+
+  const afterRightCoords = await readProbeCoords(probeCoords);
+  if (!afterRightCoords) {
+    throw new Error('Expected probe coordinates after panning right.');
+  }
+  expect(afterRightCoords.x).not.toBe(initialCoords.x);
+
+  await page.keyboard.press('a');
+  await expect.poll(async () => await readProbeCoords(probeCoords)).toEqual(initialCoords);
+});
+
+test('leaves editable text input alone when typing image-viewer wasd keys', async ({ page }) => {
+  await gotoViewerApp(page);
+  await openGalleryCbox(page);
+
+  const viewer = page.locator('#viewer-container');
+  const probeCoords = page.locator('#probe-coords');
+
+  await viewer.hover();
+  await expect.poll(async () => await readProbeCoords(probeCoords)).not.toBeNull();
+  const initialCoords = await readProbeCoords(probeCoords);
+  if (!initialCoords) {
+    throw new Error('Expected probe coordinates after hovering the viewer.');
+  }
+
+  const scratchInput = page.locator('#wasd-scratch-input');
+  await page.evaluate(() => {
+    const input = document.createElement('input');
+    input.id = 'wasd-scratch-input';
+    input.type = 'text';
+    document.body.append(input);
+  });
+  await scratchInput.focus();
+  await page.keyboard.type('wasd');
+
+  await expect(scratchInput).toHaveValue('wasd');
+  await expect.poll(async () => await readProbeCoords(probeCoords)).toEqual(initialCoords);
+});
+
 test('orbits panorama view with global w/a/s/d keys while keeping the probe in sync', async ({ page }) => {
   await gotoViewerApp(page);
   await openGalleryCbox(page);

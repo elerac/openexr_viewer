@@ -9,14 +9,17 @@ export type VisualizationMode = 'rgb' | 'colormap';
 export type ColormapRangeMode = 'alwaysAuto' | 'oneTime';
 export type ViewerMode = 'image' | 'panorama';
 export type OpenedImageDropPlacement = 'before' | 'after';
-export type PanoramaKeyboardOrbitDirection = 'up' | 'left' | 'down' | 'right';
+export type ViewerKeyboardNavigationDirection = 'up' | 'left' | 'down' | 'right';
 
-export interface PanoramaKeyboardOrbitInput {
+export interface ViewerKeyboardNavigationInput {
   up: boolean;
   left: boolean;
   down: boolean;
   right: boolean;
 }
+
+export type PanoramaKeyboardOrbitDirection = ViewerKeyboardNavigationDirection;
+export type PanoramaKeyboardOrbitInput = ViewerKeyboardNavigationInput;
 
 export type {
   ChannelMonoSelection,
