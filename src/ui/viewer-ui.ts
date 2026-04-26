@@ -1286,12 +1286,23 @@ export class ViewerUi implements Disposable {
       this.startScreenshotSelectionFromAction();
     });
 
-    this.disposables.addEventListener(this.elements.appAutoFitImageButton, 'click', () => {
+    this.disposables.addEventListener(this.elements.appAutoFitImageButton, 'mousedown', (event) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+    });
+
+    this.disposables.addEventListener(this.elements.appAutoFitImageButton, 'click', (event) => {
       const enabled = !this.autoFitImageOnSelect;
       this.setAutoFitImageOnSelect(enabled, true);
       this.callbacks.onAutoFitImageOnSelectChange(enabled);
       if (enabled) {
         this.callbacks.onAutoFitImage();
+      }
+      if (event.detail > 0) {
+        this.elements.appAutoFitImageButton.blur();
       }
     });
 

@@ -495,6 +495,35 @@ describe('display toolbar', () => {
     expect(restoredAutoFitImage).not.toHaveBeenCalled();
   });
 
+  it('does not retain focus after pointer auto-fit activation', () => {
+    installUiFixture();
+
+    new ViewerUi(createUiCallbacks());
+    const button = document.getElementById('app-auto-fit-image-button') as HTMLButtonElement;
+
+    button.focus();
+    const mouseDownEvent = new MouseEvent('mousedown', { bubbles: true, button: 0, cancelable: true });
+    button.dispatchEvent(mouseDownEvent);
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+
+    expect(mouseDownEvent.defaultPrevented).toBe(true);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).not.toBe(button);
+  });
+
+  it('keeps focus after keyboard auto-fit activation', () => {
+    installUiFixture();
+
+    new ViewerUi(createUiCallbacks());
+    const button = document.getElementById('app-auto-fit-image-button') as HTMLButtonElement;
+
+    button.focus();
+    button.click();
+
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(button);
+  });
+
   it('dispatches reset view from toolbar and inspector reset buttons', () => {
     installUiFixture();
 

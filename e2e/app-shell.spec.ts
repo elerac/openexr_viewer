@@ -83,12 +83,16 @@ async function readChromeVisualState(locator: Locator): Promise<{
 async function readAutoFitButtonVisualState(page: Page): Promise<{
   backgroundColor: string;
   boxShadow: string;
+  outlineStyle: string;
+  outlineWidth: string;
 }> {
   return page.locator('#app-auto-fit-image-button').evaluate((element) => {
     const style = getComputedStyle(element);
     return {
       backgroundColor: style.backgroundColor,
-      boxShadow: style.boxShadow
+      boxShadow: style.boxShadow,
+      outlineStyle: style.outlineStyle,
+      outlineWidth: style.outlineWidth
     };
   });
 }
@@ -267,6 +271,37 @@ test('distinguishes auto-fit pressed state from hover feedback', async ({ page }
   const hoveredOffState = await readAutoFitButtonVisualState(page);
   expect(hoveredOffState.boxShadow).toBe('none');
   expect(hoveredOffState.backgroundColor).not.toBe(pressedState.backgroundColor);
+});
+
+test('keeps pointer-toggled auto-fit button unfocused while panning with wasd keys', async ({ page }) => {
+  await gotoViewerApp(page);
+  await openGalleryCbox(page);
+
+  const autoFitButton = page.locator('#app-auto-fit-image-button');
+  const viewer = page.locator('#viewer-container');
+  const probeCoords = page.locator('#probe-coords');
+
+  await autoFitButton.click();
+  await expect(autoFitButton).toHaveAttribute('aria-pressed', 'true');
+  await viewer.hover();
+  await expect.poll(async () => await readProbeCoords(probeCoords)).not.toBeNull();
+  const initialCoords = await readProbeCoords(probeCoords);
+  if (!initialCoords) {
+    throw new Error('Expected probe coordinates after hovering the viewer.');
+  }
+
+  await page.keyboard.press('d');
+  await expect.poll(async () => {
+    const coords = await readProbeCoords(probeCoords);
+    return coords
+      ? coords.x !== initialCoords.x || coords.y !== initialCoords.y
+      : false;
+  }).toBe(true);
+
+  await expect(autoFitButton).not.toBeFocused();
+  const keyboardPanState = await readAutoFitButtonVisualState(page);
+  expect(keyboardPanState.outlineStyle).toBe('none');
+  expect(Number.parseFloat(keyboardPanState.outlineWidth)).toBe(0);
 });
 
 test('opens the gallery demo image and keeps core display controls stable', async ({ page }) => {
