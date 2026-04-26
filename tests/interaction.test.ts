@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_COLORMAP_ID } from '../src/colormaps';
 import {
   clampZoom,
+  computeFitView,
   exposureToScale,
   imageToScreen,
+  isFitViewForViewport,
   preserveImagePanOnViewportChange,
   screenToImage,
   zoomAroundPoint
@@ -56,6 +58,28 @@ describe('interaction math', () => {
     expect(exposureToScale(1)).toBe(2);
     expect(exposureToScale(0)).toBe(1);
     expect(exposureToScale(-1)).toBe(0.5);
+  });
+
+  it('computes fit view centered on the image midpoint', () => {
+    expect(computeFitView({ width: 800, height: 400 }, 1000, 500)).toEqual({
+      zoom: 0.8,
+      panX: 500,
+      panY: 250
+    });
+    expect(computeFitView({ width: 800, height: 400 }, 300, 900)).toEqual({
+      zoom: 400 / 900,
+      panX: 150,
+      panY: 450
+    });
+  });
+
+  it('detects whether a view is still the viewport fit view', () => {
+    const viewport = { width: 800, height: 400 };
+    const fitView = computeFitView(viewport, 1000, 500);
+
+    expect(isFitViewForViewport(fitView, viewport, 1000, 500)).toBe(true);
+    expect(isFitViewForViewport({ ...fitView, zoom: fitView.zoom + 1e-7 }, viewport, 1000, 500)).toBe(true);
+    expect(isFitViewForViewport({ ...fitView, panY: fitView.panY + 0.01 }, viewport, 1000, 500)).toBe(false);
   });
 
   it('maps screen coordinates into image pixels', () => {

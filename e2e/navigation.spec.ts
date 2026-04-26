@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { gotoViewerApp, openGalleryCbox } from './helpers/app';
 import { buildScalarChannelExr, buildSpectralExr } from './helpers/exr-fixtures';
+import { readProbeCoords, resolveViewerPoint } from './helpers/viewer';
 
 test('moves bottom-panel thumbnail selections with left and right arrow keys', async ({ page }) => {
   await gotoViewerApp(page);
@@ -84,6 +85,38 @@ test('keeps collapsed bottom channel names visible and selectable', async ({ pag
   await bottomPanelButton.click();
   await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'true');
   await expect(thumbnailPreviews.nth(0)).toBeVisible();
+});
+
+test('keeps a newly opened image centered after collapsed bottom channel labels appear', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await gotoViewerApp(page);
+
+  const viewer = page.locator('#viewer-container');
+  const probeCoords = page.locator('#probe-coords');
+  const bottomPanel = page.locator('#bottom-panel-content');
+  const bottomPanelButton = page.locator('#bottom-panel-collapse-button');
+  const thumbnailTiles = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile');
+
+  await bottomPanelButton.click();
+  await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'false');
+  const emptyCollapsedHeight = await bottomPanel.evaluate((element) => Math.round(element.getBoundingClientRect().height));
+  expect(emptyCollapsedHeight).toBeLessThanOrEqual(2);
+
+  await openGalleryCbox(page);
+  await expect(thumbnailTiles).toHaveCount(1);
+  await expect(thumbnailTiles.first()).toContainText('RGB');
+  await expect.poll(async () => {
+    const height = await bottomPanel.evaluate((element) => Math.round(element.getBoundingClientRect().height));
+    return height >= 32 && height <= 36;
+  }).toBe(true);
+
+  const center = await resolveViewerPoint(viewer, 0.5, 0.5);
+  await page.mouse.move(center.x, center.y);
+
+  await expect.poll(async () => await readProbeCoords(probeCoords), { timeout: 5000 }).toEqual({
+    x: 128,
+    y: 128
+  });
 });
 
 test('moves open files and channel view selections with arrow keys', async ({ page }) => {

@@ -10,6 +10,8 @@ export interface ViewportClientRect {
   height: number;
 }
 
+const FIT_VIEW_EPSILON = 1e-6;
+
 export function clampZoom(zoom: number): number {
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }
@@ -70,6 +72,34 @@ export function imageToScreen(
     x: (imageX - state.panX) * state.zoom + viewport.width * 0.5,
     y: (imageY - state.panY) * state.zoom + viewport.height * 0.5
   };
+}
+
+export function computeFitView(
+  viewport: ViewportInfo,
+  width: number,
+  height: number
+): { zoom: number; panX: number; panY: number } {
+  const fitZoom = clampZoom(Math.min(viewport.width / width, viewport.height / height));
+
+  return {
+    zoom: fitZoom,
+    panX: width * 0.5,
+    panY: height * 0.5
+  };
+}
+
+export function isFitViewForViewport(
+  view: Pick<ViewerViewState, 'zoom' | 'panX' | 'panY'>,
+  viewport: ViewportInfo,
+  width: number,
+  height: number
+): boolean {
+  const fitView = computeFitView(viewport, width, height);
+  return (
+    Math.abs(view.zoom - fitView.zoom) <= FIT_VIEW_EPSILON &&
+    Math.abs(view.panX - fitView.panX) <= FIT_VIEW_EPSILON &&
+    Math.abs(view.panY - fitView.panY) <= FIT_VIEW_EPSILON
+  );
 }
 
 export function preserveImagePanOnViewportChange(

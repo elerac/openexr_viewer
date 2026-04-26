@@ -1,9 +1,15 @@
-import { preserveImagePanOnViewportChange, type ViewportClientRect } from '../../interaction/image-geometry';
+import {
+  computeFitView,
+  isFitViewForViewport,
+  preserveImagePanOnViewportChange,
+  type ViewportClientRect
+} from '../../interaction/image-geometry';
 import { ViewerInteraction } from '../../interaction/viewer-interaction';
 import { mergeRenderState } from '../../view-state';
 import { selectActiveSession } from '../viewer-app-selectors';
 import { ViewerAppCore } from '../viewer-app-core';
 import type { ViewerInteractionCoordinator } from '../../interaction-coordinator';
+import type { ViewerViewState, ViewportInfo } from '../../types';
 import type { ViewerUi } from '../../ui/viewer-ui';
 import type { WebGlExrRenderer } from '../../renderer';
 
@@ -103,10 +109,23 @@ export function initializeViewportLifecycle({
 
     const rect = readViewportClientRect(ui.viewerContainer);
     const interactionState = interactionCoordinator.getState();
-    if (viewerContainerRect && core.getState().sessionState.viewerMode === 'image') {
-      const nextPan = preserveImagePanOnViewportChange(interactionState.view, viewerContainerRect, rect);
-      if (nextPan.panX !== interactionState.view.panX || nextPan.panY !== interactionState.view.panY) {
-        interactionCoordinator.enqueueViewPatch(nextPan);
+    const state = core.getState();
+    const activeSession = selectActiveSession(state);
+    if (viewerContainerRect && state.sessionState.viewerMode === 'image') {
+      const nextViewPatch = activeSession && isFitViewForViewport(
+        interactionState.view,
+        viewportInfoFromClientRect(viewerContainerRect),
+        activeSession.decoded.width,
+        activeSession.decoded.height
+      )
+        ? computeFitView(
+            viewportInfoFromClientRect(rect),
+            activeSession.decoded.width,
+            activeSession.decoded.height
+          )
+        : preserveImagePanOnViewportChange(interactionState.view, viewerContainerRect, rect);
+      if (hasImageViewPatchChanged(interactionState.view, nextViewPatch)) {
+        interactionCoordinator.enqueueViewPatch(nextViewPatch);
       }
     }
     viewerContainerRect = rect;
@@ -134,4 +153,22 @@ export function readViewportClientRect(element: HTMLElement): ViewportClientRect
     width: Number.isFinite(rect.width) ? rect.width : 0,
     height: Number.isFinite(rect.height) ? rect.height : 0
   };
+}
+
+function viewportInfoFromClientRect(rect: ViewportClientRect): ViewportInfo {
+  return {
+    width: Math.max(1, Math.floor(rect.width)),
+    height: Math.max(1, Math.floor(rect.height))
+  };
+}
+
+function hasImageViewPatchChanged(
+  current: Pick<ViewerViewState, 'zoom' | 'panX' | 'panY'>,
+  patch: Partial<Pick<ViewerViewState, 'zoom' | 'panX' | 'panY'>>
+): boolean {
+  return (
+    (patch.zoom !== undefined && patch.zoom !== current.zoom) ||
+    (patch.panX !== undefined && patch.panX !== current.panX) ||
+    (patch.panY !== undefined && patch.panY !== current.panY)
+  );
 }

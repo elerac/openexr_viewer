@@ -1,4 +1,4 @@
-import { clampZoom } from '../interaction/image-geometry';
+import { computeFitView } from '../interaction/image-geometry';
 import { DEFAULT_PANORAMA_HFOV_DEG } from '../interaction/panorama-geometry';
 import { cloneDisplayLuminanceRange } from '../colormap-range';
 import {
@@ -240,20 +240,6 @@ export function buildResetSessionState(
     activeSession.decoded,
     0
   );
-}
-
-export function computeFitView(
-  viewport: ViewportInfo,
-  width: number,
-  height: number
-): { zoom: number; panX: number; panY: number } {
-  const fitZoom = clampZoom(Math.min(viewport.width / width, viewport.height / height));
-
-  return {
-    zoom: fitZoom,
-    panX: width * 0.5,
-    panY: height * 0.5
-  };
 }
 
 function remapPanToImageCenterAnchor(

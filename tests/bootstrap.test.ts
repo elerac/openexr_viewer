@@ -256,6 +256,23 @@ vi.mock('../src/renderer', () => ({
 }));
 
 vi.mock('../src/interaction/image-geometry', () => ({
+  computeFitView: vi.fn((viewport, width, height) => {
+    const zoom = Math.min(512, Math.max(0.125, Math.min(viewport.width / width, viewport.height / height)));
+    return {
+      zoom,
+      panX: width * 0.5,
+      panY: height * 0.5
+    };
+  }),
+  isFitViewForViewport: vi.fn((view, viewport, width, height) => {
+    const zoom = Math.min(512, Math.max(0.125, Math.min(viewport.width / width, viewport.height / height)));
+    const epsilon = 1e-6;
+    return (
+      Math.abs(view.zoom - zoom) <= epsilon &&
+      Math.abs(view.panX - width * 0.5) <= epsilon &&
+      Math.abs(view.panY - height * 0.5) <= epsilon
+    );
+  }),
   preserveImagePanOnViewportChange: vi.fn((state, previousViewport, nextViewport) => ({
     panX: state.panX + (
       (nextViewport.left + nextViewport.width * 0.5) -
@@ -373,6 +390,18 @@ afterEach(() => {
     textureRevisionKey: '',
     textureDirty: false
   }));
+  mocks.interactionCoordinatorGetState.mockImplementation(() => ({
+    view: {
+      zoom: 4,
+      panX: 10,
+      panY: 20,
+      panoramaYawDeg: 0,
+      panoramaPitchDeg: 0,
+      panoramaHfovDeg: 100
+    },
+    hoveredPixel: null,
+    draftRoi: null
+  }));
   mocks.displayGetActiveColormapLutForState.mockImplementation(() => null);
   mocks.getColormapAsset.mockImplementation((registry: { assets?: Array<{ label: string; file: string }> }, id: string) => {
     const index = Number(id);
@@ -455,6 +484,113 @@ describe('bootstrap app lifecycle', () => {
     });
     expect(viewerContainer?.style.getPropertyValue('--viewer-checker-offset-x')).toBe('-40px');
     expect(viewerContainer?.style.getPropertyValue('--viewer-checker-offset-y')).toBe('-10px');
+
+    app.dispose();
+  });
+
+  it('refits an auto-fitted image when the viewer container changes size', async () => {
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
+      observe(): void {}
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+    const mutableCoreState = mocks.coreState as unknown as {
+      activeSessionId: string | null;
+      sessions: unknown[];
+    };
+    mutableCoreState.activeSessionId = 'session-1';
+    mutableCoreState.sessions = [{
+      id: 'session-1',
+      filename: 'image.exr',
+      displayName: 'image.exr',
+      fileSizeBytes: 4,
+      source: { kind: 'url', url: '/image.exr' },
+      decoded: { width: 640, height: 360, layers: [] },
+      state: mocks.coreState.sessionState
+    }];
+    mocks.interactionCoordinatorGetState.mockImplementation(() => ({
+      view: {
+        zoom: 0.5,
+        panX: 320,
+        panY: 180,
+        panoramaYawDeg: 0,
+        panoramaPitchDeg: 0,
+        panoramaHfovDeg: 100
+      },
+      hoveredPixel: null,
+      draftRoi: null
+    }));
+
+    const { bootstrapApp } = await import('../src/app/bootstrap');
+    const app = await bootstrapApp();
+    mocks.interactionCoordinatorEnqueueViewPatch.mockClear();
+
+    mocks.viewerRect.height = 146;
+    mocks.getResizeObserverCallback()?.([], {} as ResizeObserver);
+
+    expect(mocks.interactionCoordinatorEnqueueViewPatch).toHaveBeenCalledWith({
+      zoom: 146 / 360,
+      panX: 320,
+      panY: 180
+    });
+
+    app.dispose();
+  });
+
+  it('preserves manual image alignment instead of refitting during resize', async () => {
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
+      observe(): void {}
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+    const mutableCoreState = mocks.coreState as unknown as {
+      activeSessionId: string | null;
+      sessions: unknown[];
+    };
+    mutableCoreState.activeSessionId = 'session-1';
+    mutableCoreState.sessions = [{
+      id: 'session-1',
+      filename: 'image.exr',
+      displayName: 'image.exr',
+      fileSizeBytes: 4,
+      source: { kind: 'url', url: '/image.exr' },
+      decoded: { width: 640, height: 360, layers: [] },
+      state: mocks.coreState.sessionState
+    }];
+    mocks.interactionCoordinatorGetState.mockImplementation(() => ({
+      view: {
+        zoom: 1,
+        panX: 123,
+        panY: 77,
+        panoramaYawDeg: 0,
+        panoramaPitchDeg: 0,
+        panoramaHfovDeg: 100
+      },
+      hoveredPixel: null,
+      draftRoi: null
+    }));
+
+    const { bootstrapApp } = await import('../src/app/bootstrap');
+    const app = await bootstrapApp();
+    mocks.interactionCoordinatorEnqueueViewPatch.mockClear();
+
+    mocks.viewerRect.height = 146;
+    mocks.getResizeObserverCallback()?.([], {} as ResizeObserver);
+
+    expect(mocks.interactionCoordinatorEnqueueViewPatch).toHaveBeenCalledWith({
+      panX: 123,
+      panY: 60
+    });
 
     app.dispose();
   });
