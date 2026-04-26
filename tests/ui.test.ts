@@ -1201,11 +1201,15 @@ describe('view menu', () => {
     expect(fileMenu.querySelectorAll('.app-menu-separator[role="menuitem"]')).toHaveLength(0);
   });
 
-  it('renders the top menu tabs in file-view-window-gallery-settings order', () => {
+  it('renders the top menu tabs in file-view-window-gallery order without Settings in the menu nav', () => {
     installUiFixture();
 
-    const labels = Array.from(document.querySelectorAll('.app-menu-tab')).map((item) => item.textContent?.trim());
-    expect(labels).toEqual(['File', 'View', 'Window', 'Gallery', 'Settings']);
+    const menuNav = document.querySelector('.app-menu-nav') as HTMLElement;
+    const labels = Array.from(menuNav.querySelectorAll('.app-menu-tab')).map((item) => item.textContent?.trim());
+    const navButtonLabels = Array.from(menuNav.querySelectorAll('button')).map((item) => item.textContent?.trim());
+
+    expect(labels).toEqual(['File', 'View', 'Window', 'Gallery']);
+    expect(navButtonLabels).not.toContain('Settings');
   });
 
   it('renders top bar icon actions in the expected order', () => {
@@ -1217,16 +1221,20 @@ describe('view menu', () => {
     const autoFitButton = document.getElementById('app-auto-fit-image-button') as HTMLButtonElement;
     const screenshotButton = document.getElementById('app-screenshot-button') as HTMLButtonElement;
     const fullscreenButton = document.getElementById('app-fullscreen-button') as HTMLButtonElement;
+    const settingsButton = document.getElementById('settings-dialog-button') as HTMLButtonElement;
 
     expect(screenshotButton.closest('#app-menu-bar')).not.toBeNull();
+    expect(settingsButton.closest('#app-menu-bar')).not.toBeNull();
     expect(actions).not.toBeNull();
     expect(Array.from(actions.children).map((child) => child.id)).toEqual([
       'app-auto-fit-image-button',
       'app-screenshot-button',
-      'app-fullscreen-button'
+      'app-fullscreen-button',
+      'settings-dialog-button'
     ]);
     expect(screenshotButton.previousElementSibling).toBe(autoFitButton);
     expect(fullscreenButton.previousElementSibling).toBe(screenshotButton);
+    expect(settingsButton.previousElementSibling).toBe(fullscreenButton);
     expect(autoFitButton.getAttribute('aria-label')).toBe('Auto fit selected images');
     expect(autoFitButton.dataset.tooltip).toBe('Auto fit selected images');
     expect(autoFitButton.title).toBe('Auto fit selected images');
@@ -1234,6 +1242,12 @@ describe('view menu', () => {
     expect(screenshotButton.dataset.tooltip).toBe('Export screenshot');
     expect(screenshotButton.title).toBe('Export Screenshot...');
     expect(screenshotButton.querySelectorAll('.app-menu-icon')).toHaveLength(1);
+    expect(settingsButton.getAttribute('aria-label')).toBe('Settings');
+    expect(settingsButton.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(settingsButton.getAttribute('aria-expanded')).toBe('false');
+    expect(settingsButton.getAttribute('aria-controls')).toBe('settings-dialog');
+    expect(settingsButton.dataset.tooltip).toBe('Settings');
+    expect(settingsButton.title).toBe('Settings');
   });
 
   it('shows short help for top bar icon buttons on hover and focus', () => {
@@ -1408,21 +1422,27 @@ describe('view menu', () => {
     expect(labels).toEqual(['Normal', 'Full Screen Preview', 'Tool bar']);
   });
 
-  it('renders Reset Settings in the settings menu', () => {
+  it('renders Reset Settings in the settings dialog', () => {
     installUiFixture();
 
+    const settingsDialog = document.getElementById('settings-dialog') as HTMLElement;
     const resetSettingsButton = document.getElementById('reset-settings-button') as HTMLButtonElement;
 
+    expect(settingsDialog.getAttribute('role')).toBe('dialog');
+    expect(settingsDialog.getAttribute('aria-modal')).toBe('true');
+    expect(settingsDialog.getAttribute('aria-labelledby')).toBe('settings-dialog-title');
     expect(resetSettingsButton).not.toBeNull();
+    expect(resetSettingsButton.closest('#settings-dialog')).toBe(settingsDialog);
     expect(resetSettingsButton.textContent?.trim()).toBe('Reset Settings');
-    expect(resetSettingsButton.getAttribute('role')).toBe('menuitem');
+    expect(resetSettingsButton.getAttribute('role')).toBeNull();
+    expect(resetSettingsButton.type).toBe('button');
   });
 
   it('renders the theme setting before the memory budget setting', () => {
     installUiFixture();
     new ViewerUi(createUiCallbacks());
 
-    const labels = Array.from(document.querySelectorAll('#settings-menu .app-menu-setting-label'))
+    const labels = Array.from(document.querySelectorAll('#settings-dialog .app-menu-setting-label'))
       .map((item) => item.textContent?.trim());
     const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
 
@@ -1869,32 +1889,35 @@ describe('view menu', () => {
     expect(document.activeElement).toBe(fileButton);
   });
 
-  it('focuses the settings controls in theme-budget-reset order from the keyboard', () => {
+  it('focuses the settings dialog controls in theme-budget-reset-close order and restores focus on Escape', () => {
     installUiFixture();
 
     new ViewerUi(createUiCallbacks());
-    const settingsButton = document.getElementById('settings-menu-button') as HTMLButtonElement;
-    const settingsMenu = document.getElementById('settings-menu') as HTMLElement;
+    const settingsButton = document.getElementById('settings-dialog-button') as HTMLButtonElement;
+    const settingsBackdrop = document.getElementById('settings-dialog-backdrop') as HTMLElement;
+    const settingsDialog = document.getElementById('settings-dialog') as HTMLElement;
     const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
     const budgetInput = document.getElementById('display-cache-budget-input') as HTMLSelectElement;
     const resetSettingsButton = document.getElementById('reset-settings-button') as HTMLButtonElement;
+    const closeButton = document.getElementById('settings-dialog-close-button') as HTMLButtonElement;
     const focusableSettingsControls = Array.from(
-      settingsMenu.querySelectorAll<HTMLElement>('button, input, select, textarea')
+      settingsDialog.querySelectorAll<HTMLElement>('button, input, select, textarea')
     );
 
-    expect(focusableSettingsControls).toEqual([themeSelect, budgetInput, resetSettingsButton]);
+    expect(focusableSettingsControls).toEqual([themeSelect, budgetInput, resetSettingsButton, closeButton]);
 
     settingsButton.focus();
-    settingsButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    settingsButton.click();
 
-    expectTopMenuOpen('settings-menu-button', 'settings-menu');
+    expect(settingsBackdrop.classList.contains('hidden')).toBe(false);
+    expect(settingsButton.getAttribute('aria-expanded')).toBe('true');
     expect(document.activeElement).toBe(themeSelect);
 
-    settingsButton.focus();
-    settingsButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
 
-    expectTopMenuOpen('settings-menu-button', 'settings-menu');
-    expect(document.activeElement).toBe(resetSettingsButton);
+    expect(settingsBackdrop.classList.contains('hidden')).toBe(true);
+    expect(settingsButton.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(settingsButton);
   });
 
   it('keeps export disabled until an image is active and blocks it during rgb-view loading', () => {
