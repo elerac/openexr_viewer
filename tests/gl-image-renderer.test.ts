@@ -289,7 +289,7 @@ describe('gl image renderer', () => {
     });
   });
 
-  it('renders the onscreen viewer transparently while preserving transparent export mode', () => {
+  it('renders the onscreen viewer with an opaque checker while preserving transparent export mode', () => {
     const { renderer, gl } = createHarness();
     const layer = createInterleavedLayerFromChannels({
       R: [1],
@@ -315,8 +315,8 @@ describe('gl image renderer', () => {
 
     renderer.render(state);
 
-    expect(lastUniform1iValue(gl, 'uCompositeCheckerboard')).toBe(0);
-    expect(lastUniform1iValue(gl, 'uAlphaOutputMode')).toBe(2);
+    expect(lastUniform1iValue(gl, 'uCompositeCheckerboard')).toBe(1);
+    expect(lastUniform1iValue(gl, 'uAlphaOutputMode')).toBe(0);
 
     gl.uniform1i.mockClear();
     gl.readPixels.mockImplementation((_x, _y, _width, _height, _format, _type, data: Uint8ClampedArray) => {
@@ -538,11 +538,7 @@ function createHarness(): {
 
   const canvas = document.createElement('canvas');
   const renderer = new GlImageRenderer(canvas);
-  expect(getContext).toHaveBeenCalledWith('webgl2', {
-    alpha: true,
-    antialias: false,
-    premultipliedAlpha: true
-  });
+  expect(getContext).toHaveBeenCalledWith('webgl2', { antialias: false });
   return {
     renderer,
     gl

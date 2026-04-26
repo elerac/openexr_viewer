@@ -1,11 +1,15 @@
 import { DisposableBag, type Disposable } from '../lifecycle';
 
-interface SpectrumLatticeIdleElements {
-  appShell: HTMLElement;
-  mainLayout: HTMLElement;
-  viewerContainer: HTMLElement;
+export type SpectrumLatticeMode = 'disabled' | 'idle' | 'active';
+
+export interface SpectrumLatticeBlend {
+  checkerOpacity: number;
+  gridOpacity: number;
+}
+
+interface SpectrumLatticeRendererArgs {
   canvas: HTMLCanvasElement;
-  idle: HTMLElement;
+  onBlendChange?: (blend: SpectrumLatticeBlend | null) => void;
 }
 
 interface SpectrumLatticeUniforms {
@@ -14,13 +18,6 @@ interface SpectrumLatticeUniforms {
   time: WebGLUniformLocation;
   perceivedBrightness: WebGLUniformLocation;
 }
-
-interface SpectrumLatticeState {
-  themeEnabled: boolean;
-  idle: boolean;
-}
-
-type SpectrumLatticeMode = 'disabled' | 'idle' | 'active';
 
 const VERTEX_SHADER_SOURCE = `#version 300 es
 precision highp float;
@@ -121,7 +118,7 @@ void main() {
 `;
 
 const DEFAULT_FRAME_TIME_SECONDS = 18.0;
-const SPECTRUM_LATTICE_MOTION_TRANSITION_MS = 3000;
+const SPECTRUM_LATTICE_TRANSITION_MS = 3000;
 const IDLE_PERCEIVED_BRIGHTNESS = 1.0;
 const ACTIVE_PERCEIVED_BRIGHTNESS = 0.55;
 const IDLE_CHECKER_OPACITY = 0;
@@ -129,7 +126,7 @@ const IDLE_SPECTRUM_GRID_OPACITY = 1;
 const ACTIVE_CHECKER_OPACITY = 1;
 const ACTIVE_SPECTRUM_GRID_OPACITY = 0;
 
-export class SpectrumLatticeIdleController implements Disposable {
+export class SpectrumLatticeRenderer implements Disposable {
   private readonly disposables = new DisposableBag();
   private gl: WebGL2RenderingContext | null = null;
   private program: WebGLProgram | null = null;
@@ -159,28 +156,28 @@ export class SpectrumLatticeIdleController implements Disposable {
   private targetSpectrumGridOpacity = ACTIVE_SPECTRUM_GRID_OPACITY;
   private transitionStartSpectrumGridOpacity = ACTIVE_SPECTRUM_GRID_OPACITY;
   private transitionStartNowMs: number | null = null;
+  private pointerTrackingActive = false;
+  private reducedMotion = false;
 
-  constructor(private readonly elements: SpectrumLatticeIdleElements) {
-    this.hideLiveSurface();
-    this.disposables.addEventListener(this.elements.appShell, 'pointermove', (event) => {
-      const rect = this.elements.appShell.getBoundingClientRect();
-      if (rect.width <= 0 || rect.height <= 0) {
-        return;
-      }
-
-      this.targetPointer = {
-        x: clamp01((event.clientX - rect.left) / rect.width),
-        y: clamp01(1 - (event.clientY - rect.top) / rect.height)
-      };
-    }, { passive: true });
+  constructor(private readonly args: SpectrumLatticeRendererArgs) {
+    this.hideCanvas();
+    this.reducedMotion = readReducedMotionPreference();
+    this.args.canvas.addEventListener('webglcontextlost', this.handleContextLost);
+    this.disposables.add(() => {
+      this.args.canvas.removeEventListener('webglcontextlost', this.handleContextLost);
+    });
+    this.args.canvas.addEventListener('webglcontextrestored', this.handleContextRestored);
+    this.disposables.add(() => {
+      this.args.canvas.removeEventListener('webglcontextrestored', this.handleContextRestored);
+    });
+    this.disposables.addEventListener(document, 'visibilitychange', this.handleVisibilityChange);
   }
 
-  setState(state: SpectrumLatticeState): void {
+  setMode(nextMode: SpectrumLatticeMode): void {
     if (this.disposed) {
       return;
     }
 
-    const nextMode = getMode(state);
     if (this.mode === nextMode) {
       return;
     }
@@ -188,19 +185,31 @@ export class SpectrumLatticeIdleController implements Disposable {
     const previousMode = this.mode;
     this.mode = nextMode;
     if (nextMode === 'idle') {
-      this.setCanvasVisible(true, true);
+      this.setCanvasVisible(true);
       this.enterIdle(previousMode);
       return;
     }
 
     if (nextMode === 'active') {
-      this.setCanvasVisible(true, false);
+      this.setCanvasVisible(true);
       this.enterActive(previousMode);
       return;
     }
 
-    this.setCanvasVisible(false, false);
-    this.clearBackgroundBlend();
+    this.setCanvasVisible(false);
+    this.emitBlend(null);
+  }
+
+  resize(): void {
+    if (this.disposed || !this.canvasVisible || !this.initialized) {
+      return;
+    }
+
+    if (!this.gl || !this.program || !this.uniforms) {
+      return;
+    }
+
+    this.renderStaticFrame(this.lastTimeSeconds);
   }
 
   dispose(): void {
@@ -210,31 +219,24 @@ export class SpectrumLatticeIdleController implements Disposable {
 
     this.disposed = true;
     this.mode = 'disabled';
-    this.setCanvasVisible(false, false);
+    this.setCanvasVisible(false);
     this.disposables.dispose();
     this.deleteGlResources();
   }
 
-  private setCanvasVisible(visible: boolean, idle: boolean): void {
+  private setCanvasVisible(visible: boolean): void {
     this.canvasVisible = visible;
-    this.elements.appShell.classList.toggle('is-spectrum-lattice-idle', visible && idle);
-    this.elements.mainLayout.classList.toggle('is-spectrum-lattice-idle', visible && idle);
-    this.elements.viewerContainer.classList.toggle('is-spectrum-lattice-idle', visible && idle);
-    this.elements.canvas.classList.toggle('hidden', !visible);
-    this.elements.idle.classList.toggle('hidden', !visible || !idle);
+    this.args.canvas.classList.toggle('hidden', !visible);
+    this.setPointerTracking(visible);
 
     if (!visible) {
       this.stop();
-      this.clearBackgroundBlend();
+      this.emitBlend(null);
     }
   }
 
-  private hideLiveSurface(): void {
-    this.elements.appShell.classList.remove('is-spectrum-lattice-idle');
-    this.elements.mainLayout.classList.remove('is-spectrum-lattice-idle');
-    this.elements.viewerContainer.classList.remove('is-spectrum-lattice-idle');
-    this.elements.canvas.classList.add('hidden');
-    this.elements.idle.classList.add('hidden');
+  private hideCanvas(): void {
+    this.args.canvas.classList.add('hidden');
   }
 
   private enterIdle(previousMode: SpectrumLatticeMode): void {
@@ -248,7 +250,7 @@ export class SpectrumLatticeIdleController implements Disposable {
       return;
     }
 
-    if (previousMode === 'active') {
+    if (previousMode === 'active' && !this.reducedMotion) {
       this.transitionMotionTo(
         1,
         IDLE_PERCEIVED_BRIGHTNESS,
@@ -259,7 +261,12 @@ export class SpectrumLatticeIdleController implements Disposable {
     } else {
       this.setMotionState(1, IDLE_PERCEIVED_BRIGHTNESS, IDLE_CHECKER_OPACITY, IDLE_SPECTRUM_GRID_OPACITY);
     }
-    this.startAnimation(now);
+    if (this.reducedMotion) {
+      this.renderStaticFrame(this.lastTimeSeconds);
+      this.stop();
+    } else {
+      this.startAnimation(now);
+    }
   }
 
   private enterActive(previousMode: SpectrumLatticeMode): void {
@@ -278,7 +285,7 @@ export class SpectrumLatticeIdleController implements Disposable {
       return;
     }
 
-    if (previousMode === 'idle') {
+    if (previousMode === 'idle' && !this.reducedMotion) {
       this.transitionMotionTo(
         0,
         ACTIVE_PERCEIVED_BRIGHTNESS,
@@ -338,7 +345,7 @@ export class SpectrumLatticeIdleController implements Disposable {
     this.transitionStartSpectrumGridOpacity = spectrumGridOpacity;
     this.transitionStartNowMs = null;
     this.lastFrameNowMs = null;
-    this.applyBackgroundBlend();
+    this.emitCurrentBlend();
   }
 
   private transitionMotionTo(
@@ -364,10 +371,7 @@ export class SpectrumLatticeIdleController implements Disposable {
     this.initialized = true;
 
     try {
-      const gl = this.elements.canvas.getContext('webgl2', {
-        antialias: false,
-        powerPreference: 'high-performance'
-      });
+      const gl = this.args.canvas.getContext('webgl2', { antialias: false });
       if (!gl) {
         this.useFallback();
         return;
@@ -399,7 +403,7 @@ export class SpectrumLatticeIdleController implements Disposable {
         time: getRequiredUniformLocation(gl, program, 'uTime'),
         perceivedBrightness: getRequiredUniformLocation(gl, program, 'uPerceivedBrightness')
       };
-      this.elements.canvas.classList.remove('spectrum-lattice-canvas--fallback');
+      this.args.canvas.classList.remove('spectrum-lattice-canvas--fallback');
     } catch {
       this.deleteGlResources();
       this.useFallback();
@@ -407,7 +411,7 @@ export class SpectrumLatticeIdleController implements Disposable {
   }
 
   private readonly renderFrame = (now: number): void => {
-    if (!this.animationActive || !this.canvasVisible || !this.gl || !this.program || !this.uniforms) {
+    if (!this.animationActive || !this.canvasVisible) {
       return;
     }
 
@@ -426,7 +430,7 @@ export class SpectrumLatticeIdleController implements Disposable {
 
   private updateMotionState(now: number): void {
     if (this.transitionStartNowMs !== null) {
-      const progress = clamp01((now - this.transitionStartNowMs) / SPECTRUM_LATTICE_MOTION_TRANSITION_MS);
+      const progress = clamp01((now - this.transitionStartNowMs) / SPECTRUM_LATTICE_TRANSITION_MS);
       const easedProgress = smoothstep(progress);
       this.motionSpeed = lerp(this.transitionStartSpeed, this.targetMotionSpeed, easedProgress);
       this.perceivedBrightness = lerp(
@@ -458,17 +462,18 @@ export class SpectrumLatticeIdleController implements Disposable {
       this.lastTimeSeconds += deltaSeconds * this.motionSpeed;
     }
     this.lastFrameNowMs = now;
-    this.applyBackgroundBlend();
+    this.emitCurrentBlend();
   }
 
-  private applyBackgroundBlend(): void {
-    this.elements.viewerContainer.style.setProperty('--spectrum-checker-opacity', formatOpacity(this.checkerOpacity));
-    this.elements.viewerContainer.style.setProperty('--spectrum-grid-opacity', formatOpacity(this.spectrumGridOpacity));
+  private emitCurrentBlend(): void {
+    this.emitBlend({
+      checkerOpacity: this.checkerOpacity,
+      gridOpacity: this.spectrumGridOpacity
+    });
   }
 
-  private clearBackgroundBlend(): void {
-    this.elements.viewerContainer.style.removeProperty('--spectrum-checker-opacity');
-    this.elements.viewerContainer.style.removeProperty('--spectrum-grid-opacity');
+  private emitBlend(blend: SpectrumLatticeBlend | null): void {
+    this.args.onBlendChange?.(blend);
   }
 
   private renderStaticFrame(timeSeconds: number): void {
@@ -480,7 +485,7 @@ export class SpectrumLatticeIdleController implements Disposable {
     this.resizeCanvas();
     gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);
-    gl.uniform2f(this.uniforms.resolution, this.elements.canvas.width, this.elements.canvas.height);
+    gl.uniform2f(this.uniforms.resolution, this.args.canvas.width, this.args.canvas.height);
     gl.uniform2f(this.uniforms.pointer, this.pointer.x, this.pointer.y);
     gl.uniform1f(this.uniforms.time, timeSeconds);
     gl.uniform1f(this.uniforms.perceivedBrightness, this.perceivedBrightness);
@@ -493,21 +498,21 @@ export class SpectrumLatticeIdleController implements Disposable {
       return;
     }
 
-    const rect = this.elements.canvas.getBoundingClientRect();
+    const rect = this.args.canvas.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const width = Math.max(1, Math.floor(rect.width * dpr));
     const height = Math.max(1, Math.floor(rect.height * dpr));
-    if (this.elements.canvas.width === width && this.elements.canvas.height === height) {
+    if (this.args.canvas.width === width && this.args.canvas.height === height) {
       return;
     }
 
-    this.elements.canvas.width = width;
-    this.elements.canvas.height = height;
+    this.args.canvas.width = width;
+    this.args.canvas.height = height;
     gl.viewport(0, 0, width, height);
   }
 
   private useFallback(): void {
-    this.elements.canvas.classList.add('spectrum-lattice-canvas--fallback');
+    this.args.canvas.classList.add('spectrum-lattice-canvas--fallback');
   }
 
   private deleteGlResources(): void {
@@ -524,13 +529,69 @@ export class SpectrumLatticeIdleController implements Disposable {
     this.uniforms = null;
     this.gl = null;
   }
-}
 
-function getMode(state: SpectrumLatticeState): SpectrumLatticeMode {
-  if (!state.themeEnabled) {
-    return 'disabled';
+  private setPointerTracking(active: boolean): void {
+    if (this.pointerTrackingActive === active) {
+      return;
+    }
+
+    this.pointerTrackingActive = active;
+    if (active) {
+      window.addEventListener('pointermove', this.handlePointerMove, { passive: true });
+    } else {
+      window.removeEventListener('pointermove', this.handlePointerMove);
+    }
   }
-  return state.idle ? 'idle' : 'active';
+
+  private readonly handlePointerMove = (event: PointerEvent): void => {
+    const rect = this.args.canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      return;
+    }
+
+    this.targetPointer = {
+      x: clamp01((event.clientX - rect.left) / rect.width),
+      y: clamp01(1 - (event.clientY - rect.top) / rect.height)
+    };
+  };
+
+  private readonly handleContextLost = (event: Event): void => {
+    event.preventDefault();
+    this.stop();
+    this.deleteGlResources();
+    this.initialized = false;
+    this.useFallback();
+  };
+
+  private readonly handleContextRestored = (): void => {
+    if (this.disposed || this.mode === 'disabled') {
+      return;
+    }
+
+    this.initialized = false;
+    this.initialize();
+    this.resize();
+    if (this.mode === 'idle' && !this.reducedMotion) {
+      this.startAnimation(performance.now());
+    }
+  };
+
+  private readonly handleVisibilityChange = (): void => {
+    if (this.disposed || this.mode === 'disabled') {
+      return;
+    }
+
+    if (document.visibilityState === 'hidden') {
+      this.stop();
+      return;
+    }
+
+    if (this.mode === 'idle' && !this.reducedMotion) {
+      this.startAnimation(performance.now());
+    } else {
+      this.renderStaticFrame(this.lastTimeSeconds);
+    }
+  };
 }
 
 function createProgram(
@@ -601,6 +662,10 @@ function smoothstep(progress: number): number {
   return progress * progress * (3 - 2 * progress);
 }
 
-function formatOpacity(value: number): string {
-  return clamp01(value).toFixed(4).replace(/\.?0+$/, '');
+function readReducedMotionPreference(): boolean {
+  if (typeof window.matchMedia !== 'function') {
+    return false;
+  }
+
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }

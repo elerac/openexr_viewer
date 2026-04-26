@@ -107,7 +107,7 @@ async function expectViewerCheckerBackground(viewer: Locator): Promise<void> {
     };
   });
 
-  expect(background.color).toBe('rgb(23, 23, 23)');
+  expect(background.color).toBe('rgb(11, 15, 21)');
   expect(background.image).toContain('conic-gradient');
   expect(background.image).toContain('rgb(31, 31, 31)');
   expect(background.opacity).toBe('1');
@@ -154,9 +154,7 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   await expect(page.locator('#pan-readout')).toHaveCount(0);
   await expect(openedImages.locator('option')).toHaveCount(0);
   await expect(page.locator('#opened-files-list')).toContainText('No open files');
-  await expect(page.locator('#viewer-idle-message')).toBeVisible();
-  await expect(page.locator('#viewer-idle-message h2')).toHaveCount(0);
-  await expect(page.locator('#viewer-idle-message p')).toHaveCount(0);
+  await expect(page.locator('#viewer-idle-message')).toHaveCount(0);
   await expectViewerCheckerBackground(viewer);
 
   await fileMenuButton.click();

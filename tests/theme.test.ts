@@ -20,6 +20,7 @@ describe('theme settings', () => {
   it('defaults missing and invalid stored values to the default theme', () => {
     expect(parseStoredTheme(null)).toBe(DEFAULT_THEME_ID);
     expect(parseStoredTheme('')).toBe(DEFAULT_THEME_ID);
+    expect(parseStoredTheme(DEFAULT_THEME_ID)).toBe(DEFAULT_THEME_ID);
     expect(parseStoredTheme('unknown')).toBe(DEFAULT_THEME_ID);
     expect(parseStoredTheme(SPECTRUM_LATTICE_THEME_ID)).toBe(SPECTRUM_LATTICE_THEME_ID);
   });
@@ -33,7 +34,11 @@ describe('theme settings', () => {
     applyTheme(SPECTRUM_LATTICE_THEME_ID);
     expect(document.documentElement.dataset.theme).toBe(SPECTRUM_LATTICE_THEME_ID);
 
+    applyTheme(DEFAULT_THEME_ID);
+    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+
     saveStoredTheme(DEFAULT_THEME_ID);
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
     expect(readStoredTheme()).toBe(DEFAULT_THEME_ID);
   });
 });

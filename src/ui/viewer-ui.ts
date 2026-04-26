@@ -63,18 +63,12 @@ import type {
 import type { ProbeColorPreview } from '../probe';
 import { ProbeReadoutController, type ProbeCoordinateImageSize } from './probe-readout';
 import { setRoiReadout } from './roi-readout';
-import { SpectrumLatticeIdleController } from './spectrum-lattice-idle';
+import { ThemeController } from './theme-controller';
 import { TopMenuController } from './top-menu-controller';
+import { ViewerBackgroundController } from './viewer-background-controller';
 import { WindowPreviewController } from './window-preview-controller';
-import {
-  DEFAULT_THEME_ID,
-  SPECTRUM_LATTICE_THEME_ID,
-  applyTheme,
-  parseStoredTheme,
-  readStoredTheme,
-  saveStoredTheme,
-  type ThemeId
-} from '../theme';
+import type { ViewportClientRect } from '../interaction/image-geometry';
+import type { ThemeId } from '../theme';
 import {
   DEFAULT_FOLDER_LOAD_LIMITS,
   createFolderLoadAdmission,
@@ -156,11 +150,11 @@ export class ViewerUi implements Disposable {
   private readonly probeReadoutController: ProbeReadoutController;
   private readonly dragDropController: DragDropController;
   private readonly collapsibleSectionsController: CollapsibleSectionsController;
-  private readonly spectrumLatticeIdleController: SpectrumLatticeIdleController;
+  private readonly themeController: ThemeController;
+  private readonly viewerBackgroundController: ViewerBackgroundController;
   private isLoading = false;
   private isDisplayBusy = false;
   private isDisplayOverlayLoading = false;
-  private theme: ThemeId = DEFAULT_THEME_ID;
   private openedImageCount = 0;
   private activeSessionId: string | null = null;
   private exportTarget: ExportImageTarget | null = null;
@@ -376,12 +370,16 @@ export class ViewerUi implements Disposable {
       }
     });
     this.collapsibleSectionsController = new CollapsibleSectionsController(this.elements);
-    this.spectrumLatticeIdleController = new SpectrumLatticeIdleController({
+    this.viewerBackgroundController = new ViewerBackgroundController({
       appShell: this.elements.appShell,
       mainLayout: this.elements.mainLayout,
       viewerContainer: this.elements.viewerContainer,
-      canvas: this.elements.spectrumLatticeCanvas,
-      idle: this.elements.spectrumLatticeIdle
+      spectrumLatticeCanvas: this.elements.spectrumLatticeCanvas
+    });
+    this.themeController = new ThemeController(this.elements, {
+      onThemeChange: (theme) => {
+        this.viewerBackgroundController.setTheme(theme);
+      }
     });
     this.disposables.addDisposable(this.loadingOverlayDisclosure);
     this.disposables.addDisposable(this.openedImagesPanel);
@@ -400,11 +398,11 @@ export class ViewerUi implements Disposable {
     this.disposables.addDisposable(this.folderLoadDialog);
     this.disposables.addDisposable(this.dragDropController);
     this.disposables.addDisposable(this.collapsibleSectionsController);
-    this.disposables.addDisposable(this.spectrumLatticeIdleController);
+    this.disposables.addDisposable(this.viewerBackgroundController);
+    this.disposables.addDisposable(this.themeController);
     this.clearImageBrowserPanels();
     this.setViewerMode('image');
     this.setDisplayToolbarVisible(readStoredDisplayToolbarVisible(), false);
-    this.setTheme(readStoredTheme(), false);
     this.updateViewerModeMenuItemsDisabled();
     this.updateFileMenuItemsDisabled();
     this.bindEvents();
@@ -553,13 +551,15 @@ export class ViewerUi implements Disposable {
       return;
     }
 
-    this.theme = theme;
-    this.elements.themeSelect.value = theme;
-    applyTheme(theme);
-    if (persist) {
-      saveStoredTheme(theme);
+    this.themeController.setTheme(theme, { persist });
+  }
+
+  setViewerViewportRect(rect: ViewportClientRect): void {
+    if (this.disposed) {
+      return;
     }
-    this.updateIdleVisibility();
+
+    this.viewerBackgroundController.setViewportRect(rect);
   }
 
   setExposure(exposureEv: number): void {
@@ -662,9 +662,9 @@ export class ViewerUi implements Disposable {
     this.openedImagesPanel.setOpenedImageOptions(items, activeId);
     this.colormapPanel.setOpenedImageCount(this.openedImagesPanel.getOpenedImageCount());
     this.windowPreviewController.setOpenedImageCount(items.length);
+    this.viewerBackgroundController.setHasOpenImages(items.length > 0);
     this.updateViewerModeMenuItemsDisabled();
     this.updateFileMenuItemsDisabled();
-    this.updateIdleVisibility();
     if (items.length === 0 && this.windowPreviewController.isActive()) {
       void this.windowPreviewController.setEnabled(false);
     }
@@ -1381,16 +1381,12 @@ export class ViewerUi implements Disposable {
       input.value = '';
     });
 
-    this.disposables.addEventListener(this.elements.themeSelect, 'change', () => {
-      this.setTheme(parseStoredTheme(this.elements.themeSelect.value));
-    });
-
     this.bindResetViewButton(this.elements.resetViewButton);
     this.bindResetViewButton(this.elements.toolbarResetViewButton);
 
     this.disposables.addEventListener(this.elements.resetSettingsButton, 'click', () => {
       this.layoutSplitController.resetToDefaults();
-      this.setTheme(DEFAULT_THEME_ID);
+      this.themeController.reset();
       this.callbacks.onResetSettings();
     });
 
@@ -1452,16 +1448,6 @@ export class ViewerUi implements Disposable {
       }
 
       this.callbacks.onResetView();
-    });
-  }
-
-  private updateIdleVisibility(): void {
-    const idle = this.openedImageCount === 0;
-    const spectrumIdle = this.theme === SPECTRUM_LATTICE_THEME_ID && idle;
-    this.elements.viewerIdleMessage.classList.toggle('hidden', !idle || spectrumIdle);
-    this.spectrumLatticeIdleController.setState({
-      themeEnabled: this.theme === SPECTRUM_LATTICE_THEME_ID,
-      idle
     });
   }
 

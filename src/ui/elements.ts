@@ -164,9 +164,7 @@ export interface Elements {
   roiValidCount: HTMLElement;
   roiStats: HTMLElement;
   clearRoiButton: HTMLButtonElement;
-  viewerIdleMessage: HTMLDivElement;
   spectrumLatticeCanvas: HTMLCanvasElement;
-  spectrumLatticeIdle: HTMLDivElement;
   glCanvas: HTMLCanvasElement;
   overlayCanvas: HTMLCanvasElement;
   probeOverlayCanvas: HTMLCanvasElement;
@@ -570,9 +568,7 @@ export function resolveElements(): Elements {
     roiValidCount: requireElement('roi-valid-count', HTMLElement),
     roiStats: requireElement('roi-stats', HTMLElement),
     clearRoiButton: requireElement('clear-roi-button', HTMLButtonElement),
-    viewerIdleMessage: requireElement('viewer-idle-message', HTMLDivElement),
     spectrumLatticeCanvas: requireElement('spectrum-lattice-canvas', HTMLCanvasElement),
-    spectrumLatticeIdle: requireElement('spectrum-lattice-idle', HTMLDivElement),
     glCanvas: requireElement('gl-canvas', HTMLCanvasElement),
     overlayCanvas: requireElement('overlay-canvas', HTMLCanvasElement),
     probeOverlayCanvas: requireElement('probe-overlay-canvas', HTMLCanvasElement),

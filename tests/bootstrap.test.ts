@@ -211,6 +211,10 @@ vi.mock('../src/ui/viewer-ui', () => ({
     readonly overlayCanvas = document.createElement('canvas');
     readonly probeOverlayCanvas = document.createElement('canvas');
     readonly dispose = mocks.uiDispose;
+    readonly setViewerViewportRect = vi.fn((rect: { left: number; top: number }) => {
+      this.viewerContainer.style.setProperty('--viewer-checker-offset-x', `${-rect.left}px`);
+      this.viewerContainer.style.setProperty('--viewer-checker-offset-y', `${-rect.top}px`);
+    });
     readonly setError = vi.fn();
     readonly setLoading = vi.fn();
     readonly setRgbViewLoading = vi.fn();
