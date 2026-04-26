@@ -1136,7 +1136,8 @@ describe('view menu', () => {
     expect(button.getAttribute('aria-label')).toBe('Enter app fullscreen');
     expect(button.getAttribute('aria-pressed')).toBe('false');
     expect(button.title).toBe('Enter app fullscreen');
-    expect(button.querySelectorAll('.app-fullscreen-icon')).toHaveLength(2);
+    expect(button.querySelectorAll('.app-fullscreen-icon')).toHaveLength(1);
+    expect(button.querySelector('.app-fullscreen-icon--enter')).not.toBeNull();
   });
 
   it('toggles app fullscreen without requiring an open image', async () => {
@@ -1156,6 +1157,8 @@ describe('view menu', () => {
     expect(button.getAttribute('aria-pressed')).toBe('true');
     expect(button.getAttribute('aria-label')).toBe('Exit app fullscreen');
     expect(button.title).toBe('Exit app fullscreen');
+    expect(button.querySelectorAll('.app-fullscreen-icon')).toHaveLength(1);
+    expect(button.querySelector('.app-fullscreen-icon--enter')).not.toBeNull();
   });
 
   it('exits app fullscreen through the app fullscreen button', async () => {

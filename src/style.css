@@ -266,15 +266,6 @@ output {
   stroke-linejoin: round;
 }
 
-.app-fullscreen-icon--exit,
-.app-fullscreen-button[aria-pressed='true'] .app-fullscreen-icon--enter {
-  display: none;
-}
-
-.app-fullscreen-button[aria-pressed='true'] .app-fullscreen-icon--exit {
-  display: block;
-}
-
 .app-menu-dropdown {
   position: absolute;
   top: 100%;
