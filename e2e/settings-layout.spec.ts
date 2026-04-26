@@ -507,15 +507,17 @@ test('applies persisted collapsed left panel before the app runtime starts', asy
 test('persists the cache budget and keeps open-file actions limited to reload and close', async ({ page }) => {
   await gotoViewerApp(page);
 
-  const settingsMenuButton = page.getByRole('button', { name: 'Settings', exact: true });
-  const settingsMenu = page.locator('#settings-menu');
+  const settingsDialogButton = page.getByRole('button', { name: 'Settings', exact: true });
+  const settingsDialog = page.locator('#settings-dialog');
   const budgetInput = page.locator('#display-cache-budget-input');
   const usageReadout = page.locator('#display-cache-usage');
 
-  await settingsMenuButton.click();
-  await expect(settingsMenu).toBeVisible();
+  await settingsDialogButton.click();
+  await expect(settingsDialog).toBeVisible();
   await expect(budgetInput).toHaveValue('256');
   await expect(usageReadout).toContainText('/ 256 MB');
+  await page.keyboard.press('Escape');
+  await expect(settingsDialog).toBeHidden();
 
   await openGalleryCbox(page);
 
@@ -523,8 +525,8 @@ test('persists the cache budget and keeps open-file actions limited to reload an
   await expect(page.getByRole('button', { name: 'Close cbox_rgb.exr', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /Pin cache|Unpin cache/ })).toHaveCount(0);
 
-  await settingsMenuButton.click();
-  await expect(settingsMenu).toBeVisible();
+  await settingsDialogButton.click();
+  await expect(settingsDialog).toBeVisible();
   await budgetInput.selectOption('128');
 
   await expect(budgetInput).toHaveValue('128');
@@ -538,10 +540,12 @@ test('persists the cache budget and keeps open-file actions limited to reload an
   await page.reload();
   await expectViewerAppReady(page);
 
-  await settingsMenuButton.click();
-  await expect(settingsMenu).toBeVisible();
+  await settingsDialogButton.click();
+  await expect(settingsDialog).toBeVisible();
   await expect(budgetInput).toHaveValue('128');
   await expect(usageReadout).toContainText('/ 128 MB');
+  await page.keyboard.press('Escape');
+  await expect(settingsDialog).toBeHidden();
 
   await openGalleryCbox(page);
   await expect(page.getByRole('button', { name: 'Reload cbox_rgb.exr', exact: true })).toBeVisible();
@@ -552,8 +556,8 @@ test('persists the cache budget and keeps open-file actions limited to reload an
 test('persists Spectrum lattice as animated idle and frozen active chrome', async ({ page }) => {
   await gotoViewerApp(page);
 
-  const settingsMenuButton = page.getByRole('button', { name: 'Settings', exact: true });
-  const settingsMenu = page.locator('#settings-menu');
+  const settingsDialogButton = page.getByRole('button', { name: 'Settings', exact: true });
+  const settingsDialog = page.locator('#settings-dialog');
   const themeInput = page.locator('#theme-select');
   const appShell = page.locator('#app');
   const mainLayout = page.locator('#main-layout');
@@ -577,8 +581,8 @@ test('persists Spectrum lattice as animated idle and frozen active chrome', asyn
   expect(defaultTopBarState.backgroundImage).toBe('none');
   expect(defaultTopBarState.backdropFilter === 'none' || defaultTopBarState.backdropFilter === '').toBe(true);
   expect(defaultTopBarState.boxShadow).toBe('none');
-  await settingsMenuButton.click();
-  await expect(settingsMenu).toBeVisible();
+  await settingsDialogButton.click();
+  await expect(settingsDialog).toBeVisible();
   await themeInput.selectOption('spectrum-lattice');
 
   await expect(themeInput).toHaveValue('spectrum-lattice');
@@ -644,8 +648,8 @@ test('persists Spectrum lattice as animated idle and frozen active chrome', asyn
   const reloadedSpectrumViewerBackground = await readViewerBackgroundState(page);
   expect(reloadedSpectrumViewerBackground.checkerOpacity).toBe('0');
   expect(reloadedSpectrumViewerBackground.spectrumGridOpacity).toBe('1');
-  await settingsMenuButton.click();
-  await expect(settingsMenu).toBeVisible();
+  await settingsDialogButton.click();
+  await expect(settingsDialog).toBeVisible();
   await expect(themeInput).toHaveValue('spectrum-lattice');
   await page.keyboard.press('Escape');
 
@@ -682,12 +686,12 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   await page.setViewportSize({ width: 1440, height: 900 });
   await gotoViewerApp(page);
 
-  const settingsMenuButton = page.getByRole('button', { name: 'Settings', exact: true });
-  const settingsMenu = page.locator('#settings-menu');
+  const settingsDialogButton = page.getByRole('button', { name: 'Settings', exact: true });
+  const settingsDialog = page.locator('#settings-dialog');
   const themeInput = page.locator('#theme-select');
   const budgetInput = page.locator('#display-cache-budget-input');
   const usageReadout = page.locator('#display-cache-usage');
-  const resetSettingsButton = page.getByRole('menuitem', { name: 'Reset Settings', exact: true });
+  const resetSettingsButton = page.getByRole('button', { name: 'Reset Settings', exact: true });
   const imageResizer = page.locator('#image-panel-resizer');
   const rightResizer = page.locator('#right-panel-resizer');
   const bottomResizer = page.locator('#bottom-panel-resizer');
@@ -728,15 +732,15 @@ test('resets settings back to the default budget and panel layout', async ({ pag
     });
   };
 
-  await settingsMenuButton.click();
-  await expect(settingsMenu).toBeVisible();
+  await settingsDialogButton.click();
+  await expect(settingsDialog).toBeVisible();
   await themeInput.selectOption('spectrum-lattice');
   await expect(themeInput).toHaveValue('spectrum-lattice');
   await budgetInput.selectOption('128');
   await expect(budgetInput).toHaveValue('128');
   await expect(usageReadout).toContainText('/ 128 MB');
   await page.keyboard.press('Escape');
-  await expect(settingsMenu).toBeHidden();
+  await expect(settingsDialog).toBeHidden();
 
   await dragBy(page, imageResizer, 48, 0);
   await dragBy(page, rightResizer, -48, 0);
@@ -758,14 +762,14 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   expect(mutated.storedBudget).toBe('128');
   expect(mutated.storedTheme).toBe('spectrum-lattice');
 
-  await settingsMenuButton.click();
-  await expect(settingsMenu).toBeVisible();
+  await settingsDialogButton.click();
+  await expect(settingsDialog).toBeVisible();
   await expect(themeInput).toHaveValue('spectrum-lattice');
   await expect(budgetInput).toHaveValue('128');
   await resetSettingsButton.click();
 
-  await expect(settingsMenu).toBeVisible();
-  await expect(settingsMenuButton).toHaveAttribute('aria-expanded', 'true');
+  await expect(settingsDialog).toBeVisible();
+  await expect(settingsDialogButton).toHaveAttribute('aria-expanded', 'true');
   await expect(themeInput).toHaveValue('default');
   await expect(budgetInput).toHaveValue('256');
   await expect(usageReadout).toContainText('/ 256 MB');
@@ -791,8 +795,8 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   await page.reload();
   await expectViewerAppReady(page);
 
-  await settingsMenuButton.click();
-  await expect(settingsMenu).toBeVisible();
+  await settingsDialogButton.click();
+  await expect(settingsDialog).toBeVisible();
   await expect(themeInput).toHaveValue('default');
   await expect(budgetInput).toHaveValue('256');
   await expect(usageReadout).toContainText('/ 256 MB');

@@ -4,6 +4,7 @@ export interface Elements {
   appAutoFitImageButton: HTMLButtonElement;
   appScreenshotButton: HTMLButtonElement;
   appFullscreenButton: HTMLButtonElement;
+  settingsDialogButton: HTMLButtonElement;
   appIconTooltip: HTMLElement;
   displayToolbar: HTMLElement;
   mainLayout: HTMLElement;
@@ -28,8 +29,9 @@ export interface Elements {
   windowMenu: HTMLElement;
   galleryMenuButton: HTMLButtonElement;
   galleryMenu: HTMLElement;
-  settingsMenuButton: HTMLButtonElement;
-  settingsMenu: HTMLElement;
+  settingsDialogBackdrop: HTMLDivElement;
+  settingsDialog: HTMLElement;
+  settingsDialogCloseButton: HTMLButtonElement;
   themeSelect: HTMLSelectElement;
   resetSettingsButton: HTMLButtonElement;
   imageViewerMenuItem: HTMLButtonElement;
@@ -265,8 +267,6 @@ export type TopMenuControllerElements = Pick<
   | 'windowMenu'
   | 'galleryMenuButton'
   | 'galleryMenu'
-  | 'settingsMenuButton'
-  | 'settingsMenu'
 >;
 
 export type AppFullscreenElements = Pick<Elements, 'appShell' | 'appFullscreenButton'>;
@@ -349,6 +349,15 @@ export type FolderLoadDialogElements = Pick<
   | 'folderLoadDialogSubmitButton'
 >;
 
+export type SettingsDialogElements = Pick<
+  Elements,
+  | 'settingsDialogButton'
+  | 'settingsDialogBackdrop'
+  | 'settingsDialog'
+  | 'settingsDialogCloseButton'
+  | 'themeSelect'
+>;
+
 export type ProbeReadoutElements = Pick<
   Elements,
   | 'probeMode'
@@ -410,6 +419,7 @@ export function resolveElements(): Elements {
     appAutoFitImageButton: requireElement('app-auto-fit-image-button', HTMLButtonElement),
     appScreenshotButton: requireElement('app-screenshot-button', HTMLButtonElement),
     appFullscreenButton: requireElement('app-fullscreen-button', HTMLButtonElement),
+    settingsDialogButton: requireElement('settings-dialog-button', HTMLButtonElement),
     appIconTooltip: requireElement('app-icon-tooltip', HTMLElement),
     displayToolbar: requireElement('display-toolbar', HTMLElement),
     mainLayout: requireElement('main-layout', HTMLElement),
@@ -434,8 +444,9 @@ export function resolveElements(): Elements {
     windowMenu: requireElement('window-menu', HTMLElement),
     galleryMenuButton: requireElement('gallery-menu-button', HTMLButtonElement),
     galleryMenu: requireElement('gallery-menu', HTMLElement),
-    settingsMenuButton: requireElement('settings-menu-button', HTMLButtonElement),
-    settingsMenu: requireElement('settings-menu', HTMLElement),
+    settingsDialogBackdrop: requireElement('settings-dialog-backdrop', HTMLDivElement),
+    settingsDialog: requireElement('settings-dialog', HTMLElement),
+    settingsDialogCloseButton: requireElement('settings-dialog-close-button', HTMLButtonElement),
     themeSelect: requireElement('theme-select', HTMLSelectElement),
     resetSettingsButton: requireElement('reset-settings-button', HTMLButtonElement),
     imageViewerMenuItem: requireElement('image-viewer-menu-item', HTMLButtonElement),

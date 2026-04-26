@@ -169,8 +169,8 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   const fileMenu = page.locator('#file-menu');
   const galleryMenuButton = page.getByRole('button', { name: 'Gallery', exact: true });
   const galleryMenu = page.locator('#gallery-menu');
-  const settingsMenuButton = page.getByRole('button', { name: 'Settings', exact: true });
-  const settingsMenu = page.locator('#settings-menu');
+  const settingsDialogButton = page.locator('#settings-dialog-button');
+  const settingsDialog = page.locator('#settings-dialog');
   const galleryCboxItem = page.getByRole('menuitem', { name: 'cbox_rgb.exr', exact: true });
   const openMenuItem = page.locator('#open-file-button');
   const exportMenuItem = page.locator('#export-image-button');
@@ -187,8 +187,12 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   await expect(fileMenu).toBeHidden();
   await expect(galleryMenuButton).toBeVisible();
   await expect(galleryMenu).toBeHidden();
-  await expect(settingsMenuButton).toBeVisible();
-  await expect(settingsMenu).toBeHidden();
+  await expect(page.locator('.app-menu-nav').getByRole('button', { name: 'Settings', exact: true })).toHaveCount(0);
+  await expect(settingsDialogButton).toBeVisible();
+  await expect(settingsDialogButton).toHaveAttribute('aria-label', 'Settings');
+  await expect(settingsDialogButton).toHaveAttribute('aria-haspopup', 'dialog');
+  await expect(settingsDialogButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(settingsDialog).toBeHidden();
   await expect(page.locator('.image-panel-actions')).toHaveCount(0);
   await expect(page.locator('.image-panel-titlebar')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Image', exact: true })).toHaveCount(0);
@@ -225,8 +229,9 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   await page.keyboard.press('Escape');
   await expect(galleryMenu).toBeHidden();
 
-  await settingsMenuButton.click();
-  await expect(settingsMenu).toBeVisible();
+  await settingsDialogButton.click();
+  await expect(settingsDialog).toBeVisible();
+  await expect(settingsDialogButton).toHaveAttribute('aria-expanded', 'true');
   await expect(themeInput).toBeVisible();
   await expect(themeInput).toHaveValue('default');
   await expect(themeInput.locator('option')).toHaveText(['Default', 'Spectrum lattice']);
@@ -235,18 +240,18 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   await expect(budgetInput.locator('option')).toHaveText(['64', '128', '256', '512', '1024']);
   await expect(usageReadout).toContainText('/ 256 MB');
   await page.keyboard.press('Escape');
-  await expect(settingsMenu).toBeHidden();
+  await expect(settingsDialog).toBeHidden();
+  await expect(settingsDialogButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(settingsDialogButton).toBeFocused();
 
   await fileMenuButton.click();
   await expect(fileMenu).toBeVisible();
   await galleryMenuButton.hover();
   await expect(fileMenu).toBeHidden();
   await expect(galleryMenu).toBeVisible();
-  await settingsMenuButton.hover();
+  await settingsDialogButton.hover();
   await expect(galleryMenu).toBeHidden();
-  await expect(settingsMenu).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(settingsMenu).toBeHidden();
+  await expect(settingsDialog).toBeHidden();
 });
 
 test('distinguishes auto-fit pressed state from hover feedback', async ({ page }) => {
@@ -696,7 +701,7 @@ test('marks non-viewer chrome inactive while screenshot selection is active', as
 test('preserves Spectrum lattice chrome blur while screenshot selection is active', async ({ page }) => {
   await gotoViewerApp(page);
 
-  const settingsMenuButton = page.getByRole('button', { name: 'Settings', exact: true });
+  const settingsDialogButton = page.locator('#settings-dialog-button');
   const themeInput = page.locator('#theme-select');
   const appShell = page.locator('#app');
   const appMenuBar = page.locator('#app-menu-bar');
@@ -706,7 +711,7 @@ test('preserves Spectrum lattice chrome blur while screenshot selection is activ
   const appScreenshotButton = page.locator('#app-screenshot-button');
   const selectionOverlay = page.locator('#screenshot-selection-overlay');
 
-  await settingsMenuButton.click();
+  await settingsDialogButton.click();
   await themeInput.selectOption('spectrum-lattice');
   await expect(themeInput).toHaveValue('spectrum-lattice');
   await page.keyboard.press('Escape');

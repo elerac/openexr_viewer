@@ -64,6 +64,7 @@ import type { ProbeColorPreview } from '../probe';
 import { ProbeReadoutController, type ProbeCoordinateImageSize } from './probe-readout';
 import { setRoiReadout } from './roi-readout';
 import { ThemeController } from './theme-controller';
+import { SettingsDialogController } from './settings-dialog';
 import { TopBarTooltipController } from './top-bar-tooltip-controller';
 import { TopMenuController } from './top-menu-controller';
 import { ViewerBackgroundController } from './viewer-background-controller';
@@ -145,6 +146,7 @@ export class ViewerUi implements Disposable {
   private readonly layoutSplitController: LayoutSplitController;
   private readonly topBarTooltipController: TopBarTooltipController;
   private readonly topMenuController: TopMenuController;
+  private readonly settingsDialog: SettingsDialogController;
   private readonly appFullscreenController: AppFullscreenController;
   private readonly globalKeyboardController: GlobalKeyboardController;
   private readonly windowPreviewController: WindowPreviewController;
@@ -259,9 +261,16 @@ export class ViewerUi implements Disposable {
         this.clearViewerKeyboardNavigationInput();
       }
     });
+    this.settingsDialog = new SettingsDialogController(this.elements, {
+      onBeforeOpen: () => {
+        this.clearViewerKeyboardNavigationInput();
+        this.topMenuController.closeAll(false);
+      }
+    });
     this.appFullscreenController = new AppFullscreenController(this.elements, {
       onBeforeToggle: () => {
         this.topMenuController.closeAll();
+        this.settingsDialog.close(false);
       }
     });
     this.globalKeyboardController = new GlobalKeyboardController(this.elements, {
@@ -287,6 +296,10 @@ export class ViewerUi implements Disposable {
       isFolderLoadDialogOpen: () => this.folderLoadDialog.isOpen(),
       closeFolderLoadDialog: (restoreFocus) => {
         this.folderLoadDialog.close(false, restoreFocus);
+      },
+      isSettingsDialogOpen: () => this.settingsDialog.isOpen(),
+      closeSettingsDialog: (restoreFocus) => {
+        this.settingsDialog.close(restoreFocus);
       },
       isWindowPreviewActive: () => this.windowPreviewController.isActive(),
       setWindowPreviewEnabled: (enabled) => {
@@ -397,6 +410,7 @@ export class ViewerUi implements Disposable {
     this.disposables.addDisposable(this.layoutSplitController);
     this.disposables.addDisposable(this.topBarTooltipController);
     this.disposables.addDisposable(this.topMenuController);
+    this.disposables.addDisposable(this.settingsDialog);
     this.disposables.addDisposable(this.appFullscreenController);
     this.disposables.addDisposable(this.globalKeyboardController);
     this.disposables.addDisposable(this.windowPreviewController);
@@ -446,6 +460,7 @@ export class ViewerUi implements Disposable {
     this.clearScreenshotSelectionMemory();
     this.hideScreenshotSelection();
     this.folderLoadDialog.close(false, false);
+    this.settingsDialog.close(false);
     this.topMenuController.closeAll(false);
     this.dragDropController.showOverlay(false);
     this.elements.appShell.classList.remove('is-window-preview');
@@ -499,6 +514,7 @@ export class ViewerUi implements Disposable {
       this.exportImageBatchDialog.close(false);
       this.exportColormapDialog.close(false);
       this.folderLoadDialog.close(false, false);
+      this.settingsDialog.close(false);
     }
   }
 

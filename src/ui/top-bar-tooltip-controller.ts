@@ -19,7 +19,8 @@ export class TopBarTooltipController implements Disposable {
     this.buttons = [
       this.elements.appAutoFitImageButton,
       this.elements.appScreenshotButton,
-      this.elements.appFullscreenButton
+      this.elements.appFullscreenButton,
+      this.elements.settingsDialogButton
     ] as TooltipButton[];
     this.elements.appIconTooltip.hidden = true;
 

@@ -77,8 +77,7 @@ export class TopMenuController implements Disposable {
       { button: this.elements.fileMenuButton, menu: this.elements.fileMenu },
       { button: this.elements.viewMenuButton, menu: this.elements.viewMenu },
       { button: this.elements.windowMenuButton, menu: this.elements.windowMenu },
-      { button: this.elements.galleryMenuButton, menu: this.elements.galleryMenu },
-      { button: this.elements.settingsMenuButton, menu: this.elements.settingsMenu }
+      { button: this.elements.galleryMenuButton, menu: this.elements.galleryMenu }
     ];
   }
 

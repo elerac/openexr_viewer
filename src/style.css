@@ -590,6 +590,10 @@ input[type='range'] {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
+.app-dialog--settings {
+  width: min(100%, 22rem);
+}
+
 .app-dialog-header,
 .app-dialog-body {
   display: grid;
