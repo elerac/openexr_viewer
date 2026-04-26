@@ -318,6 +318,81 @@ describe('viewer app core', () => {
     expect(core.getState().sessionState.roi).toBeNull();
   });
 
+  it('fits the active image to the viewport while preserving non-view session state', () => {
+    const core = new ViewerAppCore();
+    const session = createSession('session-1', createDecodedImage());
+    core.dispatch({ type: 'sessionLoaded', session });
+    core.dispatch({ type: 'exposureSet', exposureEv: 2 });
+    core.dispatch({ type: 'displaySelectionSet', displaySelection: createChannelMonoSelection('R') });
+    core.dispatch({ type: 'roiSet', roi: { x0: 0, y0: 0, x1: 1, y1: 0 } });
+    core.dispatch({ type: 'lockedPixelToggled', pixel: { ix: 1, iy: 0 } });
+    core.dispatch({
+      type: 'viewStateCommitted',
+      view: {
+        zoom: 3,
+        panX: 20,
+        panY: 30,
+        panoramaYawDeg: 0,
+        panoramaPitchDeg: 0,
+        panoramaHfovDeg: 100
+      }
+    });
+
+    core.dispatch({
+      type: 'activeSessionFitToViewport',
+      viewport: { width: 40, height: 40 }
+    });
+
+    expect(core.getState().sessionState).toMatchObject({
+      zoom: 20,
+      panX: 1,
+      panY: 0.5,
+      exposureEv: 2,
+      displaySelection: createChannelMonoSelection('R'),
+      roi: { x0: 0, y0: 0, x1: 1, y1: 0 },
+      lockedPixel: { ix: 1, iy: 0 }
+    });
+    expect(core.getState().interactionState.view).toMatchObject({
+      zoom: 20,
+      panX: 1,
+      panY: 0.5
+    });
+    expect(core.getState().interactionState.hoveredPixel).toBeNull();
+  });
+
+  it('does not fit the active image while in panorama mode', () => {
+    const core = new ViewerAppCore();
+    const session = createSession('session-1');
+    core.dispatch({ type: 'sessionLoaded', session });
+    core.dispatch({ type: 'viewerModeSet', viewerMode: 'panorama' });
+    core.dispatch({
+      type: 'viewStateCommitted',
+      view: {
+        zoom: 3,
+        panX: 20,
+        panY: 30,
+        panoramaYawDeg: 15,
+        panoramaPitchDeg: 5,
+        panoramaHfovDeg: 80
+      }
+    });
+
+    core.dispatch({
+      type: 'activeSessionFitToViewport',
+      viewport: { width: 40, height: 40 }
+    });
+
+    expect(core.getState().sessionState).toMatchObject({
+      viewerMode: 'panorama',
+      zoom: 3,
+      panX: 20,
+      panY: 30,
+      panoramaYawDeg: 15,
+      panoramaPitchDeg: 5,
+      panoramaHfovDeg: 80
+    });
+  });
+
   it('routes hover-only interaction publishes through the render lane without broad UI churn', () => {
     const core = new ViewerAppCore();
     const session = createSession('session-1');

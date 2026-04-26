@@ -263,6 +263,17 @@ export class SessionController implements Disposable {
     });
   }
 
+  fitActiveSessionToViewport(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.core.dispatch({
+      type: 'activeSessionFitToViewport',
+      viewport: this.getViewport()
+    });
+  }
+
   getSessions(): OpenedImageSession[] {
     return this.core.getState().sessions;
   }

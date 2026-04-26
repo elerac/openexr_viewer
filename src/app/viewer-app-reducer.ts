@@ -13,6 +13,7 @@ import {
   isStokesSelection,
   sameDisplaySelection
 } from '../display-model';
+import { computeFitView } from '../interaction/image-geometry';
 import { cloneImageRoi } from '../roi';
 import { cloneViewerSessionState } from '../session-state';
 import {
@@ -598,6 +599,21 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         clearHover: true,
         resetDisplayRangeContext: true
       });
+    }
+    case 'activeSessionFitToViewport': {
+      const activeSession = selectActiveSession(state);
+      if (!activeSession || state.sessionState.viewerMode !== 'image') {
+        return state;
+      }
+
+      return patchSessionState(
+        state,
+        computeFitView(intent.viewport, activeSession.decoded.width, activeSession.decoded.height),
+        {
+          syncInteractionView: true,
+          clearHover: true
+        }
+      );
     }
     case 'thumbnailRequested':
       return {

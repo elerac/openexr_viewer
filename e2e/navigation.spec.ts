@@ -238,6 +238,17 @@ test('auto-fits images selected from Open Files when the top-bar toggle is enabl
     return coords === null || coords.x !== 25 || coords.y !== 50;
   }).toBe(true);
 
+  await autoFitButton.click();
+  await expect(autoFitButton).toHaveAttribute('aria-pressed', 'false');
+  await page.mouse.move(center.x, center.y);
+  await expect.poll(async () => await readProbeCoords(probeCoords), { timeout: 5000 }).toEqual({
+    x: 25,
+    y: 50
+  });
+
+  await autoFitButton.click();
+  await expect(autoFitButton).toHaveAttribute('aria-pressed', 'true');
+
   const landscapeRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'landscape.exr' });
   await landscapeRow.locator('.opened-file-label').click();
   await expect(openedImages.locator('option:checked')).toContainText('landscape.exr');

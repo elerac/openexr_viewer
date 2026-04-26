@@ -147,6 +147,7 @@ export type ViewerIntent =
   | { type: 'sessionClosed'; sessionId: string }
   | { type: 'allSessionsClosed' }
   | { type: 'activeSessionReset'; viewport: ViewportInfo }
+  | { type: 'activeSessionFitToViewport'; viewport: ViewportInfo }
   | { type: 'thumbnailRequested'; sessionId: string; token: number }
   | { type: 'thumbnailReady'; sessionId: string; token: number; thumbnailDataUrl: string | null }
   | { type: 'channelThumbnailRequested'; requestKey: string; token: number }

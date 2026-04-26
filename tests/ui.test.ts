@@ -455,35 +455,44 @@ describe('display toolbar', () => {
     expect(hiddenToolbarMenuItem.getAttribute('aria-checked')).toBe('false');
   });
 
-  it('persists and dispatches the top-bar auto-fit selected images toggle', () => {
+  it('persists and dispatches the top-bar auto-fit selected images toggle and immediate fit action', () => {
     installUiFixture();
 
     const onAutoFitImageOnSelectChange = vi.fn();
-    new ViewerUi(createUiCallbacks({ onAutoFitImageOnSelectChange }));
+    const onAutoFitImage = vi.fn();
+    new ViewerUi(createUiCallbacks({ onAutoFitImageOnSelectChange, onAutoFitImage }));
     const button = document.getElementById('app-auto-fit-image-button') as HTMLButtonElement;
 
     expect(button.getAttribute('aria-pressed')).toBe('false');
     expect(onAutoFitImageOnSelectChange).toHaveBeenLastCalledWith(false);
+    expect(onAutoFitImage).not.toHaveBeenCalled();
 
     button.click();
 
     expect(button.getAttribute('aria-pressed')).toBe('true');
     expect(window.localStorage.getItem('openexr-viewer:auto-fit-image-on-select:v1')).toBe('true');
     expect(onAutoFitImageOnSelectChange).toHaveBeenLastCalledWith(true);
+    expect(onAutoFitImage).toHaveBeenCalledTimes(1);
 
     installUiFixture();
     const restoredCallback = vi.fn();
-    new ViewerUi(createUiCallbacks({ onAutoFitImageOnSelectChange: restoredCallback }));
+    const restoredAutoFitImage = vi.fn();
+    new ViewerUi(createUiCallbacks({
+      onAutoFitImageOnSelectChange: restoredCallback,
+      onAutoFitImage: restoredAutoFitImage
+    }));
     const restoredButton = document.getElementById('app-auto-fit-image-button') as HTMLButtonElement;
 
     expect(restoredButton.getAttribute('aria-pressed')).toBe('true');
     expect(restoredCallback).toHaveBeenLastCalledWith(true);
+    expect(restoredAutoFitImage).not.toHaveBeenCalled();
 
     restoredButton.click();
 
     expect(restoredButton.getAttribute('aria-pressed')).toBe('false');
     expect(window.localStorage.getItem('openexr-viewer:auto-fit-image-on-select:v1')).toBe('false');
     expect(restoredCallback).toHaveBeenLastCalledWith(false);
+    expect(restoredAutoFitImage).toHaveBeenCalledTimes(1);
   });
 
   it('dispatches reset view from toolbar and inspector reset buttons', () => {
@@ -5676,6 +5685,7 @@ function createUiCallbacksBase() {
     onExposureChange: () => {},
     onPanoramaKeyboardOrbitInputChange: () => {},
     onAutoFitImageOnSelectChange: () => {},
+    onAutoFitImage: () => {},
     onViewerModeChange: () => {},
     onLayerChange: () => {},
     onRgbGroupChange: () => {},

@@ -154,6 +154,9 @@ export function createViewerUi({
     onAutoFitImageOnSelectChange: (enabled) => {
       core.dispatch({ type: 'autoFitImageOnSelectSet', enabled });
     },
+    onAutoFitImage: () => {
+      getSessionController().fitActiveSessionToViewport();
+    },
     onViewerModeChange: (mode) => {
       getDisplayController().setViewerMode(mode);
     },

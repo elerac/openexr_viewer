@@ -115,6 +115,7 @@ export interface UiCallbacks {
   onExposureChange: (value: number) => void;
   onPanoramaKeyboardOrbitInputChange: (input: PanoramaKeyboardOrbitInput) => void;
   onAutoFitImageOnSelectChange: (enabled: boolean) => void;
+  onAutoFitImage: () => void;
   onViewerModeChange: (mode: ViewerMode) => void;
   onLayerChange: (layerIndex: number) => void;
   onRgbGroupChange: (mapping: DisplaySelection) => void;
@@ -1291,6 +1292,7 @@ export class ViewerUi implements Disposable {
       const enabled = !this.autoFitImageOnSelect;
       this.setAutoFitImageOnSelect(enabled, true);
       this.callbacks.onAutoFitImageOnSelectChange(enabled);
+      this.callbacks.onAutoFitImage();
     });
 
     this.disposables.addEventListener(this.elements.screenshotSelectionCancelButton, 'click', () => {
