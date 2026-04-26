@@ -253,15 +253,27 @@ output {
   border-radius: 0.35rem;
   padding: 0;
   background: transparent;
+  box-shadow: none;
   color: var(--text-dim);
 }
 
-.app-menu-icon-button:hover:not(:disabled),
-.app-menu-icon-button:focus-visible,
-.app-auto-fit-image-button[aria-pressed='true'],
-.app-fullscreen-button[aria-pressed='true'] {
+.app-menu-icon-button:hover:not(:disabled) {
   outline: none;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text);
+}
+
+.app-menu-icon-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 62%, transparent);
+  outline-offset: 2px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text);
+}
+
+.app-auto-fit-image-button[aria-pressed='true']:not(:disabled),
+.app-fullscreen-button[aria-pressed='true']:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
   color: var(--text);
 }
 

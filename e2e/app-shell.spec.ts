@@ -80,6 +80,19 @@ async function readChromeVisualState(locator: Locator): Promise<{
   });
 }
 
+async function readAutoFitButtonVisualState(page: Page): Promise<{
+  backgroundColor: string;
+  boxShadow: string;
+}> {
+  return page.locator('#app-auto-fit-image-button').evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      backgroundColor: style.backgroundColor,
+      boxShadow: style.boxShadow
+    };
+  });
+}
+
 async function expectInactiveScreenshotChrome(locator: Locator): Promise<void> {
   await expect.poll(async () => (await readChromeVisualState(locator)).opacity).toBeCloseTo(1, 2);
   await expect.poll(async () => (await readChromeVisualState(locator)).pointerEvents).toBe('none');
@@ -230,6 +243,30 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   await expect(settingsMenu).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(settingsMenu).toBeHidden();
+});
+
+test('distinguishes auto-fit pressed state from hover feedback', async ({ page }) => {
+  await gotoViewerApp(page);
+
+  const autoFitButton = page.locator('#app-auto-fit-image-button');
+
+  await page.mouse.move(1, 1);
+  await expect(autoFitButton).toHaveAttribute('aria-pressed', 'false');
+  const initialState = await readAutoFitButtonVisualState(page);
+  expect(initialState.boxShadow).toBe('none');
+
+  await autoFitButton.click();
+  await expect(autoFitButton).toHaveAttribute('aria-pressed', 'true');
+  const pressedState = await readAutoFitButtonVisualState(page);
+  expect(pressedState.boxShadow).not.toBe('none');
+  expect(pressedState.boxShadow.match(/\binset\b/g)).toHaveLength(1);
+  expect(pressedState.boxShadow).not.toContain('-2px');
+
+  await autoFitButton.click();
+  await expect(autoFitButton).toHaveAttribute('aria-pressed', 'false');
+  const hoveredOffState = await readAutoFitButtonVisualState(page);
+  expect(hoveredOffState.boxShadow).toBe('none');
+  expect(hoveredOffState.backgroundColor).not.toBe(pressedState.backgroundColor);
 });
 
 test('opens the gallery demo image and keeps core display controls stable', async ({ page }) => {
