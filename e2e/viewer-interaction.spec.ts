@@ -98,6 +98,36 @@ test('orbits panorama view with global w/a/s/d keys while keeping the probe in s
   await expect.poll(async () => await readProbeCoords(probeCoords)).toEqual(initialCoords);
 });
 
+test('disables the top-bar auto-fit toggle while panorama view is active', async ({ page }) => {
+  await gotoViewerApp(page);
+  await openGalleryCbox(page);
+
+  const autoFitButton = page.locator('#app-auto-fit-image-button');
+  const viewMenuButton = page.locator('#view-menu-button');
+  const imageViewerMenuItem = page.locator('#image-viewer-menu-item');
+  const panoramaViewerMenuItem = page.locator('#panorama-viewer-menu-item');
+
+  await expect(autoFitButton).toBeEnabled();
+  await expect(autoFitButton).toHaveAttribute('aria-pressed', 'false');
+
+  await autoFitButton.click();
+  await expect(autoFitButton).toHaveAttribute('aria-pressed', 'true');
+
+  await viewMenuButton.click();
+  await panoramaViewerMenuItem.click();
+
+  await expect(panoramaViewerMenuItem).toHaveAttribute('aria-checked', 'true');
+  await expect(autoFitButton).toBeDisabled();
+  await expect(autoFitButton).toHaveAttribute('aria-pressed', 'true');
+
+  await viewMenuButton.click();
+  await imageViewerMenuItem.click();
+
+  await expect(imageViewerMenuItem).toHaveAttribute('aria-checked', 'true');
+  await expect(autoFitButton).toBeEnabled();
+  await expect(autoFitButton).toHaveAttribute('aria-pressed', 'true');
+});
+
 test('creates ROI with shift-drag and keeps ROI editing disabled in panorama mode', async ({ page }) => {
   await gotoViewerApp(page);
   await openGalleryCbox(page);

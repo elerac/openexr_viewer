@@ -495,6 +495,43 @@ describe('display toolbar', () => {
     expect(restoredAutoFitImage).not.toHaveBeenCalled();
   });
 
+  it('disables the top-bar auto-fit toggle in panorama mode without clearing its pressed state', () => {
+    installUiFixture();
+
+    const onAutoFitImageOnSelectChange = vi.fn();
+    const onAutoFitImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onAutoFitImageOnSelectChange, onAutoFitImage }));
+    const button = document.getElementById('app-auto-fit-image-button') as HTMLButtonElement;
+
+    expect(button.disabled).toBe(false);
+    button.click();
+
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(window.localStorage.getItem('openexr-viewer:auto-fit-image-on-select:v1')).toBe('true');
+    expect(onAutoFitImageOnSelectChange).toHaveBeenLastCalledWith(true);
+    expect(onAutoFitImage).toHaveBeenCalledTimes(1);
+
+    onAutoFitImageOnSelectChange.mockClear();
+    onAutoFitImage.mockClear();
+
+    ui.setViewerMode('panorama');
+
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(window.localStorage.getItem('openexr-viewer:auto-fit-image-on-select:v1')).toBe('true');
+    expect(onAutoFitImageOnSelectChange).not.toHaveBeenCalled();
+    expect(onAutoFitImage).not.toHaveBeenCalled();
+
+    ui.setViewerMode('image');
+
+    expect(button.disabled).toBe(false);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+  });
+
   it('does not retain focus after pointer auto-fit activation', () => {
     installUiFixture();
 

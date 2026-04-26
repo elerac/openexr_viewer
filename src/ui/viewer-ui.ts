@@ -609,6 +609,7 @@ export class ViewerUi implements Disposable {
     this.viewerMode = mode;
     this.elements.imageViewerMenuItem.setAttribute('aria-checked', mode === 'image' ? 'true' : 'false');
     this.elements.panoramaViewerMenuItem.setAttribute('aria-checked', mode === 'panorama' ? 'true' : 'false');
+    this.updateAutoFitImageButtonDisabled();
   }
 
   setVisualizationMode(mode: VisualizationMode): void {
@@ -1236,6 +1237,14 @@ export class ViewerUi implements Disposable {
     this.elements.panoramaViewerMenuItem.disabled = disabled;
   }
 
+  private updateAutoFitImageButtonDisabled(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.elements.appAutoFitImageButton.disabled = this.viewerMode === 'panorama';
+  }
+
   private bindEvents(): void {
     this.disposables.addEventListener(document, 'pointerdown', this.onScreenshotSelectionPointerGuard, {
       capture: true
@@ -1295,6 +1304,10 @@ export class ViewerUi implements Disposable {
     });
 
     this.disposables.addEventListener(this.elements.appAutoFitImageButton, 'click', (event) => {
+      if (this.elements.appAutoFitImageButton.disabled) {
+        return;
+      }
+
       const enabled = !this.autoFitImageOnSelect;
       this.setAutoFitImageOnSelect(enabled, true);
       this.callbacks.onAutoFitImageOnSelectChange(enabled);

@@ -469,6 +469,45 @@ describe('session controller shim', () => {
     expect(reloaded?.decoded.height).toBe(8);
   });
 
+  it('fits the active session after reload when auto-fit is enabled', async () => {
+    const decodeBytes = vi
+      .fn<(_: Uint8Array) => Promise<DecodedExrImage>>()
+      .mockResolvedValueOnce(createDecodedImage(4, 4))
+      .mockResolvedValueOnce(createDecodedImage(8, 8));
+    const { controller, core } = createController({ decodeBytes });
+
+    await controller.enqueueFiles([createFile('reload.exr')]);
+    const sessionId = controller.getActiveSessionId()!;
+    core.dispatch({
+      type: 'viewStateCommitted',
+      view: {
+        zoom: 3,
+        panX: 20,
+        panY: 30,
+        panoramaYawDeg: 0,
+        panoramaPitchDeg: 0,
+        panoramaHfovDeg: 100
+      }
+    });
+    core.dispatch({
+      type: 'autoFitImageOnSelectSet',
+      enabled: true
+    });
+
+    await controller.reloadSession(sessionId);
+
+    expect(core.getState().sessionState).toMatchObject({
+      zoom: 12.5,
+      panX: 4,
+      panY: 4
+    });
+    expect(controller.getActiveSession()?.state).toMatchObject({
+      zoom: 12.5,
+      panX: 4,
+      panY: 4
+    });
+  });
+
   it('cancels in-flight reload decodes when the session is closed', async () => {
     const reloadSignalRef: { current: AbortSignal | null } = { current: null };
     const decodeBytes = vi

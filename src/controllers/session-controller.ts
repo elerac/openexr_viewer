@@ -451,6 +451,10 @@ export class SessionController implements Disposable {
         sessionId,
         session: reloadedSession
       });
+      const currentState = this.core.getState();
+      if (currentState.autoFitImageOnSelect && currentState.activeSessionId === sessionId) {
+        this.fitActiveSessionToViewport();
+      }
       return null;
     } catch (error) {
       if (isAbortError(error)) {
