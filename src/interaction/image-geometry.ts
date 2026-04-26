@@ -1,6 +1,6 @@
 import type { ImagePixel, ViewerState, ViewerViewState, ViewportInfo } from '../types';
 
-export const MIN_ZOOM = 0.125;
+export const MIN_ZOOM = 0.03125;
 export const MAX_ZOOM = 512;
 
 export interface ViewportClientRect {

@@ -49,7 +49,7 @@ const state: ViewerState = {
 
 describe('interaction math', () => {
   it('clamps zoom bounds', () => {
-    expect(clampZoom(0.001)).toBe(0.125);
+    expect(clampZoom(0.001)).toBe(0.03125);
     expect(clampZoom(999)).toBe(512);
     expect(clampZoom(2)).toBe(2);
   });

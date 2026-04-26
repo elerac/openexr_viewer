@@ -259,7 +259,7 @@ vi.mock('../src/renderer', () => ({
 
 vi.mock('../src/interaction/image-geometry', () => ({
   computeFitView: vi.fn((viewport, width, height) => {
-    const zoom = Math.min(512, Math.max(0.125, Math.min(viewport.width / width, viewport.height / height)));
+    const zoom = Math.min(512, Math.max(0.03125, Math.min(viewport.width / width, viewport.height / height)));
     return {
       zoom,
       panX: width * 0.5,
@@ -267,7 +267,7 @@ vi.mock('../src/interaction/image-geometry', () => ({
     };
   }),
   isFitViewForViewport: vi.fn((view, viewport, width, height) => {
-    const zoom = Math.min(512, Math.max(0.125, Math.min(viewport.width / width, viewport.height / height)));
+    const zoom = Math.min(512, Math.max(0.03125, Math.min(viewport.width / width, viewport.height / height)));
     const epsilon = 1e-6;
     return (
       Math.abs(view.zoom - zoom) <= epsilon &&

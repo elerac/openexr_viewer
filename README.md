@@ -43,7 +43,7 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - Angle Stokes colormaps expose a paired degree modulation toggle: AoLP can be modulated by DoLP, CoP by DoCP, and ToP by DoP. AoLP also lets the modulation target be `V` (HSV value) or `S` (HSV saturation), defaulting to `V`. CoP and ToP modulation default to on; AoLP defaults to off.
   - Leaves raw numeric probe values unchanged.
 - Nearest-neighbor rendering at all zoom levels (no interpolation).
-- Zoom range: `0.125x` to `512x`, wheel zoom anchored to cursor.
+- Zoom range: `0.03125x` to `512x`, wheel zoom anchored to cursor.
 - Pan with left mouse drag.
 - Panorama viewer:
   - Projects the current display texture onto a sphere using equirectangular sampling.
