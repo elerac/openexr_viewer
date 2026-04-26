@@ -333,6 +333,59 @@ describe('gl image renderer', () => {
     expect(lastUniform1iValue(gl, 'uAlphaOutputMode')).toBe(1);
   });
 
+  it('keeps full-image RGB exports opaque while making screenshot backgrounds transparent', () => {
+    const { renderer, gl } = createHarness();
+    const layer = createInterleavedLayerFromChannels({
+      R: [1, 0, 0, 1],
+      G: [0, 1, 0, 1],
+      B: [0, 0, 1, 1]
+    });
+    const state = {
+      ...createInitialState(),
+      displaySelection: createChannelRgbSelection('R', 'G', 'B'),
+      hoveredPixel: null,
+      draftRoi: null
+    };
+
+    renderer.ensureLayerChannelsResident('session-1', 0, 2, 2, layer, ['R', 'G', 'B']);
+    renderer.setDisplaySelectionBindings(
+      'session-1',
+      0,
+      2,
+      2,
+      buildDisplaySourceBinding(layer, state.displaySelection)
+    );
+    gl.readPixels.mockImplementation((_x, _y, _width, _height, _format, _type, data: Uint8ClampedArray) => {
+      data.fill(255);
+    });
+
+    renderer.readExportPixels({
+      state,
+      sourceWidth: 2,
+      sourceHeight: 2
+    });
+
+    expect(lastUniform1iValue(gl, 'uCompositeCheckerboard')).toBe(0);
+    expect(lastUniform1iValue(gl, 'uAlphaOutputMode')).toBe(0);
+
+    gl.uniform1i.mockClear();
+
+    renderer.readExportPixels({
+      state,
+      sourceWidth: 2,
+      sourceHeight: 2,
+      outputWidth: 40,
+      outputHeight: 20,
+      screenshot: {
+        rect: { x: 10, y: 5, width: 20, height: 10 },
+        sourceViewport: { width: 100, height: 50 }
+      }
+    });
+
+    expect(lastUniform1iValue(gl, 'uCompositeCheckerboard')).toBe(0);
+    expect(lastUniform1iValue(gl, 'uAlphaOutputMode')).toBe(1);
+  });
+
   it('renders bounded export pixels into the requested output dimensions', () => {
     const { renderer, gl } = createHarness();
     const layer = createInterleavedLayerFromChannels({

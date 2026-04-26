@@ -36,7 +36,7 @@ export function readExportPixels(
   const sourceSurface = getOrCreateExportSurface(gl, state.exportSourceSurface, outputWidth, outputHeight);
   state.exportSourceSurface = sourceSurface;
 
-  const preserveAlpha = state.activeBinding.usesImageAlpha;
+  const preserveAlpha = Boolean(screenshot) || state.activeBinding.usesImageAlpha;
   const exportRender = screenshot
     ? buildScreenshotExportRender(viewerState, screenshot, outputWidth, outputHeight)
     : buildFullImageExportRender(viewerState, sourceWidth, sourceHeight, outputWidth, outputHeight);
