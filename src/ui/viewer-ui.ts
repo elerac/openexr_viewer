@@ -1292,7 +1292,9 @@ export class ViewerUi implements Disposable {
       const enabled = !this.autoFitImageOnSelect;
       this.setAutoFitImageOnSelect(enabled, true);
       this.callbacks.onAutoFitImageOnSelectChange(enabled);
-      this.callbacks.onAutoFitImage();
+      if (enabled) {
+        this.callbacks.onAutoFitImage();
+      }
     });
 
     this.disposables.addEventListener(this.elements.screenshotSelectionCancelButton, 'click', () => {

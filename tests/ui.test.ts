@@ -492,7 +492,7 @@ describe('display toolbar', () => {
     expect(restoredButton.getAttribute('aria-pressed')).toBe('false');
     expect(window.localStorage.getItem('openexr-viewer:auto-fit-image-on-select:v1')).toBe('false');
     expect(restoredCallback).toHaveBeenLastCalledWith(false);
-    expect(restoredAutoFitImage).toHaveBeenCalledTimes(1);
+    expect(restoredAutoFitImage).not.toHaveBeenCalled();
   });
 
   it('dispatches reset view from toolbar and inspector reset buttons', () => {
