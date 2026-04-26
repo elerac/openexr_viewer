@@ -1687,6 +1687,7 @@ body.is-resizing-panel-rows * {
 }
 
 .image-browser-list {
+  --image-browser-empty-row-height: 1.94rem;
   display: grid;
   gap: 0.05rem;
   padding: 0.15rem 0 0.45rem;
@@ -1695,7 +1696,7 @@ body.is-resizing-panel-rows * {
 .image-browser-list:empty::before {
   content: "";
   display: block;
-  min-height: 1.94rem;
+  min-height: var(--image-browser-empty-row-height);
 }
 
 .image-browser-list[hidden] {
@@ -1711,9 +1712,11 @@ body.is-resizing-panel-rows * {
 }
 
 .image-browser-empty {
+  min-height: var(--image-browser-empty-row-height);
   padding: 0.5rem 0.75rem;
   color: var(--text-dim);
   font-size: 0.78rem;
+  line-height: calc(var(--image-browser-empty-row-height) - 1rem);
 }
 
 .image-browser-row {
