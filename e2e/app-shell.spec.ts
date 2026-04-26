@@ -63,30 +63,55 @@ async function readChromeVisualState(locator: Locator): Promise<{
   opacity: number;
   pointerEvents: string;
   filter: string;
+  backdropFilter: string;
+  overlayBackgroundColor: string;
 }> {
   return locator.evaluate((element) => {
     const style = getComputedStyle(element);
+    const webkitStyle = style as CSSStyleDeclaration & { webkitBackdropFilter?: string };
+    const overlayStyle = getComputedStyle(element, '::after');
     return {
       opacity: Number.parseFloat(style.opacity),
       pointerEvents: style.pointerEvents,
-      filter: style.filter
+      filter: style.filter,
+      backdropFilter: style.backdropFilter || webkitStyle.webkitBackdropFilter || '',
+      overlayBackgroundColor: overlayStyle.backgroundColor
     };
   });
 }
 
 async function expectInactiveScreenshotChrome(locator: Locator): Promise<void> {
+  await expect.poll(async () => (await readChromeVisualState(locator)).opacity).toBeCloseTo(1, 2);
+  await expect.poll(async () => (await readChromeVisualState(locator)).pointerEvents).toBe('none');
+  await expect.poll(async () => (await readChromeVisualState(locator)).filter).toBe('none');
+  await expect.poll(async () => parseCssColorAlpha((await readChromeVisualState(locator)).overlayBackgroundColor))
+    .toBeGreaterThan(0);
+}
+
+async function expectInactiveScreenshotResizer(locator: Locator): Promise<void> {
   await expect.poll(async () => (await readChromeVisualState(locator)).opacity).toBeCloseTo(0.46, 2);
   await expect.poll(async () => (await readChromeVisualState(locator)).pointerEvents).toBe('none');
-  await expect.poll(async () => (await readChromeVisualState(locator)).filter).toContain('grayscale');
-  const state = await readChromeVisualState(locator);
-  expect(state.filter).toContain('saturate');
-  expect(state.filter).toContain('brightness');
+  await expect.poll(async () => (await readChromeVisualState(locator)).filter).toBe('none');
 }
 
 async function expectActiveScreenshotTarget(locator: Locator): Promise<void> {
   await expect.poll(async () => (await readChromeVisualState(locator)).opacity).toBeCloseTo(1, 2);
   await expect.poll(async () => (await readChromeVisualState(locator)).pointerEvents).toBe('auto');
   await expect.poll(async () => (await readChromeVisualState(locator)).filter).toBe('none');
+}
+
+function parseCssColorAlpha(color: string): number {
+  if (color === 'transparent') {
+    return 0;
+  }
+
+  const match = color.match(/^rgba?\((.+)\)$/);
+  if (!match) {
+    return 0;
+  }
+
+  const alpha = match[1]?.split(',').at(3)?.trim();
+  return alpha === undefined ? 1 : Number.parseFloat(alpha);
 }
 
 async function expectViewerCheckerBackground(viewer: Locator): Promise<void> {
@@ -553,12 +578,17 @@ test('marks non-viewer chrome inactive while screenshot selection is active', as
     displayToolbar,
     rightStack,
     imagePanel,
-    bottomPanel,
+    bottomPanel
+  ]) {
+    await expectInactiveScreenshotChrome(inactiveChrome);
+  }
+
+  for (const inactiveResizer of [
     imagePanelResizer,
     rightPanelResizer,
     bottomPanelResizer
   ]) {
-    await expectInactiveScreenshotChrome(inactiveChrome);
+    await expectInactiveScreenshotResizer(inactiveResizer);
   }
 
   await expectActiveScreenshotTarget(selectionControls);
@@ -579,6 +609,41 @@ test('marks non-viewer chrome inactive while screenshot selection is active', as
     bottomPanelResizer
   ]) {
     await expectActiveScreenshotTarget(restoredChrome);
+  }
+});
+
+test('preserves Spectrum lattice chrome blur while screenshot selection is active', async ({ page }) => {
+  await gotoViewerApp(page);
+
+  const settingsMenuButton = page.getByRole('button', { name: 'Settings', exact: true });
+  const themeInput = page.locator('#theme-select');
+  const appShell = page.locator('#app');
+  const appMenuBar = page.locator('#app-menu-bar');
+  const rightStack = page.locator('#right-stack');
+  const imagePanel = page.locator('#image-panel');
+  const bottomPanel = page.locator('#bottom-panel');
+  const appScreenshotButton = page.locator('#app-screenshot-button');
+  const selectionOverlay = page.locator('#screenshot-selection-overlay');
+
+  await settingsMenuButton.click();
+  await themeInput.selectOption('spectrum-lattice');
+  await expect(themeInput).toHaveValue('spectrum-lattice');
+  await page.keyboard.press('Escape');
+
+  await openGalleryCbox(page);
+  await appScreenshotButton.click();
+
+  await expect(selectionOverlay).toBeVisible();
+  await expect(appShell).toHaveClass(/is-screenshot-selecting/);
+
+  for (const inactiveChrome of [
+    appMenuBar,
+    rightStack,
+    imagePanel,
+    bottomPanel
+  ]) {
+    await expectInactiveScreenshotChrome(inactiveChrome);
+    await expect.poll(async () => (await readChromeVisualState(inactiveChrome)).backdropFilter).toContain('blur');
   }
 });
 

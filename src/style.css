@@ -35,6 +35,8 @@
   --viewer-checker-offset-y: 0px;
   --viewer-checker-opacity: 1;
   --viewer-grid-opacity: 0;
+  --screenshot-inactive-overlay: rgba(3, 7, 12, 0.46);
+  --screenshot-inactive-resizer-opacity: 0.46;
   --z-app-menu: 20;
   --z-viewer-background: 0;
   --z-viewer-grid: 1;
@@ -78,6 +80,7 @@
   --viewer-background: transparent;
   --viewer-checker-opacity: 0;
   --viewer-grid-opacity: 1;
+  --screenshot-inactive-overlay: rgba(2, 5, 10, 0.38);
 }
 
 * {
@@ -153,14 +156,28 @@ output {
 .app-shell.is-screenshot-selecting .error-banner,
 .app-shell.is-screenshot-selecting .image-panel-shell,
 .app-shell.is-screenshot-selecting .right-stack,
-.app-shell.is-screenshot-selecting .bottom-panel-shell,
-.app-shell.is-screenshot-selecting .layout-resizer {
-  opacity: 0.46;
-  filter: grayscale(0.65) saturate(0.45) brightness(0.82);
+.app-shell.is-screenshot-selecting .bottom-panel-shell {
   pointer-events: none;
-  transition:
-    opacity 120ms ease,
-    filter 120ms ease;
+}
+
+.app-shell.is-screenshot-selecting .app-menu-bar::after,
+.app-shell.is-screenshot-selecting .display-toolbar::after,
+.app-shell.is-screenshot-selecting .error-banner::after,
+.app-shell.is-screenshot-selecting .image-panel-shell::after,
+.app-shell.is-screenshot-selecting .right-stack::after,
+.app-shell.is-screenshot-selecting .bottom-panel-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--screenshot-inactive-overlay);
+  pointer-events: none;
+}
+
+.app-shell.is-screenshot-selecting .layout-resizer {
+  opacity: var(--screenshot-inactive-resizer-opacity);
+  pointer-events: none;
+  transition: opacity 120ms ease;
 }
 
 .app-menu-bar {
