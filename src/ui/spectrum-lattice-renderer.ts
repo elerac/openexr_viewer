@@ -120,6 +120,7 @@ void main() {
 
 const DEFAULT_FRAME_TIME_SECONDS = 18.0;
 const SPECTRUM_LATTICE_TRANSITION_MS = 3000;
+const SPECTRUM_LATTICE_TRANSITION_COMPLETION_MS = SPECTRUM_LATTICE_TRANSITION_MS + 100;
 const IDLE_PERCEIVED_BRIGHTNESS = 1.0;
 const ACTIVE_PERCEIVED_BRIGHTNESS = 0.7;
 const IDLE_CHECKER_OPACITY = 0;
@@ -157,6 +158,7 @@ export class SpectrumLatticeRenderer implements Disposable {
   private targetSpectrumGridOpacity = ACTIVE_SPECTRUM_GRID_OPACITY;
   private transitionStartSpectrumGridOpacity = ACTIVE_SPECTRUM_GRID_OPACITY;
   private transitionStartNowMs: number | null = null;
+  private transitionCompletionTimeoutId: number | null = null;
   private pointerTrackingActive = false;
   private reducedMotion = false;
 
@@ -264,7 +266,7 @@ export class SpectrumLatticeRenderer implements Disposable {
     }
     if (this.reducedMotion) {
       this.renderStaticFrame(this.lastTimeSeconds);
-      this.stop();
+      this.stopAnimation();
     } else {
       this.startAnimation(now);
     }
@@ -317,13 +319,22 @@ export class SpectrumLatticeRenderer implements Disposable {
   }
 
   private stop(): void {
+    this.stopAnimation();
+    this.clearTransition();
+  }
+
+  private stopAnimation(): void {
     this.animationActive = false;
     this.lastFrameNowMs = null;
-    this.transitionStartNowMs = null;
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
+  }
+
+  private clearTransition(): void {
+    this.transitionStartNowMs = null;
+    this.clearTransitionCompletionTimeout();
   }
 
   private setMotionState(
@@ -344,7 +355,7 @@ export class SpectrumLatticeRenderer implements Disposable {
     this.spectrumGridOpacity = spectrumGridOpacity;
     this.targetSpectrumGridOpacity = spectrumGridOpacity;
     this.transitionStartSpectrumGridOpacity = spectrumGridOpacity;
-    this.transitionStartNowMs = null;
+    this.clearTransition();
     this.lastFrameNowMs = null;
     this.emitCurrentBlend();
   }
@@ -366,6 +377,7 @@ export class SpectrumLatticeRenderer implements Disposable {
     this.targetSpectrumGridOpacity = targetSpectrumGridOpacity;
     this.transitionStartSpectrumGridOpacity = this.spectrumGridOpacity;
     this.transitionStartNowMs = now;
+    this.scheduleTransitionCompletion();
   }
 
   private initialize(): void {
@@ -422,7 +434,7 @@ export class SpectrumLatticeRenderer implements Disposable {
 
     this.renderStaticFrame(this.lastTimeSeconds);
     if (this.mode === 'active' && this.targetMotionSpeed === 0 && this.motionSpeed === 0) {
-      this.stop();
+      this.stopAnimation();
       return;
     }
 
@@ -450,11 +462,7 @@ export class SpectrumLatticeRenderer implements Disposable {
         easedProgress
       );
       if (progress >= 1) {
-        this.motionSpeed = this.targetMotionSpeed;
-        this.perceivedBrightness = this.targetPerceivedBrightness;
-        this.checkerOpacity = this.targetCheckerOpacity;
-        this.spectrumGridOpacity = this.targetSpectrumGridOpacity;
-        this.transitionStartNowMs = null;
+        this.snapTransitionToTarget();
       }
     }
 
@@ -464,6 +472,53 @@ export class SpectrumLatticeRenderer implements Disposable {
     }
     this.lastFrameNowMs = now;
     this.emitCurrentBlend();
+  }
+
+  private scheduleTransitionCompletion(): void {
+    this.clearTransitionCompletionTimeout();
+    this.transitionCompletionTimeoutId = window.setTimeout(() => {
+      this.transitionCompletionTimeoutId = null;
+      if (this.disposed || this.mode === 'disabled' || !this.canvasVisible) {
+        return;
+      }
+
+      this.completeTransition();
+      this.renderStaticFrame(this.lastTimeSeconds);
+
+      if (this.mode === 'active' && this.targetMotionSpeed === 0) {
+        this.stopAnimation();
+      } else if (this.mode === 'idle' && !this.reducedMotion && document.visibilityState !== 'hidden') {
+        this.stopAnimation();
+        this.startAnimation(performance.now());
+      }
+    }, SPECTRUM_LATTICE_TRANSITION_COMPLETION_MS);
+  }
+
+  private clearTransitionCompletionTimeout(): void {
+    if (this.transitionCompletionTimeoutId === null) {
+      return;
+    }
+
+    window.clearTimeout(this.transitionCompletionTimeoutId);
+    this.transitionCompletionTimeoutId = null;
+  }
+
+  private completeTransition(): void {
+    if (this.transitionStartNowMs === null) {
+      this.clearTransitionCompletionTimeout();
+      return;
+    }
+
+    this.snapTransitionToTarget();
+    this.emitCurrentBlend();
+  }
+
+  private snapTransitionToTarget(): void {
+    this.motionSpeed = this.targetMotionSpeed;
+    this.perceivedBrightness = this.targetPerceivedBrightness;
+    this.checkerOpacity = this.targetCheckerOpacity;
+    this.spectrumGridOpacity = this.targetSpectrumGridOpacity;
+    this.clearTransition();
   }
 
   private emitCurrentBlend(): void {
@@ -583,7 +638,8 @@ export class SpectrumLatticeRenderer implements Disposable {
     }
 
     if (document.visibilityState === 'hidden') {
-      this.stop();
+      this.completeTransition();
+      this.stopAnimation();
       return;
     }
 

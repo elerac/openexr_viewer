@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SpectrumLatticeRenderer, type SpectrumLatticeBlend } from '../src/ui/spectrum-lattice-renderer';
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
@@ -52,6 +53,26 @@ describe('SpectrumLatticeRenderer', () => {
     expect(animation.cancelAnimationFrame).toHaveBeenCalledTimes(1);
     expect(readBrightnessUniforms(gl).at(-1)).toBeCloseTo(0.7);
     expect(blends.at(-1)).toEqual({ checkerOpacity: 1, gridOpacity: 0 });
+  });
+
+  it('finishes the active blend if animation frames stall during transition', () => {
+    vi.useFakeTimers();
+    const animation = installAnimationFrameMock();
+    const { canvas, renderer, blends } = createHarness();
+
+    renderer.setMode('idle');
+    animation.setNow(100);
+    renderer.setMode('active');
+
+    expect(canvas.classList.contains('hidden')).toBe(false);
+    expect(animation.queuedFrameCount()).toBe(1);
+    expect(blends.at(-1)).not.toEqual({ checkerOpacity: 1, gridOpacity: 0 });
+
+    vi.advanceTimersByTime(3100);
+
+    expect(blends.at(-1)).toEqual({ checkerOpacity: 1, gridOpacity: 0 });
+    expect(animation.queuedFrameCount()).toBe(0);
+    expect(animation.cancelAnimationFrame).toHaveBeenCalledTimes(1);
   });
 
   it('redraws a frozen active frame when resized', () => {

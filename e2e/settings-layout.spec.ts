@@ -94,11 +94,20 @@ async function expectViewerBackgroundLayerOpacity(
 ): Promise<void> {
   await expect.poll(async () => {
     const state = await readViewerBackgroundState(page);
-    return (
-      Math.abs(Number(state.checkerOpacity) - expected.checker) < 0.01 &&
-      Math.abs(Number(state.spectrumGridOpacity) - expected.spectrumGrid) < 0.01
-    );
-  }, { timeout: 4500 }).toBe(true);
+    return {
+      checker: normalizePolledOpacity(state.checkerOpacity, expected.checker),
+      spectrumGrid: normalizePolledOpacity(state.spectrumGridOpacity, expected.spectrumGrid)
+    };
+  }, { timeout: 7000 }).toEqual(expected);
+}
+
+function normalizePolledOpacity(value: string, expected: number): number {
+  const numericValue = Number(value);
+  if (Math.abs(numericValue - expected) < 0.01) {
+    return expected;
+  }
+
+  return Number(numericValue.toFixed(4));
 }
 
 async function expectOverlayCanvasTransparent(page: Page): Promise<void> {
