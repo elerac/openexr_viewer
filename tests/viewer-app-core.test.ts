@@ -37,6 +37,18 @@ function createSession(id: string, decoded = createDecodedImage()): OpenedImageS
 }
 
 describe('viewer app core', () => {
+  it('toggles auto-fit selected images as application state', () => {
+    const core = new ViewerAppCore();
+
+    expect(core.getState().autoFitImageOnSelect).toBe(false);
+
+    core.dispatch({ type: 'autoFitImageOnSelectSet', enabled: true });
+    expect(core.getState().autoFitImageOnSelect).toBe(true);
+
+    core.dispatch({ type: 'autoFitImageOnSelectSet', enabled: false });
+    expect(core.getState().autoFitImageOnSelect).toBe(false);
+  });
+
   it('updates thumbnail state from worker feedback and ignores stale tokens', () => {
     const core = new ViewerAppCore();
     const session = createSession('session-1');
@@ -76,6 +88,75 @@ describe('viewer app core', () => {
       panY: 5,
       displaySelection: createChannelMonoSelection('R'),
       lockedPixel: { ix: 1, iy: 0 }
+    });
+  });
+
+  it('fits the selected image on active session switches when auto-fit is enabled and a viewport is supplied', () => {
+    const core = new ViewerAppCore();
+    const first = createSession('first');
+    const second = createSession('second');
+    core.dispatch({ type: 'sessionLoaded', session: first });
+    core.dispatch({ type: 'sessionLoaded', session: second });
+    core.dispatch({
+      type: 'viewStateCommitted',
+      view: {
+        zoom: 3,
+        panX: 4,
+        panY: 5,
+        panoramaYawDeg: 0,
+        panoramaPitchDeg: 0,
+        panoramaHfovDeg: 100
+      }
+    });
+    core.dispatch({ type: 'autoFitImageOnSelectSet', enabled: true });
+
+    core.dispatch({
+      type: 'activeSessionSwitched',
+      sessionId: first.id,
+      viewport: { width: 20, height: 20 }
+    });
+
+    expect(core.getState().sessionState).toMatchObject({
+      zoom: 10,
+      panX: 1,
+      panY: 0.5
+    });
+  });
+
+  it('does not apply image auto-fit while switching sessions in panorama mode', () => {
+    const core = new ViewerAppCore();
+    const first = createSession('first');
+    const second = createSession('second');
+    core.dispatch({ type: 'sessionLoaded', session: first });
+    core.dispatch({ type: 'sessionLoaded', session: second });
+    core.dispatch({ type: 'autoFitImageOnSelectSet', enabled: true });
+    core.dispatch({ type: 'viewerModeSet', viewerMode: 'panorama' });
+    core.dispatch({
+      type: 'viewStateCommitted',
+      view: {
+        zoom: 3,
+        panX: 4,
+        panY: 5,
+        panoramaYawDeg: 30,
+        panoramaPitchDeg: 10,
+        panoramaHfovDeg: 90
+      }
+    });
+
+    core.dispatch({
+      type: 'activeSessionSwitched',
+      sessionId: first.id,
+      viewport: { width: 20, height: 20 }
+    });
+
+    expect(core.getState().sessionState).toMatchObject({
+      viewerMode: 'panorama',
+      zoom: first.state.zoom,
+      panX: first.state.panX,
+      panY: first.state.panY,
+      panoramaYawDeg: 30,
+      panoramaPitchDeg: 10,
+      panoramaHfovDeg: 90
     });
   });
 

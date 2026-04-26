@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => {
     activeDisplayLuminanceRange: null,
     loadedColormapId: null,
     stokesDisplayRestoreStates: {},
+    autoFitImageOnSelect: false,
     sessionState: {
       exposureEv: 0,
       viewerMode: 'image',
@@ -218,6 +219,7 @@ vi.mock('../src/ui/viewer-ui', () => ({
     readonly setError = vi.fn();
     readonly setLoading = vi.fn();
     readonly setRgbViewLoading = vi.fn();
+    readonly setAutoFitImageOnSelect = vi.fn();
     readonly setDisplayCacheBudget = vi.fn();
     readonly setDisplayCacheUsage = vi.fn();
     readonly setOpenedImageOptions = vi.fn();

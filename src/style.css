@@ -258,6 +258,7 @@ output {
 
 .app-menu-icon-button:hover:not(:disabled),
 .app-menu-icon-button:focus-visible,
+.app-auto-fit-image-button[aria-pressed='true'],
 .app-fullscreen-button[aria-pressed='true'] {
   outline: none;
   background: color-mix(in srgb, var(--accent) 14%, transparent);

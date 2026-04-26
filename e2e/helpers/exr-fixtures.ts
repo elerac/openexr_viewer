@@ -247,6 +247,34 @@ export function buildPortraitRgbExr(): Buffer {
   }
 }
 
+export function buildSizedRgbExr(width: number, height: number): Buffer {
+  ensureExrEncoderInitialized();
+
+  const pixelCount = width * height;
+  const pixels = new Float32Array(pixelCount * 3);
+  for (let index = 0; index < pixelCount; index += 1) {
+    const x = index % width;
+    const y = Math.floor(index / width);
+    pixels[index * 3] = width > 1 ? x / (width - 1) : 0;
+    pixels[index * 3 + 1] = height > 1 ? y / (height - 1) : 0;
+    pixels[index * 3 + 2] = 0.5;
+  }
+
+  const encoder = new ExrEncoder(width, height);
+  try {
+    encoder.addLayer(
+      null,
+      ['R', 'G', 'B'],
+      pixels,
+      SamplePrecision.F32,
+      CompressionMethod.None
+    );
+    return Buffer.from(encoder.encode());
+  } finally {
+    encoder.free();
+  }
+}
+
 export function buildRgbStokesExr(): Buffer {
   ensureExrEncoderInitialized();
 

@@ -37,6 +37,11 @@ export interface BuildLoadedSessionArgs {
   currentSessionState: ViewerSessionState;
   hasActiveSession: boolean;
   previousImage: DecodedExrImage | null;
+  autoFitImageOnSelect: boolean;
+}
+
+export interface BuildSwitchedSessionStateOptions {
+  autoFitViewport?: ViewportInfo | null;
 }
 
 export function buildLoadedSession(args: BuildLoadedSessionArgs): OpenedImageSession {
@@ -65,7 +70,9 @@ export function buildLoadedSession(args: BuildLoadedSessionArgs): OpenedImageSes
     state: defaultSessionState
   };
   const sessionState = args.hasActiveSession
-    ? buildSwitchedSessionState(baseSession, args.currentSessionState, args.previousImage)
+    ? buildSwitchedSessionState(baseSession, args.currentSessionState, args.previousImage, {
+        autoFitViewport: args.autoFitImageOnSelect ? args.viewport : null
+      })
     : defaultSessionState;
 
   return {
@@ -152,7 +159,8 @@ export function buildReloadedSessionState(
 export function buildSwitchedSessionState(
   nextSession: OpenedImageSession,
   currentState: ViewerSessionState,
-  previousImage: DecodedExrImage | null
+  previousImage: DecodedExrImage | null,
+  options: BuildSwitchedSessionStateOptions = {}
 ): ViewerSessionState {
   const lockedPixel = currentState.lockedPixel
     ? clampPixelToImageBounds(currentState.lockedPixel, nextSession.decoded.width, nextSession.decoded.height)
@@ -160,21 +168,7 @@ export function buildSwitchedSessionState(
   const roi = currentState.roi
     ? clampImageRoiToBounds(currentState.roi, nextSession.decoded.width, nextSession.decoded.height)
     : null;
-  const nextImageCamera = currentState.viewerMode === 'image'
-    ? {
-        zoom: currentState.zoom,
-        ...remapPanToImageCenterAnchor(
-          currentState.panX,
-          currentState.panY,
-          previousImage,
-          nextSession.decoded
-        )
-      }
-    : {
-        zoom: nextSession.state.zoom,
-        panX: nextSession.state.panX,
-        panY: nextSession.state.panY
-      };
+  const nextImageCamera = buildSwitchedImageCamera(nextSession, currentState, previousImage, options);
   const nextPanoramaCamera = currentState.viewerMode === 'panorama'
     ? {
         panoramaYawDeg: currentState.panoramaYawDeg,
@@ -215,6 +209,35 @@ export function buildSwitchedSessionState(
     colormapRange: cloneDisplayLuminanceRange(currentState.colormapRange),
     colormapRangeMode: currentState.colormapRangeMode,
     colormapZeroCentered: currentState.colormapZeroCentered
+  };
+}
+
+function buildSwitchedImageCamera(
+  nextSession: OpenedImageSession,
+  currentState: ViewerSessionState,
+  previousImage: DecodedExrImage | null,
+  options: BuildSwitchedSessionStateOptions
+): Pick<ViewerSessionState, 'zoom' | 'panX' | 'panY'> {
+  if (currentState.viewerMode !== 'image') {
+    return {
+      zoom: nextSession.state.zoom,
+      panX: nextSession.state.panX,
+      panY: nextSession.state.panY
+    };
+  }
+
+  if (options.autoFitViewport) {
+    return computeFitView(options.autoFitViewport, nextSession.decoded.width, nextSession.decoded.height);
+  }
+
+  return {
+    zoom: currentState.zoom,
+    ...remapPanToImageCenterAnchor(
+      currentState.panX,
+      currentState.panY,
+      previousImage,
+      nextSession.decoded
+    )
   };
 }
 

@@ -77,6 +77,7 @@ import {
 } from '../folder-load-limits';
 
 const DISPLAY_TOOLBAR_VISIBLE_STORAGE_KEY = 'openexr-viewer:display-toolbar-visible:v1';
+const AUTO_FIT_IMAGE_ON_SELECT_STORAGE_KEY = 'openexr-viewer:auto-fit-image-on-select:v1';
 
 export interface UiCallbacks {
   onOpenFileClick: () => void;
@@ -113,6 +114,7 @@ export interface UiCallbacks {
   onDisplayCacheBudgetChange: (mb: number) => void;
   onExposureChange: (value: number) => void;
   onPanoramaKeyboardOrbitInputChange: (input: PanoramaKeyboardOrbitInput) => void;
+  onAutoFitImageOnSelectChange: (enabled: boolean) => void;
   onViewerModeChange: (mode: ViewerMode) => void;
   onLayerChange: (layerIndex: number) => void;
   onRgbGroupChange: (mapping: DisplaySelection) => void;
@@ -170,6 +172,7 @@ export class ViewerUi implements Disposable {
   private rgbGroupChannelNames: string[] = [];
   private currentChannelSelection: DisplaySelection | null = null;
   private viewerMode: ViewerMode = 'image';
+  private autoFitImageOnSelect = false;
   private hasActiveChannelImage = false;
   private disposed = false;
 
@@ -406,6 +409,8 @@ export class ViewerUi implements Disposable {
     this.disposables.addDisposable(this.themeController);
     this.clearImageBrowserPanels();
     this.setViewerMode('image');
+    this.setAutoFitImageOnSelect(readStoredAutoFitImageOnSelect(), false);
+    this.callbacks.onAutoFitImageOnSelectChange(this.autoFitImageOnSelect);
     this.setDisplayToolbarVisible(readStoredDisplayToolbarVisible(), false);
     this.updateViewerModeMenuItemsDisabled();
     this.updateFileMenuItemsDisabled();
@@ -493,6 +498,18 @@ export class ViewerUi implements Disposable {
       this.exportImageBatchDialog.close(false);
       this.exportColormapDialog.close(false);
       this.folderLoadDialog.close(false, false);
+    }
+  }
+
+  setAutoFitImageOnSelect(enabled: boolean, persist = false): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.autoFitImageOnSelect = enabled;
+    this.elements.appAutoFitImageButton.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    if (persist) {
+      saveStoredAutoFitImageOnSelect(enabled);
     }
   }
 
@@ -1270,6 +1287,12 @@ export class ViewerUi implements Disposable {
       this.startScreenshotSelectionFromAction();
     });
 
+    this.disposables.addEventListener(this.elements.appAutoFitImageButton, 'click', () => {
+      const enabled = !this.autoFitImageOnSelect;
+      this.setAutoFitImageOnSelect(enabled, true);
+      this.callbacks.onAutoFitImageOnSelectChange(enabled);
+    });
+
     this.disposables.addEventListener(this.elements.screenshotSelectionCancelButton, 'click', () => {
       this.cancelScreenshotSelection();
     });
@@ -1514,5 +1537,21 @@ function saveStoredDisplayToolbarVisible(visible: boolean): void {
     window.localStorage.setItem(DISPLAY_TOOLBAR_VISIBLE_STORAGE_KEY, String(visible));
   } catch {
     // Storage can be unavailable in private contexts; keep the runtime toolbar state anyway.
+  }
+}
+
+function readStoredAutoFitImageOnSelect(): boolean {
+  try {
+    return window.localStorage.getItem(AUTO_FIT_IMAGE_ON_SELECT_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function saveStoredAutoFitImageOnSelect(enabled: boolean): void {
+  try {
+    window.localStorage.setItem(AUTO_FIT_IMAGE_ON_SELECT_STORAGE_KEY, String(enabled));
+  } catch {
+    // Storage can be unavailable in private contexts; keep the runtime state anyway.
   }
 }

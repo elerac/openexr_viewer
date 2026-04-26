@@ -159,6 +159,7 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   const exportMenuItem = page.locator('#export-image-button');
   const reloadAllMenuItem = page.locator('#reload-all-opened-images-button');
   const closeAllMenuItem = page.locator('#close-all-opened-images-button');
+  const autoFitButton = page.locator('#app-auto-fit-image-button');
   const themeInput = page.locator('#theme-select');
   const budgetInput = page.locator('#display-cache-budget-input');
   const usageReadout = page.locator('#display-cache-usage');
@@ -180,7 +181,15 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   await expect(openedImages.locator('option')).toHaveCount(0);
   await expect(page.locator('#opened-files-list')).toContainText('No open files');
   await expect(page.locator('#viewer-idle-message')).toHaveCount(0);
+  await expect(autoFitButton).toBeVisible();
+  await expect(autoFitButton).toHaveAttribute('aria-label', 'Auto fit selected images');
+  await expect(autoFitButton).toHaveAttribute('aria-pressed', 'false');
   await expectViewerCheckerBackground(viewer);
+
+  await autoFitButton.click();
+  await expect(autoFitButton).toHaveAttribute('aria-pressed', 'true');
+  await autoFitButton.click();
+  await expect(autoFitButton).toHaveAttribute('aria-pressed', 'false');
 
   await fileMenuButton.click();
   await expect(fileMenu).toBeVisible();

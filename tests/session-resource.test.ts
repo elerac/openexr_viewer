@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildReloadedSessionState } from '../src/app/session-resource';
+import { buildLoadedSession, buildReloadedSessionState } from '../src/app/session-resource';
 import { createInitialState } from '../src/viewer-store';
 import { createImage, createLayerFromChannels } from './helpers/state-fixtures';
+import type { DecodedExrImage } from '../src/types';
 
 describe('session resource ROI handling', () => {
   it('clamps ROIs to the reloaded image bounds', () => {
@@ -56,3 +57,76 @@ describe('session resource ROI handling', () => {
     expect(nextState.roi).toBeNull();
   });
 });
+
+describe('session resource auto-fit handling', () => {
+  it('preserves the carried image view when loading with auto-fit disabled', () => {
+    const session = buildLoadedSession({
+      sessionId: 'session-2',
+      decoded: createSizedImage(8, 8),
+      filename: 'second.exr',
+      fileSizeBytes: 16,
+      source: { kind: 'url', url: '/second.exr' },
+      existingSessions: [],
+      defaultColormapId: '0',
+      viewport: { width: 200, height: 100 },
+      currentSessionState: {
+        ...createInitialState(),
+        zoom: 3,
+        panX: 4,
+        panY: 5
+      },
+      hasActiveSession: true,
+      previousImage: createSizedImage(6, 6),
+      autoFitImageOnSelect: false
+    });
+
+    expect(session.state).toMatchObject({
+      zoom: 3,
+      panX: 5,
+      panY: 6
+    });
+  });
+
+  it('fits the newly active image when loading with auto-fit enabled', () => {
+    const session = buildLoadedSession({
+      sessionId: 'session-2',
+      decoded: createSizedImage(8, 8),
+      filename: 'second.exr',
+      fileSizeBytes: 16,
+      source: { kind: 'url', url: '/second.exr' },
+      existingSessions: [],
+      defaultColormapId: '0',
+      viewport: { width: 200, height: 100 },
+      currentSessionState: {
+        ...createInitialState(),
+        zoom: 3,
+        panX: 4,
+        panY: 5
+      },
+      hasActiveSession: true,
+      previousImage: createSizedImage(6, 6),
+      autoFitImageOnSelect: true
+    });
+
+    expect(session.state).toMatchObject({
+      zoom: 12.5,
+      panX: 4,
+      panY: 4
+    });
+  });
+});
+
+function createSizedImage(width: number, height: number): DecodedExrImage {
+  const pixelCount = width * height;
+  return {
+    width,
+    height,
+    layers: [
+      createLayerFromChannels({
+        R: new Float32Array(pixelCount).fill(1),
+        G: new Float32Array(pixelCount).fill(1),
+        B: new Float32Array(pixelCount).fill(1)
+      })
+    ]
+  };
+}

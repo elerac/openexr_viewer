@@ -61,7 +61,8 @@ export function createInitialViewerAppState(): ViewerAppState {
     pendingChannelThumbnailTokensByRequestKey: {},
     channelThumbnailsByRequestKey: {},
     channelThumbnailLatestRequestKeyByContextKey: {},
-    stokesDisplayRestoreStates: {}
+    stokesDisplayRestoreStates: {},
+    autoFitImageOnSelect: false
   };
 }
 
@@ -76,6 +77,11 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
       return state.isLoading === intent.loading ? state : {
         ...state,
         isLoading: intent.loading
+      };
+    case 'autoFitImageOnSelectSet':
+      return state.autoFitImageOnSelect === intent.enabled ? state : {
+        ...state,
+        autoFitImageOnSelect: intent.enabled
       };
     case 'colormapRegistryResolved': {
       const nextState = patchSessionState(state, {
@@ -435,7 +441,10 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
       const nextSessionState = buildSwitchedSessionState(
         nextSession,
         state.sessionState,
-        selectActiveSession(state)?.decoded ?? null
+        selectActiveSession(state)?.decoded ?? null,
+        {
+          autoFitViewport: state.autoFitImageOnSelect ? intent.viewport ?? null : null
+        }
       );
       return {
         ...state,

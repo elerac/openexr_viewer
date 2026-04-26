@@ -108,6 +108,21 @@ describe('viewer app lanes', () => {
     expect(createRenderFlags(state, state)).toBe(ViewerRenderInvalidationFlags.None);
   });
 
+  it('exposes auto-fit selection mode through the UI lane only', () => {
+    const state = createActiveState();
+    const nextState = {
+      ...state,
+      autoFitImageOnSelect: true
+    };
+    const selectUiSnapshot = createViewerUiSnapshotSelector();
+    const snapshot = selectUiSnapshot(nextState);
+    const uiFlags = createUiFlags(state, nextState);
+
+    expect(snapshot.autoFitImageOnSelect).toBe(true);
+    expect(hasUiFlag(uiFlags, ViewerUiInvalidationFlags.AutoFitImageOnSelect)).toBe(true);
+    expect(createRenderFlags(state, nextState)).toBe(ViewerRenderInvalidationFlags.None);
+  });
+
   it('keeps display selection transitions busy without requesting the full loading overlay', () => {
     const state = createActiveState();
     const selectUiSnapshot = createViewerUiSnapshotSelector();

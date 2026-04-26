@@ -455,6 +455,37 @@ describe('display toolbar', () => {
     expect(hiddenToolbarMenuItem.getAttribute('aria-checked')).toBe('false');
   });
 
+  it('persists and dispatches the top-bar auto-fit selected images toggle', () => {
+    installUiFixture();
+
+    const onAutoFitImageOnSelectChange = vi.fn();
+    new ViewerUi(createUiCallbacks({ onAutoFitImageOnSelectChange }));
+    const button = document.getElementById('app-auto-fit-image-button') as HTMLButtonElement;
+
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(onAutoFitImageOnSelectChange).toHaveBeenLastCalledWith(false);
+
+    button.click();
+
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(window.localStorage.getItem('openexr-viewer:auto-fit-image-on-select:v1')).toBe('true');
+    expect(onAutoFitImageOnSelectChange).toHaveBeenLastCalledWith(true);
+
+    installUiFixture();
+    const restoredCallback = vi.fn();
+    new ViewerUi(createUiCallbacks({ onAutoFitImageOnSelectChange: restoredCallback }));
+    const restoredButton = document.getElementById('app-auto-fit-image-button') as HTMLButtonElement;
+
+    expect(restoredButton.getAttribute('aria-pressed')).toBe('true');
+    expect(restoredCallback).toHaveBeenLastCalledWith(true);
+
+    restoredButton.click();
+
+    expect(restoredButton.getAttribute('aria-pressed')).toBe('false');
+    expect(window.localStorage.getItem('openexr-viewer:auto-fit-image-on-select:v1')).toBe('false');
+    expect(restoredCallback).toHaveBeenLastCalledWith(false);
+  });
+
   it('dispatches reset view from toolbar and inspector reset buttons', () => {
     installUiFixture();
 
@@ -1102,22 +1133,28 @@ describe('view menu', () => {
     expect(labels).toEqual(['File', 'View', 'Window', 'Gallery', 'Settings']);
   });
 
-  it('renders the top bar screenshot button before the fullscreen button', () => {
+  it('renders top bar icon actions in the expected order', () => {
     installUiFixture();
 
     new ViewerUi(createUiCallbacks());
 
     const actions = document.querySelector('.app-menu-actions') as HTMLElement;
+    const autoFitButton = document.getElementById('app-auto-fit-image-button') as HTMLButtonElement;
     const screenshotButton = document.getElementById('app-screenshot-button') as HTMLButtonElement;
     const fullscreenButton = document.getElementById('app-fullscreen-button') as HTMLButtonElement;
 
     expect(screenshotButton.closest('#app-menu-bar')).not.toBeNull();
     expect(actions).not.toBeNull();
     expect(Array.from(actions.children).map((child) => child.id)).toEqual([
+      'app-auto-fit-image-button',
       'app-screenshot-button',
       'app-fullscreen-button'
     ]);
+    expect(screenshotButton.previousElementSibling).toBe(autoFitButton);
     expect(fullscreenButton.previousElementSibling).toBe(screenshotButton);
+    expect(autoFitButton.getAttribute('aria-label')).toBe('Auto fit selected images');
+    expect(autoFitButton.dataset.tooltip).toBe('Auto fit selected images');
+    expect(autoFitButton.title).toBe('Auto fit selected images');
     expect(screenshotButton.getAttribute('aria-label')).toBe('Export Screenshot...');
     expect(screenshotButton.dataset.tooltip).toBe('Export screenshot');
     expect(screenshotButton.title).toBe('Export Screenshot...');
@@ -5638,6 +5675,7 @@ function createUiCallbacksBase() {
     onDisplayCacheBudgetChange: () => {},
     onExposureChange: () => {},
     onPanoramaKeyboardOrbitInputChange: () => {},
+    onAutoFitImageOnSelectChange: () => {},
     onViewerModeChange: () => {},
     onLayerChange: () => {},
     onRgbGroupChange: () => {},

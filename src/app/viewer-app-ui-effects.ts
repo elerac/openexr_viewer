@@ -26,6 +26,10 @@ export function applyUiEffects(ui: ViewerUi, transition: ViewerUiTransition): vo
     ui.setExportBatchTarget(snapshot.exportBatchTarget);
   }
 
+  if (invalidation & ViewerUiInvalidationFlags.AutoFitImageOnSelect) {
+    ui.setAutoFitImageOnSelect(snapshot.autoFitImageOnSelect);
+  }
+
   if (invalidation & ViewerUiInvalidationFlags.Exposure) {
     ui.setExposure(snapshot.exposureEv);
   }

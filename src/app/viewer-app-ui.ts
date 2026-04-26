@@ -30,18 +30,19 @@ export const enum ViewerUiInvalidationFlags {
   OpenedImages = 1 << 2,
   ExportTarget = 1 << 3,
   ExportBatchTarget = 1 << 4,
-  Exposure = 1 << 5,
-  ViewerMode = 1 << 6,
-  VisualizationMode = 1 << 7,
-  StokesDegreeModulation = 1 << 8,
-  ActiveColormap = 1 << 9,
-  ColormapOptions = 1 << 10,
-  ColormapGradient = 1 << 11,
-  ColormapRange = 1 << 12,
-  LayerOptions = 1 << 13,
-  Metadata = 1 << 14,
-  RgbGroupOptions = 1 << 15,
-  ClearPanels = 1 << 16
+  AutoFitImageOnSelect = 1 << 5,
+  Exposure = 1 << 6,
+  ViewerMode = 1 << 7,
+  VisualizationMode = 1 << 8,
+  StokesDegreeModulation = 1 << 9,
+  ActiveColormap = 1 << 10,
+  ColormapOptions = 1 << 11,
+  ColormapGradient = 1 << 12,
+  ColormapRange = 1 << 13,
+  LayerOptions = 1 << 14,
+  Metadata = 1 << 15,
+  RgbGroupOptions = 1 << 16,
+  ClearPanels = 1 << 17
 }
 
 export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => ViewerUiSnapshot {
@@ -71,6 +72,7 @@ export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => Vie
         state.pendingColormapRequestId ||
         state.pendingColormapActivation
       ),
+      autoFitImageOnSelect: state.autoFitImageOnSelect,
       activeSessionId: state.activeSessionId,
       openedImageOptions: selectOpenedImageOptions(state),
       exportTarget: selectExportTarget(activeSession),
@@ -138,6 +140,10 @@ export function computeViewerUiInvalidation(
 
   if (!sameExportBatchTarget(previous.exportBatchTarget, next.exportBatchTarget)) {
     flags |= ViewerUiInvalidationFlags.ExportBatchTarget;
+  }
+
+  if (previous.autoFitImageOnSelect !== next.autoFitImageOnSelect) {
+    flags |= ViewerUiInvalidationFlags.AutoFitImageOnSelect;
   }
 
   if (previous.exposureEv !== next.exposureEv) {
@@ -378,6 +384,7 @@ function sameViewerUiSnapshot(a: ViewerUiSnapshot, b: ViewerUiSnapshot): boolean
     a.isLoading === b.isLoading &&
     a.isDisplayBusy === b.isDisplayBusy &&
     a.isDisplayOverlayLoading === b.isDisplayOverlayLoading &&
+    a.autoFitImageOnSelect === b.autoFitImageOnSelect &&
     a.activeSessionId === b.activeSessionId &&
     sameOpenedImageOptions(a.openedImageOptions, b.openedImageOptions) &&
     sameExportTarget(a.exportTarget, b.exportTarget) &&

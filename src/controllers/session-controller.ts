@@ -196,9 +196,11 @@ export class SessionController implements Disposable {
     this.loadQueue.promoteWhere((entry) => {
       return entry.category === LOAD_CATEGORY_RELOAD_ALL && entry.sessionId === sessionId;
     });
+    const state = this.core.getState();
     this.core.dispatch({
       type: 'activeSessionSwitched',
-      sessionId
+      sessionId,
+      viewport: state.autoFitImageOnSelect ? this.getViewport() : undefined
     });
   }
 
@@ -408,7 +410,8 @@ export class SessionController implements Disposable {
       viewport: this.getViewport(),
       currentSessionState: currentState.sessionState,
       hasActiveSession: Boolean(activeSession),
-      previousImage: activeSession?.decoded ?? null
+      previousImage: activeSession?.decoded ?? null,
+      autoFitImageOnSelect: currentState.autoFitImageOnSelect
     });
 
     this.core.dispatch({

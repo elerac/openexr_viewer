@@ -1,6 +1,7 @@
 export interface Elements {
   appShell: HTMLElement;
   appMenuBar: HTMLElement;
+  appAutoFitImageButton: HTMLButtonElement;
   appScreenshotButton: HTMLButtonElement;
   appFullscreenButton: HTMLButtonElement;
   appIconTooltip: HTMLElement;
@@ -406,6 +407,7 @@ export function resolveElements(): Elements {
   return {
     appShell: requireElement('app', HTMLElement),
     appMenuBar: requireElement('app-menu-bar', HTMLElement),
+    appAutoFitImageButton: requireElement('app-auto-fit-image-button', HTMLButtonElement),
     appScreenshotButton: requireElement('app-screenshot-button', HTMLButtonElement),
     appFullscreenButton: requireElement('app-fullscreen-button', HTMLButtonElement),
     appIconTooltip: requireElement('app-icon-tooltip', HTMLElement),

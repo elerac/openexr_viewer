@@ -151,6 +151,9 @@ export function createViewerUi({
     onPanoramaKeyboardOrbitInputChange: (input) => {
       getInteraction()?.setPanoramaKeyboardOrbitInput(input);
     },
+    onAutoFitImageOnSelectChange: (enabled) => {
+      core.dispatch({ type: 'autoFitImageOnSelectSet', enabled });
+    },
     onViewerModeChange: (mode) => {
       getDisplayController().setViewerMode(mode);
     },

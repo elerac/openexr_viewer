@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { gotoViewerApp, openGalleryCbox } from './helpers/app';
-import { buildScalarChannelExr, buildSpectralExr } from './helpers/exr-fixtures';
-import { readProbeCoords, resolveViewerPoint } from './helpers/viewer';
+import { buildScalarChannelExr, buildSizedRgbExr, buildSpectralExr } from './helpers/exr-fixtures';
+import { dragBy, readProbeCoords, resolveViewerPoint } from './helpers/viewer';
 
 test('moves bottom-panel thumbnail selections with left and right arrow keys', async ({ page }) => {
   await gotoViewerApp(page);
@@ -194,4 +194,56 @@ test('moves open files and channel view selections with arrow keys', async ({ pa
   await page.keyboard.press('ArrowUp');
   await expect(channelSelect.locator('option:checked')).toHaveText('G');
   await expect(greenRow).toBeFocused();
+});
+
+test('auto-fits images selected from Open Files when the top-bar toggle is enabled', async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 760 });
+  await gotoViewerApp(page);
+
+  const autoFitButton = page.locator('#app-auto-fit-image-button');
+  const openedImages = page.locator('#opened-images-select');
+  const viewer = page.locator('#viewer-container');
+  const probeCoords = page.locator('#probe-coords');
+
+  await expect(autoFitButton).toBeVisible();
+  await expect(autoFitButton).toHaveAttribute('aria-pressed', 'false');
+  await autoFitButton.click();
+  await expect(autoFitButton).toHaveAttribute('aria-pressed', 'true');
+
+  await page.setInputFiles('#file-input', {
+    name: 'landscape.exr',
+    mimeType: 'image/exr',
+    buffer: buildSizedRgbExr(100, 50)
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('landscape.exr', { timeout: 30000 });
+
+  await page.setInputFiles('#file-input', {
+    name: 'portrait.exr',
+    mimeType: 'image/exr',
+    buffer: buildSizedRgbExr(50, 100)
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('portrait.exr', { timeout: 30000 });
+
+  const center = await resolveViewerPoint(viewer, 0.5, 0.5);
+  await page.mouse.move(center.x, center.y);
+  await expect.poll(async () => await readProbeCoords(probeCoords), { timeout: 5000 }).toEqual({
+    x: 25,
+    y: 50
+  });
+
+  await dragBy(page, viewer, 180, 120);
+  await page.mouse.move(center.x, center.y);
+  await expect.poll(async () => {
+    const coords = await readProbeCoords(probeCoords);
+    return coords === null || coords.x !== 25 || coords.y !== 50;
+  }).toBe(true);
+
+  const landscapeRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'landscape.exr' });
+  await landscapeRow.locator('.opened-file-label').click();
+  await expect(openedImages.locator('option:checked')).toContainText('landscape.exr');
+  await page.mouse.move(center.x, center.y);
+  await expect.poll(async () => await readProbeCoords(probeCoords), { timeout: 5000 }).toEqual({
+    x: 50,
+    y: 25
+  });
 });

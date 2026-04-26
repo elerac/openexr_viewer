@@ -103,11 +103,13 @@ export interface ViewerAppState {
   channelThumbnailsByRequestKey: Record<string, string | null>;
   channelThumbnailLatestRequestKeyByContextKey: Record<string, string>;
   stokesDisplayRestoreStates: Record<string, RestorableVisualizationState>;
+  autoFitImageOnSelect: boolean;
 }
 
 export type ViewerIntent =
   | { type: 'errorSet'; message: string | null }
   | { type: 'loadingSet'; loading: boolean }
+  | { type: 'autoFitImageOnSelectSet'; enabled: boolean }
   | { type: 'colormapRegistryResolved'; registry: ColormapRegistry }
   | { type: 'colormapLoadStarted'; requestId: number }
   | { type: 'colormapLoadResolved'; requestId: number; colormapId: string; lut: ColormapLut }
@@ -135,7 +137,7 @@ export type ViewerIntent =
   | { type: 'viewStateCommitted'; view: ViewerInteractionState['view'] }
   | { type: 'sessionLoaded'; session: OpenedImageSession }
   | { type: 'sessionReloaded'; sessionId: string; session: OpenedImageSession }
-  | { type: 'activeSessionSwitched'; sessionId: string }
+  | { type: 'activeSessionSwitched'; sessionId: string; viewport?: ViewportInfo }
   | {
       type: 'sessionsReordered';
       draggedSessionId: string;
@@ -177,6 +179,7 @@ export interface ViewerUiSnapshot {
   isLoading: boolean;
   isDisplayBusy: boolean;
   isDisplayOverlayLoading: boolean;
+  autoFitImageOnSelect: boolean;
   activeSessionId: string | null;
   openedImageOptions: ViewerOpenedImageOption[];
   exportTarget: { filename: string } | null;
