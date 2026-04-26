@@ -211,6 +211,7 @@
             class="app-menu-icon-button app-screenshot-button"
             type="button"
             aria-label="Export Screenshot..."
+            data-tooltip="Export screenshot"
             title="Export Screenshot..."
             disabled
           >
@@ -230,6 +231,7 @@
             type="button"
             aria-label="Enter app fullscreen"
             aria-pressed="false"
+            data-tooltip="Enter fullscreen"
             title="Enter app fullscreen"
           >
             <svg
@@ -245,6 +247,7 @@
             </svg>
           </button>
         </div>
+        <div id="app-icon-tooltip" class="app-icon-tooltip hidden" role="tooltip"></div>
         <input id="file-input" type="file" accept=".exr,image/exr" hidden />
         <input id="folder-input" type="file" accept=".exr,image/exr" webkitdirectory multiple hidden />
       </header>

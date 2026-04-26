@@ -4,6 +4,9 @@ import type { AppFullscreenElements } from './elements';
 const ENTER_FULLSCREEN_LABEL = 'Enter app fullscreen';
 const EXIT_FULLSCREEN_LABEL = 'Exit app fullscreen';
 const FULLSCREEN_UNAVAILABLE_LABEL = 'App fullscreen unavailable';
+const ENTER_FULLSCREEN_TOOLTIP = 'Enter fullscreen';
+const EXIT_FULLSCREEN_TOOLTIP = 'Exit fullscreen';
+const FULLSCREEN_UNAVAILABLE_TOOLTIP = 'Fullscreen unavailable';
 
 interface AppFullscreenControllerCallbacks {
   onBeforeToggle: () => void;
@@ -92,10 +95,14 @@ export class AppFullscreenController implements Disposable {
     const supported = this.isSupported();
     const active = document.fullscreenElement === this.elements.appShell;
     const label = supported ? (active ? EXIT_FULLSCREEN_LABEL : ENTER_FULLSCREEN_LABEL) : FULLSCREEN_UNAVAILABLE_LABEL;
+    const tooltip = supported
+      ? (active ? EXIT_FULLSCREEN_TOOLTIP : ENTER_FULLSCREEN_TOOLTIP)
+      : FULLSCREEN_UNAVAILABLE_TOOLTIP;
 
     this.elements.appFullscreenButton.disabled = !supported;
     this.elements.appFullscreenButton.setAttribute('aria-pressed', active ? 'true' : 'false');
     this.elements.appFullscreenButton.setAttribute('aria-label', label);
+    this.elements.appFullscreenButton.dataset.tooltip = tooltip;
     this.elements.appFullscreenButton.title = label;
   }
 

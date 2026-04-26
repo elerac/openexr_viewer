@@ -64,6 +64,7 @@ import type { ProbeColorPreview } from '../probe';
 import { ProbeReadoutController, type ProbeCoordinateImageSize } from './probe-readout';
 import { setRoiReadout } from './roi-readout';
 import { ThemeController } from './theme-controller';
+import { TopBarTooltipController } from './top-bar-tooltip-controller';
 import { TopMenuController } from './top-menu-controller';
 import { ViewerBackgroundController } from './viewer-background-controller';
 import { WindowPreviewController } from './window-preview-controller';
@@ -139,6 +140,7 @@ export class ViewerUi implements Disposable {
   private readonly channelThumbnailStrip: ChannelThumbnailStrip;
   private readonly colormapPanel: ColormapPanel;
   private readonly layoutSplitController: LayoutSplitController;
+  private readonly topBarTooltipController: TopBarTooltipController;
   private readonly topMenuController: TopMenuController;
   private readonly appFullscreenController: AppFullscreenController;
   private readonly globalKeyboardController: GlobalKeyboardController;
@@ -247,6 +249,7 @@ export class ViewerUi implements Disposable {
       }
     });
     this.layoutSplitController = new LayoutSplitController(this.elements);
+    this.topBarTooltipController = new TopBarTooltipController(this.elements);
     this.topMenuController = new TopMenuController(this.elements, {
       onBeforeOpenMenu: () => {
         this.clearPanoramaKeyboardOrbitInput();
@@ -388,6 +391,7 @@ export class ViewerUi implements Disposable {
     this.disposables.addDisposable(this.channelThumbnailStrip);
     this.disposables.addDisposable(this.colormapPanel);
     this.disposables.addDisposable(this.layoutSplitController);
+    this.disposables.addDisposable(this.topBarTooltipController);
     this.disposables.addDisposable(this.topMenuController);
     this.disposables.addDisposable(this.appFullscreenController);
     this.disposables.addDisposable(this.globalKeyboardController);

@@ -3,6 +3,7 @@ export interface Elements {
   appMenuBar: HTMLElement;
   appScreenshotButton: HTMLButtonElement;
   appFullscreenButton: HTMLButtonElement;
+  appIconTooltip: HTMLElement;
   displayToolbar: HTMLElement;
   mainLayout: HTMLElement;
   rightStack: HTMLElement;
@@ -407,6 +408,7 @@ export function resolveElements(): Elements {
     appMenuBar: requireElement('app-menu-bar', HTMLElement),
     appScreenshotButton: requireElement('app-screenshot-button', HTMLButtonElement),
     appFullscreenButton: requireElement('app-fullscreen-button', HTMLButtonElement),
+    appIconTooltip: requireElement('app-icon-tooltip', HTMLElement),
     displayToolbar: requireElement('display-toolbar', HTMLElement),
     mainLayout: requireElement('main-layout', HTMLElement),
     rightStack: requireElement('right-stack', HTMLElement),

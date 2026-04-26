@@ -256,6 +256,24 @@ output {
   color: var(--text-dim);
 }
 
+.app-icon-tooltip {
+  position: fixed;
+  z-index: calc(var(--z-app-menu) + 2);
+  max-width: min(16rem, calc(100vw - 1rem));
+  padding: 0.28rem 0.48rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--popover-surface);
+  box-shadow: var(--popover-shadow);
+  color: var(--text);
+  font-size: 0.76rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  backdrop-filter: var(--popover-backdrop-filter);
+  -webkit-backdrop-filter: var(--popover-backdrop-filter);
+}
+
 .app-menu-icon {
   width: 1.08rem;
   height: 1.08rem;

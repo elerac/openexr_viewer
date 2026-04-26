@@ -1119,8 +1119,41 @@ describe('view menu', () => {
     ]);
     expect(fullscreenButton.previousElementSibling).toBe(screenshotButton);
     expect(screenshotButton.getAttribute('aria-label')).toBe('Export Screenshot...');
+    expect(screenshotButton.dataset.tooltip).toBe('Export screenshot');
     expect(screenshotButton.title).toBe('Export Screenshot...');
     expect(screenshotButton.querySelectorAll('.app-menu-icon')).toHaveLength(1);
+  });
+
+  it('shows short help for top bar icon buttons on hover and focus', () => {
+    vi.useFakeTimers();
+    installUiFixture();
+    installFullscreenApiMock();
+
+    new ViewerUi(createUiCallbacks());
+
+    const screenshotButton = document.getElementById('app-screenshot-button') as HTMLButtonElement;
+    const fullscreenButton = document.getElementById('app-fullscreen-button') as HTMLButtonElement;
+    const tooltip = document.getElementById('app-icon-tooltip') as HTMLElement;
+
+    screenshotButton.disabled = false;
+    screenshotButton.dispatchEvent(new Event('pointerenter'));
+    expect(tooltip.hidden).toBe(true);
+
+    vi.advanceTimersByTime(350);
+    expect(tooltip.hidden).toBe(false);
+    expect(tooltip.textContent).toBe('Export screenshot');
+    expect(screenshotButton.getAttribute('aria-describedby')).toBe('app-icon-tooltip');
+
+    screenshotButton.dispatchEvent(new Event('pointerleave'));
+    expect(tooltip.hidden).toBe(true);
+    expect(screenshotButton.hasAttribute('aria-describedby')).toBe(false);
+
+    fullscreenButton.focus();
+    expect(tooltip.hidden).toBe(false);
+    expect(tooltip.textContent).toBe('Enter fullscreen');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(tooltip.hidden).toBe(true);
   });
 
   it('renders the app fullscreen button in the top bar', () => {
@@ -1135,9 +1168,23 @@ describe('view menu', () => {
     expect(button.disabled).toBe(false);
     expect(button.getAttribute('aria-label')).toBe('Enter app fullscreen');
     expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(button.dataset.tooltip).toBe('Enter fullscreen');
     expect(button.title).toBe('Enter app fullscreen');
     expect(button.querySelectorAll('.app-fullscreen-icon')).toHaveLength(1);
     expect(button.querySelector('.app-fullscreen-icon--enter')).not.toBeNull();
+  });
+
+  it('exposes short help when app fullscreen is unavailable', () => {
+    installUiFixture();
+
+    new ViewerUi(createUiCallbacks());
+
+    const button = document.getElementById('app-fullscreen-button') as HTMLButtonElement;
+
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-label')).toBe('App fullscreen unavailable');
+    expect(button.dataset.tooltip).toBe('Fullscreen unavailable');
+    expect(button.title).toBe('App fullscreen unavailable');
   });
 
   it('toggles app fullscreen without requiring an open image', async () => {
@@ -1156,6 +1203,7 @@ describe('view menu', () => {
     expect(getFullscreenElement()).toBe(appShell);
     expect(button.getAttribute('aria-pressed')).toBe('true');
     expect(button.getAttribute('aria-label')).toBe('Exit app fullscreen');
+    expect(button.dataset.tooltip).toBe('Exit fullscreen');
     expect(button.title).toBe('Exit app fullscreen');
     expect(button.querySelectorAll('.app-fullscreen-icon')).toHaveLength(1);
     expect(button.querySelector('.app-fullscreen-icon--enter')).not.toBeNull();
