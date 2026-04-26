@@ -289,7 +289,7 @@ describe('gl image renderer', () => {
     });
   });
 
-  it('uses transparent alpha export mode instead of viewer checkerboard compositing', () => {
+  it('renders the onscreen viewer transparently while preserving transparent export mode', () => {
     const { renderer, gl } = createHarness();
     const layer = createInterleavedLayerFromChannels({
       R: [1],
@@ -315,8 +315,8 @@ describe('gl image renderer', () => {
 
     renderer.render(state);
 
-    expect(lastUniform1iValue(gl, 'uCompositeCheckerboard')).toBe(1);
-    expect(lastUniform1iValue(gl, 'uAlphaOutputMode')).toBe(0);
+    expect(lastUniform1iValue(gl, 'uCompositeCheckerboard')).toBe(0);
+    expect(lastUniform1iValue(gl, 'uAlphaOutputMode')).toBe(2);
 
     gl.uniform1i.mockClear();
     gl.readPixels.mockImplementation((_x, _y, _width, _height, _format, _type, data: Uint8ClampedArray) => {
@@ -529,7 +529,7 @@ function createHarness(): {
   gl: ReturnType<typeof createWebGlContextMock>;
 } {
   const gl = createWebGlContextMock();
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((contextId) => {
+  const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((contextId) => {
     if (contextId === 'webgl2') {
       return gl;
     }
@@ -537,8 +537,14 @@ function createHarness(): {
   });
 
   const canvas = document.createElement('canvas');
+  const renderer = new GlImageRenderer(canvas);
+  expect(getContext).toHaveBeenCalledWith('webgl2', {
+    alpha: true,
+    antialias: false,
+    premultipliedAlpha: true
+  });
   return {
-    renderer: new GlImageRenderer(canvas),
+    renderer,
     gl
   };
 }

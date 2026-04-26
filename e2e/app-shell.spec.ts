@@ -92,12 +92,14 @@ async function expectActiveScreenshotTarget(locator: Locator): Promise<void> {
 async function expectViewerCheckerBackground(viewer: Locator): Promise<void> {
   const background = await viewer.evaluate((element) => {
     const style = getComputedStyle(element);
+    const checkerStyle = getComputedStyle(element, '::after');
     const rect = element.getBoundingClientRect();
     return {
       color: style.backgroundColor,
-      image: style.backgroundImage,
-      size: style.backgroundSize,
-      position: style.backgroundPosition,
+      image: checkerStyle.backgroundImage,
+      opacity: checkerStyle.opacity,
+      size: checkerStyle.backgroundSize,
+      position: checkerStyle.backgroundPosition,
       offsetX: style.getPropertyValue('--viewer-checker-offset-x').trim(),
       offsetY: style.getPropertyValue('--viewer-checker-offset-y').trim(),
       rectLeft: rect.left,
@@ -108,6 +110,7 @@ async function expectViewerCheckerBackground(viewer: Locator): Promise<void> {
   expect(background.color).toBe('rgb(23, 23, 23)');
   expect(background.image).toContain('conic-gradient');
   expect(background.image).toContain('rgb(31, 31, 31)');
+  expect(background.opacity).toBe('1');
   expect(background.size).toBe('32px 32px');
   expect(background.position).toBeTruthy();
   expect(Number.parseFloat(background.offsetX)).toBeCloseTo(-background.rectLeft, 2);

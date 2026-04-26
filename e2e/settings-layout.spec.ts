@@ -1,6 +1,15 @@
 import { expect, test, type Page } from '@playwright/test';
+import { Buffer } from 'node:buffer';
+import { inflateSync } from 'node:zlib';
 import { expectViewerAppReady, gotoViewerApp, openGalleryCbox } from './helpers/app';
 import { dragBy } from './helpers/viewer';
+
+interface RgbaPixel {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
 
 async function readPanelShellVisualState(page: Page): Promise<Array<{
   id: string;
@@ -52,6 +61,283 @@ async function readTopBarVisualState(page: Page): Promise<{
   });
 }
 
+async function readViewerBackgroundState(page: Page): Promise<{
+  backgroundColor: string;
+  backgroundImage: string;
+  checkerBackgroundImage: string;
+  checkerOpacity: string;
+  checkerTransitionDuration: string;
+  checkerTransitionProperty: string;
+  spectrumGridBackgroundImage: string;
+  spectrumGridOpacity: string;
+  spectrumGridTransitionDuration: string;
+  spectrumGridTransitionProperty: string;
+}> {
+  return await page.evaluate(() => {
+    const element = document.getElementById('viewer-container');
+    if (!(element instanceof HTMLElement)) {
+      throw new Error('Missing viewer container.');
+    }
+
+    const style = getComputedStyle(element);
+    const checkerStyle = getComputedStyle(element, '::after');
+    const spectrumGridStyle = getComputedStyle(element, '::before');
+    return {
+      backgroundColor: style.backgroundColor,
+      backgroundImage: style.backgroundImage,
+      checkerBackgroundImage: checkerStyle.backgroundImage,
+      checkerOpacity: checkerStyle.opacity,
+      checkerTransitionDuration: checkerStyle.transitionDuration,
+      checkerTransitionProperty: checkerStyle.transitionProperty,
+      spectrumGridBackgroundImage: spectrumGridStyle.backgroundImage,
+      spectrumGridOpacity: spectrumGridStyle.opacity,
+      spectrumGridTransitionDuration: spectrumGridStyle.transitionDuration,
+      spectrumGridTransitionProperty: spectrumGridStyle.transitionProperty
+    };
+  });
+}
+
+async function expectViewerBackgroundLayerOpacity(
+  page: Page,
+  expected: { checker: number; spectrumGrid: number }
+): Promise<void> {
+  await expect.poll(async () => {
+    const state = await readViewerBackgroundState(page);
+    return (
+      Math.abs(Number(state.checkerOpacity) - expected.checker) < 0.01 &&
+      Math.abs(Number(state.spectrumGridOpacity) - expected.spectrumGrid) < 0.01
+    );
+  }, { timeout: 4500 }).toBe(true);
+}
+
+async function waitForTransitioningTransparentViewerPoint(page: Page): Promise<{
+  x: number;
+  y: number;
+  checkerOpacity: number;
+  spectrumGridOpacity: number;
+}> {
+  const deadline = Date.now() + 2500;
+  let lastState = 'not sampled';
+  while (Date.now() < deadline) {
+    const state = await page.evaluate(() => {
+      const viewer = document.getElementById('viewer-container');
+      const canvas = document.getElementById('gl-canvas');
+      if (!(viewer instanceof HTMLElement) || !(canvas instanceof HTMLCanvasElement)) {
+        return { kind: 'missing' as const };
+      }
+
+      const checkerOpacity = Number.parseFloat(getComputedStyle(viewer, '::after').opacity);
+      const spectrumGridOpacity = Number.parseFloat(getComputedStyle(viewer, '::before').opacity);
+      if (
+        !Number.isFinite(checkerOpacity) ||
+        checkerOpacity <= 0.08 ||
+        checkerOpacity >= 0.85 ||
+        !Number.isFinite(spectrumGridOpacity)
+      ) {
+        return {
+          kind: 'waiting-opacity' as const,
+          checkerOpacity,
+          spectrumGridOpacity
+        };
+      }
+
+      const gl = canvas.getContext('webgl2');
+      const rect = canvas.getBoundingClientRect();
+      if (!gl || rect.width <= 0 || rect.height <= 0 || canvas.width <= 0 || canvas.height <= 0) {
+        return {
+          kind: 'waiting-canvas' as const,
+          checkerOpacity,
+          spectrumGridOpacity
+        };
+      }
+
+      const candidates = [
+        [0.08, 0.5], [0.92, 0.5], [0.5, 0.08], [0.5, 0.92],
+        [0.12, 0.12], [0.88, 0.12], [0.12, 0.88], [0.88, 0.88]
+      ] as const;
+      const pixel = new Uint8Array(4);
+      for (const [xRatio, yRatio] of candidates) {
+        const cssX = Math.min(rect.width - 1, Math.max(0, Math.floor(rect.width * xRatio)));
+        const cssY = Math.min(rect.height - 1, Math.max(0, Math.floor(rect.height * yRatio)));
+        const pixelX = Math.min(canvas.width - 1, Math.max(0, Math.floor((cssX / rect.width) * canvas.width)));
+        const pixelY = Math.min(canvas.height - 1, Math.max(0, Math.floor((cssY / rect.height) * canvas.height)));
+        gl.readPixels(pixelX, canvas.height - 1 - pixelY, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+        if (pixel[3] < 8) {
+          return {
+            kind: 'point' as const,
+            x: Math.round(rect.left + cssX),
+            y: Math.round(rect.top + cssY),
+            checkerOpacity,
+            spectrumGridOpacity
+          };
+        }
+      }
+
+      return {
+        kind: 'waiting-alpha' as const,
+        checkerOpacity,
+        spectrumGridOpacity
+      };
+    });
+
+    if (state.kind === 'point') {
+      return state;
+    }
+    lastState = JSON.stringify(state);
+    await page.waitForTimeout(50);
+  }
+
+  throw new Error(`Timed out waiting for a transparent viewer background pixel during fade: ${lastState}`);
+}
+
+async function readPagePixel(page: Page, point: { x: number; y: number }): Promise<RgbaPixel> {
+  const bytes = await page.screenshot({
+    clip: {
+      x: point.x,
+      y: point.y,
+      width: 1,
+      height: 1
+    }
+  });
+  return readPngFirstPixel(bytes);
+}
+
+function readPngFirstPixel(bytes: Buffer): RgbaPixel {
+  const pngSignature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  for (let index = 0; index < pngSignature.length; index += 1) {
+    expect(bytes[index]).toBe(pngSignature[index]);
+  }
+
+  let offset = 8;
+  let width = 0;
+  let height = 0;
+  let bitDepth = 0;
+  let colorType = 0;
+  const idatChunks: Buffer[] = [];
+  while (offset < bytes.length) {
+    const length = bytes.readUInt32BE(offset);
+    offset += 4;
+    const type = bytes.toString('ascii', offset, offset + 4);
+    offset += 4;
+    const chunk = bytes.subarray(offset, offset + length);
+    offset += length + 4;
+
+    if (type === 'IHDR') {
+      width = chunk.readUInt32BE(0);
+      height = chunk.readUInt32BE(4);
+      bitDepth = chunk[8] ?? 0;
+      colorType = chunk[9] ?? 0;
+    } else if (type === 'IDAT') {
+      idatChunks.push(chunk);
+    } else if (type === 'IEND') {
+      break;
+    }
+  }
+
+  if (width !== 1 || height !== 1 || bitDepth !== 8 || (colorType !== 2 && colorType !== 6)) {
+    throw new Error(`Unsupported screenshot PNG format: ${width}x${height}, depth ${bitDepth}, color ${colorType}`);
+  }
+
+  const bytesPerPixel = colorType === 6 ? 4 : 3;
+  const inflated = inflateSync(Buffer.concat(idatChunks));
+  const filter = inflated[0] ?? 0;
+  const raw = inflated.subarray(1, 1 + bytesPerPixel);
+  const reconstructed = unfilterPngScanline(filter, raw, bytesPerPixel);
+  return {
+    r: reconstructed[0] ?? 0,
+    g: reconstructed[1] ?? 0,
+    b: reconstructed[2] ?? 0,
+    a: colorType === 6 ? reconstructed[3] ?? 255 : 255
+  };
+}
+
+function unfilterPngScanline(filter: number, raw: Uint8Array, bytesPerPixel: number): Uint8Array {
+  const reconstructed = new Uint8Array(raw.length);
+  for (let index = 0; index < raw.length; index += 1) {
+    const left = index >= bytesPerPixel ? reconstructed[index - bytesPerPixel] ?? 0 : 0;
+    const value = raw[index] ?? 0;
+    switch (filter) {
+      case 0:
+        reconstructed[index] = value;
+        break;
+      case 1:
+        reconstructed[index] = (value + left) & 0xff;
+        break;
+      case 2:
+        reconstructed[index] = value;
+        break;
+      case 3:
+        reconstructed[index] = (value + Math.floor(left / 2)) & 0xff;
+        break;
+      case 4:
+        reconstructed[index] = (value + paethPredictor(left, 0, 0)) & 0xff;
+        break;
+      default:
+        throw new Error(`Unsupported PNG filter: ${filter}`);
+    }
+  }
+  return reconstructed;
+}
+
+function paethPredictor(left: number, up: number, upLeft: number): number {
+  const estimate = left + up - upLeft;
+  const leftDistance = Math.abs(estimate - left);
+  const upDistance = Math.abs(estimate - up);
+  const upLeftDistance = Math.abs(estimate - upLeft);
+  if (leftDistance <= upDistance && leftDistance <= upLeftDistance) {
+    return left;
+  }
+  return upDistance <= upLeftDistance ? up : upLeft;
+}
+
+function colorDistance(a: RgbaPixel, b: RgbaPixel): number {
+  return Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b);
+}
+
+async function zoomUntilOverlayValueLabelsVisible(page: Page): Promise<void> {
+  const viewerBox = await page.locator('#viewer-container').boundingBox();
+  if (!viewerBox) {
+    throw new Error('Viewer container is not visible.');
+  }
+
+  await page.mouse.move(viewerBox.x + viewerBox.width * 0.5, viewerBox.y + viewerBox.height * 0.5);
+  for (let index = 0; index < 8; index += 1) {
+    await page.mouse.wheel(0, -1200);
+    if (await hasOverlayCanvasPixels(page)) {
+      return;
+    }
+    await page.waitForTimeout(50);
+  }
+
+  throw new Error('Expected high zoom to render value labels on the overlay canvas.');
+}
+
+async function expectOverlayCanvasTransparent(page: Page): Promise<void> {
+  await expect.poll(async () => await hasOverlayCanvasPixels(page), { timeout: 1000 }).toBe(false);
+}
+
+async function hasOverlayCanvasPixels(page: Page): Promise<boolean> {
+  return await page.evaluate(() => {
+    const canvas = document.getElementById('overlay-canvas');
+    if (!(canvas instanceof HTMLCanvasElement) || canvas.width <= 0 || canvas.height <= 0) {
+      return false;
+    }
+
+    const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Unable to read overlay canvas.');
+    }
+
+    const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let index = 3; index < data.length; index += 4) {
+      if ((data[index] ?? 0) > 0) {
+        return true;
+      }
+    }
+    return false;
+  });
+}
+
 test('persists the cache budget and keeps open-file actions limited to reload and close', async ({ page }) => {
   await gotoViewerApp(page);
 
@@ -97,7 +383,7 @@ test('persists the cache budget and keeps open-file actions limited to reload an
   await expect(page.getByRole('button', { name: /Pin cache|Unpin cache/ })).toHaveCount(0);
 });
 
-test('persists Spectrum lattice and hides the idle surface after an image opens', async ({ page }) => {
+test('persists Spectrum lattice as animated idle and frozen active chrome', async ({ page }) => {
   await gotoViewerApp(page);
 
   const settingsMenuButton = page.getByRole('button', { name: 'Settings', exact: true });
@@ -114,6 +400,14 @@ test('persists Spectrum lattice and hides the idle surface after an image opens'
   await expect(defaultIdle.locator('h2')).toHaveCount(0);
   await expect(defaultIdle.locator('p')).toHaveCount(0);
   await expect(idle).toBeHidden();
+  await expect(idleCanvas).toBeHidden();
+  const defaultViewerBackground = await readViewerBackgroundState(page);
+  expect(defaultViewerBackground.backgroundColor).toBe('rgb(23, 23, 23)');
+  expect(defaultViewerBackground.backgroundImage).toBe('none');
+  expect(defaultViewerBackground.checkerBackgroundImage).toContain('conic-gradient');
+  expect(defaultViewerBackground.checkerOpacity).toBe('1');
+  expect(defaultViewerBackground.spectrumGridBackgroundImage).toContain('linear-gradient');
+  expect(defaultViewerBackground.spectrumGridOpacity).toBe('0');
   const defaultPanelState = await readPanelShellVisualState(page);
   expect(defaultPanelState.every((panel) => panel.backgroundColor === 'rgb(23, 29, 38)')).toBe(true);
   expect(defaultPanelState.every((panel) => panel.backgroundImage === 'none')).toBe(true);
@@ -140,55 +434,40 @@ test('persists Spectrum lattice and hides the idle surface after an image opens'
   expect(spectrumTopBarState.backgroundImage.includes('linear-gradient')).toBe(true);
   expect(spectrumTopBarState.backdropFilter.includes('blur')).toBe(true);
   expect(spectrumTopBarState.boxShadow).not.toBe('none');
-  const spectrumLayoutGeometry = await page.evaluate(() => {
+  await expectViewerBackgroundLayerOpacity(page, { checker: 0, spectrumGrid: 1 });
+  const spectrumViewerBackground = await readViewerBackgroundState(page);
+  expect(spectrumViewerBackground.checkerBackgroundImage).toContain('conic-gradient');
+  expect(spectrumViewerBackground.spectrumGridBackgroundImage).toContain('linear-gradient');
+  const spectrumLayoutState = await page.evaluate(() => {
     const appShell = document.getElementById('app');
     const mainLayout = document.getElementById('main-layout');
     const canvas = document.getElementById('spectrum-lattice-canvas');
     const viewer = document.getElementById('viewer-container');
-    const appMenuBar = document.getElementById('app-menu-bar');
     if (
       !(appShell instanceof HTMLElement) ||
       !(mainLayout instanceof HTMLElement) ||
       !(canvas instanceof HTMLCanvasElement) ||
-      !(viewer instanceof HTMLElement) ||
-      !(appMenuBar instanceof HTMLElement)
+      !(viewer instanceof HTMLElement)
     ) {
       throw new Error('Missing Spectrum layout elements.');
     }
 
-    const appRect = appShell.getBoundingClientRect();
-    const mainRect = mainLayout.getBoundingClientRect();
-    const canvasRect = canvas.getBoundingClientRect();
-    const viewerRect = viewer.getBoundingClientRect();
-    const topBarRect = appMenuBar.getBoundingClientRect();
     const viewerStyle = getComputedStyle(viewer);
     return {
-      app: { left: appRect.left, top: appRect.top, width: appRect.width, height: appRect.height },
-      main: { left: mainRect.left, top: mainRect.top, width: mainRect.width, height: mainRect.height },
-      canvas: { left: canvasRect.left, top: canvasRect.top, width: canvasRect.width, height: canvasRect.height },
-      viewer: { left: viewerRect.left, top: viewerRect.top, width: viewerRect.width, height: viewerRect.height },
-      topBar: { left: topBarRect.left, top: topBarRect.top, width: topBarRect.width, height: topBarRect.height },
       canvasParentId: canvas.parentElement?.id,
       appIdle: appShell.classList.contains('is-spectrum-lattice-idle'),
       mainIdle: mainLayout.classList.contains('is-spectrum-lattice-idle'),
+      viewerIdle: viewer.classList.contains('is-spectrum-lattice-idle'),
       viewerBackgroundColor: viewerStyle.backgroundColor,
       viewerBackgroundImage: viewerStyle.backgroundImage
     };
   });
-  expect(spectrumLayoutGeometry.canvasParentId).toBe('app');
-  expect(spectrumLayoutGeometry.appIdle).toBe(true);
-  expect(spectrumLayoutGeometry.mainIdle).toBe(true);
-  expect(Math.abs(spectrumLayoutGeometry.canvas.left - spectrumLayoutGeometry.app.left)).toBeLessThanOrEqual(1);
-  expect(Math.abs(spectrumLayoutGeometry.canvas.top - spectrumLayoutGeometry.app.top)).toBeLessThanOrEqual(1);
-  expect(Math.abs(spectrumLayoutGeometry.canvas.width - spectrumLayoutGeometry.app.width)).toBeLessThanOrEqual(1);
-  expect(Math.abs(spectrumLayoutGeometry.canvas.height - spectrumLayoutGeometry.app.height)).toBeLessThanOrEqual(1);
-  expect(spectrumLayoutGeometry.topBar.top).toBeGreaterThanOrEqual(spectrumLayoutGeometry.canvas.top);
-  expect(spectrumLayoutGeometry.topBar.top + spectrumLayoutGeometry.topBar.height).toBeLessThanOrEqual(
-    spectrumLayoutGeometry.canvas.top + spectrumLayoutGeometry.canvas.height + 1
-  );
-  expect(spectrumLayoutGeometry.canvas.width).toBeGreaterThan(spectrumLayoutGeometry.viewer.width);
-  expect(spectrumLayoutGeometry.viewerBackgroundColor).toBe('rgba(0, 0, 0, 0)');
-  expect(spectrumLayoutGeometry.viewerBackgroundImage).toBe('none');
+  expect(spectrumLayoutState.canvasParentId).toBe('app');
+  expect(spectrumLayoutState.appIdle).toBe(true);
+  expect(spectrumLayoutState.mainIdle).toBe(true);
+  expect(spectrumLayoutState.viewerIdle).toBe(true);
+  expect(spectrumLayoutState.viewerBackgroundColor).toBe('rgba(0, 0, 0, 0)');
+  expect(spectrumLayoutState.viewerBackgroundImage).toBe('none');
   await expect.poll(async () => {
     return await page.evaluate(() => ({
       theme: document.documentElement.dataset.theme,
@@ -204,9 +483,13 @@ test('persists Spectrum lattice and hides the idle surface after an image opens'
   await expect(defaultIdle).toBeHidden();
   await expect(idle).toBeVisible();
   await expect(idle.locator('h2')).toHaveCount(0);
+  await expect(idleCanvas).toBeVisible();
   await expect(appShell).toHaveClass(/is-spectrum-lattice-idle/);
   await expect(mainLayout).toHaveClass(/is-spectrum-lattice-idle/);
   await expect(viewer).toHaveClass(/is-spectrum-lattice-idle/);
+  const reloadedSpectrumViewerBackground = await readViewerBackgroundState(page);
+  expect(reloadedSpectrumViewerBackground.checkerOpacity).toBe('0');
+  expect(reloadedSpectrumViewerBackground.spectrumGridOpacity).toBe('1');
   await settingsMenuButton.click();
   await expect(settingsMenu).toBeVisible();
   await expect(themeInput).toHaveValue('spectrum-lattice');
@@ -215,13 +498,35 @@ test('persists Spectrum lattice and hides the idle surface after an image opens'
   await openGalleryCbox(page);
   await expect(defaultIdle).toBeHidden();
   await expect(idle).toBeHidden();
-  await expect(idleCanvas).toBeHidden();
+  await expect(idleCanvas).toBeVisible();
   await expect(appShell).not.toHaveClass(/is-spectrum-lattice-idle/);
   await expect(mainLayout).not.toHaveClass(/is-spectrum-lattice-idle/);
   await expect(viewer).not.toHaveClass(/is-spectrum-lattice-idle/);
+  const transitioningBackgroundPoint = await waitForTransitioningTransparentViewerPoint(page);
+  const transitioningBackgroundPixel = await readPagePixel(page, transitioningBackgroundPoint);
+  await expectViewerBackgroundLayerOpacity(page, { checker: 1, spectrumGrid: 0 });
+  const finalBackgroundPixel = await readPagePixel(page, transitioningBackgroundPoint);
+  expect(colorDistance(transitioningBackgroundPixel, finalBackgroundPixel)).toBeGreaterThan(2);
+  const activeViewerBackground = await readViewerBackgroundState(page);
+  expect(activeViewerBackground.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+  expect(activeViewerBackground.backgroundImage).toBe('none');
+  expect(activeViewerBackground.checkerBackgroundImage).toContain('conic-gradient');
+  expect(activeViewerBackground.spectrumGridBackgroundImage).toContain('linear-gradient');
+  const activePanelState = await readPanelShellVisualState(page);
+  expect(activePanelState.every((panel) => panel.backgroundImage.includes('linear-gradient'))).toBe(true);
+  expect(activePanelState.every((panel) => panel.backdropFilter.includes('blur'))).toBe(true);
+  const activeTopBarState = await readTopBarVisualState(page);
+  expect(activeTopBarState.backgroundImage.includes('linear-gradient')).toBe(true);
+  expect(activeTopBarState.backdropFilter.includes('blur')).toBe(true);
   await expect.poll(async () => {
     return await page.evaluate(() => document.documentElement.dataset.theme);
   }).toBe('spectrum-lattice');
+
+  await zoomUntilOverlayValueLabelsVisible(page);
+  await page.getByRole('button', { name: 'Close cbox_rgb.exr', exact: true }).click();
+  await expect(idle).toBeVisible();
+  await expectOverlayCanvasTransparent(page);
+  await expectViewerBackgroundLayerOpacity(page, { checker: 0, spectrumGrid: 1 });
 });
 
 test('resets settings back to the default budget and panel layout', async ({ page }) => {

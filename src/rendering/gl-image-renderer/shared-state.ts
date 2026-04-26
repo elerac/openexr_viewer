@@ -8,7 +8,11 @@ import { createZeroTexture } from './texture-store';
 import type { GlImageRendererState, LayerSourceTextures } from './types';
 
 export function createGlImageRendererState(glCanvas: HTMLCanvasElement): GlImageRendererState {
-  const gl = glCanvas.getContext('webgl2', { antialias: false });
+  const gl = glCanvas.getContext('webgl2', {
+    alpha: true,
+    antialias: false,
+    premultipliedAlpha: true
+  });
   if (!gl) {
     throw new Error('WebGL2 is required for this viewer.');
   }

@@ -1459,7 +1459,10 @@ export class ViewerUi implements Disposable {
     const idle = this.openedImageCount === 0;
     const spectrumIdle = this.theme === SPECTRUM_LATTICE_THEME_ID && idle;
     this.elements.viewerIdleMessage.classList.toggle('hidden', !idle || spectrumIdle);
-    this.spectrumLatticeIdleController.setVisible(spectrumIdle);
+    this.spectrumLatticeIdleController.setState({
+      themeEnabled: this.theme === SPECTRUM_LATTICE_THEME_ID,
+      idle
+    });
   }
 
   private setDisplayToolbarVisible(visible: boolean, persist = true): void {

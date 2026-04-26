@@ -1314,6 +1314,29 @@ describe('view menu', () => {
     expect(canvas.classList.contains('spectrum-lattice-canvas--fallback')).toBe(true);
   });
 
+  it('defines controller-driven viewer background blend layers for Spectrum lattice', () => {
+    const viewerRule = readStyleRule('.viewer-container');
+    const spectrumGridRule = readStyleRule('.viewer-container::before');
+    const checkerRule = readStyleRule('.viewer-container::after', 1);
+    const spectrumViewerRule = readStyleRule(":root[data-theme='spectrum-lattice'] .viewer-container");
+    const stylesheet = readStyleSheet();
+    const indexMarkup = readIndexMarkup();
+    const bootstrapIndex = indexMarkup.indexOf("openexr-viewer:theme:v1");
+    const stylesheetIndex = indexMarkup.indexOf('<link rel="stylesheet" href="/src/style.css"');
+
+    expect(viewerRule).toContain('background-image: none');
+    expect(spectrumViewerRule).toContain('background-color: transparent');
+    expect(spectrumViewerRule).toContain('--spectrum-checker-opacity: 0');
+    expect(spectrumViewerRule).toContain('--spectrum-grid-opacity: 1');
+    expect(checkerRule).toContain('conic-gradient');
+    expect(checkerRule).toContain('opacity: var(--spectrum-checker-opacity, 1)');
+    expect(spectrumGridRule).toContain('linear-gradient');
+    expect(spectrumGridRule).toContain('opacity: var(--spectrum-grid-opacity, 0)');
+    expect(stylesheet).not.toContain('transition: opacity 3000ms ease-in-out');
+    expect(bootstrapIndex).toBeGreaterThanOrEqual(0);
+    expect(stylesheetIndex).toBeGreaterThan(bootstrapIndex);
+  });
+
   it('reads the stored theme during UI initialization', () => {
     installUiFixture();
     window.localStorage.setItem(THEME_STORAGE_KEY, SPECTRUM_LATTICE_THEME_ID);
@@ -1322,16 +1345,18 @@ describe('view menu', () => {
 
     expect((document.getElementById('theme-select') as HTMLSelectElement).value).toBe(SPECTRUM_LATTICE_THEME_ID);
     expect(document.documentElement.dataset.theme).toBe(SPECTRUM_LATTICE_THEME_ID);
+    expect((document.getElementById('viewer-idle-message') as HTMLElement).classList.contains('hidden')).toBe(true);
     expect((document.getElementById('spectrum-lattice-idle') as HTMLElement).classList.contains('hidden')).toBe(false);
   });
 
-  it('hides the Spectrum lattice idle surface while an image is active', () => {
+  it('freezes the Spectrum lattice canvas while an image is active', () => {
     installUiFixture();
 
     const ui = new ViewerUi(createUiCallbacks());
     const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
     const appShell = document.getElementById('app') as HTMLElement;
     const mainLayout = document.getElementById('main-layout') as HTMLElement;
+    const viewer = document.getElementById('viewer-container') as HTMLElement;
     const defaultIdle = document.getElementById('viewer-idle-message') as HTMLElement;
     const idle = document.getElementById('spectrum-lattice-idle') as HTMLElement;
     const canvas = document.getElementById('spectrum-lattice-canvas') as HTMLElement;
@@ -1340,6 +1365,7 @@ describe('view menu', () => {
     themeSelect.dispatchEvent(new Event('change', { bubbles: true }));
     expect(appShell.classList.contains('is-spectrum-lattice-idle')).toBe(true);
     expect(mainLayout.classList.contains('is-spectrum-lattice-idle')).toBe(true);
+    expect(viewer.classList.contains('is-spectrum-lattice-idle')).toBe(true);
     expect(defaultIdle.classList.contains('hidden')).toBe(true);
     expect(idle.classList.contains('hidden')).toBe(false);
     expect(canvas.classList.contains('hidden')).toBe(false);
@@ -1348,13 +1374,16 @@ describe('view menu', () => {
 
     expect(appShell.classList.contains('is-spectrum-lattice-idle')).toBe(false);
     expect(mainLayout.classList.contains('is-spectrum-lattice-idle')).toBe(false);
+    expect(viewer.classList.contains('is-spectrum-lattice-idle')).toBe(false);
     expect(defaultIdle.classList.contains('hidden')).toBe(true);
     expect(idle.classList.contains('hidden')).toBe(true);
-    expect(canvas.classList.contains('hidden')).toBe(true);
+    expect(canvas.classList.contains('hidden')).toBe(false);
+    expect(canvas.classList.contains('spectrum-lattice-canvas--fallback')).toBe(true);
 
     ui.setOpenedImageOptions([], null);
     expect(appShell.classList.contains('is-spectrum-lattice-idle')).toBe(true);
     expect(mainLayout.classList.contains('is-spectrum-lattice-idle')).toBe(true);
+    expect(viewer.classList.contains('is-spectrum-lattice-idle')).toBe(true);
     expect(defaultIdle.classList.contains('hidden')).toBe(true);
     expect(idle.classList.contains('hidden')).toBe(false);
     expect(canvas.classList.contains('hidden')).toBe(false);
@@ -1363,6 +1392,7 @@ describe('view menu', () => {
     themeSelect.dispatchEvent(new Event('change', { bubbles: true }));
     expect(appShell.classList.contains('is-spectrum-lattice-idle')).toBe(false);
     expect(mainLayout.classList.contains('is-spectrum-lattice-idle')).toBe(false);
+    expect(viewer.classList.contains('is-spectrum-lattice-idle')).toBe(false);
     expect(defaultIdle.classList.contains('hidden')).toBe(false);
     expect(idle.classList.contains('hidden')).toBe(true);
     expect(canvas.classList.contains('hidden')).toBe(true);
@@ -5613,9 +5643,16 @@ function createPreviewPixels(width = 4, height = 1) {
   };
 }
 
-function readStyleRule(selector: string): string {
-  const css = readFileSync(resolve(process.cwd(), 'src/style.css'), 'utf8');
-  const ruleStart = css.indexOf(`${selector} {`);
+function readStyleRule(selector: string, occurrence = 0): string {
+  const css = readStyleSheet();
+  const pattern = `${selector} {`;
+  let ruleStart = -1;
+  for (let index = 0; index <= occurrence; index += 1) {
+    ruleStart = css.indexOf(pattern, ruleStart + 1);
+    if (ruleStart < 0) {
+      break;
+    }
+  }
   if (ruleStart < 0) {
     throw new Error(`Style rule not found: ${selector}`);
   }
@@ -5623,6 +5660,14 @@ function readStyleRule(selector: string): string {
   const bodyStart = css.indexOf('{', ruleStart);
   const bodyEnd = css.indexOf('}', bodyStart);
   return css.slice(bodyStart + 1, bodyEnd);
+}
+
+function readStyleSheet(): string {
+  return readFileSync(resolve(process.cwd(), 'src/style.css'), 'utf8');
+}
+
+function readIndexMarkup(): string {
+  return readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
 }
 
 async function flushMicrotasks(): Promise<void> {

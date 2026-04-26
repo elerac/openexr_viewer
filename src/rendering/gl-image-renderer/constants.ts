@@ -9,6 +9,6 @@ export const ALPHA_OUTPUT_STRAIGHT = 1;
 export const ALPHA_OUTPUT_PREMULTIPLIED = 2;
 
 export const DEFAULT_RENDER_PASS_OPTIONS: RenderPassOptions = {
-  compositeCheckerboard: true,
-  alphaOutputMode: 'opaque'
+  compositeCheckerboard: false,
+  alphaOutputMode: 'premultiplied'
 };

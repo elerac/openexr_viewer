@@ -80,6 +80,29 @@ describe('overlay renderer', () => {
     expect(context.alphaHistory).toEqual([1, 1]);
     expect(context.globalAlpha).toBe(1);
   });
+
+  it('clears previously rendered value labels when the image is cleared', () => {
+    const { renderer, context } = createOverlayHarness();
+    const layer = createDisplayLayer(2);
+
+    renderer.resize(128, 64);
+    renderer.setDisplaySelectionContext(2, 1, layer, createChannelRgbSelection('R', 'G', 'B'), 'rgb');
+    renderer.render(createViewerState({
+      viewerMode: 'image',
+      zoom: 32,
+      panX: 1,
+      panY: 0.5,
+      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+    }));
+
+    expect(context.fillText).toHaveBeenCalled();
+    context.clearRect.mockClear();
+
+    renderer.clearImage();
+
+    expect(context.clearRect).toHaveBeenCalledTimes(1);
+    expect(context.clearRect).toHaveBeenCalledWith(0, 0, 128, 64);
+  });
 });
 
 function createOverlayHarness(): {

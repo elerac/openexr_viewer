@@ -65,6 +65,7 @@ export class OverlayRenderer implements Disposable {
 
     this.imageSize = null;
     this.displayEvaluator = null;
+    this.overlayContext.clearRect(0, 0, this.viewport.width, this.viewport.height);
   }
 
   render(state: ViewerState): void {

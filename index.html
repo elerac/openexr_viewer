@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OpenEXR Viewer</title>
+    <script>
+      (() => {
+        try {
+          if (window.localStorage.getItem('openexr-viewer:theme:v1') === 'spectrum-lattice') {
+            document.documentElement.dataset.theme = 'spectrum-lattice';
+          }
+        } catch {
+          // Runtime theme initialization handles storage failures after app boot.
+        }
+      })();
+    </script>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>

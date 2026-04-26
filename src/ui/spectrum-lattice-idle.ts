@@ -12,7 +12,15 @@ interface SpectrumLatticeUniforms {
   resolution: WebGLUniformLocation;
   pointer: WebGLUniformLocation;
   time: WebGLUniformLocation;
+  perceivedBrightness: WebGLUniformLocation;
 }
+
+interface SpectrumLatticeState {
+  themeEnabled: boolean;
+  idle: boolean;
+}
+
+type SpectrumLatticeMode = 'disabled' | 'idle' | 'active';
 
 const VERTEX_SHADER_SOURCE = `#version 300 es
 precision highp float;
@@ -35,9 +43,12 @@ out vec4 fragColor;
 uniform vec2 uResolution;
 uniform vec2 uPointer;
 uniform float uTime;
+uniform float uPerceivedBrightness;
 
 const float PI = 3.141592653589793;
 const float TAU = 6.283185307179586;
+const float PERCEPTUAL_GAMMA = 2.2;
+const float INVERSE_PERCEPTUAL_GAMMA = 1.0 / PERCEPTUAL_GAMMA;
 
 float hash21(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
@@ -101,10 +112,22 @@ void main() {
   col = vignette(uv, col);
   col = 1.0 - exp(-col * 1.15);
   col = pow(col, vec3(0.92));
+  vec3 perceived = pow(max(col, vec3(0.0)), vec3(INVERSE_PERCEPTUAL_GAMMA));
+  perceived *= uPerceivedBrightness;
+  col = pow(perceived, vec3(PERCEPTUAL_GAMMA));
 
   fragColor = vec4(col, 1.0);
 }
 `;
+
+const DEFAULT_FRAME_TIME_SECONDS = 18.0;
+const SPECTRUM_LATTICE_MOTION_TRANSITION_MS = 3000;
+const IDLE_PERCEIVED_BRIGHTNESS = 1.0;
+const ACTIVE_PERCEIVED_BRIGHTNESS = 0.55;
+const IDLE_CHECKER_OPACITY = 0;
+const IDLE_SPECTRUM_GRID_OPACITY = 1;
+const ACTIVE_CHECKER_OPACITY = 1;
+const ACTIVE_SPECTRUM_GRID_OPACITY = 0;
 
 export class SpectrumLatticeIdleController implements Disposable {
   private readonly disposables = new DisposableBag();
@@ -115,12 +138,30 @@ export class SpectrumLatticeIdleController implements Disposable {
   private uniforms: SpectrumLatticeUniforms | null = null;
   private animationFrameId: number | null = null;
   private initialized = false;
-  private visible = false;
+  private canvasVisible = false;
+  private animationActive = false;
+  private mode: SpectrumLatticeMode = 'disabled';
   private disposed = false;
   private pointer = { x: 0.5, y: 0.5 };
   private targetPointer = { x: 0.5, y: 0.5 };
+  private lastTimeSeconds = DEFAULT_FRAME_TIME_SECONDS;
+  private lastFrameNowMs: number | null = null;
+  private motionSpeed = 0;
+  private targetMotionSpeed = 0;
+  private transitionStartSpeed = 0;
+  private perceivedBrightness = ACTIVE_PERCEIVED_BRIGHTNESS;
+  private targetPerceivedBrightness = ACTIVE_PERCEIVED_BRIGHTNESS;
+  private transitionStartPerceivedBrightness = ACTIVE_PERCEIVED_BRIGHTNESS;
+  private checkerOpacity = ACTIVE_CHECKER_OPACITY;
+  private targetCheckerOpacity = ACTIVE_CHECKER_OPACITY;
+  private transitionStartCheckerOpacity = ACTIVE_CHECKER_OPACITY;
+  private spectrumGridOpacity = ACTIVE_SPECTRUM_GRID_OPACITY;
+  private targetSpectrumGridOpacity = ACTIVE_SPECTRUM_GRID_OPACITY;
+  private transitionStartSpectrumGridOpacity = ACTIVE_SPECTRUM_GRID_OPACITY;
+  private transitionStartNowMs: number | null = null;
 
   constructor(private readonly elements: SpectrumLatticeIdleElements) {
+    this.hideLiveSurface();
     this.disposables.addEventListener(this.elements.appShell, 'pointermove', (event) => {
       const rect = this.elements.appShell.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) {
@@ -134,23 +175,32 @@ export class SpectrumLatticeIdleController implements Disposable {
     }, { passive: true });
   }
 
-  setVisible(visible: boolean): void {
-    if (this.disposed || this.visible === visible) {
+  setState(state: SpectrumLatticeState): void {
+    if (this.disposed) {
       return;
     }
 
-    this.visible = visible;
-    this.elements.appShell.classList.toggle('is-spectrum-lattice-idle', visible);
-    this.elements.mainLayout.classList.toggle('is-spectrum-lattice-idle', visible);
-    this.elements.viewerContainer.classList.toggle('is-spectrum-lattice-idle', visible);
-    this.elements.canvas.classList.toggle('hidden', !visible);
-    this.elements.idle.classList.toggle('hidden', !visible);
-
-    if (visible) {
-      this.start();
-    } else {
-      this.stop();
+    const nextMode = getMode(state);
+    if (this.mode === nextMode) {
+      return;
     }
+
+    const previousMode = this.mode;
+    this.mode = nextMode;
+    if (nextMode === 'idle') {
+      this.setCanvasVisible(true, true);
+      this.enterIdle(previousMode);
+      return;
+    }
+
+    if (nextMode === 'active') {
+      this.setCanvasVisible(true, false);
+      this.enterActive(previousMode);
+      return;
+    }
+
+    this.setCanvasVisible(false, false);
+    this.clearBackgroundBlend();
   }
 
   dispose(): void {
@@ -159,33 +209,155 @@ export class SpectrumLatticeIdleController implements Disposable {
     }
 
     this.disposed = true;
-    this.stop();
+    this.mode = 'disabled';
+    this.setCanvasVisible(false, false);
+    this.disposables.dispose();
+    this.deleteGlResources();
+  }
+
+  private setCanvasVisible(visible: boolean, idle: boolean): void {
+    this.canvasVisible = visible;
+    this.elements.appShell.classList.toggle('is-spectrum-lattice-idle', visible && idle);
+    this.elements.mainLayout.classList.toggle('is-spectrum-lattice-idle', visible && idle);
+    this.elements.viewerContainer.classList.toggle('is-spectrum-lattice-idle', visible && idle);
+    this.elements.canvas.classList.toggle('hidden', !visible);
+    this.elements.idle.classList.toggle('hidden', !visible || !idle);
+
+    if (!visible) {
+      this.stop();
+      this.clearBackgroundBlend();
+    }
+  }
+
+  private hideLiveSurface(): void {
     this.elements.appShell.classList.remove('is-spectrum-lattice-idle');
     this.elements.mainLayout.classList.remove('is-spectrum-lattice-idle');
     this.elements.viewerContainer.classList.remove('is-spectrum-lattice-idle');
     this.elements.canvas.classList.add('hidden');
     this.elements.idle.classList.add('hidden');
-    this.disposables.dispose();
-    this.deleteGlResources();
   }
 
-  private start(): void {
+  private enterIdle(previousMode: SpectrumLatticeMode): void {
     if (!this.initialized) {
       this.initialize();
     }
 
+    const now = performance.now();
     if (!this.gl || !this.program || !this.uniforms) {
+      this.setMotionState(1, IDLE_PERCEIVED_BRIGHTNESS, IDLE_CHECKER_OPACITY, IDLE_SPECTRUM_GRID_OPACITY);
       return;
     }
 
-    this.renderFrame(performance.now());
+    if (previousMode === 'active') {
+      this.transitionMotionTo(
+        1,
+        IDLE_PERCEIVED_BRIGHTNESS,
+        IDLE_CHECKER_OPACITY,
+        IDLE_SPECTRUM_GRID_OPACITY,
+        now
+      );
+    } else {
+      this.setMotionState(1, IDLE_PERCEIVED_BRIGHTNESS, IDLE_CHECKER_OPACITY, IDLE_SPECTRUM_GRID_OPACITY);
+    }
+    this.startAnimation(now);
+  }
+
+  private enterActive(previousMode: SpectrumLatticeMode): void {
+    if (!this.initialized) {
+      this.initialize();
+    }
+
+    const now = performance.now();
+    if (!this.gl || !this.program || !this.uniforms) {
+      this.setMotionState(
+        0,
+        ACTIVE_PERCEIVED_BRIGHTNESS,
+        ACTIVE_CHECKER_OPACITY,
+        ACTIVE_SPECTRUM_GRID_OPACITY
+      );
+      return;
+    }
+
+    if (previousMode === 'idle') {
+      this.transitionMotionTo(
+        0,
+        ACTIVE_PERCEIVED_BRIGHTNESS,
+        ACTIVE_CHECKER_OPACITY,
+        ACTIVE_SPECTRUM_GRID_OPACITY,
+        now
+      );
+      this.startAnimation(now);
+      return;
+    }
+
+    this.setMotionState(
+      0,
+      ACTIVE_PERCEIVED_BRIGHTNESS,
+      ACTIVE_CHECKER_OPACITY,
+      ACTIVE_SPECTRUM_GRID_OPACITY
+    );
+    this.lastFrameNowMs = null;
+    this.renderStaticFrame(this.lastTimeSeconds);
+    this.stop();
+  }
+
+  private startAnimation(now: number): void {
+    this.animationActive = true;
+    if (this.animationFrameId === null) {
+      this.renderFrame(now);
+    }
   }
 
   private stop(): void {
+    this.animationActive = false;
+    this.lastFrameNowMs = null;
+    this.transitionStartNowMs = null;
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
+  }
+
+  private setMotionState(
+    speed: number,
+    perceivedBrightness: number,
+    checkerOpacity: number,
+    spectrumGridOpacity: number
+  ): void {
+    this.motionSpeed = speed;
+    this.targetMotionSpeed = speed;
+    this.transitionStartSpeed = speed;
+    this.perceivedBrightness = perceivedBrightness;
+    this.targetPerceivedBrightness = perceivedBrightness;
+    this.transitionStartPerceivedBrightness = perceivedBrightness;
+    this.checkerOpacity = checkerOpacity;
+    this.targetCheckerOpacity = checkerOpacity;
+    this.transitionStartCheckerOpacity = checkerOpacity;
+    this.spectrumGridOpacity = spectrumGridOpacity;
+    this.targetSpectrumGridOpacity = spectrumGridOpacity;
+    this.transitionStartSpectrumGridOpacity = spectrumGridOpacity;
+    this.transitionStartNowMs = null;
+    this.lastFrameNowMs = null;
+    this.applyBackgroundBlend();
+  }
+
+  private transitionMotionTo(
+    targetSpeed: number,
+    targetPerceivedBrightness: number,
+    targetCheckerOpacity: number,
+    targetSpectrumGridOpacity: number,
+    now: number
+  ): void {
+    this.updateMotionState(now);
+    this.targetMotionSpeed = targetSpeed;
+    this.transitionStartSpeed = this.motionSpeed;
+    this.targetPerceivedBrightness = targetPerceivedBrightness;
+    this.transitionStartPerceivedBrightness = this.perceivedBrightness;
+    this.targetCheckerOpacity = targetCheckerOpacity;
+    this.transitionStartCheckerOpacity = this.checkerOpacity;
+    this.targetSpectrumGridOpacity = targetSpectrumGridOpacity;
+    this.transitionStartSpectrumGridOpacity = this.spectrumGridOpacity;
+    this.transitionStartNowMs = now;
   }
 
   private initialize(): void {
@@ -224,7 +396,8 @@ export class SpectrumLatticeIdleController implements Disposable {
       this.uniforms = {
         resolution: getRequiredUniformLocation(gl, program, 'uResolution'),
         pointer: getRequiredUniformLocation(gl, program, 'uPointer'),
-        time: getRequiredUniformLocation(gl, program, 'uTime')
+        time: getRequiredUniformLocation(gl, program, 'uTime'),
+        perceivedBrightness: getRequiredUniformLocation(gl, program, 'uPerceivedBrightness')
       };
       this.elements.canvas.classList.remove('spectrum-lattice-canvas--fallback');
     } catch {
@@ -234,25 +407,85 @@ export class SpectrumLatticeIdleController implements Disposable {
   }
 
   private readonly renderFrame = (now: number): void => {
-    if (!this.visible || !this.gl || !this.program || !this.uniforms) {
+    if (!this.animationActive || !this.canvasVisible || !this.gl || !this.program || !this.uniforms) {
+      return;
+    }
+
+    this.updateMotionState(now);
+    this.pointer.x += (this.targetPointer.x - this.pointer.x) * 0.055;
+    this.pointer.y += (this.targetPointer.y - this.pointer.y) * 0.055;
+
+    this.renderStaticFrame(this.lastTimeSeconds);
+    if (this.mode === 'active' && this.targetMotionSpeed === 0 && this.motionSpeed === 0) {
+      this.stop();
+      return;
+    }
+
+    this.animationFrameId = requestAnimationFrame(this.renderFrame);
+  };
+
+  private updateMotionState(now: number): void {
+    if (this.transitionStartNowMs !== null) {
+      const progress = clamp01((now - this.transitionStartNowMs) / SPECTRUM_LATTICE_MOTION_TRANSITION_MS);
+      const easedProgress = smoothstep(progress);
+      this.motionSpeed = lerp(this.transitionStartSpeed, this.targetMotionSpeed, easedProgress);
+      this.perceivedBrightness = lerp(
+        this.transitionStartPerceivedBrightness,
+        this.targetPerceivedBrightness,
+        easedProgress
+      );
+      this.checkerOpacity = lerp(
+        this.transitionStartCheckerOpacity,
+        this.targetCheckerOpacity,
+        easedProgress
+      );
+      this.spectrumGridOpacity = lerp(
+        this.transitionStartSpectrumGridOpacity,
+        this.targetSpectrumGridOpacity,
+        easedProgress
+      );
+      if (progress >= 1) {
+        this.motionSpeed = this.targetMotionSpeed;
+        this.perceivedBrightness = this.targetPerceivedBrightness;
+        this.checkerOpacity = this.targetCheckerOpacity;
+        this.spectrumGridOpacity = this.targetSpectrumGridOpacity;
+        this.transitionStartNowMs = null;
+      }
+    }
+
+    if (this.lastFrameNowMs !== null) {
+      const deltaSeconds = Math.max(0, (now - this.lastFrameNowMs) * 0.001);
+      this.lastTimeSeconds += deltaSeconds * this.motionSpeed;
+    }
+    this.lastFrameNowMs = now;
+    this.applyBackgroundBlend();
+  }
+
+  private applyBackgroundBlend(): void {
+    this.elements.viewerContainer.style.setProperty('--spectrum-checker-opacity', formatOpacity(this.checkerOpacity));
+    this.elements.viewerContainer.style.setProperty('--spectrum-grid-opacity', formatOpacity(this.spectrumGridOpacity));
+  }
+
+  private clearBackgroundBlend(): void {
+    this.elements.viewerContainer.style.removeProperty('--spectrum-checker-opacity');
+    this.elements.viewerContainer.style.removeProperty('--spectrum-grid-opacity');
+  }
+
+  private renderStaticFrame(timeSeconds: number): void {
+    if (!this.gl || !this.program || !this.uniforms) {
       return;
     }
 
     const gl = this.gl;
-    const t = now * 0.001;
     this.resizeCanvas();
-    this.pointer.x += (this.targetPointer.x - this.pointer.x) * 0.055;
-    this.pointer.y += (this.targetPointer.y - this.pointer.y) * 0.055;
-
     gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);
     gl.uniform2f(this.uniforms.resolution, this.elements.canvas.width, this.elements.canvas.height);
     gl.uniform2f(this.uniforms.pointer, this.pointer.x, this.pointer.y);
-    gl.uniform1f(this.uniforms.time, t);
+    gl.uniform1f(this.uniforms.time, timeSeconds);
+    gl.uniform1f(this.uniforms.perceivedBrightness, this.perceivedBrightness);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-    this.animationFrameId = requestAnimationFrame(this.renderFrame);
-  };
+  }
 
   private resizeCanvas(): void {
     const gl = this.gl;
@@ -291,6 +524,13 @@ export class SpectrumLatticeIdleController implements Disposable {
     this.uniforms = null;
     this.gl = null;
   }
+}
+
+function getMode(state: SpectrumLatticeState): SpectrumLatticeMode {
+  if (!state.themeEnabled) {
+    return 'disabled';
+  }
+  return state.idle ? 'idle' : 'active';
 }
 
 function createProgram(
@@ -351,4 +591,16 @@ function getRequiredUniformLocation(
 
 function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
+}
+
+function lerp(start: number, end: number, progress: number): number {
+  return start + (end - start) * progress;
+}
+
+function smoothstep(progress: number): number {
+  return progress * progress * (3 - 2 * progress);
+}
+
+function formatOpacity(value: number): string {
+  return clamp01(value).toFixed(4).replace(/\.?0+$/, '');
 }

@@ -1196,6 +1196,29 @@ body.is-resizing-panel-rows * {
   border-radius: 0.5rem;
   overflow: hidden;
   background-color: var(--viewer-checker-dark);
+  background-image: none;
+}
+
+.viewer-container::before,
+.viewer-container::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.viewer-container::before {
+  z-index: 1;
+  background-image:
+    linear-gradient(rgba(180, 220, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(180, 220, 255, 0.035) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(circle at center, black, transparent 76%);
+  opacity: var(--spectrum-grid-opacity, 0);
+}
+
+.viewer-container::after {
+  z-index: 0;
   background-image: conic-gradient(
     var(--viewer-checker-light) 25%,
     var(--viewer-checker-dark) 0 50%,
@@ -1204,24 +1227,18 @@ body.is-resizing-panel-rows * {
   );
   background-size: calc(var(--viewer-checker-tile) * 2) calc(var(--viewer-checker-tile) * 2);
   background-position: var(--viewer-checker-offset-x) var(--viewer-checker-offset-y);
+  opacity: var(--spectrum-checker-opacity, 1);
+}
+
+:root[data-theme='spectrum-lattice'] .viewer-container {
+  --spectrum-checker-opacity: 0;
+  --spectrum-grid-opacity: 1;
+  background-color: transparent;
 }
 
 .viewer-container.is-spectrum-lattice-idle {
   background-color: transparent;
   background-image: none;
-}
-
-.viewer-container.is-spectrum-lattice-idle::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(180, 220, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(180, 220, 255, 0.035) 1px, transparent 1px);
-  background-size: 46px 46px;
-  mask-image: radial-gradient(circle at center, black, transparent 76%);
 }
 
 .viewer-container:fullscreen {
