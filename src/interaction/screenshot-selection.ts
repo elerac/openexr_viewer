@@ -34,6 +34,7 @@ export interface ScreenshotSelectionDragUpdate {
 
 export interface ScreenshotSelectionDragOptions {
   preserveAspectRatio?: boolean;
+  resizeFromCenter?: boolean;
   centerSnapTarget?: PointerPosition | null;
   edgeSnapTargets?: ScreenshotSelectionEdgeSnapTargets | null;
 }
@@ -171,50 +172,40 @@ function resizeScreenshotSelectionRect(
 
   if (options.preserveAspectRatio) {
     return {
-      rect: resizeScreenshotSelectionRectWithAspectRatio(
-        rect,
-        handle,
-        deltaX,
-        deltaY,
-        viewportBounds,
-        minWidth,
-        minHeight
-      ),
+      rect: options.resizeFromCenter
+        ? resizeScreenshotSelectionRectFromCenterWithAspectRatio(
+            rect,
+            handle,
+            deltaX,
+            deltaY,
+            viewportBounds,
+            minWidth,
+            minHeight
+          )
+        : resizeScreenshotSelectionRectWithAspectRatio(
+            rect,
+            handle,
+            deltaX,
+            deltaY,
+            viewportBounds,
+            minWidth,
+            minHeight
+          ),
       squareSnapped: false,
       snapGuide: createEmptySnapGuide()
     };
   }
 
-  let left = rect.x;
-  let right = rect.x + rect.width;
-  let top = rect.y;
-  let bottom = rect.y + rect.height;
-
-  if (handle === 'edge-w' || handle === 'corner-nw' || handle === 'corner-sw') {
-    left = clamp(rect.x + deltaX, 0, right - minWidth);
-  }
-  if (handle === 'edge-e' || handle === 'corner-ne' || handle === 'corner-se') {
-    right = clamp(rect.x + rect.width + deltaX, left + minWidth, maxWidth);
-  }
-  if (handle === 'edge-n' || handle === 'corner-nw' || handle === 'corner-ne') {
-    top = clamp(rect.y + deltaY, 0, bottom - minHeight);
-  }
-  if (handle === 'edge-s' || handle === 'corner-sw' || handle === 'corner-se') {
-    bottom = clamp(rect.y + rect.height + deltaY, top + minHeight, maxHeight);
-  }
-
-  const resizedRect = {
-    x: left,
-    y: top,
-    width: right - left,
-    height: bottom - top
-  };
+  const resizedRect = options.resizeFromCenter
+    ? resizeScreenshotSelectionRectFromCenter(rect, handle, deltaX, deltaY, viewportBounds, minWidth, minHeight)
+    : resizeScreenshotSelectionRectFromFixedEdge(rect, handle, deltaX, deltaY, viewportBounds, minWidth, minHeight);
   const squareSnappedRect = snapScreenshotSelectionResizeToSquare(
     resizedRect,
     handle,
     viewportBounds,
     minWidth,
-    minHeight
+    minHeight,
+    Boolean(options.resizeFromCenter)
   );
 
   if (squareSnappedRect) {
@@ -283,24 +274,43 @@ function snapScreenshotSelectionResizeToAlignment(
 ): { rect: ViewportRect; snapGuide: ScreenshotSelectionSnapGuide } {
   const horizontalEdge = resolveHorizontalResizeEdge(handle);
   const verticalEdge = resolveVerticalResizeEdge(handle);
-  const xSnap = resolveResizeAxisSnap(
-    rect.x,
-    rect.x + rect.width,
-    viewport.width,
-    minWidth,
-    horizontalEdge,
-    isCenterSnapTargetInsideViewport(options.centerSnapTarget, viewport) ? options.centerSnapTarget.x : null,
-    options.edgeSnapTargets?.x ?? []
-  );
-  const ySnap = resolveResizeAxisSnap(
-    rect.y,
-    rect.y + rect.height,
-    viewport.height,
-    minHeight,
-    verticalEdge,
-    isCenterSnapTargetInsideViewport(options.centerSnapTarget, viewport) ? options.centerSnapTarget.y : null,
-    options.edgeSnapTargets?.y ?? []
-  );
+  const centerSnapTarget = options.resizeFromCenter ? null : options.centerSnapTarget;
+  const xSnap = options.resizeFromCenter
+    ? resolveCenteredResizeAxisSnap(
+        rect.x,
+        rect.x + rect.width,
+        viewport.width,
+        minWidth,
+        horizontalEdge,
+        options.edgeSnapTargets?.x ?? []
+      )
+    : resolveResizeAxisSnap(
+        rect.x,
+        rect.x + rect.width,
+        viewport.width,
+        minWidth,
+        horizontalEdge,
+        isCenterSnapTargetInsideViewport(centerSnapTarget, viewport) ? centerSnapTarget.x : null,
+        options.edgeSnapTargets?.x ?? []
+      );
+  const ySnap = options.resizeFromCenter
+    ? resolveCenteredResizeAxisSnap(
+        rect.y,
+        rect.y + rect.height,
+        viewport.height,
+        minHeight,
+        verticalEdge,
+        options.edgeSnapTargets?.y ?? []
+      )
+    : resolveResizeAxisSnap(
+        rect.y,
+        rect.y + rect.height,
+        viewport.height,
+        minHeight,
+        verticalEdge,
+        isCenterSnapTargetInsideViewport(centerSnapTarget, viewport) ? centerSnapTarget.y : null,
+        options.edgeSnapTargets?.y ?? []
+      );
 
   return {
     rect: {
@@ -415,6 +425,39 @@ function resolveResizeAxisSnap(
     : { start, end, guide: null };
 }
 
+function resolveCenteredResizeAxisSnap(
+  start: number,
+  end: number,
+  viewportSize: number,
+  minSize: number,
+  edge: ResizeAxisEdge,
+  edgeTargets: number[]
+): { start: number; end: number; guide: number | null } {
+  if (!edge) {
+    return { start, end, guide: null };
+  }
+
+  let candidate: ResizeAxisSnapCandidate | null = null;
+  const center = (start + end) * 0.5;
+  const draggedValue = edge === 'start' ? start : end;
+  for (const target of edgeTargets) {
+    if (!isFiniteViewportCoordinate(target, viewportSize)) {
+      continue;
+    }
+
+    candidate = chooseResizeAxisSnapCandidate(candidate, {
+      distance: Math.abs(draggedValue - target),
+      start: edge === 'start' ? target : 2 * center - target,
+      end: edge === 'end' ? target : 2 * center - target,
+      guide: target
+    }, viewportSize, minSize, SCREENSHOT_SELECTION_EDGE_SNAP_THRESHOLD);
+  }
+
+  return candidate
+    ? { start: candidate.start, end: candidate.end, guide: candidate.guide }
+    : { start, end, guide: null };
+}
+
 function buildCenterResizeAxisSnapCandidate(
   start: number,
   end: number,
@@ -500,6 +543,70 @@ function isFiniteViewportCoordinate(value: number | null | undefined, max: numbe
   return value !== null && value !== undefined && Number.isFinite(value) && value >= 0 && value <= max;
 }
 
+function resizeScreenshotSelectionRectFromFixedEdge(
+  rect: ViewportRect,
+  handle: Exclude<ScreenshotSelectionHandle, 'move'>,
+  deltaX: number,
+  deltaY: number,
+  viewport: ViewportInfo,
+  minWidth: number,
+  minHeight: number
+): ViewportRect {
+  let left = rect.x;
+  let right = rect.x + rect.width;
+  let top = rect.y;
+  let bottom = rect.y + rect.height;
+
+  if (handle === 'edge-w' || handle === 'corner-nw' || handle === 'corner-sw') {
+    left = clamp(rect.x + deltaX, 0, right - minWidth);
+  }
+  if (handle === 'edge-e' || handle === 'corner-ne' || handle === 'corner-se') {
+    right = clamp(rect.x + rect.width + deltaX, left + minWidth, viewport.width);
+  }
+  if (handle === 'edge-n' || handle === 'corner-nw' || handle === 'corner-ne') {
+    top = clamp(rect.y + deltaY, 0, bottom - minHeight);
+  }
+  if (handle === 'edge-s' || handle === 'corner-sw' || handle === 'corner-se') {
+    bottom = clamp(rect.y + rect.height + deltaY, top + minHeight, viewport.height);
+  }
+
+  return {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top
+  };
+}
+
+function resizeScreenshotSelectionRectFromCenter(
+  rect: ViewportRect,
+  handle: Exclude<ScreenshotSelectionHandle, 'move'>,
+  deltaX: number,
+  deltaY: number,
+  viewport: ViewportInfo,
+  minWidth: number,
+  minHeight: number
+): ViewportRect {
+  const centerX = rect.x + rect.width * 0.5;
+  const centerY = rect.y + rect.height * 0.5;
+  const horizontalEdge = resolveHorizontalResizeEdge(handle);
+  const verticalEdge = resolveVerticalResizeEdge(handle);
+  const rawWidth = horizontalEdge === 'start'
+    ? rect.width - 2 * deltaX
+    : horizontalEdge === 'end'
+      ? rect.width + 2 * deltaX
+      : rect.width;
+  const rawHeight = verticalEdge === 'start'
+    ? rect.height - 2 * deltaY
+    : verticalEdge === 'end'
+      ? rect.height + 2 * deltaY
+      : rect.height;
+  const width = clamp(rawWidth, minWidth, getCenteredMaxSize(centerX, viewport.width));
+  const height = clamp(rawHeight, minHeight, getCenteredMaxSize(centerY, viewport.height));
+
+  return createRectFromCenter(centerX, centerY, width, height);
+}
+
 function resizeScreenshotSelectionRectWithAspectRatio(
   rect: ViewportRect,
   handle: Exclude<ScreenshotSelectionHandle, 'move'>,
@@ -515,6 +622,49 @@ function resizeScreenshotSelectionRectWithAspectRatio(
   }
 
   return resizeEdgeWithAspectRatio(rect, handle, deltaX, deltaY, viewport, minWidth, minHeight, aspectRatio);
+}
+
+function resizeScreenshotSelectionRectFromCenterWithAspectRatio(
+  rect: ViewportRect,
+  handle: Exclude<ScreenshotSelectionHandle, 'move'>,
+  deltaX: number,
+  deltaY: number,
+  viewport: ViewportInfo,
+  minWidth: number,
+  minHeight: number
+): ViewportRect {
+  const centerX = rect.x + rect.width * 0.5;
+  const centerY = rect.y + rect.height * 0.5;
+  const aspectRatio = sanitizeDimension(rect.width, minWidth) / sanitizeDimension(rect.height, minHeight);
+  const horizontalEdge = resolveHorizontalResizeEdge(handle);
+  const verticalEdge = resolveVerticalResizeEdge(handle);
+  const rawWidth = horizontalEdge === 'start'
+    ? rect.width - 2 * deltaX
+    : horizontalEdge === 'end'
+      ? rect.width + 2 * deltaX
+      : rect.width;
+  const rawHeight = verticalEdge === 'start'
+    ? rect.height - 2 * deltaY
+    : verticalEdge === 'end'
+      ? rect.height + 2 * deltaY
+      : rect.height;
+  const widthDrive = horizontalEdge !== null && (
+    verticalEdge === null ||
+    Math.abs(deltaX / Math.max(rect.width, Number.EPSILON))
+      >= Math.abs(deltaY / Math.max(rect.height, Number.EPSILON))
+  );
+  const size = chooseAspectLockedSize({
+    rawWidth,
+    rawHeight,
+    maxWidth: getCenteredMaxSize(centerX, viewport.width),
+    maxHeight: getCenteredMaxSize(centerY, viewport.height),
+    minWidth,
+    minHeight,
+    aspectRatio,
+    widthDrive
+  });
+
+  return createRectFromCenter(centerX, centerY, size.width, size.height);
 }
 
 function resizeCornerWithAspectRatio(
@@ -658,10 +808,15 @@ function snapScreenshotSelectionResizeToSquare(
   handle: Exclude<ScreenshotSelectionHandle, 'move'>,
   viewport: ViewportInfo,
   minWidth: number,
-  minHeight: number
+  minHeight: number,
+  resizeFromCenter: boolean
 ): ViewportRect | null {
   if (Math.abs(rect.width - rect.height) > SCREENSHOT_SELECTION_SQUARE_SNAP_THRESHOLD) {
     return null;
+  }
+
+  if (resizeFromCenter) {
+    return snapCenteredResizeToSquare(rect, viewport, minWidth, minHeight);
   }
 
   if (handle === 'corner-nw' || handle === 'corner-ne' || handle === 'corner-se' || handle === 'corner-sw') {
@@ -669,6 +824,24 @@ function snapScreenshotSelectionResizeToSquare(
   }
 
   return snapEdgeResizeToSquare(rect, handle, viewport, minWidth, minHeight);
+}
+
+function snapCenteredResizeToSquare(
+  rect: ViewportRect,
+  viewport: ViewportInfo,
+  minWidth: number,
+  minHeight: number
+): ViewportRect | null {
+  const centerX = rect.x + rect.width * 0.5;
+  const centerY = rect.y + rect.height * 0.5;
+  const minSide = Math.max(minWidth, minHeight);
+  const maxSide = Math.min(
+    getCenteredMaxSize(centerX, viewport.width),
+    getCenteredMaxSize(centerY, viewport.height)
+  );
+  const side = chooseSquareSide(rect.width, rect.height, minSide, maxSide);
+
+  return side === null ? null : createRectFromCenter(centerX, centerY, side, side);
 }
 
 function snapCornerResizeToSquare(
@@ -762,6 +935,19 @@ function chooseSquareSide(width: number, height: number, minSide: number, maxSid
   }
 
   return clamp((width + height) * 0.5, minSide, maxSide);
+}
+
+function createRectFromCenter(centerX: number, centerY: number, width: number, height: number): ViewportRect {
+  return {
+    x: centerX - width * 0.5,
+    y: centerY - height * 0.5,
+    width,
+    height
+  };
+}
+
+function getCenteredMaxSize(center: number, viewportSize: number): number {
+  return 2 * Math.min(center, viewportSize - center);
 }
 
 function isCenterSnapTargetInsideViewport(

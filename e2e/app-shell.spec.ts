@@ -59,6 +59,13 @@ function expectPngSignature(bytes: Uint8Array): void {
   );
 }
 
+function getBoxCenter(box: { x: number; y: number; width: number; height: number }): { x: number; y: number } {
+  return {
+    x: box.x + box.width * 0.5,
+    y: box.y + box.height * 0.5
+  };
+}
+
 async function readChromeVisualState(locator: Locator): Promise<{
   opacity: number;
   pointerEvents: string;
@@ -568,15 +575,66 @@ test('exports an adjusted image-viewer screenshot region as a png download', asy
     throw new Error('Expected screenshot selection box to be visible.');
   }
 
-  await page.mouse.move(initialBox.x + initialBox.width, initialBox.y + initialBox.height);
-  await page.mouse.down();
-  await page.mouse.move(initialBox.x + initialBox.width - 48, initialBox.y + initialBox.height - 24, { steps: 4 });
-  await page.mouse.up();
+  const dragSelectionWithKeys = async (
+    keys: string[],
+    from: { x: number; y: number },
+    to: { x: number; y: number }
+  ): Promise<void> => {
+    for (const key of keys) {
+      await page.keyboard.down(key);
+    }
+    try {
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(to.x, to.y, { steps: 4 });
+      await page.mouse.up();
+    } finally {
+      for (const key of [...keys].reverse()) {
+        await page.keyboard.up(key);
+      }
+    }
+  };
+
+  const initialCenter = getBoxCenter(initialBox);
+  await dragSelectionWithKeys(
+    ['Control'],
+    {
+      x: initialBox.x + initialBox.width,
+      y: initialBox.y + initialBox.height * 0.5
+    },
+    {
+      x: initialBox.x + initialBox.width - 48,
+      y: initialBox.y + initialBox.height * 0.5
+    }
+  );
+
+  const centerResizedBox = await selectionBox.boundingBox();
+  if (!centerResizedBox) {
+    throw new Error('Expected center-resized screenshot selection box to be visible.');
+  }
+  expect(getBoxCenter(centerResizedBox).x).toBeCloseTo(initialCenter.x, 0);
+  expect(getBoxCenter(centerResizedBox).y).toBeCloseTo(initialCenter.y, 0);
+
+  const centerResizedRatio = centerResizedBox.width / centerResizedBox.height;
+  await dragSelectionWithKeys(
+    ['Control', 'Shift'],
+    {
+      x: centerResizedBox.x + centerResizedBox.width,
+      y: centerResizedBox.y + centerResizedBox.height
+    },
+    {
+      x: centerResizedBox.x + centerResizedBox.width - 40,
+      y: centerResizedBox.y + centerResizedBox.height - 20
+    }
+  );
 
   const resizedBox = await selectionBox.boundingBox();
   if (!resizedBox) {
     throw new Error('Expected resized screenshot selection box to be visible.');
   }
+  expect(getBoxCenter(resizedBox).x).toBeCloseTo(initialCenter.x, 0);
+  expect(getBoxCenter(resizedBox).y).toBeCloseTo(initialCenter.y, 0);
+  expect(resizedBox.width / resizedBox.height).toBeCloseTo(centerResizedRatio, 1);
   expect(resizedBox.width).toBeLessThan(initialBox.width);
   expect(resizedBox.height).toBeLessThan(initialBox.height);
 

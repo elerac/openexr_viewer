@@ -239,6 +239,7 @@ export class ViewerInteraction {
           this.callbacks.getViewport(),
           {
             preserveAspectRatio: event.shiftKey,
+            resizeFromCenter: this.screenshotDrag.handle !== 'move' && event.ctrlKey,
             ...this.resolveScreenshotSelectionSnapTargets()
           }
         );

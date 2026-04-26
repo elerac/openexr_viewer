@@ -126,6 +126,160 @@ describe('screenshot selection geometry', () => {
     });
   });
 
+  it('resizes edge handles from the center when requested', () => {
+    expect(updateScreenshotSelectionRectFromDrag({
+      handle: 'edge-e',
+      startPoint: { x: 120, y: 50 },
+      startRect: { x: 40, y: 30, width: 80, height: 40 }
+    }, { x: 140, y: 50 }, { width: 200, height: 140 }, {
+      resizeFromCenter: true
+    })).toEqual({
+      rect: {
+        x: 20,
+        y: 30,
+        width: 120,
+        height: 40
+      },
+      squareSnapped: false,
+      snapGuide: { x: null, y: null }
+    });
+  });
+
+  it('resizes corner handles from the center when requested', () => {
+    expect(updateScreenshotSelectionRectFromDrag({
+      handle: 'corner-nw',
+      startPoint: { x: 50, y: 40 },
+      startRect: { x: 50, y: 40, width: 60, height: 40 }
+    }, { x: 40, y: 30 }, { width: 200, height: 140 }, {
+      resizeFromCenter: true
+    })).toEqual({
+      rect: {
+        x: 40,
+        y: 30,
+        width: 80,
+        height: 60
+      },
+      squareSnapped: false,
+      snapGuide: { x: null, y: null }
+    });
+  });
+
+  it('clamps center resizes symmetrically to minimum size and viewport bounds', () => {
+    expect(updateScreenshotSelectionRectFromDrag({
+      handle: 'edge-e',
+      startPoint: { x: 130, y: 65 },
+      startRect: { x: 50, y: 40, width: 80, height: 50 }
+    }, { x: 20, y: 65 }, { width: 200, height: 140 }, {
+      resizeFromCenter: true
+    })).toEqual({
+      rect: {
+        x: 82,
+        y: 40,
+        width: 16,
+        height: 50
+      },
+      squareSnapped: false,
+      snapGuide: { x: null, y: null }
+    });
+
+    expect(updateScreenshotSelectionRectFromDrag({
+      handle: 'edge-e',
+      startPoint: { x: 100, y: 50 },
+      startRect: { x: 20, y: 30, width: 80, height: 40 }
+    }, { x: 200, y: 50 }, { width: 160, height: 120 }, {
+      resizeFromCenter: true
+    })).toEqual({
+      rect: {
+        x: 0,
+        y: 30,
+        width: 120,
+        height: 40
+      },
+      squareSnapped: false,
+      snapGuide: { x: null, y: null }
+    });
+  });
+
+  it('preserves the starting aspect ratio for ctrl-shift corner resizes from center', () => {
+    expect(updateScreenshotSelectionRectFromDrag({
+      handle: 'corner-se',
+      startPoint: { x: 160, y: 90 },
+      startRect: { x: 40, y: 30, width: 120, height: 60 }
+    }, { x: 180, y: 100 }, { width: 260, height: 180 }, {
+      preserveAspectRatio: true,
+      resizeFromCenter: true
+    })).toEqual({
+      rect: {
+        x: 20,
+        y: 20,
+        width: 160,
+        height: 80
+      },
+      squareSnapped: false,
+      snapGuide: { x: null, y: null }
+    });
+  });
+
+  it('preserves the starting aspect ratio for ctrl-shift edge resizes from center', () => {
+    expect(updateScreenshotSelectionRectFromDrag({
+      handle: 'edge-s',
+      startPoint: { x: 100, y: 90 },
+      startRect: { x: 40, y: 30, width: 120, height: 60 }
+    }, { x: 100, y: 105 }, { width: 260, height: 180 }, {
+      preserveAspectRatio: true,
+      resizeFromCenter: true
+    })).toEqual({
+      rect: {
+        x: 10,
+        y: 15,
+        width: 180,
+        height: 90
+      },
+      squareSnapped: false,
+      snapGuide: { x: null, y: null }
+    });
+  });
+
+  it('snaps centered resize edges by mirroring the dragged edge across the fixed center', () => {
+    expect(updateScreenshotSelectionRectFromDrag({
+      handle: 'edge-e',
+      startPoint: { x: 120, y: 40 },
+      startRect: { x: 40, y: 20, width: 80, height: 40 }
+    }, { x: 126, y: 40 }, { width: 200, height: 120 }, {
+      resizeFromCenter: true,
+      centerSnapTarget: { x: 84, y: 80 },
+      edgeSnapTargets: { x: [130], y: [] }
+    })).toEqual({
+      rect: {
+        x: 30,
+        y: 20,
+        width: 100,
+        height: 40
+      },
+      squareSnapped: false,
+      snapGuide: { x: 130, y: null }
+    });
+  });
+
+  it('square-snaps centered resizes around the fixed center', () => {
+    expect(updateScreenshotSelectionRectFromDrag({
+      handle: 'edge-e',
+      startPoint: { x: 120, y: 40 },
+      startRect: { x: 40, y: 20, width: 80, height: 40 }
+    }, { x: 102, y: 40 }, { width: 200, height: 120 }, {
+      resizeFromCenter: true
+    })).toEqual({
+      rect: {
+        x: 59,
+        y: 19,
+        width: 42,
+        height: 42
+      },
+      squareSnapped: true,
+      snapGuide: { x: null, y: null }
+    });
+  });
+
   it('snaps moved selections to an optional center target', () => {
     expect(updateScreenshotSelectionRectFromDrag({
       handle: 'move',

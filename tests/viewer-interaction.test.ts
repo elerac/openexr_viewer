@@ -304,6 +304,59 @@ describe('viewer interaction roi gestures', () => {
     expect(harness.onScreenshotSelectionSquareSnapChange).toHaveBeenLastCalledWith(false);
   });
 
+  it('resizes screenshot selection from center while resizing with ctrl held', () => {
+    const harness = createHarness({}, {
+      imageSize: null,
+      screenshotRect: { x: 40, y: 20, width: 80, height: 40 },
+      viewport: { width: 200, height: 160 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', { pointerId: 1, clientX: 120, clientY: 40 });
+    dispatchPointer(harness.element, 'pointermove', {
+      pointerId: 1,
+      clientX: 140,
+      clientY: 40,
+      ctrlKey: true
+    });
+
+    expect(harness.onScreenshotSelectionRectChange).toHaveBeenCalledWith({
+      rect: {
+        x: 20,
+        y: 20,
+        width: 120,
+        height: 40
+      },
+      squareSnapped: false,
+      snapGuide: { x: null, y: null }
+    });
+  });
+
+  it('keeps ctrl move drags as move drags', () => {
+    const harness = createHarness({}, {
+      imageSize: null,
+      screenshotRect: { x: 20, y: 20, width: 40, height: 30 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', { pointerId: 1, clientX: 40, clientY: 35 });
+    dispatchPointer(harness.element, 'pointermove', {
+      pointerId: 1,
+      clientX: 50,
+      clientY: 45,
+      ctrlKey: true
+    });
+
+    expect(harness.onScreenshotSelectionRectChange).toHaveBeenCalledWith({
+      rect: {
+        x: 30,
+        y: 30,
+        width: 40,
+        height: 30
+      },
+      squareSnapped: false,
+      snapGuide: { x: null, y: null }
+    });
+  });
+
   it('clears screenshot square snap feedback on pointer up', () => {
     const harness = createHarness({}, {
       screenshotRect: { x: 20, y: 20, width: 40, height: 40 }
