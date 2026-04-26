@@ -1267,7 +1267,7 @@ body.is-resizing-panel-rows * {
 #spectrum-lattice-canvas.spectrum-lattice-canvas--fallback {
   background:
     radial-gradient(circle at 52% 42%, rgba(134, 247, 255, 0.18), transparent 34%),
-    repeating-linear-gradient(115deg, rgba(134, 247, 255, 0.08) 0 1px, transparent 1px 16px),
+    repeating-linear-gradient(115deg, rgba(134, 247, 255, 0.1) 0 1px, transparent 1px 16px),
     linear-gradient(135deg, rgba(136, 104, 255, 0.24), rgba(255, 121, 198, 0.12) 45%, rgba(5, 7, 10, 0.92));
 }
 

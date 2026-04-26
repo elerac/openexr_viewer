@@ -78,17 +78,18 @@ vec3 vignette(vec2 uv, vec3 col) {
   return col;
 }
 
-vec3 spectrumLattice(vec2 p, vec2 uv, float t, vec2 m) {
+vec3 spectrumLattice(vec2 p, vec2 uv, float t, vec2 m, float perceivedBrightness) {
   vec2 q = rotate(p, 0.16 * sin(t * 0.09));
 
   float carrier = sin((q.x * 22.0 + 1.8 * sin(q.y * 9.0 + t * 0.45)) + t * 0.35);
   float bands = 0.5 + 0.5 * sin((q.x + q.y * 0.12) * 8.0 + carrier * 0.9 + t * 0.18);
   float lattice = gridLine(q + 0.025 * vec2(sin(t * 0.3), cos(t * 0.2)), 10.0, 0.78);
   float phase = 0.45 + 0.55 * sin(10.0 * length(q - m * 0.28) - t * 0.75);
+  float latticeBoost = 1.0 + 0.2 * smoothstep(0.6, 1.0, perceivedBrightness);
 
   vec3 col = spectral(bands + 0.08 * phase);
   col *= 0.18 + 0.55 * smoothstep(-0.8, 1.0, carrier);
-  col += vec3(0.05, 0.35, 0.42) * lattice * (0.25 + 0.75 * phase);
+  col += vec3(0.05, 0.35, 0.42) * lattice * (0.25 + 0.75 * phase) * latticeBoost;
   return col;
 }
 
@@ -100,7 +101,7 @@ void main() {
     uResolution.y / min(uResolution.x, uResolution.y)
   );
 
-  vec3 col = spectrumLattice(p, uv, uTime, pointer);
+  vec3 col = spectrumLattice(p, uv, uTime, pointer, uPerceivedBrightness);
 
   float dust = hash21(gl_FragCoord.xy + floor(uTime * 12.0)) - 0.5;
   float scanline = 0.965 + 0.035 * sin(gl_FragCoord.y * PI);
