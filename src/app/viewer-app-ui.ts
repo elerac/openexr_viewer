@@ -12,6 +12,7 @@ import {
   sameOpenedImageOptions,
   sameStokesControl
 } from './viewer-app-equality';
+import { sameStokesColormapDefaultSettings } from '../stokes-colormap-settings';
 import {
   buildExportTarget,
   buildExportBatchTarget,
@@ -42,7 +43,8 @@ export const enum ViewerUiInvalidationFlags {
   LayerOptions = 1 << 14,
   Metadata = 1 << 15,
   RgbGroupOptions = 1 << 16,
-  ClearPanels = 1 << 17
+  ClearPanels = 1 << 17,
+  StokesColormapDefaults = 1 << 18
 }
 
 export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => ViewerUiSnapshot {
@@ -81,6 +83,7 @@ export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => Vie
       viewerMode: state.sessionState.viewerMode,
       visualizationMode: state.sessionState.visualizationMode,
       stokesDegreeModulationControl: selectStokesControl(state),
+      stokesColormapDefaults: state.stokesColormapDefaults,
       activeColormapId: state.sessionState.activeColormapId,
       defaultColormapId: state.defaultColormapId,
       activeColormapLut: state.activeColormapLut,
@@ -166,6 +169,10 @@ export function computeViewerUiInvalidation(
 
   if (!sameStokesControl(previous.stokesDegreeModulationControl, next.stokesDegreeModulationControl)) {
     flags |= ViewerUiInvalidationFlags.StokesDegreeModulation;
+  }
+
+  if (!sameStokesColormapDefaultSettings(previous.stokesColormapDefaults, next.stokesColormapDefaults)) {
+    flags |= ViewerUiInvalidationFlags.StokesColormapDefaults;
   }
 
   if (previous.activeColormapId !== next.activeColormapId) {
@@ -393,6 +400,7 @@ function sameViewerUiSnapshot(a: ViewerUiSnapshot, b: ViewerUiSnapshot): boolean
     a.viewerMode === b.viewerMode &&
     a.visualizationMode === b.visualizationMode &&
     sameStokesControl(a.stokesDegreeModulationControl, b.stokesDegreeModulationControl) &&
+    sameStokesColormapDefaultSettings(a.stokesColormapDefaults, b.stokesColormapDefaults) &&
     a.activeColormapId === b.activeColormapId &&
     a.defaultColormapId === b.defaultColormapId &&
     a.activeColormapLut === b.activeColormapLut &&

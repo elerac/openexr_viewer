@@ -59,6 +59,10 @@ export function applyUiEffects(ui: ViewerUi, transition: ViewerUiTransition): vo
     ui.setColormapOptions(snapshot.colormapOptions, snapshot.defaultColormapId);
   }
 
+  if (invalidation & (ViewerUiInvalidationFlags.ColormapOptions | ViewerUiInvalidationFlags.StokesColormapDefaults)) {
+    ui.setStokesDefaultSettingsOptions(snapshot.colormapOptions, snapshot.stokesColormapDefaults);
+  }
+
   if ((invalidation & ViewerUiInvalidationFlags.ColormapGradient) && snapshot.activeColormapLut) {
     ui.setColormapGradient(snapshot.activeColormapLut);
   }

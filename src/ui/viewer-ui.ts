@@ -67,10 +67,20 @@ import { ProbeReadoutController, type ProbeCoordinateImageSize } from './probe-r
 import { setRoiReadout } from './roi-readout';
 import { ThemeController } from './theme-controller';
 import { SettingsDialogController } from './settings-dialog';
+import {
+  STOKES_COLORMAP_DEFAULT_GROUPS,
+  cloneStokesColormapDefaultSetting,
+  cloneStokesColormapDefaultSettings,
+  createDefaultStokesColormapDefaultSettings,
+  type StokesColormapDefaultGroup,
+  type StokesColormapDefaultSetting,
+  type StokesColormapDefaultSettings
+} from '../stokes';
 import { TopBarTooltipController } from './top-bar-tooltip-controller';
 import { TopMenuController } from './top-menu-controller';
 import { ViewerBackgroundController } from './viewer-background-controller';
 import { WindowPreviewController } from './window-preview-controller';
+import { syncSelectOptions } from './render-helpers';
 import type { ViewportClientRect } from '../interaction/image-geometry';
 import type { ThemeId } from '../theme';
 import {
@@ -130,12 +140,23 @@ export interface UiCallbacks {
   onColormapZeroCenterToggle: () => void;
   onStokesDegreeModulationToggle: () => void;
   onStokesAolpDegreeModulationModeChange: (mode: StokesAolpDegreeModulationMode) => void;
+  onStokesDefaultSettingChange: (group: StokesColormapDefaultGroup, setting: StokesColormapDefaultSetting) => void;
   onClearRoi: () => void;
   onResetSettings: () => void;
   onResetView: () => void;
 }
 
 export type ChannelThumbnailOptionItem = ChannelViewThumbnailItem;
+
+interface StokesDefaultSettingRowElements {
+  colormapSelect: HTMLSelectElement;
+  vminInput: HTMLInputElement;
+  vmaxInput: HTMLInputElement;
+  zeroCenteredCheckbox: HTMLInputElement;
+  modulationCheckbox: HTMLInputElement | null;
+  aolpModeSelect: HTMLSelectElement | null;
+  controls: Array<HTMLInputElement | HTMLSelectElement>;
+}
 
 export class ViewerUi implements Disposable {
   private readonly disposables = new DisposableBag();
@@ -178,6 +199,8 @@ export class ViewerUi implements Disposable {
   private channelThumbnailItems: ChannelThumbnailOptionItem[] = [];
   private rgbGroupChannelNames: string[] = [];
   private currentChannelSelection: DisplaySelection | null = null;
+  private stokesColormapOptions: Array<{ id: string; label: string }> = [];
+  private stokesColormapDefaults: StokesColormapDefaultSettings = createDefaultStokesColormapDefaultSettings();
   private viewerMode: ViewerMode = 'image';
   private autoFitImageOnSelect = false;
   private hasActiveChannelImage = false;
@@ -430,6 +453,7 @@ export class ViewerUi implements Disposable {
     this.disposables.addDisposable(this.viewerBackgroundController);
     this.disposables.addDisposable(this.themeController);
     this.clearImageBrowserPanels();
+    this.setStokesDefaultSettingsOptions([], this.stokesColormapDefaults);
     this.setViewerMode('image');
     this.setAutoFitImageOnSelect(readStoredAutoFitImageOnSelect(), false);
     this.callbacks.onAutoFitImageOnSelectChange(this.autoFitImageOnSelect);
@@ -651,6 +675,51 @@ export class ViewerUi implements Disposable {
     this.colormapPanel.setColormapOptions(items, activeId);
     this.exportColormapDialog.setOptions(items, activeId);
     this.updateFileMenuItemsDisabled();
+  }
+
+  setStokesDefaultSettingsOptions(
+    items: Array<{ id: string; label: string }>,
+    defaults: StokesColormapDefaultSettings
+  ): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.stokesColormapOptions = items.map((item) => ({ ...item }));
+    this.stokesColormapDefaults = cloneStokesColormapDefaultSettings(defaults);
+    const selectOptions = items.map((item) => ({
+      value: item.id,
+      label: item.label
+    }));
+
+    for (const group of STOKES_COLORMAP_DEFAULT_GROUPS) {
+      const row = this.getStokesDefaultSettingRow(group);
+      const setting = defaults[group];
+      const focusedControl = row?.controls.find((control) => control === document.activeElement) ?? null;
+      if (!row) {
+        continue;
+      }
+
+      syncSelectOptions(row.colormapSelect, selectOptions);
+      row.colormapSelect.value = findColormapOptionIdByLabel(items, setting.colormapLabel) ?? '';
+      row.colormapSelect.disabled = items.length === 0;
+      row.vminInput.value = formatStokesDefaultNumber(setting.range.min);
+      row.vmaxInput.value = formatStokesDefaultNumber(setting.range.max);
+      row.vminInput.removeAttribute('aria-invalid');
+      row.vmaxInput.removeAttribute('aria-invalid');
+      row.zeroCenteredCheckbox.checked = setting.zeroCentered;
+
+      if (row.modulationCheckbox) {
+        row.modulationCheckbox.checked = Boolean(setting.modulation?.enabled);
+      }
+      if (row.aolpModeSelect) {
+        row.aolpModeSelect.value = setting.modulation?.aolpMode ?? 'value';
+      }
+
+      if (focusedControl && !focusedControl.disabled) {
+        focusedControl.focus();
+      }
+    }
   }
 
   setActiveColormap(activeId: string): void {
@@ -1510,10 +1579,17 @@ export class ViewerUi implements Disposable {
 
     this.bindResetViewButton(this.elements.resetViewButton);
     this.bindResetViewButton(this.elements.toolbarResetViewButton);
+    for (const group of STOKES_COLORMAP_DEFAULT_GROUPS) {
+      this.bindStokesDefaultSettingRow(group);
+    }
 
     this.disposables.addEventListener(this.elements.resetSettingsButton, 'click', () => {
       this.layoutSplitController.resetToDefaults();
       this.themeController.reset();
+      this.setStokesDefaultSettingsOptions(
+        this.stokesColormapOptions,
+        createDefaultStokesColormapDefaultSettings()
+      );
       this.callbacks.onResetSettings();
     });
 
@@ -1578,6 +1654,155 @@ export class ViewerUi implements Disposable {
     });
   }
 
+  private bindStokesDefaultSettingRow(group: StokesColormapDefaultGroup): void {
+    const row = this.getStokesDefaultSettingRow(group);
+    if (!row) {
+      return;
+    }
+
+    this.disposables.addEventListener(row.colormapSelect, 'change', () => {
+      if (row.colormapSelect.disabled || !row.colormapSelect.value) {
+        return;
+      }
+
+      const colormapLabel = findColormapOptionLabelById(this.stokesColormapOptions, row.colormapSelect.value);
+      if (!colormapLabel) {
+        return;
+      }
+
+      this.commitStokesDefaultSetting(group, {
+        ...this.stokesColormapDefaults[group],
+        colormapLabel
+      });
+    });
+
+    this.disposables.addEventListener(row.vminInput, 'change', () => {
+      this.commitStokesDefaultRange(group, row);
+    });
+    this.disposables.addEventListener(row.vmaxInput, 'change', () => {
+      this.commitStokesDefaultRange(group, row);
+    });
+    this.disposables.addEventListener(row.zeroCenteredCheckbox, 'change', () => {
+      this.commitStokesDefaultSetting(group, {
+        ...this.stokesColormapDefaults[group],
+        zeroCentered: row.zeroCenteredCheckbox.checked
+      });
+    });
+
+    const modulationCheckbox = row.modulationCheckbox;
+    if (modulationCheckbox) {
+      this.disposables.addEventListener(modulationCheckbox, 'change', () => {
+        const current = this.stokesColormapDefaults[group];
+        if (!current.modulation) {
+          return;
+        }
+
+        this.commitStokesDefaultSetting(group, {
+          ...current,
+          modulation: {
+            ...current.modulation,
+            enabled: modulationCheckbox.checked
+          }
+        });
+      });
+    }
+
+    const aolpModeSelect = row.aolpModeSelect;
+    if (aolpModeSelect) {
+      this.disposables.addEventListener(aolpModeSelect, 'change', () => {
+        const current = this.stokesColormapDefaults[group];
+        if (!current.modulation || (aolpModeSelect.value !== 'value' && aolpModeSelect.value !== 'saturation')) {
+          return;
+        }
+
+        this.commitStokesDefaultSetting(group, {
+          ...current,
+          modulation: {
+            ...current.modulation,
+            aolpMode: aolpModeSelect.value
+          }
+        });
+      });
+    }
+  }
+
+  private commitStokesDefaultRange(
+    group: StokesColormapDefaultGroup,
+    row: StokesDefaultSettingRowElements
+  ): void {
+    const minText = row.vminInput.value.trim();
+    const maxText = row.vmaxInput.value.trim();
+    const min = Number(minText);
+    const max = Number(maxText);
+    const valid = (
+      minText.length > 0 &&
+      maxText.length > 0 &&
+      Number.isFinite(min) &&
+      Number.isFinite(max) &&
+      min < max
+    );
+    row.vminInput.setAttribute('aria-invalid', valid ? 'false' : 'true');
+    row.vmaxInput.setAttribute('aria-invalid', valid ? 'false' : 'true');
+
+    if (!valid) {
+      return;
+    }
+
+    this.commitStokesDefaultSetting(group, {
+      ...this.stokesColormapDefaults[group],
+      range: { min, max }
+    });
+  }
+
+  private commitStokesDefaultSetting(
+    group: StokesColormapDefaultGroup,
+    setting: StokesColormapDefaultSetting
+  ): void {
+    const nextSetting = cloneStokesColormapDefaultSetting(setting);
+    this.stokesColormapDefaults = {
+      ...this.stokesColormapDefaults,
+      [group]: nextSetting
+    };
+    this.callbacks.onStokesDefaultSettingChange(group, nextSetting);
+  }
+
+  private getStokesDefaultSettingRow(group: StokesColormapDefaultGroup): StokesDefaultSettingRowElements | null {
+    const row = this.elements.stokesDefaultSettingsTable.querySelector<HTMLTableRowElement>(
+      `tr[data-stokes-group="${group}"]`
+    );
+    if (!row) {
+      return null;
+    }
+
+    const colormapSelect = row.querySelector<HTMLSelectElement>('[data-stokes-control="colormap"]');
+    const vminInput = row.querySelector<HTMLInputElement>('[data-stokes-control="vmin"]');
+    const vmaxInput = row.querySelector<HTMLInputElement>('[data-stokes-control="vmax"]');
+    const zeroCenteredCheckbox = row.querySelector<HTMLInputElement>('[data-stokes-control="zeroCentered"]');
+    if (!colormapSelect || !vminInput || !vmaxInput || !zeroCenteredCheckbox) {
+      return null;
+    }
+
+    const modulationCheckbox = row.querySelector<HTMLInputElement>('[data-stokes-control="modulation"]');
+    const aolpModeSelect = row.querySelector<HTMLSelectElement>('[data-stokes-control="aolpMode"]');
+    const controls = [
+      colormapSelect,
+      vminInput,
+      vmaxInput,
+      zeroCenteredCheckbox,
+      ...(modulationCheckbox ? [modulationCheckbox] : []),
+      ...(aolpModeSelect ? [aolpModeSelect] : [])
+    ];
+    return {
+      colormapSelect,
+      vminInput,
+      vmaxInput,
+      zeroCenteredCheckbox,
+      modulationCheckbox,
+      aolpModeSelect,
+      controls
+    };
+  }
+
   private setDisplayToolbarVisible(visible: boolean, persist = true): void {
     this.elements.displayToolbar.classList.toggle('hidden', !visible);
     this.elements.windowToolbarMenuItem.setAttribute('aria-checked', visible ? 'true' : 'false');
@@ -1608,6 +1833,25 @@ function setPositionStyle(element: HTMLElement, x: number, y: number): void {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function findColormapOptionIdByLabel(
+  items: Array<{ id: string; label: string }>,
+  label: string
+): string | null {
+  const normalizedLabel = label.trim().toLocaleLowerCase();
+  return items.find((item) => item.label.toLocaleLowerCase() === normalizedLabel)?.id ?? null;
+}
+
+function findColormapOptionLabelById(
+  items: Array<{ id: string; label: string }>,
+  id: string
+): string | null {
+  return items.find((item) => item.id === id)?.label ?? null;
+}
+
+function formatStokesDefaultNumber(value: number): string {
+  return Number.isFinite(value) ? String(value) : '';
 }
 
 function sameViewportRectSize(a: ViewportRect, b: ViewportRect): boolean {

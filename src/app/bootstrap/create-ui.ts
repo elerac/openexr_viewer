@@ -20,6 +20,7 @@ import type {
   OpenedImageDropPlacement,
   ViewerKeyboardNavigationInput
 } from '../../types';
+import type { StokesColormapDefaultGroup, StokesColormapDefaultSetting } from '../../stokes';
 import type { RenderCacheService } from '../../services/render-cache-service';
 import type { WebGlExrRenderer } from '../../renderer';
 
@@ -190,6 +191,12 @@ export function createViewerUi({
     onStokesAolpDegreeModulationModeChange: (mode) => {
       getDisplayController().setStokesAolpDegreeModulationMode(mode);
     },
+    onStokesDefaultSettingChange: (
+      group: StokesColormapDefaultGroup,
+      setting: StokesColormapDefaultSetting
+    ) => {
+      void getDisplayController().setStokesColormapDefaultSetting(group, setting);
+    },
     onClearRoi: () => {
       core.dispatch({
         type: 'roiSet',
@@ -198,6 +205,7 @@ export function createViewerUi({
     },
     onResetSettings: () => {
       getRenderCache().setBudgetMb(DEFAULT_DISPLAY_CACHE_BUDGET_MB);
+      void getDisplayController().resetStokesColormapDefaults();
     },
     onResetView: () => {
       getSessionController().resetActiveSessionState();

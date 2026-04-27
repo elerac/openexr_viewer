@@ -33,6 +33,7 @@ export interface Elements {
   settingsDialog: HTMLElement;
   settingsDialogCloseButton: HTMLButtonElement;
   themeSelect: HTMLSelectElement;
+  stokesDefaultSettingsTable: HTMLTableElement;
   resetSettingsButton: HTMLButtonElement;
   imageViewerMenuItem: HTMLButtonElement;
   panoramaViewerMenuItem: HTMLButtonElement;
@@ -450,6 +451,7 @@ export function resolveElements(): Elements {
     settingsDialog: requireElement('settings-dialog', HTMLElement),
     settingsDialogCloseButton: requireElement('settings-dialog-close-button', HTMLButtonElement),
     themeSelect: requireElement('theme-select', HTMLSelectElement),
+    stokesDefaultSettingsTable: requireElement('stokes-default-settings-table', HTMLTableElement),
     resetSettingsButton: requireElement('reset-settings-button', HTMLButtonElement),
     imageViewerMenuItem: requireElement('image-viewer-menu-item', HTMLButtonElement),
     panoramaViewerMenuItem: requireElement('panorama-viewer-menu-item', HTMLButtonElement),

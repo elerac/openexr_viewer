@@ -6,11 +6,13 @@ import {
   computeStokesDolp,
   computeStokesEang,
   computeStokesNormalizedComponent,
+  createDefaultStokesColormapDefaultSettings,
   detectRgbStokesChannels,
   detectScalarStokesChannels,
   getStokesColormapDefault,
   getStokesColormapDefaultGroup,
-  getStokesDisplayOptions
+  getStokesDisplayOptions,
+  resolveStokesColormapDefaultLabel
 } from '../src/stokes';
 
 describe('stokes', () => {
@@ -117,24 +119,74 @@ describe('stokes', () => {
     expect(getStokesColormapDefault('aolp')).toEqual({
       colormapLabel: 'HSV',
       range: { min: 0, max: Math.PI },
-      zeroCentered: false
+      zeroCentered: false,
+      modulation: { enabled: false, aolpMode: 'value' }
     });
     expect(getStokesColormapDefault('dolp')).toEqual({
       colormapLabel: 'Black-Red',
       range: { min: 0, max: 1 },
-      zeroCentered: false
+      zeroCentered: false,
+      modulation: null
     });
     expect(getStokesColormapDefault('cop')).toEqual({
       colormapLabel: 'Yellow-Black-Blue',
       range: { min: -Math.PI / 4, max: Math.PI / 4 },
-      zeroCentered: true
+      zeroCentered: true,
+      modulation: { enabled: true }
     });
     expect(getStokesColormapDefault('s2_over_s0')).toEqual({
       colormapLabel: 'RdBu',
       range: { min: -1, max: 1 },
-      zeroCentered: true
+      zeroCentered: true,
+      modulation: null
     });
     expect(getStokesColormapDefault(null)).toBeNull();
+  });
+
+  it('overrides Stokes defaults per group', () => {
+    const settings = {
+      ...createDefaultStokesColormapDefaultSettings(),
+      aolp: {
+        colormapLabel: 'Viridis',
+        range: { min: -1, max: 1 },
+        zeroCentered: true,
+        modulation: { enabled: true, aolpMode: 'saturation' as const }
+      },
+      degree: {
+        colormapLabel: 'coolwarm',
+        range: { min: 0.2, max: 0.8 },
+        zeroCentered: true,
+        modulation: null
+      },
+      normalized: {
+        colormapLabel: 'HSV',
+        range: { min: -2, max: 2 },
+        zeroCentered: false,
+        modulation: null
+      }
+    };
+
+    expect(resolveStokesColormapDefaultLabel('dop', settings)).toBe('coolwarm');
+    expect(resolveStokesColormapDefaultLabel('s3_over_s0', settings)).toBe('HSV');
+    expect(resolveStokesColormapDefaultLabel(null, settings)).toBeNull();
+    expect(getStokesColormapDefault('aolp', settings)).toEqual({
+      colormapLabel: 'Viridis',
+      range: { min: -1, max: 1 },
+      zeroCentered: true,
+      modulation: { enabled: true, aolpMode: 'saturation' }
+    });
+    expect(getStokesColormapDefault('dolp', settings)).toEqual({
+      colormapLabel: 'coolwarm',
+      range: { min: 0.2, max: 0.8 },
+      zeroCentered: true,
+      modulation: null
+    });
+    expect(getStokesColormapDefault('s2_over_s0', settings)).toEqual({
+      colormapLabel: 'HSV',
+      range: { min: -2, max: 2 },
+      zeroCentered: false,
+      modulation: null
+    });
   });
 
   it('computes derived Stokes values', () => {

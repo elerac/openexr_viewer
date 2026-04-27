@@ -18,12 +18,24 @@ import {
 import { DisplayChannelMapping, DisplayLuminanceRange } from './types';
 
 export type StokesColormapDefaultGroup = 'aolp' | 'degree' | 'cop' | 'top' | 'normalized';
+export interface StokesColormapDefaultModulation {
+  enabled: boolean;
+  aolpMode?: StokesAolpDegreeModulationMode;
+}
+export interface StokesColormapDefaultSetting {
+  colormapLabel: string;
+  range: DisplayLuminanceRange;
+  zeroCentered: boolean;
+  modulation: StokesColormapDefaultModulation | null;
+}
+export type StokesColormapDefaultSettings = Record<StokesColormapDefaultGroup, StokesColormapDefaultSetting>;
 export type RgbStokesComponent = 'R' | 'G' | 'B';
 
 export interface StokesColormapDefault {
   colormapLabel: string;
   range: DisplayLuminanceRange;
   zeroCentered: boolean;
+  modulation: StokesColormapDefaultModulation | null;
 }
 
 export interface StokesDisplayOptionsConfig {
@@ -70,9 +82,92 @@ export const DEFAULT_STOKES_DEGREE_MODULATION: StokesDegreeModulationState = {
   top: true
 };
 export const DEFAULT_STOKES_AOLP_DEGREE_MODULATION_MODE: StokesAolpDegreeModulationMode = 'value';
+export const STOKES_COLORMAP_DEFAULT_GROUPS: readonly StokesColormapDefaultGroup[] = [
+  'aolp',
+  'degree',
+  'cop',
+  'top',
+  'normalized'
+];
+
+export const DEFAULT_STOKES_COLORMAP_DEFAULT_SETTINGS: StokesColormapDefaultSettings = {
+  aolp: {
+    colormapLabel: 'HSV',
+    range: { min: 0, max: Math.PI },
+    zeroCentered: false,
+    modulation: { enabled: false, aolpMode: 'value' }
+  },
+  degree: {
+    colormapLabel: 'Black-Red',
+    range: { min: 0, max: 1 },
+    zeroCentered: false,
+    modulation: null
+  },
+  cop: {
+    colormapLabel: 'Yellow-Black-Blue',
+    range: { min: -Math.PI / 4, max: Math.PI / 4 },
+    zeroCentered: true,
+    modulation: { enabled: true }
+  },
+  top: {
+    colormapLabel: 'Yellow-Cyan-Yellow',
+    range: { min: -Math.PI / 4, max: Math.PI / 4 },
+    zeroCentered: false,
+    modulation: { enabled: true }
+  },
+  normalized: {
+    colormapLabel: 'RdBu',
+    range: { min: -1, max: 1 },
+    zeroCentered: true,
+    modulation: null
+  }
+};
+
+const STOKES_COLORMAP_DEFAULT_GROUP_LABELS: Record<StokesColormapDefaultGroup, string> = {
+  aolp: 'AoLP',
+  degree: 'Degree',
+  cop: 'CoP',
+  top: 'ToP',
+  normalized: 'Normalized'
+};
 
 export function createDefaultStokesDegreeModulation(): StokesDegreeModulationState {
   return { ...DEFAULT_STOKES_DEGREE_MODULATION };
+}
+
+export function createDefaultStokesColormapDefaultSettings(): StokesColormapDefaultSettings {
+  return cloneStokesColormapDefaultSettings(DEFAULT_STOKES_COLORMAP_DEFAULT_SETTINGS);
+}
+
+export function cloneStokesColormapDefaultSetting(
+  setting: StokesColormapDefaultSetting
+): StokesColormapDefaultSetting {
+  return {
+    colormapLabel: setting.colormapLabel,
+    range: { ...setting.range },
+    zeroCentered: setting.zeroCentered,
+    modulation: setting.modulation ? { ...setting.modulation } : null
+  };
+}
+
+export function cloneStokesColormapDefaultSettings(
+  settings: StokesColormapDefaultSettings
+): StokesColormapDefaultSettings {
+  return {
+    aolp: cloneStokesColormapDefaultSetting(settings.aolp),
+    degree: cloneStokesColormapDefaultSetting(settings.degree),
+    cop: cloneStokesColormapDefaultSetting(settings.cop),
+    top: cloneStokesColormapDefaultSetting(settings.top),
+    normalized: cloneStokesColormapDefaultSetting(settings.normalized)
+  };
+}
+
+export function getStokesColormapDefaultGroupLabel(group: StokesColormapDefaultGroup): string {
+  return STOKES_COLORMAP_DEFAULT_GROUP_LABELS[group];
+}
+
+export function isStokesColormapDefaultGroup(value: string): value is StokesColormapDefaultGroup {
+  return STOKES_COLORMAP_DEFAULT_GROUPS.includes(value as StokesColormapDefaultGroup);
 }
 
 export function detectScalarStokesChannels(channelNames: string[]): ScalarStokesChannels | null {
@@ -215,43 +310,36 @@ export function getStokesColormapDefaultGroup(
   return parameter;
 }
 
-export function getStokesColormapDefault(parameter: StokesParameter | null): StokesColormapDefault | null {
+export function resolveStokesColormapDefaultLabel(
+  parameter: StokesParameter | null,
+  settings: StokesColormapDefaultSettings = DEFAULT_STOKES_COLORMAP_DEFAULT_SETTINGS
+): string | null {
+  const group = getStokesColormapDefaultGroup(parameter);
+  return group
+    ? settings[group]?.colormapLabel ?? DEFAULT_STOKES_COLORMAP_DEFAULT_SETTINGS[group].colormapLabel
+    : null;
+}
+
+export function getStokesColormapDefault(
+  parameter: StokesParameter | null,
+  settings: StokesColormapDefaultSettings = DEFAULT_STOKES_COLORMAP_DEFAULT_SETTINGS
+): StokesColormapDefault | null {
   if (!parameter) {
     return null;
   }
 
-  if (parameter === 'aolp') {
-    return { colormapLabel: 'HSV', range: { min: 0, max: Math.PI }, zeroCentered: false };
-  }
-
-  if (parameter === 'cop') {
-    return {
-      colormapLabel: 'Yellow-Black-Blue',
-      range: { min: -Math.PI / 4, max: Math.PI / 4 },
-      zeroCentered: true
-    };
-  }
-
-  if (parameter === 'top') {
-    return {
-      colormapLabel: 'Yellow-Cyan-Yellow',
-      range: { min: -Math.PI / 4, max: Math.PI / 4 },
-      zeroCentered: false
-    };
-  }
-
-  if (parameter === 's1_over_s0' || parameter === 's2_over_s0' || parameter === 's3_over_s0') {
-    return { colormapLabel: 'RdBu', range: { min: -1, max: 1 }, zeroCentered: true };
-  }
-
-  return { colormapLabel: 'Black-Red', range: { min: 0, max: 1 }, zeroCentered: false };
+  const group = getStokesColormapDefaultGroup(parameter);
+  return group ? cloneStokesColormapDefaultSetting(
+    settings[group] ?? DEFAULT_STOKES_COLORMAP_DEFAULT_SETTINGS[group]
+  ) : null;
 }
 
 export function getStokesDisplayColormapDefault(
-  selection: DisplaySelection | null
+  selection: DisplaySelection | null,
+  settings: StokesColormapDefaultSettings = DEFAULT_STOKES_COLORMAP_DEFAULT_SETTINGS
 ): StokesColormapDefault | null {
   return isStokesSelection(selection)
-    ? getStokesColormapDefault(selection.parameter)
+    ? getStokesColormapDefault(selection.parameter, settings)
     : null;
 }
 

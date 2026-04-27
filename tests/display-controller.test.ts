@@ -3,6 +3,7 @@ import { DisplayController } from '../src/controllers/display-controller';
 import { ViewerAppCore } from '../src/app/viewer-app-core';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
 import { DecodedExrImage, OpenedImageSession } from '../src/types';
+import { createDefaultStokesColormapDefaultSettings } from '../src/stokes';
 import {
   createChannelRgbSelection,
   createLayerFromChannels,
@@ -112,7 +113,8 @@ const registry = {
     { label: 'Secondary', file: 'secondary.npy' },
     { label: 'Black-Red', file: 'black-red.npy' },
     { label: 'RdBu', file: 'rdbu.npy' },
-    { label: 'Yellow-Black-Blue', file: 'yellow-black-blue.npy' }
+    { label: 'Yellow-Black-Blue', file: 'yellow-black-blue.npy' },
+    { label: 'Yellow-Cyan-Yellow', file: 'yellow-cyan-yellow.npy' }
   ],
   options: [
     { id: '0', label: 'Default' },
@@ -120,7 +122,8 @@ const registry = {
     { id: '2', label: 'Secondary' },
     { id: '3', label: 'Black-Red' },
     { id: '4', label: 'RdBu' },
-    { id: '5', label: 'Yellow-Black-Blue' }
+    { id: '5', label: 'Yellow-Black-Blue' },
+    { id: '6', label: 'Yellow-Cyan-Yellow' }
   ]
 };
 
@@ -135,6 +138,12 @@ const luts = {
     label: 'Yellow-Black-Blue',
     entryCount: 2,
     rgba8: new Uint8Array([255, 255, 0, 255, 0, 0, 255, 255])
+  },
+  '6': {
+    id: '6',
+    label: 'Yellow-Cyan-Yellow',
+    entryCount: 2,
+    rgba8: new Uint8Array([255, 255, 0, 255, 0, 255, 255, 255])
   }
 };
 
@@ -313,6 +322,104 @@ describe('display controller shim', () => {
       displaySelection: createStokesSelection('s3_over_s0')
     });
     expect(colormapMocks.loadColormapLut).not.toHaveBeenCalled();
+  });
+
+  it('uses configured Stokes colormap defaults when entering a group', async () => {
+    const decoded = createDecodedImage(['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3']);
+    const { controller, core } = createController(createSession(decoded));
+
+    await controller.initialize();
+    await controller.setStokesColormapDefault('degree', '2');
+    await controller.applyDisplaySelection(createStokesSelection('dolp'));
+
+    expect(core.getState().stokesColormapDefaults.degree.colormapLabel).toBe('Secondary');
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'colormap',
+      activeColormapId: '2',
+      colormapRange: { min: 0, max: 1 },
+      colormapRangeMode: 'oneTime',
+      colormapZeroCentered: false,
+      displaySelection: createStokesSelection('dolp')
+    });
+    expect(core.getState().activeColormapLut).toEqual(luts['2']);
+  });
+
+  it('uses configured Stokes defaults when switching across groups', async () => {
+    const decoded = createDecodedImage(['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3']);
+    const { controller, core } = createController(createSession(decoded));
+
+    await controller.initialize();
+    await controller.applyDisplaySelection(createStokesSelection('dolp'));
+    await controller.setStokesColormapDefault('cop', '2');
+
+    await controller.applyDisplaySelection(createStokesSelection('cop'));
+
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'colormap',
+      activeColormapId: '2',
+      colormapRange: { min: -Math.PI / 4, max: Math.PI / 4 },
+      colormapRangeMode: 'oneTime',
+      colormapZeroCentered: true,
+      displaySelection: createStokesSelection('cop')
+    });
+    expect(core.getState().activeColormapLut).toEqual(luts['2']);
+  });
+
+  it('applies a changed Stokes colormap default immediately for the active group', async () => {
+    const decoded = createDecodedImage(['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3']);
+    const { controller, core } = createController(createSession(decoded));
+
+    await controller.initialize();
+    await controller.applyDisplaySelection(createStokesSelection('aolp'));
+
+    await controller.setStokesColormapDefaultSetting('aolp', {
+      colormapLabel: 'Secondary',
+      range: { min: -1, max: 1 },
+      zeroCentered: true,
+      modulation: { enabled: true, aolpMode: 'saturation' }
+    });
+
+    expect(core.getState().stokesColormapDefaults.aolp).toEqual({
+      colormapLabel: 'Secondary',
+      range: { min: -1, max: 1 },
+      zeroCentered: true,
+      modulation: { enabled: true, aolpMode: 'saturation' }
+    });
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'colormap',
+      activeColormapId: '2',
+      colormapRange: { min: -1, max: 1 },
+      colormapRangeMode: 'oneTime',
+      colormapZeroCentered: true,
+      stokesDegreeModulation: {
+        aolp: true
+      },
+      stokesAolpDegreeModulationMode: 'saturation',
+      displaySelection: createStokesSelection('aolp')
+    });
+    expect(core.getState().activeColormapLut).toEqual(luts['2']);
+  });
+
+  it('resets Stokes colormap defaults and immediately restores the active group default', async () => {
+    const decoded = createDecodedImage(['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3']);
+    const { controller, core } = createController(createSession(decoded));
+
+    await controller.initialize();
+    await controller.applyDisplaySelection(createStokesSelection('aolp'));
+    await controller.setStokesColormapDefault('aolp', '2');
+
+    await controller.resetStokesColormapDefaults();
+
+    expect(core.getState().stokesColormapDefaults).toEqual(createDefaultStokesColormapDefaultSettings());
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'colormap',
+      activeColormapId: '1',
+      colormapRange: { min: 0, max: Math.PI },
+      colormapRangeMode: 'oneTime',
+      colormapZeroCentered: false,
+      displaySelection: createStokesSelection('aolp')
+    });
+    expect(core.getState().activeColormapLut).toEqual(luts['1']);
   });
 
   it('resets colormap state when switching across Stokes colormap groups', async () => {

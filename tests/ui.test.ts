@@ -27,6 +27,7 @@ import { formatProbeCoordinates } from '../src/ui/probe-readout';
 import { getListboxOptionIndexAtClientY } from '../src/ui/render-helpers';
 import { ViewerUi } from '../src/ui/viewer-ui';
 import { SPECTRUM_LATTICE_THEME_ID, THEME_STORAGE_KEY } from '../src/theme';
+import { createDefaultStokesColormapDefaultSettings } from '../src/stokes';
 
 interface ResizeObserverRegistration {
   callback: ResizeObserverCallback;
@@ -1121,10 +1122,25 @@ describe('panel split sizing', () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, SPECTRUM_LATTICE_THEME_ID);
 
     const onResetSettings = vi.fn();
-    new ViewerUi(createUiCallbacks({ onResetSettings }));
+    const ui = new ViewerUi(createUiCallbacks({ onResetSettings }));
+    ui.setStokesDefaultSettingsOptions([
+      { id: '0', label: 'Viridis' },
+      { id: '1', label: 'HSV' },
+      { id: '2', label: 'Black-Red' },
+      { id: '3', label: 'RdBu' },
+      { id: '4', label: 'Yellow-Black-Blue' },
+      { id: '5', label: 'Yellow-Cyan-Yellow' }
+    ], {
+      ...createDefaultStokesColormapDefaultSettings(),
+      aolp: {
+        ...createDefaultStokesColormapDefaultSettings().aolp,
+        colormapLabel: 'Viridis'
+      }
+    });
 
     const resetSettingsButton = document.getElementById('reset-settings-button') as HTMLButtonElement;
     const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
+    const stokesAolpSelect = document.getElementById('stokes-default-aolp-colormap-select') as HTMLSelectElement;
     const imageButton = document.getElementById('image-panel-collapse-button') as HTMLButtonElement;
     const rightButton = document.getElementById('right-panel-collapse-button') as HTMLButtonElement;
     const bottomButton = document.getElementById('bottom-panel-collapse-button') as HTMLButtonElement;
@@ -1137,11 +1153,13 @@ describe('panel split sizing', () => {
     expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('0px');
     expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
     expect(themeSelect.value).toBe(SPECTRUM_LATTICE_THEME_ID);
+    expect(stokesAolpSelect.value).toBe('0');
 
     resetSettingsButton.click();
 
     expect(onResetSettings).toHaveBeenCalledTimes(1);
     expect(themeSelect.value).toBe('default');
+    expect(stokesAolpSelect.value).toBe('1');
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
     expect(imageButton.getAttribute('aria-expanded')).toBe('true');
@@ -1438,7 +1456,7 @@ describe('view menu', () => {
     expect(resetSettingsButton.type).toBe('button');
   });
 
-  it('renders the theme setting before the memory budget setting', () => {
+  it('renders the theme and Stokes defaults table before the memory budget setting', () => {
     installUiFixture();
     new ViewerUi(createUiCallbacks());
 
@@ -1446,7 +1464,14 @@ describe('view menu', () => {
       .map((item) => item.textContent?.trim());
     const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
 
-    expect(labels).toEqual(['Theme', 'Memory Budget']);
+    expect(labels).toEqual(['Theme', 'Stokes Defaults', 'Memory Budget']);
+    expect(Array.from(document.querySelectorAll('#stokes-default-settings-table tbody th')).map((cell) => cell.textContent?.trim())).toEqual([
+      'AoLP',
+      'Degree',
+      'CoP',
+      'ToP',
+      'Normalized'
+    ]);
     expect(Array.from(themeSelect.options).map((option) => option.textContent)).toEqual([
       'Default',
       'Spectrum lattice'
@@ -1455,6 +1480,106 @@ describe('view menu', () => {
       'default',
       SPECTRUM_LATTICE_THEME_ID
     ]);
+  });
+
+  it('renders and dispatches Stokes default table settings from Settings', () => {
+    installUiFixture();
+
+    const onStokesDefaultSettingChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onStokesDefaultSettingChange }));
+    const defaults = createDefaultStokesColormapDefaultSettings();
+    const aolpSelect = document.getElementById('stokes-default-aolp-colormap-select') as HTMLSelectElement;
+    const degreeSelect = document.getElementById('stokes-default-degree-colormap-select') as HTMLSelectElement;
+    const degreeVminInput = document.getElementById('stokes-default-degree-vmin-input') as HTMLInputElement;
+    const degreeVmaxInput = document.getElementById('stokes-default-degree-vmax-input') as HTMLInputElement;
+    const normalizedZeroCenterCheckbox = document.getElementById(
+      'stokes-default-normalized-zero-center-checkbox'
+    ) as HTMLInputElement;
+    const aolpModulationCheckbox = document.getElementById(
+      'stokes-default-aolp-modulation-checkbox'
+    ) as HTMLInputElement;
+    const aolpModeSelect = document.getElementById('stokes-default-aolp-modulation-mode-select') as HTMLSelectElement;
+
+    ui.setStokesDefaultSettingsOptions([
+      { id: '0', label: 'Viridis' },
+      { id: '1', label: 'HSV' },
+      { id: '2', label: 'Black-Red' },
+      { id: '3', label: 'RdBu' }
+    ], {
+      ...defaults,
+      aolp: {
+        ...defaults.aolp,
+        colormapLabel: 'HSV'
+      },
+      degree: {
+        ...defaults.degree,
+        colormapLabel: 'RdBu',
+        range: { min: 0.2, max: 0.8 }
+      }
+    });
+
+    expect(Array.from(aolpSelect.options).map((option) => option.textContent)).toEqual([
+      'Viridis',
+      'HSV',
+      'Black-Red',
+      'RdBu'
+    ]);
+    expect(aolpSelect.value).toBe('1');
+    expect(degreeSelect.value).toBe('3');
+    expect(degreeVminInput.value).toBe('0.2');
+    expect(degreeVmaxInput.value).toBe('0.8');
+    expect(normalizedZeroCenterCheckbox.checked).toBe(true);
+    expect(aolpModulationCheckbox.checked).toBe(false);
+    expect(aolpModeSelect.value).toBe('value');
+
+    degreeSelect.value = '2';
+    degreeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(onStokesDefaultSettingChange).toHaveBeenLastCalledWith('degree', {
+      ...defaults.degree,
+      colormapLabel: 'Black-Red',
+      range: { min: 0.2, max: 0.8 }
+    });
+
+    onStokesDefaultSettingChange.mockClear();
+    degreeVminInput.value = '2';
+    degreeVmaxInput.value = '1';
+    degreeVminInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(onStokesDefaultSettingChange).not.toHaveBeenCalled();
+    expect(degreeVminInput.getAttribute('aria-invalid')).toBe('true');
+    expect(degreeVmaxInput.getAttribute('aria-invalid')).toBe('true');
+
+    degreeVminInput.value = '0.1';
+    degreeVmaxInput.value = '0.9';
+    degreeVmaxInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(onStokesDefaultSettingChange).toHaveBeenLastCalledWith('degree', {
+      ...defaults.degree,
+      colormapLabel: 'Black-Red',
+      range: { min: 0.1, max: 0.9 }
+    });
+    expect(degreeVminInput.getAttribute('aria-invalid')).toBe('false');
+    expect(degreeVmaxInput.getAttribute('aria-invalid')).toBe('false');
+
+    normalizedZeroCenterCheckbox.checked = false;
+    normalizedZeroCenterCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(onStokesDefaultSettingChange).toHaveBeenLastCalledWith('normalized', {
+      ...defaults.normalized,
+      zeroCentered: false
+    });
+
+    aolpModulationCheckbox.checked = true;
+    aolpModulationCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+    aolpModeSelect.value = 'saturation';
+    aolpModeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(onStokesDefaultSettingChange).toHaveBeenLastCalledWith('aolp', {
+      ...defaults.aolp,
+      colormapLabel: 'HSV',
+      modulation: { enabled: true, aolpMode: 'saturation' }
+    });
   });
 
   it('applies and persists the Spectrum lattice theme from Settings', () => {
@@ -1889,7 +2014,7 @@ describe('view menu', () => {
     expect(document.activeElement).toBe(fileButton);
   });
 
-  it('focuses the settings dialog controls in theme-budget-reset-close order and restores focus on Escape', () => {
+  it('focuses the settings dialog controls in settings order and restores focus on Escape', () => {
     installUiFixture();
 
     new ViewerUi(createUiCallbacks());
@@ -1897,6 +2022,32 @@ describe('view menu', () => {
     const settingsBackdrop = document.getElementById('settings-dialog-backdrop') as HTMLElement;
     const settingsDialog = document.getElementById('settings-dialog') as HTMLElement;
     const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
+    const aolpSelect = document.getElementById('stokes-default-aolp-colormap-select') as HTMLSelectElement;
+    const aolpVmin = document.getElementById('stokes-default-aolp-vmin-input') as HTMLInputElement;
+    const aolpVmax = document.getElementById('stokes-default-aolp-vmax-input') as HTMLInputElement;
+    const aolpZeroCenter = document.getElementById('stokes-default-aolp-zero-center-checkbox') as HTMLInputElement;
+    const aolpModulation = document.getElementById('stokes-default-aolp-modulation-checkbox') as HTMLInputElement;
+    const aolpMode = document.getElementById('stokes-default-aolp-modulation-mode-select') as HTMLSelectElement;
+    const degreeSelect = document.getElementById('stokes-default-degree-colormap-select') as HTMLSelectElement;
+    const degreeVmin = document.getElementById('stokes-default-degree-vmin-input') as HTMLInputElement;
+    const degreeVmax = document.getElementById('stokes-default-degree-vmax-input') as HTMLInputElement;
+    const degreeZeroCenter = document.getElementById('stokes-default-degree-zero-center-checkbox') as HTMLInputElement;
+    const copSelect = document.getElementById('stokes-default-cop-colormap-select') as HTMLSelectElement;
+    const copVmin = document.getElementById('stokes-default-cop-vmin-input') as HTMLInputElement;
+    const copVmax = document.getElementById('stokes-default-cop-vmax-input') as HTMLInputElement;
+    const copZeroCenter = document.getElementById('stokes-default-cop-zero-center-checkbox') as HTMLInputElement;
+    const copModulation = document.getElementById('stokes-default-cop-modulation-checkbox') as HTMLInputElement;
+    const topSelect = document.getElementById('stokes-default-top-colormap-select') as HTMLSelectElement;
+    const topVmin = document.getElementById('stokes-default-top-vmin-input') as HTMLInputElement;
+    const topVmax = document.getElementById('stokes-default-top-vmax-input') as HTMLInputElement;
+    const topZeroCenter = document.getElementById('stokes-default-top-zero-center-checkbox') as HTMLInputElement;
+    const topModulation = document.getElementById('stokes-default-top-modulation-checkbox') as HTMLInputElement;
+    const normalizedSelect = document.getElementById('stokes-default-normalized-colormap-select') as HTMLSelectElement;
+    const normalizedVmin = document.getElementById('stokes-default-normalized-vmin-input') as HTMLInputElement;
+    const normalizedVmax = document.getElementById('stokes-default-normalized-vmax-input') as HTMLInputElement;
+    const normalizedZeroCenter = document.getElementById(
+      'stokes-default-normalized-zero-center-checkbox'
+    ) as HTMLInputElement;
     const budgetInput = document.getElementById('display-cache-budget-input') as HTMLSelectElement;
     const resetSettingsButton = document.getElementById('reset-settings-button') as HTMLButtonElement;
     const closeButton = document.getElementById('settings-dialog-close-button') as HTMLButtonElement;
@@ -1904,7 +2055,36 @@ describe('view menu', () => {
       settingsDialog.querySelectorAll<HTMLElement>('button, input, select, textarea')
     );
 
-    expect(focusableSettingsControls).toEqual([themeSelect, budgetInput, resetSettingsButton, closeButton]);
+    expect(focusableSettingsControls).toEqual([
+      themeSelect,
+      aolpSelect,
+      aolpVmin,
+      aolpVmax,
+      aolpZeroCenter,
+      aolpModulation,
+      aolpMode,
+      degreeSelect,
+      degreeVmin,
+      degreeVmax,
+      degreeZeroCenter,
+      copSelect,
+      copVmin,
+      copVmax,
+      copZeroCenter,
+      copModulation,
+      topSelect,
+      topVmin,
+      topVmax,
+      topZeroCenter,
+      topModulation,
+      normalizedSelect,
+      normalizedVmin,
+      normalizedVmax,
+      normalizedZeroCenter,
+      budgetInput,
+      resetSettingsButton,
+      closeButton
+    ]);
 
     settingsButton.focus();
     settingsButton.click();
@@ -5960,6 +6140,7 @@ function createUiCallbacksBase() {
     onColormapZeroCenterToggle: () => {},
     onStokesDegreeModulationToggle: () => {},
     onStokesAolpDegreeModulationModeChange: () => {},
+    onStokesDefaultSettingChange: () => {},
     onClearRoi: () => {},
     onResetSettings: () => {},
     onResetView: () => {}

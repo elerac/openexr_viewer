@@ -9,9 +9,20 @@ import {
   loadColormapRegistry,
   type ColormapLut
 } from '../colormaps';
-import { cloneDisplaySelection, type DisplaySelection } from '../display-model';
+import { cloneDisplaySelection, isStokesSelection, type DisplaySelection } from '../display-model';
 import { createAbortError, isAbortError, throwIfAborted, type Disposable } from '../lifecycle';
-import { getStokesDisplayColormapDefault } from '../stokes';
+import {
+  cloneStokesColormapDefaultSetting,
+  createDefaultStokesColormapDefaultSettings,
+  getStokesColormapDefaultGroup,
+  getStokesDisplayColormapDefault,
+  type StokesColormapDefaultGroup,
+  type StokesColormapDefaultSetting
+} from '../stokes';
+import {
+  readStoredStokesColormapDefaults,
+  saveStoredStokesColormapDefaults
+} from '../stokes-colormap-settings';
 import { ViewerAppCore } from '../app/viewer-app-core';
 import { selectActiveSession } from '../app/viewer-app-selectors';
 import type { RestorableVisualizationState } from '../app/viewer-app-types';
@@ -44,6 +55,10 @@ export class DisplayController implements Disposable {
       this.core.dispatch({
         type: 'colormapRegistryResolved',
         registry
+      });
+      this.core.dispatch({
+        type: 'stokesColormapDefaultsSet',
+        settings: readStoredStokesColormapDefaults(registry)
       });
 
       const requestId = this.core.issueRequestId();
@@ -80,8 +95,9 @@ export class DisplayController implements Disposable {
       return;
     }
 
-    const stokesDefaults = getStokesDisplayColormapDefault(selection);
-    const restoreState = captureRestorableVisualizationState(this.core.getState().sessionState);
+    const initialState = this.core.getState();
+    const stokesDefaults = getStokesDisplayColormapDefault(selection, initialState.stokesColormapDefaults);
+    const restoreState = captureRestorableVisualizationState(initialState.sessionState);
     if (!stokesDefaults) {
       this.core.dispatch({
         type: 'displaySelectionSet',
@@ -105,12 +121,16 @@ export class DisplayController implements Disposable {
       }
 
       const latestState = this.core.getState();
+      const latestStokesDefaults = getStokesDisplayColormapDefault(
+        selection,
+        latestState.stokesColormapDefaults
+      );
       const keepManualColormap = this.manualColormapOverrideTransitionIds.has(transitionRequestId);
       const keepGroupedColormap = shouldPreserveStokesColormapState(
         latestState.sessionState.displaySelection,
         selection
       );
-      if (!stokesDefaults) {
+      if (!latestStokesDefaults) {
         this.core.dispatch({
           type: 'displaySelectionSet',
           displaySelection: cloneDisplaySelection(selection),
@@ -123,11 +143,11 @@ export class DisplayController implements Disposable {
           restoreState
         });
       } else if (latestState.colormapRegistry) {
-        const colormapId = findColormapIdByLabel(latestState.colormapRegistry, stokesDefaults.colormapLabel);
+        const colormapId = findColormapIdByLabel(latestState.colormapRegistry, latestStokesDefaults.colormapLabel);
         if (!colormapId) {
           this.core.dispatch({
             type: 'errorSet',
-            message: `Required colormap not found: ${stokesDefaults.colormapLabel}`
+            message: `Required colormap not found: ${latestStokesDefaults.colormapLabel}`
           });
           return;
         }
@@ -232,6 +252,133 @@ export class DisplayController implements Disposable {
         });
       }
     }
+  }
+
+  async setStokesColormapDefault(
+    group: StokesColormapDefaultGroup,
+    colormapId: string
+  ): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+
+    const state = this.core.getState();
+    if (!state.colormapRegistry) {
+      return;
+    }
+
+    const asset = getColormapAsset(state.colormapRegistry, colormapId);
+    if (!asset) {
+      this.core.dispatch({
+        type: 'errorSet',
+        message: `Unknown colormap: ${colormapId}`
+      });
+      return;
+    }
+
+    await this.setStokesColormapDefaultSetting(group, {
+      ...state.stokesColormapDefaults[group],
+      colormapLabel: asset.label
+    });
+  }
+
+  async setStokesColormapDefaultSetting(
+    group: StokesColormapDefaultGroup,
+    setting: StokesColormapDefaultSetting
+  ): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+
+    if (!isValidStokesDefaultSetting(setting)) {
+      this.core.dispatch({
+        type: 'errorSet',
+        message: 'Invalid Stokes colormap default setting.'
+      });
+      return;
+    }
+
+    const state = this.core.getState();
+    const registry = state.colormapRegistry;
+    if (!registry) {
+      return;
+    }
+
+    const colormapId = findColormapIdByLabel(registry, setting.colormapLabel);
+    if (!colormapId) {
+      this.core.dispatch({
+        type: 'errorSet',
+        message: `Unknown colormap: ${setting.colormapLabel}`
+      });
+      return;
+    }
+
+    const asset = getColormapAsset(registry, colormapId);
+    if (!asset) {
+      this.core.dispatch({
+        type: 'errorSet',
+        message: `Unknown colormap: ${colormapId}`
+      });
+      return;
+    }
+
+    const normalizedSetting = cloneStokesColormapDefaultSetting({
+      ...setting,
+      colormapLabel: asset.label
+    });
+    const settings = {
+      ...state.stokesColormapDefaults,
+      [group]: normalizedSetting
+    };
+    saveStoredStokesColormapDefaults(settings);
+    this.core.dispatch({
+      type: 'stokesColormapDefaultSettingSet',
+      group,
+      setting: normalizedSetting
+    });
+
+    if (this.getActiveStokesColormapDefaultGroup() === group) {
+      this.core.dispatch({
+        type: 'stokesActiveColormapDefaultApplied',
+        setting: normalizedSetting
+      });
+      await this.setActiveColormap(colormapId);
+    }
+  }
+
+  async resetStokesColormapDefaults(): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+
+    const defaults = createDefaultStokesColormapDefaultSettings();
+    saveStoredStokesColormapDefaults(defaults);
+    this.core.dispatch({
+      type: 'stokesColormapDefaultsReset'
+    });
+
+    const activeGroup = this.getActiveStokesColormapDefaultGroup();
+    const registry = this.core.getState().colormapRegistry;
+    if (!activeGroup || !registry) {
+      return;
+    }
+
+    const setting = defaults[activeGroup];
+    const colormapLabel = setting.colormapLabel;
+    const colormapId = findColormapIdByLabel(registry, colormapLabel);
+    if (!colormapId) {
+      this.core.dispatch({
+        type: 'errorSet',
+        message: `Required colormap not found: ${colormapLabel}`
+      });
+      return;
+    }
+
+    this.core.dispatch({
+      type: 'stokesActiveColormapDefaultApplied',
+      setting
+    });
+    await this.setActiveColormap(colormapId);
   }
 
   private async ensureActiveColormapLutLoaded(): Promise<void> {
@@ -357,6 +504,22 @@ export class DisplayController implements Disposable {
 
     throwIfAborted(this.abortController.signal, 'Display controller has been disposed.');
   }
+
+  private getActiveStokesColormapDefaultGroup(): StokesColormapDefaultGroup | null {
+    const selection = this.core.getState().sessionState.displaySelection;
+    return isStokesSelection(selection)
+      ? getStokesColormapDefaultGroup(selection.parameter)
+      : null;
+  }
+}
+
+function isValidStokesDefaultSetting(setting: StokesColormapDefaultSetting): boolean {
+  return (
+    setting.colormapLabel.trim().length > 0 &&
+    Number.isFinite(setting.range.min) &&
+    Number.isFinite(setting.range.max) &&
+    setting.range.min < setting.range.max
+  );
 }
 
 function waitForNextPaint(signal?: AbortSignal): Promise<void> {

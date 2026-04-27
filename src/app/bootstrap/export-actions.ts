@@ -5,7 +5,7 @@ import { cloneDisplaySelection, isStokesSelection } from '../../display-model';
 import { buildColormapExportPixels, createPngBlobFromPixels, type ExportImagePixels } from '../../export-image';
 import { createAbortError, throwIfAborted } from '../../lifecycle';
 import { RenderCacheService } from '../../services/render-cache-service';
-import { getStokesDisplayColormapDefault } from '../../stokes';
+import { getStokesDisplayColormapDefault, isStokesDegreeModulationParameter } from '../../stokes';
 import { buildDisplaySelectionThumbnailPixels } from '../../thumbnail';
 import { createInteractionState, mergeRenderState } from '../../view-state';
 import { selectActiveSession } from '../viewer-app-selectors';
@@ -567,7 +567,9 @@ async function resolveBatchEntryExportState({
 
   const baseState = session.id === appState.activeSessionId ? appState.sessionState : session.state;
   const currentState = appState.sessionState;
-  const stokesDefault = isStokesSelection(selection) ? getStokesDisplayColormapDefault(selection) : null;
+  const stokesDefault = isStokesSelection(selection)
+    ? getStokesDisplayColormapDefault(selection, appState.stokesColormapDefaults)
+    : null;
   const entryVisualization = resolveBatchEntryVisualizationState(appState, session.id, baseState);
 
   let visualizationMode = entryVisualization.visualizationMode;
@@ -575,6 +577,8 @@ async function resolveBatchEntryExportState({
   let colormapRange = cloneDisplayLuminanceRange(entryVisualization.colormapRange);
   let colormapRangeMode = entryVisualization.colormapRangeMode;
   let colormapZeroCentered = entryVisualization.colormapZeroCentered;
+  const stokesDegreeModulation = { ...currentState.stokesDegreeModulation };
+  let stokesAolpDegreeModulationMode = currentState.stokesAolpDegreeModulationMode;
 
   if (stokesDefault) {
     if (!appState.colormapRegistry) {
@@ -591,6 +595,12 @@ async function resolveBatchEntryExportState({
     colormapRange = cloneDisplayLuminanceRange(stokesDefault.range);
     colormapRangeMode = 'oneTime';
     colormapZeroCentered = stokesDefault.zeroCentered;
+    if (isStokesSelection(selection) && isStokesDegreeModulationParameter(selection.parameter) && stokesDefault.modulation) {
+      stokesDegreeModulation[selection.parameter] = stokesDefault.modulation.enabled;
+      if (selection.parameter === 'aolp') {
+        stokesAolpDegreeModulationMode = stokesDefault.modulation.aolpMode ?? 'value';
+      }
+    }
   } else if (visualizationMode === 'colormap' && colormapRangeMode === 'alwaysAuto') {
     const displayLuminanceRange = renderCache.resolveDisplayLuminanceRange(session, {
       activeLayer: entry.activeLayer,
@@ -611,8 +621,8 @@ async function resolveBatchEntryExportState({
     colormapRange,
     colormapRangeMode,
     colormapZeroCentered,
-    stokesDegreeModulation: { ...currentState.stokesDegreeModulation },
-    stokesAolpDegreeModulationMode: currentState.stokesAolpDegreeModulationMode,
+    stokesDegreeModulation,
+    stokesAolpDegreeModulationMode,
     lockedPixel: null,
     roi: null
   };

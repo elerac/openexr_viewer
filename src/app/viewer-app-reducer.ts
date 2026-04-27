@@ -17,9 +17,14 @@ import { computeFitView } from '../interaction/image-geometry';
 import { cloneImageRoi } from '../roi';
 import { cloneViewerSessionState } from '../session-state';
 import {
+  cloneStokesColormapDefaultSetting,
+  cloneStokesColormapDefaultSettings,
+  createDefaultStokesColormapDefaultSettings,
   getStokesDisplayColormapDefault,
-  isStokesDegreeModulationParameter
+  isStokesDegreeModulationParameter,
+  type StokesColormapDefaultSetting
 } from '../stokes';
+import { sameStokesColormapDefaultSettings } from '../stokes-colormap-settings';
 import type { OpenedImageSession, ViewerSessionState } from '../types';
 import { createInteractionState } from '../view-state';
 import { buildViewerStateForLayer, createInitialState } from '../viewer-store';
@@ -63,6 +68,7 @@ export function createInitialViewerAppState(): ViewerAppState {
     channelThumbnailsByRequestKey: {},
     channelThumbnailLatestRequestKeyByContextKey: {},
     stokesDisplayRestoreStates: {},
+    stokesColormapDefaults: createDefaultStokesColormapDefaultSettings(),
     autoFitImageOnSelect: false
   };
 }
@@ -178,7 +184,7 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
       const activeSession = selectActiveSession(state);
       const currentState = state.sessionState;
       const selection = cloneDisplaySelection(intent.displaySelection);
-      const stokesDefaults = getStokesDisplayColormapDefault(selection);
+      const stokesDefaults = getStokesDisplayColormapDefault(selection, state.stokesColormapDefaults);
       let patch: Partial<ViewerSessionState> = {
         displaySelection: selection
       };
@@ -217,7 +223,8 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
           visualizationMode: 'colormap',
           colormapRange: stokesDefaults.range,
           colormapRangeMode: 'oneTime',
-          colormapZeroCentered: stokesDefaults.zeroCentered
+          colormapZeroCentered: stokesDefaults.zeroCentered,
+          ...buildStokesDefaultModulationPatch(selection, stokesDefaults, currentState)
         };
       }
 
@@ -371,6 +378,51 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
       return patchSessionState(state, {
         stokesAolpDegreeModulationMode: intent.mode
       });
+    }
+    case 'stokesColormapDefaultsSet':
+      return sameStokesColormapDefaultSettings(state.stokesColormapDefaults, intent.settings)
+        ? state
+        : {
+            ...state,
+            stokesColormapDefaults: cloneStokesColormapDefaultSettings(intent.settings)
+          };
+    case 'stokesColormapDefaultSettingSet': {
+      if (sameStokesColormapDefaultSettings(state.stokesColormapDefaults, {
+        ...state.stokesColormapDefaults,
+        [intent.group]: intent.setting
+      })) {
+        return state;
+      }
+
+      return {
+        ...state,
+        stokesColormapDefaults: {
+          ...cloneStokesColormapDefaultSettings(state.stokesColormapDefaults),
+          [intent.group]: cloneStokesColormapDefaultSetting(intent.setting)
+        }
+      };
+    }
+    case 'stokesActiveColormapDefaultApplied':
+      return patchSessionState(state, {
+        colormapRange: cloneDisplayLuminanceRange(intent.setting.range),
+        colormapRangeMode: 'oneTime',
+        colormapZeroCentered: intent.setting.zeroCentered,
+        ...buildStokesDefaultModulationPatch(
+          state.sessionState.displaySelection,
+          intent.setting,
+          state.sessionState
+        )
+      }, {
+        resetDisplayRangeContext: true
+      });
+    case 'stokesColormapDefaultsReset': {
+      const defaults = createDefaultStokesColormapDefaultSettings();
+      return sameStokesColormapDefaultSettings(state.stokesColormapDefaults, defaults)
+        ? state
+        : {
+            ...state,
+            stokesColormapDefaults: defaults
+          };
     }
     case 'lockedPixelToggled': {
       const current = state.sessionState.lockedPixel;
@@ -753,6 +805,26 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
       return nextState;
     }
   }
+}
+
+function buildStokesDefaultModulationPatch(
+  selection: ViewerSessionState['displaySelection'],
+  setting: StokesColormapDefaultSetting,
+  currentState: ViewerSessionState
+): Partial<ViewerSessionState> {
+  if (!isStokesSelection(selection) || !isStokesDegreeModulationParameter(selection.parameter) || !setting.modulation) {
+    return {};
+  }
+
+  return {
+    stokesDegreeModulation: {
+      ...currentState.stokesDegreeModulation,
+      [selection.parameter]: setting.modulation.enabled
+    },
+    ...(selection.parameter === 'aolp'
+      ? { stokesAolpDegreeModulationMode: setting.modulation.aolpMode ?? 'value' }
+      : {})
+  };
 }
 
 function patchSessionState(

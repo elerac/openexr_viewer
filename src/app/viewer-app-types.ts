@@ -17,6 +17,11 @@ import type {
   ViewerRenderState,
   ViewerSessionState
 } from '../types';
+import type {
+  StokesColormapDefaultGroup,
+  StokesColormapDefaultSetting,
+  StokesColormapDefaultSettings
+} from '../stokes';
 
 export interface RestorableVisualizationState {
   visualizationMode: ViewerSessionState['visualizationMode'];
@@ -103,6 +108,7 @@ export interface ViewerAppState {
   channelThumbnailsByRequestKey: Record<string, string | null>;
   channelThumbnailLatestRequestKeyByContextKey: Record<string, string>;
   stokesDisplayRestoreStates: Record<string, RestorableVisualizationState>;
+  stokesColormapDefaults: StokesColormapDefaultSettings;
   autoFitImageOnSelect: boolean;
 }
 
@@ -131,6 +137,10 @@ export type ViewerIntent =
   | { type: 'colormapZeroCenteredToggled' }
   | { type: 'stokesDegreeModulationToggled' }
   | { type: 'stokesAolpDegreeModulationModeSet'; mode: StokesAolpDegreeModulationMode }
+  | { type: 'stokesColormapDefaultsSet'; settings: StokesColormapDefaultSettings }
+  | { type: 'stokesColormapDefaultSettingSet'; group: StokesColormapDefaultGroup; setting: StokesColormapDefaultSetting }
+  | { type: 'stokesActiveColormapDefaultApplied'; setting: StokesColormapDefaultSetting }
+  | { type: 'stokesColormapDefaultsReset' }
   | { type: 'lockedPixelToggled'; pixel: ViewerSessionState['lockedPixel'] }
   | { type: 'roiSet'; roi: ViewerSessionState['roi'] }
   | { type: 'interactionStatePublished'; interactionState: ViewerInteractionState }
@@ -190,6 +200,7 @@ export interface ViewerUiSnapshot {
   viewerMode: ViewerSessionState['viewerMode'];
   visualizationMode: ViewerSessionState['visualizationMode'];
   stokesDegreeModulationControl: StokesDegreeModulationControlModel | null;
+  stokesColormapDefaults: StokesColormapDefaultSettings;
   activeColormapId: string;
   defaultColormapId: string;
   activeColormapLut: ColormapLut | null;
