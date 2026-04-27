@@ -221,6 +221,18 @@ export class SessionController implements Disposable {
     });
   }
 
+  renameSessionDisplayName(sessionId: string, displayName: string): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.core.dispatch({
+      type: 'sessionDisplayNameChanged',
+      sessionId,
+      displayName
+    });
+  }
+
   closeSession(sessionId: string): void {
     if (this.disposed) {
       return;

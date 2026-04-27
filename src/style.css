@@ -1823,6 +1823,30 @@ body.is-resizing-panel-rows * {
   color: #d7e6f2;
 }
 
+.opened-file-label--editing {
+  overflow: visible;
+}
+
+.opened-file-rename-input {
+  width: 100%;
+  min-width: 0;
+  height: 1.55rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 58%, transparent);
+  border-radius: 0.25rem;
+  padding: 0 0.38rem;
+  background: color-mix(in srgb, var(--panel) 76%, #ffffff 8%);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.84rem;
+  outline: none;
+}
+
+.image-browser-row[aria-selected='true'] .opened-file-rename-input {
+  border-color: rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
 .opened-file-row {
   position: relative;
   cursor: grab;

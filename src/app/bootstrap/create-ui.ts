@@ -135,6 +135,9 @@ export function createViewerUi({
     onOpenedImageSelected: (sessionId) => {
       getSessionController().switchActiveSession(sessionId);
     },
+    onOpenedImageDisplayNameChange: (sessionId, displayName) => {
+      getSessionController().renameSessionDisplayName(sessionId, displayName);
+    },
     onReorderOpenedImage: (
       draggedSessionId: string,
       targetSessionId: string,

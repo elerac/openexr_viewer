@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { buildLoadedSession, buildReloadedSessionState } from '../src/app/session-resource';
+import { buildLoadedSession, buildReloadedSession, buildReloadedSessionState } from '../src/app/session-resource';
 import { createInitialState } from '../src/viewer-store';
 import { createImage, createLayerFromChannels } from './helpers/state-fixtures';
-import type { DecodedExrImage } from '../src/types';
+import type { DecodedExrImage, OpenedImageSession } from '../src/types';
 
 describe('session resource ROI handling', () => {
   it('clamps ROIs to the reloaded image bounds', () => {
@@ -55,6 +55,31 @@ describe('session resource ROI handling', () => {
     );
 
     expect(nextState.roi).toBeNull();
+  });
+});
+
+describe('session resource display names', () => {
+  it('preserves custom display names when reloading a session', () => {
+    const decoded = createSizedImage(2, 2);
+    const session: OpenedImageSession = {
+      id: 'session-1',
+      filename: 'image.exr',
+      displayName: 'Hero Plate.exr',
+      displayNameIsCustom: true,
+      fileSizeBytes: 16,
+      source: { kind: 'url', url: '/image.exr' },
+      decoded,
+      state: createInitialState()
+    };
+
+    const reloaded = buildReloadedSession(session, createSizedImage(4, 4), session.state);
+
+    expect(reloaded).toMatchObject({
+      filename: 'image.exr',
+      displayName: 'Hero Plate.exr',
+      displayNameIsCustom: true,
+      source: { kind: 'url', url: '/image.exr' }
+    });
   });
 });
 

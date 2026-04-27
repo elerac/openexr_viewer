@@ -109,6 +109,7 @@ export interface UiCallbacks {
   onCloseSelectedOpenedImage: (sessionId: string) => void;
   onCloseAllOpenedImages: () => void;
   onOpenedImageSelected: (sessionId: string) => void;
+  onOpenedImageDisplayNameChange: (sessionId: string, displayName: string) => void;
   onReorderOpenedImage: (
     draggedSessionId: string,
     targetSessionId: string,
@@ -193,6 +194,9 @@ export class ViewerUi implements Disposable {
       },
       onOpenedImageRowClick: () => {
         this.globalKeyboardController.setVerticalNavigationTarget('openedFiles');
+      },
+      onOpenedImageDisplayNameChange: (sessionId, displayName) => {
+        this.callbacks.onOpenedImageDisplayNameChange(sessionId, displayName);
       },
       onReorderOpenedImage: (draggedSessionId, targetSessionId, placement) => {
         this.callbacks.onReorderOpenedImage(draggedSessionId, targetSessionId, placement);

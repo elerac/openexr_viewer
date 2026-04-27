@@ -49,6 +49,43 @@ describe('viewer app core', () => {
     expect(core.getState().autoFitImageOnSelect).toBe(false);
   });
 
+  it('renames a session display name without changing the original source identity', () => {
+    const core = new ViewerAppCore();
+    const session = createSession('session-1');
+    core.dispatch({ type: 'sessionLoaded', session });
+
+    core.dispatch({
+      type: 'sessionDisplayNameChanged',
+      sessionId: session.id,
+      displayName: '  Hero Plate.exr  '
+    });
+
+    const renamed = core.getState().sessions[0];
+    expect(renamed).toMatchObject({
+      id: session.id,
+      filename: 'session-1.exr',
+      displayName: 'Hero Plate.exr',
+      displayNameIsCustom: true,
+      source: { kind: 'url', url: '/session-1.exr' }
+    });
+  });
+
+  it('ignores missing, blank, and unchanged session display-name updates', () => {
+    const core = new ViewerAppCore();
+    const session = createSession('session-1');
+    core.dispatch({ type: 'sessionLoaded', session });
+
+    const previous = core.getState();
+    core.dispatch({ type: 'sessionDisplayNameChanged', sessionId: 'missing', displayName: 'Other.exr' });
+    expect(core.getState()).toBe(previous);
+
+    core.dispatch({ type: 'sessionDisplayNameChanged', sessionId: session.id, displayName: '   ' });
+    expect(core.getState()).toBe(previous);
+
+    core.dispatch({ type: 'sessionDisplayNameChanged', sessionId: session.id, displayName: session.displayName });
+    expect(core.getState()).toBe(previous);
+  });
+
   it('updates thumbnail state from worker feedback and ignores stale tokens', () => {
     const core = new ViewerAppCore();
     const session = createSession('session-1');

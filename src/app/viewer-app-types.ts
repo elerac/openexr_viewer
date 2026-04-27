@@ -137,6 +137,7 @@ export type ViewerIntent =
   | { type: 'viewStateCommitted'; view: ViewerInteractionState['view'] }
   | { type: 'sessionLoaded'; session: OpenedImageSession }
   | { type: 'sessionReloaded'; sessionId: string; session: OpenedImageSession }
+  | { type: 'sessionDisplayNameChanged'; sessionId: string; displayName: string }
   | { type: 'activeSessionSwitched'; sessionId: string; viewport?: ViewportInfo }
   | {
       type: 'sessionsReordered';

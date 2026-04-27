@@ -4181,6 +4181,124 @@ describe('opened files actions', () => {
     expect(selectLabels).toEqual(['hoge/image.exr', 'fuga/image.exr']);
     expect(firstLabel.title).toContain('Path: shots/hoge/image.exr');
   });
+
+  it('starts inline rename with Enter on a focused open-file row and commits with Enter in the input', () => {
+    installUiFixture();
+
+    const onOpenedImageDisplayNameChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageDisplayNameChange }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    const row = document.querySelector('#opened-files-list .opened-file-row') as HTMLDivElement;
+    row.focus();
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    const input = document.querySelector('#opened-files-list .opened-file-rename-input') as HTMLInputElement;
+    expect(input).toBeInstanceOf(HTMLInputElement);
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe('image.exr');
+
+    input.value = '  Hero Plate.exr  ';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    expect(onOpenedImageDisplayNameChange).toHaveBeenCalledWith('session-1', 'Hero Plate.exr');
+    expect(document.querySelector('#opened-files-list .opened-file-rename-input')).toBeNull();
+  });
+
+  it('cancels inline rename with Escape and ignores blank or unchanged committed names', () => {
+    installUiFixture();
+
+    const onOpenedImageDisplayNameChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageDisplayNameChange }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    const row = document.querySelector('#opened-files-list .opened-file-row') as HTMLDivElement;
+    row.focus();
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    let input = document.querySelector('#opened-files-list .opened-file-rename-input') as HTMLInputElement;
+    input.value = 'Cancelled.exr';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    row.focus();
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    input = document.querySelector('#opened-files-list .opened-file-rename-input') as HTMLInputElement;
+    input.value = '   ';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    row.focus();
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    input = document.querySelector('#opened-files-list .opened-file-rename-input') as HTMLInputElement;
+    input.value = 'image.exr';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    expect(onOpenedImageDisplayNameChange).not.toHaveBeenCalled();
+    expect(document.querySelector('#opened-files-list .opened-file-rename-input')).toBeNull();
+  });
+
+  it('commits inline rename on blur', () => {
+    installUiFixture();
+
+    const onOpenedImageDisplayNameChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageDisplayNameChange }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    const row = document.querySelector('#opened-files-list .opened-file-row') as HTMLDivElement;
+    row.focus();
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    const input = document.querySelector('#opened-files-list .opened-file-rename-input') as HTMLInputElement;
+    input.value = 'Blur Name.exr';
+    input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+
+    expect(onOpenedImageDisplayNameChange).toHaveBeenCalledWith('session-1', 'Blur Name.exr');
+    expect(document.querySelector('#opened-files-list .opened-file-rename-input')).toBeNull();
+  });
+
+  it('keeps rename input keyboard and mouse events from selecting or reordering rows', () => {
+    installUiFixture();
+
+    const onOpenedImageSelected = vi.fn();
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected, onReorderOpenedImage }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'first.exr' },
+      { id: 'session-2', label: 'second.exr' }
+    ], 'session-1');
+
+    const rows = mockOpenedFilesListGeometry();
+    const firstRow = rows[0] as HTMLDivElement;
+    firstRow.focus();
+    firstRow.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    const input = document.querySelector('#opened-files-list .opened-file-rename-input') as HTMLInputElement;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    input.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientY: 10 }));
+    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientY: 35 }));
+
+    expect(onOpenedImageSelected).not.toHaveBeenCalled();
+    expect(onReorderOpenedImage).not.toHaveBeenCalled();
+    expect((document.getElementById('opened-images-select') as HTMLSelectElement).value).toBe('session-1');
+  });
+
+  it('updates open-file row, select, and action labels after a renamed option is rendered', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'Hero Plate.exr' }], 'session-1');
+
+    const rowLabel = document.querySelector('#opened-files-list .opened-file-label') as HTMLSpanElement;
+    const select = document.getElementById('opened-images-select') as HTMLSelectElement;
+
+    expect(rowLabel.textContent).toBe('Hero Plate.exr');
+    expect(select.options[0]?.label).toBe('Hero Plate.exr');
+    expect(document.querySelector('.opened-file-action-button--reload')?.getAttribute('aria-label')).toBe(
+      'Reload Hero Plate.exr'
+    );
+    expect(document.querySelector('.opened-file-action-button--close')?.getAttribute('aria-label')).toBe(
+      'Close Hero Plate.exr'
+    );
+  });
 });
 
 describe('opened files reordering', () => {
@@ -5825,6 +5943,7 @@ function createUiCallbacksBase() {
     onCloseSelectedOpenedImage: () => {},
     onCloseAllOpenedImages: () => {},
     onOpenedImageSelected: () => {},
+    onOpenedImageDisplayNameChange: () => {},
     onReorderOpenedImage: () => {},
     onDisplayCacheBudgetChange: () => {},
     onExposureChange: () => {},

@@ -547,6 +547,35 @@ test('exports the active image as a png download from the file menu', async ({ p
   expectPngSignature(await readDownloadBytes(download));
 });
 
+test('temporarily renames an open file from the Open Files list', async ({ page }) => {
+  await gotoViewerApp(page);
+  await openGalleryCbox(page);
+
+  const openedImages = page.locator('#opened-images-select');
+  const openedFileRow = page.locator('#opened-files-list .opened-file-row').first();
+  const fileMenuButton = page.getByRole('button', { name: 'File', exact: true });
+  const exportMenuItem = page.locator('#export-image-button');
+  const exportFilenameInput = page.locator('#export-filename-input');
+
+  await expect(openedFileRow).toHaveCount(1);
+  await expect(openedFileRow).toContainText('cbox_rgb.exr');
+  await openedFileRow.press('Enter');
+
+  const renameInput = openedFileRow.locator('.opened-file-rename-input');
+  await expect(renameInput).toBeFocused();
+  await renameInput.fill('Hero Plate.exr');
+  await renameInput.press('Enter');
+
+  const renamedRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'Hero Plate.exr' });
+  await expect(renamedRow.locator('.opened-file-label')).toHaveText('Hero Plate.exr');
+  await expect(openedImages.locator('option:checked')).toContainText('Hero Plate.exr');
+  await expect(renamedRow.locator('.opened-file-label')).toHaveAttribute('title', /Path: .*cbox_rgb\.exr\nSize: .* MB/);
+
+  await fileMenuButton.click();
+  await exportMenuItem.click();
+  await expect(exportFilenameInput).toHaveValue('Hero Plate.png');
+});
+
 test('exports an adjusted image-viewer screenshot region as a png download', async ({ page }) => {
   await gotoViewerApp(page);
   await openGalleryCbox(page);

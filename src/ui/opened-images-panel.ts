@@ -11,6 +11,7 @@ import {
   getListboxOptionIndexAtClientY,
   handleImageBrowserListKeyDown,
   isFocusWithinElement,
+  isNestedInteractiveListControl,
   renderEmptyListMessage,
   type ListboxHitTestMetrics,
   renderKeyedChildren,
@@ -23,6 +24,7 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 interface OpenedImagesPanelCallbacks {
   onOpenedImageSelected: (sessionId: string) => void;
   onOpenedImageRowClick: () => void;
+  onOpenedImageDisplayNameChange: (sessionId: string, displayName: string) => void;
   onReorderOpenedImage: (
     draggedSessionId: string,
     targetSessionId: string,
@@ -46,9 +48,15 @@ interface OpenedImageDragState {
   isDragging: boolean;
 }
 
+interface OpenedFileRenameState {
+  sessionId: string;
+  initialLabel: string;
+}
+
 interface OpenedFileRowRefs {
   thumbnail: HTMLElement;
   label: HTMLSpanElement;
+  renameInput: HTMLInputElement | null;
   reloadButton: HTMLButtonElement;
   closeButton: HTMLButtonElement;
 }
@@ -63,6 +71,7 @@ export class OpenedImagesPanel implements Disposable {
   private openedImageItems: OpenedImageOptionItem[] = [];
   private suppressOpenedImageSelectionUntilMs = 0;
   private openedImageDragState: OpenedImageDragState | null = null;
+  private openedFileRenameState: OpenedFileRenameState | null = null;
   private restoreOpenedFilesFocusAfterLoading = false;
   private displayCacheBudgetMb = 256;
   private disposed = false;
@@ -113,6 +122,12 @@ export class OpenedImagesPanel implements Disposable {
       };
     });
     this.disposables.addEventListener(this.elements.openedFilesList, 'mousedown', (event) => {
+      if (isOpenedFileRenameInput(event.target)) {
+        return;
+      }
+
+      this.commitActiveOpenedFileRename();
+
       if (event.button !== 0 || this.elements.openedImagesSelect.disabled) {
         return;
       }
@@ -141,12 +156,37 @@ export class OpenedImagesPanel implements Disposable {
       };
     });
     this.disposables.addEventListener(this.elements.openedFilesList, 'keydown', (event) => {
+      if (this.handleOpenedFileRenameInputKeyDown(event)) {
+        return;
+      }
+
+      if (event.key === 'Enter') {
+        const row = findClosestListRow(event.target, 'sessionId');
+        if (row && !isNestedInteractiveListControl(event.target, row)) {
+          event.preventDefault();
+          if (!this.elements.openedImagesSelect.disabled) {
+            const sessionId = row.dataset.sessionId ?? '';
+            this.elements.openedImagesSelect.value = sessionId;
+            if (sessionId !== this.openedImagesActiveId) {
+              this.chooseOpenedImage(sessionId);
+            }
+            this.startOpenedFileRename(sessionId);
+          }
+          return;
+        }
+      }
+
       handleImageBrowserListKeyDown(event, this.elements.openedFilesList, (row) => {
         if (this.elements.openedImagesSelect.disabled) {
           return;
         }
         this.chooseOpenedImage(row.dataset.sessionId ?? '');
       });
+    });
+    this.disposables.addEventListener(this.elements.openedFilesList, 'focusout', (event) => {
+      if (isOpenedFileRenameInput(event.target)) {
+        this.commitOpenedFileRename(event.target);
+      }
     });
 
     this.disposables.addEventListener(this.elements.displayCacheBudgetInput, 'change', (event) => {
@@ -167,6 +207,7 @@ export class OpenedImagesPanel implements Disposable {
       this.finishOpenedImagesDrag();
     });
     this.disposables.addEventListener(window, 'blur', () => {
+      this.commitActiveOpenedFileRename();
       this.finishOpenedImagesDrag();
     });
   }
@@ -177,6 +218,7 @@ export class OpenedImagesPanel implements Disposable {
     }
 
     this.disposed = true;
+    this.cancelOpenedFileRename();
     this.finishOpenedImagesDrag();
     this.elements.openedFilesList.replaceChildren();
     this.elements.openedImagesSelect.replaceChildren();
@@ -220,6 +262,7 @@ export class OpenedImagesPanel implements Disposable {
 
     if (loading) {
       this.finishOpenedImagesDrag();
+      this.cancelOpenedFileRename();
       this.restoreOpenedFilesFocusAfterLoading = isFocusWithinElement(this.elements.openedFilesList);
     }
 
@@ -266,6 +309,12 @@ export class OpenedImagesPanel implements Disposable {
 
     this.openedImageCount = items.length;
     this.openedImageItems = items.map((item) => ({ ...item }));
+    if (
+      this.openedFileRenameState &&
+      !items.some((item) => item.id === this.openedFileRenameState?.sessionId)
+    ) {
+      this.openedFileRenameState = null;
+    }
     applyListboxRowSizing(this.elements.openedImagesSelect, items.length, OPENED_IMAGES_MAX_VISIBLE_ROWS);
     syncSelectOptions(
       this.elements.openedImagesSelect,
@@ -302,6 +351,7 @@ export class OpenedImagesPanel implements Disposable {
     this.elements.openedFilesList.classList.toggle('is-disabled', disabled);
 
     if (this.openedImageItems.length === 0) {
+      this.openedFileRenameState = null;
       renderEmptyListMessage(this.elements.openedFilesList, 'No open files');
       return;
     }
@@ -320,6 +370,7 @@ export class OpenedImagesPanel implements Disposable {
           sizeText: formatFileSizeMb(item.sizeBytes ?? null),
           selected: item.id === this.openedImagesActiveId,
           disabled,
+          editing: this.openedFileRenameState?.sessionId === item.id,
           dragging: this.openedImageDragState?.isDragging === true && this.openedImageDragState.sessionId === item.id,
           dropPlacement:
             this.openedImageDragState?.isDragging === true && this.openedImageDragState.dropTarget?.sessionId === item.id
@@ -350,6 +401,88 @@ export class OpenedImagesPanel implements Disposable {
     this.openedImagesActiveId = sessionId;
     this.renderOpenedFileRows();
     this.callbacks.onOpenedImageSelected(sessionId);
+  }
+
+  private startOpenedFileRename(sessionId: string): void {
+    if (this.disposed || !sessionId || this.elements.openedImagesSelect.disabled) {
+      return;
+    }
+
+    const item = this.openedImageItems.find((current) => current.id === sessionId);
+    if (!item) {
+      return;
+    }
+
+    this.finishOpenedImagesDrag();
+    this.openedFileRenameState = {
+      sessionId,
+      initialLabel: item.label
+    };
+    this.renderOpenedFileRows();
+
+    const input = this.getOpenedFileRenameInput(sessionId);
+    input?.focus();
+    input?.select();
+  }
+
+  private handleOpenedFileRenameInputKeyDown(event: KeyboardEvent): boolean {
+    if (!isOpenedFileRenameInput(event.target)) {
+      return false;
+    }
+
+    event.stopPropagation();
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.commitOpenedFileRename(event.target);
+      return true;
+    }
+
+    if (event.key === 'Escape' || event.key === 'Esc') {
+      event.preventDefault();
+      this.cancelOpenedFileRename();
+      this.renderOpenedFileRows();
+      focusSelectedImageBrowserRow(this.elements.openedFilesList);
+      return true;
+    }
+
+    return true;
+  }
+
+  private commitActiveOpenedFileRename(): void {
+    const input = this.elements.openedFilesList.querySelector<HTMLInputElement>('.opened-file-rename-input');
+    if (input) {
+      this.commitOpenedFileRename(input);
+    }
+  }
+
+  private commitOpenedFileRename(input: HTMLInputElement): void {
+    const renameState = this.openedFileRenameState;
+    if (!renameState || input.dataset.sessionId !== renameState.sessionId) {
+      return;
+    }
+
+    const nextDisplayName = input.value.trim();
+    this.openedFileRenameState = null;
+
+    if (nextDisplayName && nextDisplayName !== renameState.initialLabel.trim()) {
+      this.callbacks.onOpenedImageDisplayNameChange(renameState.sessionId, nextDisplayName);
+    }
+
+    this.renderOpenedFileRows();
+  }
+
+  private cancelOpenedFileRename(): void {
+    this.openedFileRenameState = null;
+  }
+
+  private getOpenedFileRenameInput(sessionId: string): HTMLInputElement | null {
+    for (const row of this.elements.openedFilesList.querySelectorAll<HTMLElement>('.opened-file-row')) {
+      if (row.dataset.sessionId === sessionId) {
+        return row.querySelector<HTMLInputElement>('.opened-file-rename-input');
+      }
+    }
+
+    return null;
   }
 
   private onOpenedImagesMouseMove(event: MouseEvent): void {
@@ -561,7 +694,7 @@ function createOpenedFileRow(
 
   actions.append(reloadButton, closeButton);
   row.append(grip, thumbnail, label, actions);
-  openedFileRowRefs.set(row, { thumbnail, label, reloadButton, closeButton });
+  openedFileRowRefs.set(row, { thumbnail, label, renameInput: null, reloadButton, closeButton });
   return row;
 }
 
@@ -572,6 +705,7 @@ function updateOpenedFileRow(
     sizeText: string;
     selected: boolean;
     disabled: boolean;
+    editing: boolean;
     dragging: boolean;
     dropPlacement: OpenedImageDropPlacement | null;
   }
@@ -590,7 +724,7 @@ function updateOpenedFileRow(
   row.classList.toggle('opened-file-row--drop-before', options.dropPlacement === 'before');
   row.classList.toggle('opened-file-row--drop-after', options.dropPlacement === 'after');
 
-  refs.label.textContent = item.label;
+  updateOpenedFileLabel(refs, item, options.editing, options.disabled);
   refs.label.title = `Path: ${item.sourceDetail ?? item.label}\nSize: ${options.sizeText}`;
 
   const nextThumbnail = createOpenedFileThumbnail(item.thumbnailDataUrl ?? null);
@@ -609,6 +743,49 @@ function updateOpenedFileRow(
     label: `Close ${item.label}`,
     disabled: options.disabled
   });
+}
+
+function updateOpenedFileLabel(
+  refs: OpenedFileRowRefs,
+  item: OpenedImageOptionItem,
+  editing: boolean,
+  disabled: boolean
+): void {
+  refs.label.classList.toggle('opened-file-label--editing', editing);
+  if (!editing) {
+    refs.renameInput = null;
+    refs.label.textContent = item.label;
+    return;
+  }
+
+  let input = refs.renameInput;
+  if (!input || !refs.label.contains(input)) {
+    input = createOpenedFileRenameInput(item);
+    refs.renameInput = input;
+    refs.label.replaceChildren(input);
+  }
+
+  input.disabled = disabled;
+  input.dataset.sessionId = item.id;
+  input.setAttribute('aria-label', `Rename ${item.label}`);
+  input.title = `Rename ${item.label}`;
+}
+
+function createOpenedFileRenameInput(item: OpenedImageOptionItem): HTMLInputElement {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'opened-file-rename-input';
+  input.value = item.label;
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.dataset.sessionId = item.id;
+  input.addEventListener('mousedown', (event) => {
+    event.stopPropagation();
+  });
+  input.addEventListener('click', (event) => {
+    event.stopPropagation();
+  });
+  return input;
 }
 
 function createOpenedFileGrip(): HTMLSpanElement {
@@ -731,6 +908,10 @@ function createOpenedFileThumbnail(thumbnailDataUrl: string | null): HTMLElement
 
 function createSvgElement<K extends keyof SVGElementTagNameMap>(tagName: K): SVGElementTagNameMap[K] {
   return document.createElementNS(SVG_NS, tagName) as SVGElementTagNameMap[K];
+}
+
+function isOpenedFileRenameInput(target: EventTarget | null): target is HTMLInputElement {
+  return target instanceof HTMLInputElement && target.classList.contains('opened-file-rename-input');
 }
 
 function serializeOpenedImageDropTarget(target: OpenedImageDropTarget): string {

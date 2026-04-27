@@ -433,6 +433,30 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         pendingDisplayRangeRequestKey: null
       };
     }
+    case 'sessionDisplayNameChanged': {
+      const displayName = intent.displayName.trim();
+      if (!displayName) {
+        return state;
+      }
+
+      const session = state.sessions.find((item) => item.id === intent.sessionId);
+      if (!session || session.displayName === displayName) {
+        return state;
+      }
+
+      return {
+        ...state,
+        sessions: state.sessions.map((item) => {
+          return item.id === intent.sessionId
+            ? {
+                ...item,
+                displayName,
+                displayNameIsCustom: true
+              }
+            : item;
+        })
+      };
+    }
     case 'activeSessionSwitched': {
       const nextSession = state.sessions.find((session) => session.id === intent.sessionId);
       if (!nextSession || state.activeSessionId === nextSession.id) {

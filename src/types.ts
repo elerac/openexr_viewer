@@ -162,6 +162,7 @@ export interface OpenedImageSession {
   id: string;
   filename: string;
   displayName: string;
+  displayNameIsCustom?: boolean;
   fileSizeBytes: number | null;
   source: SessionSource;
   decoded: DecodedExrImage;

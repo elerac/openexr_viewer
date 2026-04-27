@@ -36,7 +36,7 @@ export function buildOpenedImageOptions(state: ViewerAppState): ViewerOpenedImag
     fallbackLabel: session.displayName,
     sourceDetail: getSessionSourceDetail(session)
   }));
-  const labels = buildPathAwareOpenedImageLabels(sources);
+  const labels = buildOpenedImageOptionLabels(state, sources);
 
   return state.sessions.map((session, index) => ({
     id: session.id,
@@ -46,6 +46,30 @@ export function buildOpenedImageOptions(state: ViewerAppState): ViewerOpenedImag
     thumbnailDataUrl: state.thumbnailsBySessionId[session.id] ?? null,
     thumbnailAspectRatio: resolveThumbnailAspectRatio(session.decoded.width, session.decoded.height)
   }));
+}
+
+function buildOpenedImageOptionLabels(
+  state: ViewerAppState,
+  sources: PathAwareOpenedImageLabelSource[]
+): string[] {
+  const labels = state.sessions.map((session) => session.displayName);
+  const pathAwareSources = state.sessions
+    .map((session, index) => ({
+      index,
+      session,
+      source: sources[index] ?? {
+        fallbackLabel: session.displayName,
+        sourceDetail: session.displayName
+      }
+    }))
+    .filter(({ session }) => !session.displayNameIsCustom);
+  const pathAwareLabels = buildPathAwareOpenedImageLabels(pathAwareSources.map(({ source }) => source));
+
+  for (const [pathAwareIndex, entry] of pathAwareSources.entries()) {
+    labels[entry.index] = pathAwareLabels[pathAwareIndex] ?? labels[entry.index] ?? '';
+  }
+
+  return labels;
 }
 
 export function buildExportTarget(

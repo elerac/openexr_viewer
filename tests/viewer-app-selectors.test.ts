@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildExportBatchTarget,
+  buildExportTarget,
   buildOpenedImageOptions,
   buildPathAwareOpenedImageLabels
 } from '../src/app/viewer-app-selectors';
@@ -29,6 +31,7 @@ function createSession(args: {
   id: string;
   filename: string;
   displayName: string;
+  displayNameIsCustom?: boolean;
   sourceDetail: string;
 }): OpenedImageSession {
   const decoded = createDecodedImage();
@@ -36,6 +39,7 @@ function createSession(args: {
     id: args.id,
     filename: args.filename,
     displayName: args.displayName,
+    displayNameIsCustom: args.displayNameIsCustom,
     fileSizeBytes: 3,
     source: {
       kind: 'file',
@@ -120,5 +124,69 @@ describe('opened image option labels', () => {
       'shots/hoge/image.exr',
       'shots/fuga/image.exr'
     ]);
+  });
+
+  it('uses custom display names directly while preserving path-aware labels for non-custom duplicates', () => {
+    const core = new ViewerAppCore();
+    core.dispatch({
+      type: 'sessionLoaded',
+      session: createSession({
+        id: 'session-1',
+        filename: 'image.exr',
+        displayName: 'Hero Plate.exr',
+        displayNameIsCustom: true,
+        sourceDetail: 'shots/custom/image.exr'
+      })
+    });
+    core.dispatch({
+      type: 'sessionLoaded',
+      session: createSession({
+        id: 'session-2',
+        filename: 'image.exr',
+        displayName: 'image.exr',
+        sourceDetail: 'shots/hoge/image.exr'
+      })
+    });
+    core.dispatch({
+      type: 'sessionLoaded',
+      session: createSession({
+        id: 'session-3',
+        filename: 'image.exr',
+        displayName: 'image.exr (2)',
+        sourceDetail: 'shots/fuga/image.exr'
+      })
+    });
+
+    expect(buildOpenedImageOptions(core.getState()).map((option) => option.label)).toEqual([
+      'Hero Plate.exr',
+      'hoge/image.exr',
+      'fuga/image.exr'
+    ]);
+  });
+
+  it('uses custom display names for export defaults and batch labels without changing source paths', () => {
+    const core = new ViewerAppCore();
+    core.dispatch({
+      type: 'sessionLoaded',
+      session: createSession({
+        id: 'session-1',
+        filename: 'image.exr',
+        displayName: 'Hero Plate.exr',
+        displayNameIsCustom: true,
+        sourceDetail: 'shots/hoge/image.exr'
+      })
+    });
+
+    const state = core.getState();
+    const session = state.sessions[0] ?? null;
+    const batchTarget = buildExportBatchTarget(state);
+
+    expect(buildExportTarget(session)).toEqual({ filename: 'Hero Plate.png' });
+    expect(batchTarget?.files[0]).toMatchObject({
+      sessionId: 'session-1',
+      filename: 'image.exr',
+      label: 'Hero Plate.exr',
+      sourcePath: 'shots/hoge/image.exr'
+    });
   });
 });
