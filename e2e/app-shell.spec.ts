@@ -578,16 +578,17 @@ test('exports an adjusted image-viewer screenshot region as a png download', asy
   const dragSelectionWithKeys = async (
     keys: string[],
     from: { x: number; y: number },
-    to: { x: number; y: number }
+    to: { x: number; y: number },
+    button: 'left' | 'right' = 'left'
   ): Promise<void> => {
     for (const key of keys) {
       await page.keyboard.down(key);
     }
     try {
       await page.mouse.move(from.x, from.y);
-      await page.mouse.down();
+      await page.mouse.down({ button });
       await page.mouse.move(to.x, to.y, { steps: 4 });
-      await page.mouse.up();
+      await page.mouse.up({ button });
     } finally {
       for (const key of [...keys].reverse()) {
         await page.keyboard.up(key);
@@ -605,7 +606,8 @@ test('exports an adjusted image-viewer screenshot region as a png download', asy
     {
       x: initialBox.x + initialBox.width - 48,
       y: initialBox.y + initialBox.height * 0.5
-    }
+    },
+    'right'
   );
 
   const centerResizedBox = await selectionBox.boundingBox();

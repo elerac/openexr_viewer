@@ -73,6 +73,7 @@ export class ViewerInteraction {
     this.element.addEventListener('pointermove', this.onPointerMove);
     this.element.addEventListener('pointerup', this.onPointerUp);
     this.element.addEventListener('pointerleave', this.onPointerLeave);
+    this.element.addEventListener('contextmenu', this.onContextMenu);
   }
 
   destroy(): void {
@@ -81,6 +82,7 @@ export class ViewerInteraction {
     this.element.removeEventListener('pointermove', this.onPointerMove);
     this.element.removeEventListener('pointerup', this.onPointerUp);
     this.element.removeEventListener('pointerleave', this.onPointerLeave);
+    this.element.removeEventListener('contextmenu', this.onContextMenu);
     this.imageKeyboardPan.destroy();
     this.panoramaKeyboardOrbit.destroy();
   }
@@ -154,14 +156,14 @@ export class ViewerInteraction {
   };
 
   private readonly onPointerDown = (event: PointerEvent): void => {
-    if (event.button !== 0) {
-      return;
-    }
-
-    const point = this.getLocalPoint(event);
-    this.lastPointerInElement = point;
     const screenshotSelection = this.getScreenshotSelection();
     if (screenshotSelection.active) {
+      if (!isScreenshotSelectionDragButton(event)) {
+        return;
+      }
+
+      const point = this.getLocalPoint(event);
+      this.lastPointerInElement = point;
       if (event.target instanceof Element && event.target.closest('.screenshot-selection-controls')) {
         return;
       }
@@ -191,6 +193,12 @@ export class ViewerInteraction {
       return;
     }
 
+    if (event.button !== 0) {
+      return;
+    }
+
+    const point = this.getLocalPoint(event);
+    this.lastPointerInElement = point;
     const imageSize = this.callbacks.getImageSize();
     if (!imageSize) {
       return;
@@ -296,20 +304,20 @@ export class ViewerInteraction {
   };
 
   private readonly onPointerUp = (event: PointerEvent): void => {
-    if (event.button !== 0) {
-      return;
-    }
-
-    const point = this.getLocalPoint(event);
-    this.lastPointerInElement = point;
     const screenshotSelection = this.getScreenshotSelection();
     if (screenshotSelection.active) {
+      const point = this.getLocalPoint(event);
+      this.lastPointerInElement = point;
       if (this.dragging && this.dragMode === 'screenshot') {
         const rect = this.getScreenshotSelection().rect;
         this.clearDrag(event.pointerId);
         this.callbacks.onScreenshotSelectionHandleHover?.(
           rect ? resolveScreenshotSelectionHandle(point, rect) : null
         );
+        return;
+      }
+
+      if (event.button !== 0) {
         return;
       }
 
@@ -320,6 +328,12 @@ export class ViewerInteraction {
       return;
     }
 
+    if (event.button !== 0) {
+      return;
+    }
+
+    const point = this.getLocalPoint(event);
+    this.lastPointerInElement = point;
     const imageSize = this.callbacks.getImageSize();
     if (!imageSize) {
       this.clearDrag(event.pointerId);
@@ -352,6 +366,17 @@ export class ViewerInteraction {
     if (this.getScreenshotSelection().active && !this.dragging) {
       this.callbacks.onScreenshotSelectionHandleHover?.(null);
     }
+  };
+
+  private readonly onContextMenu = (event: MouseEvent): void => {
+    if (
+      !this.getScreenshotSelection().active ||
+      (event.target instanceof Element && event.target.closest('.screenshot-selection-controls'))
+    ) {
+      return;
+    }
+
+    event.preventDefault();
   };
 
   private clearDrag(pointerId: number): void {
@@ -438,6 +463,10 @@ export class ViewerInteraction {
   private getScreenshotSelection() {
     return this.callbacks.getScreenshotSelection?.() ?? { active: false, rect: null };
   }
+}
+
+function isScreenshotSelectionDragButton(event: PointerEvent): boolean {
+  return event.button === 0 || (event.button === 2 && event.ctrlKey);
 }
 
 function isValidViewport(viewport: ViewportInfo): boolean {

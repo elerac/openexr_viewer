@@ -35,6 +35,36 @@ describe('viewer interaction roi gestures', () => {
     expect(harness.onCommitRoi).not.toHaveBeenCalled();
   });
 
+  it('ignores secondary-button drags outside screenshot selection', () => {
+    const harness = createHarness();
+
+    dispatchPointer(harness.element, 'pointerdown', {
+      pointerId: 1,
+      button: 2,
+      buttons: 2,
+      clientX: 50,
+      clientY: 50
+    });
+    dispatchPointer(harness.element, 'pointermove', {
+      pointerId: 1,
+      button: 2,
+      buttons: 2,
+      clientX: 70,
+      clientY: 50
+    });
+    dispatchPointer(harness.element, 'pointerup', {
+      pointerId: 1,
+      button: 2,
+      clientX: 70,
+      clientY: 50
+    });
+
+    expect(harness.onViewChange).not.toHaveBeenCalled();
+    expect(harness.onToggleLockPixel).not.toHaveBeenCalled();
+    expect(harness.onDraftRoi).not.toHaveBeenCalled();
+    expect(harness.onCommitRoi).not.toHaveBeenCalled();
+  });
+
   it('creates and commits a rectangular ROI with shift-drag', () => {
     const harness = createHarness();
 
@@ -329,6 +359,78 @@ describe('viewer interaction roi gestures', () => {
       squareSnapped: false,
       snapGuide: { x: null, y: null }
     });
+  });
+
+  it('resizes screenshot selection from center with ctrl secondary-button drags', () => {
+    const harness = createHarness({}, {
+      imageSize: null,
+      screenshotRect: { x: 40, y: 20, width: 80, height: 40 },
+      viewport: { width: 200, height: 160 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', {
+      pointerId: 1,
+      button: 2,
+      buttons: 2,
+      clientX: 120,
+      clientY: 40,
+      ctrlKey: true
+    });
+    dispatchPointer(harness.element, 'pointermove', {
+      pointerId: 1,
+      button: 2,
+      buttons: 2,
+      clientX: 140,
+      clientY: 40,
+      ctrlKey: true
+    });
+
+    expect(harness.onScreenshotSelectionRectChange).toHaveBeenCalledWith({
+      rect: {
+        x: 20,
+        y: 20,
+        width: 120,
+        height: 40
+      },
+      squareSnapped: false,
+      snapGuide: { x: null, y: null }
+    });
+    expect(harness.onScreenshotSelectionResizeActiveChange).toHaveBeenCalledWith(true);
+
+    dispatchPointer(harness.element, 'pointerup', {
+      pointerId: 1,
+      button: 2,
+      clientX: 140,
+      clientY: 40
+    });
+
+    expect(harness.onScreenshotSelectionResizeActiveChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('suppresses viewer context menus during screenshot selection', () => {
+    const harness = createHarness({}, {
+      screenshotRect: { x: 20, y: 20, width: 40, height: 30 }
+    });
+    const surfaceEvent = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 40,
+      clientY: 35
+    });
+
+    expect(harness.element.dispatchEvent(surfaceEvent)).toBe(false);
+    expect(surfaceEvent.defaultPrevented).toBe(true);
+
+    const controls = document.createElement('div');
+    controls.className = 'screenshot-selection-controls';
+    harness.element.append(controls);
+    const controlsEvent = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true
+    });
+
+    expect(controls.dispatchEvent(controlsEvent)).toBe(true);
+    expect(controlsEvent.defaultPrevented).toBe(false);
   });
 
   it('keeps ctrl move drags as move drags', () => {
