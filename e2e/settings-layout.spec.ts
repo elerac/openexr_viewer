@@ -93,9 +93,6 @@ async function readSpectrumLatticeCanvasState(page: Page): Promise<{
   fallback: boolean;
   width: number;
   height: number;
-  firstPixels: number[];
-  secondPixels: number[];
-  animated: boolean;
 }> {
   return await page.evaluate(async () => {
     const canvas = document.getElementById('spectrum-lattice-canvas');
@@ -108,11 +105,6 @@ async function readSpectrumLatticeCanvasState(page: Page): Promise<{
         requestAnimationFrame(() => resolve());
       });
     };
-    const waitMs = async (ms: number) => {
-      await new Promise<void>((resolve) => {
-        window.setTimeout(resolve, ms);
-      });
-    };
 
     await waitFrame();
     await waitFrame();
@@ -123,45 +115,153 @@ async function readSpectrumLatticeCanvasState(page: Page): Promise<{
         hasWebGl2: false,
         fallback: canvas.classList.contains('spectrum-lattice-canvas--fallback'),
         width: canvas.width,
-        height: canvas.height,
-        firstPixels: [],
-        secondPixels: [],
-        animated: false
+        height: canvas.height
       };
     }
-
-    const readPixels = (): number[] => {
-      if (canvas.width <= 0 || canvas.height <= 0) {
-        return [];
-      }
-
-      const samples: number[] = [];
-      for (const [xRatio, yRatio] of [[0.5, 0.5], [0.25, 0.35], [0.75, 0.65]]) {
-        const pixel = new Uint8Array(4);
-        const x = Math.min(canvas.width - 1, Math.max(0, Math.floor(canvas.width * xRatio)));
-        const y = Math.min(canvas.height - 1, Math.max(0, Math.floor(canvas.height * yRatio)));
-        gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-        samples.push(...pixel);
-      }
-      return samples;
-    };
-
-    const firstPixels = readPixels();
-    await waitMs(250);
-    await waitFrame();
-    await waitFrame();
-    const secondPixels = readPixels();
 
     return {
       hasWebGl2: true,
       fallback: canvas.classList.contains('spectrum-lattice-canvas--fallback'),
       width: canvas.width,
-      height: canvas.height,
-      firstPixels,
-      secondPixels,
-      animated: firstPixels.some((value, index) => value !== secondPixels[index])
+      height: canvas.height
     };
   });
+}
+
+interface SpectrumLatticeRenderProbeState {
+  drawCalls: number;
+  timeUniformValues: number[];
+  lastTime: number | null;
+  timeAdvanced: boolean;
+}
+
+interface SpectrumLatticeRenderProbePayload {
+  drawCalls: number;
+  timeUniformValues: number[];
+  lastTime: number | null;
+}
+
+type SpectrumLatticeRenderProbeWindow = Window & {
+  __spectrumLatticeRenderProbeInstalled?: boolean;
+  __spectrumLatticeRenderProbe?: SpectrumLatticeRenderProbePayload;
+};
+
+async function installSpectrumLatticeRenderProbe(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const targetWindow = window as SpectrumLatticeRenderProbeWindow;
+    if (targetWindow.__spectrumLatticeRenderProbeInstalled) {
+      return;
+    }
+
+    targetWindow.__spectrumLatticeRenderProbeInstalled = true;
+    targetWindow.__spectrumLatticeRenderProbe = {
+      drawCalls: 0,
+      timeUniformValues: [],
+      lastTime: null
+    };
+
+    if (typeof WebGL2RenderingContext === 'undefined') {
+      return;
+    }
+
+    const originalGetUniformLocation = WebGL2RenderingContext.prototype.getUniformLocation;
+    const originalUniform1f = WebGL2RenderingContext.prototype.uniform1f;
+    const originalDrawArrays = WebGL2RenderingContext.prototype.drawArrays;
+    const uniformNames = new WeakMap<WebGLUniformLocation, string>();
+    const timeByContext = new WeakMap<WebGL2RenderingContext, number>();
+
+    const isSpectrumLatticeContext = (gl: WebGL2RenderingContext): boolean => {
+      return gl.canvas instanceof HTMLCanvasElement && gl.canvas.id === 'spectrum-lattice-canvas';
+    };
+
+    WebGL2RenderingContext.prototype.getUniformLocation = function (
+      this: WebGL2RenderingContext,
+      program: WebGLProgram,
+      name: string
+    ): WebGLUniformLocation | null {
+      const location = originalGetUniformLocation.call(this, program, name);
+      if (location && name === 'uTime' && isSpectrumLatticeContext(this)) {
+        uniformNames.set(location, name);
+      }
+      return location;
+    };
+
+    WebGL2RenderingContext.prototype.uniform1f = function (
+      this: WebGL2RenderingContext,
+      location: WebGLUniformLocation | null,
+      x: GLfloat
+    ): void {
+      originalUniform1f.call(this, location, x);
+      if (location && uniformNames.get(location) === 'uTime' && isSpectrumLatticeContext(this)) {
+        timeByContext.set(this, Number(x));
+      }
+    };
+
+    WebGL2RenderingContext.prototype.drawArrays = function (
+      this: WebGL2RenderingContext,
+      mode: GLenum,
+      first: GLint,
+      count: GLsizei
+    ): void {
+      originalDrawArrays.call(this, mode, first, count);
+      if (!isSpectrumLatticeContext(this)) {
+        return;
+      }
+
+      const probe = targetWindow.__spectrumLatticeRenderProbe;
+      if (!probe) {
+        return;
+      }
+
+      const time = timeByContext.get(this);
+      probe.drawCalls += 1;
+      probe.lastTime = typeof time === 'number' ? time : null;
+      if (typeof time === 'number') {
+        probe.timeUniformValues.push(time);
+        if (probe.timeUniformValues.length > 60) {
+          probe.timeUniformValues.splice(0, probe.timeUniformValues.length - 60);
+        }
+      }
+    };
+  });
+}
+
+async function readSpectrumLatticeRenderProbeState(page: Page): Promise<SpectrumLatticeRenderProbeState> {
+  return await page.evaluate(() => {
+    const probe = (window as SpectrumLatticeRenderProbeWindow).__spectrumLatticeRenderProbe;
+    if (!probe) {
+      throw new Error('Spectrum lattice render probe was not installed.');
+    }
+
+    const timeUniformValues = probe.timeUniformValues.slice();
+    return {
+      drawCalls: probe.drawCalls,
+      timeUniformValues,
+      lastTime: probe.lastTime,
+      timeAdvanced: timeUniformValues.some((time, index) => index > 0 && time > timeUniformValues[index - 1])
+    };
+  });
+}
+
+async function waitForSpectrumLatticeTimeAdvance(page: Page): Promise<SpectrumLatticeRenderProbeState> {
+  let latestState: SpectrumLatticeRenderProbeState | null = null;
+  await expect.poll(async () => {
+    latestState = await readSpectrumLatticeRenderProbeState(page);
+    return latestState.timeAdvanced;
+  }, { timeout: 7000 }).toBe(true);
+
+  return latestState ?? await readSpectrumLatticeRenderProbeState(page);
+}
+
+async function expectSpectrumLatticeDrawCountToSettle(page: Page): Promise<SpectrumLatticeRenderProbeState> {
+  await expect.poll(async () => {
+    const before = await readSpectrumLatticeRenderProbeState(page);
+    await page.waitForTimeout(750);
+    const after = await readSpectrumLatticeRenderProbeState(page);
+    return after.drawCalls - before.drawCalls;
+  }, { timeout: 7000 }).toBe(0);
+
+  return await readSpectrumLatticeRenderProbeState(page);
 }
 
 async function expectViewerBackgroundLayerOpacity(
@@ -639,6 +739,7 @@ test('persists the cache budget and keeps open-file actions limited to reload an
 });
 
 test('persists Spectrum lattice as animated idle and frozen active chrome', async ({ page }) => {
+  await installSpectrumLatticeRenderProbe(page);
   await gotoViewerApp(page);
 
   const settingsDialogButton = page.getByRole('button', { name: 'Settings', exact: true });
@@ -689,8 +790,8 @@ test('persists Spectrum lattice as animated idle and frozen active chrome', asyn
   expect(spectrumCanvasState.fallback).toBe(false);
   expect(spectrumCanvasState.width).toBeGreaterThan(0);
   expect(spectrumCanvasState.height).toBeGreaterThan(0);
-  expect(spectrumCanvasState.firstPixels.length).toBeGreaterThan(0);
-  expect(spectrumCanvasState.animated).toBe(true);
+  const spectrumRenderProbeState = await waitForSpectrumLatticeTimeAdvance(page);
+  expect(spectrumRenderProbeState.drawCalls).toBeGreaterThan(1);
   const spectrumLayoutState = await page.evaluate(() => {
     const appShell = document.getElementById('app');
     const mainLayout = document.getElementById('main-layout');
@@ -775,6 +876,7 @@ test('persists Spectrum lattice as animated idle and frozen active chrome', asyn
 });
 
 test('animates Spectrum lattice by default and lets Settings follow reduced motion', async ({ page }) => {
+  await installSpectrumLatticeRenderProbe(page);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await gotoViewerApp(page);
 
@@ -790,9 +892,8 @@ test('animates Spectrum lattice by default and lets Settings follow reduced moti
   await themeInput.selectOption('spectrum-lattice');
   await expect(idleCanvas).toBeVisible();
 
-  await expect.poll(async () => {
-    return (await readSpectrumLatticeCanvasState(page)).animated;
-  }, { timeout: 7000 }).toBe(true);
+  const animatedProbeState = await waitForSpectrumLatticeTimeAdvance(page);
+  expect(animatedProbeState.drawCalls).toBeGreaterThan(1);
 
   await spectrumMotionInput.selectOption('system');
   await expect(spectrumMotionInput).toHaveValue('system');
@@ -800,7 +901,7 @@ test('animates Spectrum lattice by default and lets Settings follow reduced moti
   const followSystemState = await readSpectrumLatticeCanvasState(page);
   expect(followSystemState.hasWebGl2).toBe(true);
   expect(followSystemState.fallback).toBe(false);
-  expect(followSystemState.animated).toBe(false);
+  await expectSpectrumLatticeDrawCountToSettle(page);
   await expect.poll(async () => {
     return await page.evaluate(() => window.localStorage.getItem('openexr-viewer:spectrum-lattice-motion:v1'));
   }).toBe('system');
