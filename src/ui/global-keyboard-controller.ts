@@ -27,6 +27,7 @@ interface GlobalKeyboardControllerCallbacks {
   isWindowPreviewActive: () => boolean;
   setWindowPreviewEnabled: (enabled: boolean) => void;
   hasOpenMenu: () => boolean;
+  openExportImageDialog: () => void;
   getViewerMode: () => ViewerMode;
   getOpenedImageCount: () => number;
   onViewerKeyboardNavigationInputChange: (input: ViewerKeyboardNavigationInput) => void;
@@ -94,6 +95,14 @@ export class GlobalKeyboardController implements Disposable {
       if (event.key === 'Escape' && this.callbacks.isScreenshotSelectionActive()) {
         event.preventDefault();
         this.callbacks.cancelScreenshotSelection();
+        return;
+      }
+
+      if (isPrimarySaveKeyboardEvent(event)) {
+        event.preventDefault();
+        if (!this.isDialogOpen()) {
+          this.callbacks.openExportImageDialog();
+        }
         return;
       }
 
@@ -360,6 +369,25 @@ export class GlobalKeyboardController implements Disposable {
 
     return false;
   }
+
+  private isDialogOpen(): boolean {
+    return (
+      this.callbacks.isExportImageDialogOpen() ||
+      this.callbacks.isExportImageBatchDialogOpen() ||
+      this.callbacks.isExportColormapDialogOpen() ||
+      this.callbacks.isFolderLoadDialogOpen() ||
+      this.callbacks.isSettingsDialogOpen()
+    );
+  }
+}
+
+function isPrimarySaveKeyboardEvent(event: KeyboardEvent): boolean {
+  return (
+    (event.key === 's' || event.key === 'S') &&
+    (event.ctrlKey || event.metaKey) &&
+    !event.altKey &&
+    !event.shiftKey
+  );
 }
 
 function isEditableEventTarget(target: EventTarget | null): boolean {

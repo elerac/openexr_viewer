@@ -342,6 +342,9 @@ export class ViewerUi implements Disposable {
         void this.windowPreviewController.setEnabled(enabled);
       },
       hasOpenMenu: () => this.topMenuController.hasOpenMenu(),
+      openExportImageDialog: () => {
+        this.openExportImageDialog();
+      },
       getViewerMode: () => this.viewerMode,
       getOpenedImageCount: () => this.openedImageCount,
       onViewerKeyboardNavigationInputChange: (input) => {
@@ -1191,6 +1194,18 @@ export class ViewerUi implements Disposable {
     });
   }
 
+  private openExportImageDialog(): void {
+    if (this.elements.exportImageButton.disabled) {
+      return;
+    }
+
+    this.clearViewerKeyboardNavigationInput();
+    this.exportImageBatchDialog.close(false);
+    this.exportColormapDialog.close(false);
+    this.topMenuController.closeAll();
+    this.exportImageDialog.openDialog();
+  }
+
   private openScreenshotBatchExportDialog(): void {
     if (!this.screenshotSelection || this.elements.screenshotSelectionExportBatchButton.disabled) {
       return;
@@ -1437,15 +1452,7 @@ export class ViewerUi implements Disposable {
     });
 
     this.disposables.addEventListener(this.elements.exportImageButton, 'click', () => {
-      if (this.elements.exportImageButton.disabled) {
-        return;
-      }
-
-      this.clearViewerKeyboardNavigationInput();
-      this.exportImageBatchDialog.close(false);
-      this.exportColormapDialog.close(false);
-      this.topMenuController.closeAll();
-      this.exportImageDialog.openDialog();
+      this.openExportImageDialog();
     });
 
     this.disposables.addEventListener(this.elements.exportScreenshotButton, 'click', () => {

@@ -2295,6 +2295,107 @@ describe('view menu', () => {
     expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
   });
 
+  it('opens the export dialog with the Ctrl+S shortcut and prevents browser save', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const event = new KeyboardEvent('keydown', {
+      key: 's',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true
+    });
+    document.body.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect((document.getElementById('export-dialog-backdrop') as HTMLDivElement).classList.contains('hidden')).toBe(false);
+    expect((document.getElementById('export-filename-input') as HTMLInputElement).value).toBe('image.png');
+  });
+
+  it('opens the export dialog with the Cmd+S shortcut', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'S',
+      metaKey: true,
+      bubbles: true,
+      cancelable: true
+    }));
+
+    expect((document.getElementById('export-dialog-backdrop') as HTMLDivElement).classList.contains('hidden')).toBe(false);
+  });
+
+  it('opens the export dialog with the save shortcut while focus is in an editable control', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const input = document.createElement('input');
+    document.body.append(input);
+    input.focus();
+
+    const event = new KeyboardEvent('keydown', {
+      key: 's',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true
+    });
+    input.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect((document.getElementById('export-dialog-backdrop') as HTMLDivElement).classList.contains('hidden')).toBe(false);
+  });
+
+  it('prevents browser save but does not open export when export is disabled', () => {
+    installUiFixture();
+
+    new ViewerUi(createUiCallbacks());
+
+    const event = new KeyboardEvent('keydown', {
+      key: 's',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true
+    });
+    document.body.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect((document.getElementById('export-dialog-backdrop') as HTMLDivElement).classList.contains('hidden')).toBe(true);
+  });
+
+  it('prevents browser save but does not open export while a modal dialog is open', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const settingsBackdrop = document.getElementById('settings-dialog-backdrop') as HTMLDivElement;
+    (document.getElementById('settings-dialog-button') as HTMLButtonElement).click();
+    expect(settingsBackdrop.classList.contains('hidden')).toBe(false);
+
+    const event = new KeyboardEvent('keydown', {
+      key: 's',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true
+    });
+    document.body.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(settingsBackdrop.classList.contains('hidden')).toBe(false);
+    expect((document.getElementById('export-dialog-backdrop') as HTMLDivElement).classList.contains('hidden')).toBe(true);
+  });
+
   it('requests and renders an image export preview when the dialog opens', async () => {
     installUiFixture();
 
