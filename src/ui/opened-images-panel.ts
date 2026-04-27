@@ -191,6 +191,17 @@ export class OpenedImagesPanel implements Disposable {
         return;
       }
 
+      const reorderDelta = getOpenedFilesKeyboardReorderDelta(event);
+      if (reorderDelta !== null) {
+        if (this.reorderActiveItem(reorderDelta)) {
+          event.preventDefault();
+        }
+        return;
+      }
+      if (isOpenedFilesKeyboardReorderCandidate(event)) {
+        return;
+      }
+
       if (event.key === 'Enter') {
         const row = findClosestListRow(event.target, 'sessionId');
         if (row && !isNestedInteractiveListControl(event.target, row)) {
@@ -263,6 +274,7 @@ export class OpenedImagesPanel implements Disposable {
   stepSelection(delta: -1 | 1): boolean {
     if (
       this.disposed ||
+      !this.elements.openedFilesList.isConnected ||
       this.elements.openedImagesSelect.disabled ||
       this.elements.openedFilesList.hidden ||
       this.openedImageItems.length === 0
@@ -283,6 +295,40 @@ export class OpenedImagesPanel implements Disposable {
       this.chooseOpenedImage(nextSessionId);
     }
 
+    return true;
+  }
+
+  reorderActiveItem(delta: -1 | 1): boolean {
+    if (
+      this.disposed ||
+      !this.elements.openedFilesList.isConnected ||
+      this.elements.openedImagesSelect.disabled ||
+      this.elements.openedFilesList.hidden ||
+      this.openedImageItems.length === 0
+    ) {
+      return false;
+    }
+
+    const currentId = this.openedImagesActiveId ?? this.elements.openedImagesSelect.value;
+    const currentIndex = this.openedImageItems.findIndex((item) => item.id === currentId);
+    if (currentIndex < 0) {
+      return false;
+    }
+
+    const targetIndex = currentIndex + delta;
+    if (targetIndex < 0 || targetIndex >= this.openedImageItems.length) {
+      return true;
+    }
+
+    const targetSessionId = this.openedImageItems[targetIndex]?.id ?? null;
+    if (!targetSessionId) {
+      return false;
+    }
+
+    this.finishOpenedImagesDrag();
+    this.openedImagesActiveId = currentId;
+    this.elements.openedImagesSelect.value = currentId;
+    this.callbacks.onReorderOpenedImage(currentId, targetSessionId, delta < 0 ? 'before' : 'after');
     return true;
   }
 
@@ -943,6 +989,30 @@ function createSvgElement<K extends keyof SVGElementTagNameMap>(tagName: K): SVG
 
 function isOpenedFileRenameInput(target: EventTarget | null): target is HTMLInputElement {
   return target instanceof HTMLInputElement && target.classList.contains('opened-file-rename-input');
+}
+
+function getOpenedFilesKeyboardReorderDelta(event: KeyboardEvent): -1 | 1 | null {
+  if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+    return null;
+  }
+
+  return getVerticalArrowKeyDelta(event.key);
+}
+
+function isOpenedFilesKeyboardReorderCandidate(event: KeyboardEvent): boolean {
+  return event.altKey && getVerticalArrowKeyDelta(event.key) !== null;
+}
+
+function getVerticalArrowKeyDelta(key: string): -1 | 1 | null {
+  if (key === 'ArrowUp' || key === 'Up') {
+    return -1;
+  }
+
+  if (key === 'ArrowDown' || key === 'Down') {
+    return 1;
+  }
+
+  return null;
 }
 
 function serializeOpenedImageDropTarget(target: OpenedImageDropTarget): string {

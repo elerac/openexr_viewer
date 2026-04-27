@@ -31,6 +31,7 @@ interface GlobalKeyboardControllerCallbacks {
   getOpenedImageCount: () => number;
   onViewerKeyboardNavigationInputChange: (input: ViewerKeyboardNavigationInput) => void;
   routeVerticalNavigation: (target: VerticalNavigationTarget, delta: -1 | 1) => boolean;
+  routeOpenedFilesReorder: (delta: -1 | 1) => boolean;
   routeHorizontalNavigation: (delta: -1 | 1) => boolean;
   canRouteChannelViewNavigation: () => boolean;
 }
@@ -97,6 +98,10 @@ export class GlobalKeyboardController implements Disposable {
       }
 
       if (this.handleGlobalViewerKeyboardNavigationKeyDown(event)) {
+        return;
+      }
+
+      if (this.handleGlobalOpenedFilesReorderKeyDown(event)) {
         return;
       }
 
@@ -217,6 +222,37 @@ export class GlobalKeyboardController implements Disposable {
     }
 
     return false;
+  }
+
+  private handleGlobalOpenedFilesReorderKeyDown(event: KeyboardEvent): boolean {
+    const delta = getOpenedFilesKeyboardReorderDelta(event);
+    if (
+      event.defaultPrevented ||
+      delta === null ||
+      this.isLocalKeyboardNavigationEvent(event) ||
+      isEditableKeyboardEvent(event) ||
+      this.callbacks.isExportImageDialogOpen() ||
+      this.callbacks.isExportImageBatchDialogOpen() ||
+      this.callbacks.isExportColormapDialogOpen() ||
+      this.callbacks.isFolderLoadDialogOpen() ||
+      this.callbacks.isSettingsDialogOpen() ||
+      this.callbacks.isScreenshotSelectionActive() ||
+      this.callbacks.isWindowPreviewActive() ||
+      this.callbacks.hasOpenMenu()
+    ) {
+      return false;
+    }
+
+    if (this.normalizeVerticalNavigationTarget() !== 'openedFiles') {
+      return false;
+    }
+
+    if (!this.callbacks.routeOpenedFilesReorder(delta)) {
+      return false;
+    }
+
+    event.preventDefault();
+    return true;
   }
 
   private handleGlobalViewerKeyboardNavigationKeyDown(event: KeyboardEvent): boolean {
@@ -364,6 +400,22 @@ function createViewerKeyboardNavigationInput(): ViewerKeyboardNavigationInput {
 
 function hasViewerKeyboardNavigationInput(input: ViewerKeyboardNavigationInput): boolean {
   return input.up || input.left || input.down || input.right;
+}
+
+function getOpenedFilesKeyboardReorderDelta(event: KeyboardEvent): -1 | 1 | null {
+  if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+    return null;
+  }
+
+  if (event.key === 'ArrowUp' || event.key === 'Up') {
+    return -1;
+  }
+
+  if (event.key === 'ArrowDown' || event.key === 'Down') {
+    return 1;
+  }
+
+  return null;
 }
 
 function getViewerKeyboardNavigationDirection(key: string): ViewerKeyboardNavigationDirection | null {

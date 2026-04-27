@@ -4293,7 +4293,9 @@ describe('opened files actions', () => {
     ).map((button) => button.getAttribute('aria-label'));
 
     expect(openedFilesList.getAttribute('aria-describedby')).toBe('opened-files-reorder-hint');
-    expect(document.getElementById('opened-files-reorder-hint')?.textContent).toBe('Drag rows to reorder open files.');
+    expect(document.getElementById('opened-files-reorder-hint')?.textContent).toBe(
+      'Drag rows or press Alt+Up/Down or Option+Up/Down to reorder open files.'
+    );
     expect(openedFilesList.querySelector('.opened-file-grip')).toBeInstanceOf(HTMLSpanElement);
     expect(openedFilesList.querySelector('.opened-file-thumbnail')).toBeInstanceOf(HTMLImageElement);
     expect(firstRow.childElementCount).toBe(4);
@@ -4461,6 +4463,7 @@ describe('opened files actions', () => {
 
     const input = document.querySelector('#opened-files-list .opened-file-rename-input') as HTMLInputElement;
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true }));
     input.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientY: 10 }));
     window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientY: 35 }));
 
@@ -4558,6 +4561,104 @@ describe('opened files reordering', () => {
     window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientY: 35 }));
 
     expect(onReorderOpenedImage).not.toHaveBeenCalled();
+  });
+
+  it('moves the active file before the previous row with Alt+ArrowUp from a focused row', () => {
+    installUiFixture();
+
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onReorderOpenedImage }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'first.exr' },
+      { id: 'session-2', label: 'second.exr' },
+      { id: 'session-3', label: 'third.exr' }
+    ], 'session-2');
+
+    const secondRow = document.querySelector(
+      '#opened-files-list .opened-file-row[data-session-id="session-2"]'
+    ) as HTMLDivElement;
+    secondRow.focus();
+    const event = new KeyboardEvent('keydown', {
+      key: 'ArrowUp',
+      altKey: true,
+      bubbles: true,
+      cancelable: true
+    });
+    secondRow.dispatchEvent(event);
+
+    expect(onReorderOpenedImage).toHaveBeenCalledTimes(1);
+    expect(onReorderOpenedImage).toHaveBeenCalledWith('session-2', 'session-1', 'before');
+    expect(event.defaultPrevented).toBe(true);
+    expect((document.getElementById('opened-images-select') as HTMLSelectElement).value).toBe('session-2');
+  });
+
+  it('moves the active file after the next row with Alt+ArrowDown from a focused row', () => {
+    installUiFixture();
+
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onReorderOpenedImage }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'first.exr' },
+      { id: 'session-2', label: 'second.exr' },
+      { id: 'session-3', label: 'third.exr' }
+    ], 'session-2');
+
+    const secondRow = document.querySelector(
+      '#opened-files-list .opened-file-row[data-session-id="session-2"]'
+    ) as HTMLDivElement;
+    secondRow.focus();
+    const event = new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      altKey: true,
+      bubbles: true,
+      cancelable: true
+    });
+    secondRow.dispatchEvent(event);
+
+    expect(onReorderOpenedImage).toHaveBeenCalledTimes(1);
+    expect(onReorderOpenedImage).toHaveBeenCalledWith('session-2', 'session-3', 'after');
+    expect(event.defaultPrevented).toBe(true);
+    expect((document.getElementById('opened-images-select') as HTMLSelectElement).value).toBe('session-2');
+  });
+
+  it('consumes Alt+ArrowUp and Alt+ArrowDown at open-file reorder boundaries', () => {
+    installUiFixture();
+
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onReorderOpenedImage }));
+    const items = [
+      { id: 'session-1', label: 'first.exr' },
+      { id: 'session-2', label: 'second.exr' },
+      { id: 'session-3', label: 'third.exr' }
+    ];
+
+    ui.setOpenedImageOptions(items, 'session-1');
+    const firstRow = document.querySelector(
+      '#opened-files-list .opened-file-row[data-session-id="session-1"]'
+    ) as HTMLDivElement;
+    const upEvent = new KeyboardEvent('keydown', {
+      key: 'ArrowUp',
+      altKey: true,
+      bubbles: true,
+      cancelable: true
+    });
+    firstRow.dispatchEvent(upEvent);
+
+    ui.setOpenedImageOptions(items, 'session-3');
+    const thirdRow = document.querySelector(
+      '#opened-files-list .opened-file-row[data-session-id="session-3"]'
+    ) as HTMLDivElement;
+    const downEvent = new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      altKey: true,
+      bubbles: true,
+      cancelable: true
+    });
+    thirdRow.dispatchEvent(downEvent);
+
+    expect(onReorderOpenedImage).not.toHaveBeenCalled();
+    expect(upEvent.defaultPrevented).toBe(true);
+    expect(downEvent.defaultPrevented).toBe(true);
   });
 });
 
@@ -5235,6 +5336,40 @@ describe('global panel arrow navigation', () => {
     expect((document.getElementById('opened-images-select') as HTMLSelectElement).value).toBe('session-2');
   });
 
+  it('uses Alt+ArrowUp and Alt+ArrowDown on the document to reorder Open Files by default', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onReorderOpenedImage }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image-a.exr' },
+      { id: 'session-2', label: 'image-b.exr' },
+      { id: 'session-3', label: 'image-c.exr' }
+    ], 'session-2');
+
+    const downEvent = new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      altKey: true,
+      bubbles: true,
+      cancelable: true
+    });
+    document.body.dispatchEvent(downEvent);
+    const upEvent = new KeyboardEvent('keydown', {
+      key: 'ArrowUp',
+      altKey: true,
+      bubbles: true,
+      cancelable: true
+    });
+    document.body.dispatchEvent(upEvent);
+
+    expect(onReorderOpenedImage).toHaveBeenNthCalledWith(1, 'session-2', 'session-3', 'after');
+    expect(onReorderOpenedImage).toHaveBeenNthCalledWith(2, 'session-2', 'session-1', 'before');
+    expect(downEvent.defaultPrevented).toBe(true);
+    expect(upEvent.defaultPrevented).toBe(true);
+    expect((document.getElementById('opened-images-select') as HTMLSelectElement).value).toBe('session-2');
+  });
+
   it('uses ArrowLeft and ArrowRight on the document to move the bottom channel selection', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
@@ -5307,6 +5442,41 @@ describe('global panel arrow navigation', () => {
     });
     expect(onOpenedImageSelected).not.toHaveBeenCalled();
     expect((document.getElementById('rgb-group-select') as HTMLSelectElement).value).toBe('channel:depth.Z');
+  });
+
+  it('does not reorder Open Files with Alt+ArrowDown when Channel View is the vertical target', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onReorderOpenedImage }));
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'depth.Z'];
+
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image-a.exr' },
+      { id: 'session-2', label: 'image-b.exr' }
+    ], 'session-1');
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    })));
+
+    const channelRows = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-view-list .channel-view-row'));
+    channelRows[0]?.click();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      altKey: true,
+      bubbles: true,
+      cancelable: true
+    }));
+
+    expect(onReorderOpenedImage).not.toHaveBeenCalled();
   });
 
   it('switches ArrowUp and ArrowDown back to Open Files after an open-files row click', () => {
@@ -5407,6 +5577,29 @@ describe('global panel arrow navigation', () => {
     expect((document.getElementById('opened-images-select') as HTMLSelectElement).value).toBe('session-1');
   });
 
+  it('ignores global Open Files reorder while the export dialog is open', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onReorderOpenedImage }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image-a.exr' },
+      { id: 'session-2', label: 'image-b.exr' }
+    ], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    (document.getElementById('export-image-button') as HTMLButtonElement).click();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      altKey: true,
+      bubbles: true,
+      cancelable: true
+    }));
+
+    expect(onReorderOpenedImage).not.toHaveBeenCalled();
+  });
+
   it('ignores global arrow routing while a top menu is open', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
@@ -5423,6 +5616,28 @@ describe('global panel arrow navigation', () => {
 
     expect(onOpenedImageSelected).not.toHaveBeenCalled();
     expect((document.getElementById('opened-images-select') as HTMLSelectElement).value).toBe('session-1');
+  });
+
+  it('ignores global Open Files reorder while a top menu is open', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onReorderOpenedImage }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image-a.exr' },
+      { id: 'session-2', label: 'image-b.exr' }
+    ], 'session-1');
+
+    (document.getElementById('file-menu-button') as HTMLButtonElement).click();
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      altKey: true,
+      bubbles: true,
+      cancelable: true
+    }));
+
+    expect(onReorderOpenedImage).not.toHaveBeenCalled();
   });
 
   it('ignores global arrow routing from editable controls', () => {
@@ -5443,6 +5658,30 @@ describe('global panel arrow navigation', () => {
 
     expect(onOpenedImageSelected).not.toHaveBeenCalled();
     expect((document.getElementById('opened-images-select') as HTMLSelectElement).value).toBe('session-1');
+  });
+
+  it('ignores global Open Files reorder from editable controls', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onReorderOpenedImage }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'image-a.exr' },
+      { id: 'session-2', label: 'image-b.exr' }
+    ], 'session-1');
+
+    const input = document.createElement('input');
+    document.body.append(input);
+    input.focus();
+    input.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      altKey: true,
+      bubbles: true,
+      cancelable: true
+    }));
+
+    expect(onReorderOpenedImage).not.toHaveBeenCalled();
   });
 
   it('starts and releases viewer keyboard navigation input on global w/a/s/d keydown and keyup', () => {

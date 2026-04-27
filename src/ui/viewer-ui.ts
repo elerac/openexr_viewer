@@ -354,6 +354,9 @@ export class ViewerUi implements Disposable {
 
         return this.openedImagesPanel.stepSelection(delta);
       },
+      routeOpenedFilesReorder: (delta) => {
+        return this.openedImagesPanel.reorderActiveItem(delta);
+      },
       routeHorizontalNavigation: (delta) => {
         return this.channelThumbnailStrip.stepSelection(delta);
       },
