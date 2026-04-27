@@ -135,7 +135,6 @@ output {
 }
 
 .app-shell.is-window-preview .app-menu-bar,
-.app-shell.is-window-preview .display-toolbar,
 .app-shell.is-window-preview .error-banner,
 .app-shell.is-window-preview .image-panel-shell,
 .app-shell.is-window-preview .right-stack,
@@ -152,7 +151,6 @@ output {
 }
 
 .app-shell.is-screenshot-selecting .app-menu-bar,
-.app-shell.is-screenshot-selecting .display-toolbar,
 .app-shell.is-screenshot-selecting .error-banner,
 .app-shell.is-screenshot-selecting .image-panel-shell,
 .app-shell.is-screenshot-selecting .right-stack,
@@ -161,7 +159,6 @@ output {
 }
 
 .app-shell.is-screenshot-selecting .app-menu-bar::after,
-.app-shell.is-screenshot-selecting .display-toolbar::after,
 .app-shell.is-screenshot-selecting .error-banner::after,
 .app-shell.is-screenshot-selecting .image-panel-shell::after,
 .app-shell.is-screenshot-selecting .right-stack::after,
@@ -492,86 +489,6 @@ output {
 
 .app-menu-setting-action {
   margin-top: 0.2rem;
-}
-
-.display-toolbar {
-  position: relative;
-  z-index: 1;
-  min-height: 2rem;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.7rem;
-  padding: 0.24rem 0.45rem;
-  border: 1px solid var(--panel-border);
-  border-radius: 0.5rem;
-  background: var(--dialog-surface);
-  box-shadow: var(--dialog-shadow);
-  backdrop-filter: var(--dialog-backdrop-filter);
-  -webkit-backdrop-filter: var(--dialog-backdrop-filter);
-}
-
-.display-toolbar-control {
-  flex: 0 1 20rem;
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.55rem;
-}
-
-.display-toolbar-control label {
-  flex: 0 0 auto;
-  color: var(--text-dim);
-  font-size: 0.78rem;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.display-toolbar-reset {
-  flex: 0 0 auto;
-  min-width: 4.8rem;
-  padding-block: 0.28rem;
-}
-
-.display-toolbar-mode {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: stretch;
-  overflow: hidden;
-  border: 1px solid var(--control-border);
-  border-radius: 0.375rem;
-}
-
-.display-toolbar-mode button {
-  min-width: 5.4rem;
-  border: 0;
-  border-right: 1px solid var(--control-border);
-  border-radius: 0;
-  padding-block: 0.28rem;
-}
-
-.display-toolbar-mode button:last-child {
-  border-right: 0;
-}
-
-.display-toolbar-exposure-inputs {
-  flex: 0 1 12.75rem;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.display-toolbar-exposure-inputs input[type='range'] {
-  flex: 0 1 7.5rem;
-  width: clamp(5rem, 11vw, 8rem);
-  min-width: 5rem;
-}
-
-.display-toolbar-exposure-inputs input[type='number'] {
-  width: 4.8rem;
-  padding-block: 0.2rem;
 }
 
 button,
@@ -1009,37 +926,6 @@ input[type='range'] {
 }
 
 @media (max-width: 520px) {
-  .display-toolbar {
-    align-items: stretch;
-  }
-
-  .display-toolbar-reset {
-    width: 100%;
-  }
-
-  .display-toolbar-mode {
-    width: 100%;
-  }
-
-  .display-toolbar-mode button {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-
-  .display-toolbar-control {
-    flex-basis: 100%;
-    align-items: stretch;
-  }
-
-  .display-toolbar-control label,
-  .display-toolbar-exposure-inputs {
-    width: 100%;
-  }
-
-  .display-toolbar-exposure-inputs input[type='range'] {
-    min-width: 0;
-  }
-
   .app-dialog {
     width: min(100%, 22rem);
   }
@@ -2306,9 +2192,7 @@ body.is-resizing-panel-rows * {
 }
 
 #visualization-none-button[aria-pressed='true'],
-#toolbar-visualization-none-button[aria-pressed='true'],
 #colormap-toggle-button[aria-pressed='true'],
-#toolbar-colormap-toggle-button[aria-pressed='true'],
 #stokes-degree-modulation-button[aria-pressed='true'],
 .stokes-aolp-modulation-mode-control button[aria-pressed='true'] {
   border-color: #75a7ff;

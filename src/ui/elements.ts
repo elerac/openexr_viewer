@@ -6,7 +6,6 @@ export interface Elements {
   appFullscreenButton: HTMLButtonElement;
   settingsDialogButton: HTMLButtonElement;
   appIconTooltip: HTMLElement;
-  displayToolbar: HTMLElement;
   mainLayout: HTMLElement;
   rightStack: HTMLElement;
   sidePanel: HTMLElement;
@@ -39,7 +38,6 @@ export interface Elements {
   panoramaViewerMenuItem: HTMLButtonElement;
   windowNormalMenuItem: HTMLButtonElement;
   windowFullScreenPreviewMenuItem: HTMLButtonElement;
-  windowToolbarMenuItem: HTMLButtonElement;
   galleryCboxRgbButton: HTMLButtonElement;
   openFileButton: HTMLButtonElement;
   openFolderButton: HTMLButtonElement;
@@ -99,11 +97,8 @@ export interface Elements {
   exportColormapDialogCancelButton: HTMLButtonElement;
   exportColormapDialogSubmitButton: HTMLButtonElement;
   resetViewButton: HTMLButtonElement;
-  toolbarResetViewButton: HTMLButtonElement;
   visualizationNoneButton: HTMLButtonElement;
   colormapToggleButton: HTMLButtonElement;
-  toolbarVisualizationNoneButton: HTMLButtonElement;
-  toolbarColormapToggleButton: HTMLButtonElement;
   colormapRangeControl: HTMLDivElement;
   colormapSelect: HTMLSelectElement;
   stokesDegreeModulationControl: HTMLDivElement;
@@ -121,9 +116,6 @@ export interface Elements {
   exposureControl: HTMLDivElement;
   exposureSlider: HTMLInputElement;
   exposureValue: HTMLInputElement;
-  toolbarExposureControl: HTMLDivElement;
-  toolbarExposureSlider: HTMLInputElement;
-  toolbarExposureValue: HTMLInputElement;
   errorBanner: HTMLDivElement;
   viewerContainer: HTMLElement;
   dropOverlay: HTMLDivElement;
@@ -216,8 +208,6 @@ export type ColormapPanelElements = Pick<
   Elements,
   | 'visualizationNoneButton'
   | 'colormapToggleButton'
-  | 'toolbarVisualizationNoneButton'
-  | 'toolbarColormapToggleButton'
   | 'colormapRangeControl'
   | 'colormapSelect'
   | 'stokesDegreeModulationControl'
@@ -235,9 +225,6 @@ export type ColormapPanelElements = Pick<
   | 'exposureControl'
   | 'exposureSlider'
   | 'exposureValue'
-  | 'toolbarExposureControl'
-  | 'toolbarExposureSlider'
-  | 'toolbarExposureValue'
 >;
 
 export type LayoutSplitElements = Pick<
@@ -424,7 +411,6 @@ export function resolveElements(): Elements {
     appFullscreenButton: requireElement('app-fullscreen-button', HTMLButtonElement),
     settingsDialogButton: requireElement('settings-dialog-button', HTMLButtonElement),
     appIconTooltip: requireElement('app-icon-tooltip', HTMLElement),
-    displayToolbar: requireElement('display-toolbar', HTMLElement),
     mainLayout: requireElement('main-layout', HTMLElement),
     rightStack: requireElement('right-stack', HTMLElement),
     sidePanel: requireElement('inspector-panel', HTMLElement),
@@ -457,7 +443,6 @@ export function resolveElements(): Elements {
     panoramaViewerMenuItem: requireElement('panorama-viewer-menu-item', HTMLButtonElement),
     windowNormalMenuItem: requireElement('window-normal-menu-item', HTMLButtonElement),
     windowFullScreenPreviewMenuItem: requireElement('window-full-screen-preview-menu-item', HTMLButtonElement),
-    windowToolbarMenuItem: requireElement('window-toolbar-menu-item', HTMLButtonElement),
     galleryCboxRgbButton: requireElement('gallery-cbox-rgb-button', HTMLButtonElement),
     openFileButton: requireElement('open-file-button', HTMLButtonElement),
     openFolderButton: requireElement('open-folder-button', HTMLButtonElement),
@@ -517,11 +502,8 @@ export function resolveElements(): Elements {
     exportColormapDialogCancelButton: requireElement('export-colormap-dialog-cancel-button', HTMLButtonElement),
     exportColormapDialogSubmitButton: requireElement('export-colormap-dialog-submit-button', HTMLButtonElement),
     resetViewButton: requireElement('reset-view-button', HTMLButtonElement),
-    toolbarResetViewButton: requireElement('toolbar-reset-view-button', HTMLButtonElement),
     visualizationNoneButton: requireElement('visualization-none-button', HTMLButtonElement),
     colormapToggleButton: requireElement('colormap-toggle-button', HTMLButtonElement),
-    toolbarVisualizationNoneButton: requireElement('toolbar-visualization-none-button', HTMLButtonElement),
-    toolbarColormapToggleButton: requireElement('toolbar-colormap-toggle-button', HTMLButtonElement),
     colormapRangeControl: requireElement('colormap-range-control', HTMLDivElement),
     colormapSelect: requireElement('colormap-select', HTMLSelectElement),
     stokesDegreeModulationControl: requireElement('stokes-degree-modulation-control', HTMLDivElement),
@@ -539,9 +521,6 @@ export function resolveElements(): Elements {
     exposureControl: requireElement('exposure-control', HTMLDivElement),
     exposureSlider: requireElement('exposure-slider', HTMLInputElement),
     exposureValue: requireElement('exposure-value', HTMLInputElement),
-    toolbarExposureControl: requireElement('toolbar-exposure-control', HTMLDivElement),
-    toolbarExposureSlider: requireElement('toolbar-exposure-slider', HTMLInputElement),
-    toolbarExposureValue: requireElement('toolbar-exposure-value', HTMLInputElement),
     errorBanner: requireElement('error-banner', HTMLDivElement),
     viewerContainer: requireElement('viewer-container', HTMLElement),
     dropOverlay: requireElement('drop-overlay', HTMLDivElement),

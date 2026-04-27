@@ -42,9 +42,7 @@ export class ColormapPanel implements Disposable {
     this.setColormapRangeControlsDisabled(true);
 
     this.bindVisualizationModeButton(this.elements.visualizationNoneButton, 'rgb');
-    this.bindVisualizationModeButton(this.elements.toolbarVisualizationNoneButton, 'rgb');
     this.bindVisualizationModeButton(this.elements.colormapToggleButton, 'colormap');
-    this.bindVisualizationModeButton(this.elements.toolbarColormapToggleButton, 'colormap');
 
     this.disposables.addEventListener(this.elements.colormapSelect, 'change', (event) => {
       if (this.elements.colormapSelect.disabled) {
@@ -98,7 +96,6 @@ export class ColormapPanel implements Disposable {
     });
 
     this.bindExposureControl(this.elements.exposureSlider, this.elements.exposureValue);
-    this.bindExposureControl(this.elements.toolbarExposureSlider, this.elements.toolbarExposureValue);
   }
 
   dispose(): void {
@@ -119,7 +116,6 @@ export class ColormapPanel implements Disposable {
     this.setVisualizationModeButtonsDisabled(loading || this.openedImageCount === 0);
     this.setColormapRangeControlsDisabled(loading || this.openedImageCount === 0 || !this.currentColormapRange);
     this.elements.exposureValue.disabled = loading;
-    this.elements.toolbarExposureValue.disabled = loading;
     this.updateStokesDegreeModulationDisabled();
   }
 
@@ -156,7 +152,6 @@ export class ColormapPanel implements Disposable {
     this.setVisualizationModeButtonPressedStates(mode);
     this.elements.colormapRangeControl.classList.toggle('hidden', !this.isColormapEnabled);
     this.elements.exposureControl.classList.toggle('hidden', this.isColormapEnabled);
-    this.elements.toolbarExposureControl.classList.toggle('hidden', this.isColormapEnabled);
     this.setColormapRangeControlsDisabled(
       this.isLoading || this.openedImageCount === 0 || !this.currentColormapRange
     );
@@ -307,19 +302,14 @@ export class ColormapPanel implements Disposable {
     const isRgb = mode === 'rgb';
     const isColormap = mode === 'colormap';
     this.elements.visualizationNoneButton.setAttribute('aria-pressed', isRgb ? 'true' : 'false');
-    this.elements.toolbarVisualizationNoneButton.setAttribute('aria-pressed', isRgb ? 'true' : 'false');
     this.elements.colormapToggleButton.setAttribute('aria-pressed', isColormap ? 'true' : 'false');
-    this.elements.toolbarColormapToggleButton.setAttribute('aria-pressed', isColormap ? 'true' : 'false');
     this.elements.colormapToggleButton.setAttribute('aria-expanded', isColormap ? 'true' : 'false');
-    this.elements.toolbarColormapToggleButton.setAttribute('aria-expanded', isColormap ? 'true' : 'false');
   }
 
   private getVisualizationModeButtons(): HTMLButtonElement[] {
     return [
       this.elements.visualizationNoneButton,
-      this.elements.toolbarVisualizationNoneButton,
-      this.elements.colormapToggleButton,
-      this.elements.toolbarColormapToggleButton
+      this.elements.colormapToggleButton
     ];
   }
 
@@ -345,8 +335,7 @@ export class ColormapPanel implements Disposable {
 
   private getExposureControls(): Array<{ slider: HTMLInputElement; value: HTMLInputElement }> {
     return [
-      { slider: this.elements.exposureSlider, value: this.elements.exposureValue },
-      { slider: this.elements.toolbarExposureSlider, value: this.elements.toolbarExposureValue }
+      { slider: this.elements.exposureSlider, value: this.elements.exposureValue }
     ];
   }
 

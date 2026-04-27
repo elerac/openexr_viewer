@@ -204,8 +204,6 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   const colormapVmaxInput = page.locator('#colormap-vmax-input');
   const noneButton = page.locator('#visualization-none-button');
   const colormapButton = page.locator('#colormap-toggle-button');
-  const toolbarNoneButton = page.locator('#toolbar-visualization-none-button');
-  const toolbarColormapButton = page.locator('#toolbar-colormap-toggle-button');
   const exposureControl = page.locator('#exposure-control');
   const colormapAutoRangeButton = page.getByRole('button', { name: 'Auto Range' });
   const colormapZeroCenterButton = page.getByRole('button', { name: 'Zero Center' });
@@ -238,8 +236,6 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   await noneButton.click();
   await expect(noneButton).toHaveAttribute('aria-pressed', 'true');
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'false');
-  await expect(toolbarNoneButton).toHaveAttribute('aria-pressed', 'true');
-  await expect(toolbarColormapButton).toHaveAttribute('aria-pressed', 'false');
   await expect(exposureControl).toBeVisible();
   await expect(colormapRangeControl).toBeHidden();
   await viewer.hover();
@@ -247,7 +243,6 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
 
   await colormapButton.click();
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'true');
-  await expect(toolbarColormapButton).toHaveAttribute('aria-pressed', 'true');
   await expect(colormapRangeControl).toBeVisible();
   await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['Mono:']);
 
@@ -340,15 +335,12 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   await expect(stokesDegreeModulationButton).toBeHidden();
   await expect(noneButton).toHaveAttribute('aria-pressed', 'true');
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'false');
-  await expect(toolbarNoneButton).toHaveAttribute('aria-pressed', 'true');
-  await expect(toolbarColormapButton).toHaveAttribute('aria-pressed', 'false');
   await expect(exposureControl).toBeVisible();
   await expect(colormapRangeControl).toBeHidden();
 
   await colormapButton.click();
   await colormapSelect.selectOption({ label: 'RdBu' });
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'true');
-  await expect(toolbarColormapButton).toHaveAttribute('aria-pressed', 'true');
   await expect(colormapSelect).toHaveValue(previousColormapId);
 
   await channelSelect.selectOption({ label: 'ToP.RGB' });
@@ -359,8 +351,6 @@ test('loads RGB Stokes channels and applies grouped and split derived defaults',
   await channelSelect.selectOption({ label: 'RGB' });
   await expect(noneButton).toHaveAttribute('aria-pressed', 'false');
   await expect(colormapButton).toHaveAttribute('aria-pressed', 'true');
-  await expect(toolbarNoneButton).toHaveAttribute('aria-pressed', 'false');
-  await expect(toolbarColormapButton).toHaveAttribute('aria-pressed', 'true');
   await expect(exposureControl).toBeHidden();
   await expect(colormapRangeControl).toBeVisible();
   await expect(colormapSelect).toHaveValue(previousColormapId);

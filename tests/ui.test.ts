@@ -404,58 +404,7 @@ describe('metadata inspector', () => {
   });
 });
 
-describe('display toolbar', () => {
-  it('starts hidden and toggles from the Window menu Tool bar item', () => {
-    installUiFixture();
-
-    new ViewerUi(createUiCallbacks());
-    const displayToolbar = document.getElementById('display-toolbar') as HTMLElement;
-    const windowMenuButton = document.getElementById('window-menu-button') as HTMLButtonElement;
-    const windowMenu = document.getElementById('window-menu') as HTMLElement;
-    const toolbarMenuItem = document.getElementById('window-toolbar-menu-item') as HTMLButtonElement;
-
-    expect(displayToolbar.classList.contains('hidden')).toBe(true);
-    expect(toolbarMenuItem.getAttribute('aria-checked')).toBe('false');
-
-    windowMenuButton.click();
-    expect(windowMenu.classList.contains('hidden')).toBe(false);
-
-    toolbarMenuItem.click();
-    expect(displayToolbar.classList.contains('hidden')).toBe(false);
-    expect(toolbarMenuItem.getAttribute('aria-checked')).toBe('true');
-    expect(windowMenu.classList.contains('hidden')).toBe(true);
-
-    toolbarMenuItem.click();
-    expect(displayToolbar.classList.contains('hidden')).toBe(true);
-    expect(toolbarMenuItem.getAttribute('aria-checked')).toBe('false');
-  });
-
-  it('persists the Window menu Tool bar visibility choice across UI reloads', () => {
-    installUiFixture();
-
-    new ViewerUi(createUiCallbacks());
-    const toolbarMenuItem = document.getElementById('window-toolbar-menu-item') as HTMLButtonElement;
-    toolbarMenuItem.click();
-
-    installUiFixture();
-    new ViewerUi(createUiCallbacks());
-    const restoredDisplayToolbar = document.getElementById('display-toolbar') as HTMLElement;
-    const restoredToolbarMenuItem = document.getElementById('window-toolbar-menu-item') as HTMLButtonElement;
-
-    expect(restoredDisplayToolbar.classList.contains('hidden')).toBe(false);
-    expect(restoredToolbarMenuItem.getAttribute('aria-checked')).toBe('true');
-
-    restoredToolbarMenuItem.click();
-
-    installUiFixture();
-    new ViewerUi(createUiCallbacks());
-    const hiddenDisplayToolbar = document.getElementById('display-toolbar') as HTMLElement;
-    const hiddenToolbarMenuItem = document.getElementById('window-toolbar-menu-item') as HTMLButtonElement;
-
-    expect(hiddenDisplayToolbar.classList.contains('hidden')).toBe(true);
-    expect(hiddenToolbarMenuItem.getAttribute('aria-checked')).toBe('false');
-  });
-
+describe('top bar and display controls', () => {
   it('persists and dispatches the top-bar auto-fit selected images toggle and immediate fit action', () => {
     installUiFixture();
 
@@ -562,50 +511,35 @@ describe('display toolbar', () => {
     expect(document.activeElement).toBe(button);
   });
 
-  it('dispatches reset view from toolbar and inspector reset buttons', () => {
+  it('dispatches reset view from the inspector reset button', () => {
     installUiFixture();
 
     const onResetView = vi.fn();
     const ui = new ViewerUi(createUiCallbacks({ onResetView }));
     const inspectorResetButton = document.getElementById('reset-view-button') as HTMLButtonElement;
-    const toolbarResetButton = document.getElementById('toolbar-reset-view-button') as HTMLButtonElement;
-
-    toolbarResetButton.click();
-    expect(onResetView).toHaveBeenCalledTimes(1);
 
     inspectorResetButton.click();
-    expect(onResetView).toHaveBeenCalledTimes(2);
+    expect(onResetView).toHaveBeenCalledTimes(1);
 
     ui.setLoading(true);
     expect(inspectorResetButton.disabled).toBe(true);
-    expect(toolbarResetButton.disabled).toBe(true);
 
-    toolbarResetButton.click();
     inspectorResetButton.click();
-    expect(onResetView).toHaveBeenCalledTimes(2);
+    expect(onResetView).toHaveBeenCalledTimes(1);
 
     ui.setLoading(false);
     expect(inspectorResetButton.disabled).toBe(false);
-    expect(toolbarResetButton.disabled).toBe(false);
   });
 
-  it('dispatches visualization mode changes from toolbar and inspector buttons', () => {
+  it('dispatches visualization mode changes from inspector buttons', () => {
     installUiFixture();
 
     const onVisualizationModeChange = vi.fn();
     const ui = new ViewerUi(createUiCallbacks({ onVisualizationModeChange }));
     const inspectorNoneButton = document.getElementById('visualization-none-button') as HTMLButtonElement;
     const inspectorColormapButton = document.getElementById('colormap-toggle-button') as HTMLButtonElement;
-    const toolbarNoneButton = document.getElementById('toolbar-visualization-none-button') as HTMLButtonElement;
-    const toolbarColormapButton = document.getElementById('toolbar-colormap-toggle-button') as HTMLButtonElement;
 
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
-
-    toolbarColormapButton.click();
-    expect(onVisualizationModeChange).toHaveBeenLastCalledWith('colormap');
-
-    toolbarNoneButton.click();
-    expect(onVisualizationModeChange).toHaveBeenLastCalledWith('rgb');
 
     inspectorColormapButton.click();
     expect(onVisualizationModeChange).toHaveBeenLastCalledWith('colormap');
@@ -614,76 +548,62 @@ describe('display toolbar', () => {
     expect(onVisualizationModeChange).toHaveBeenLastCalledWith('rgb');
   });
 
-  it('syncs toolbar and inspector visualization mode button state', () => {
+  it('syncs inspector visualization mode button state', () => {
     installUiFixture();
 
     const ui = new ViewerUi(createUiCallbacks());
     const inspectorNoneButton = document.getElementById('visualization-none-button') as HTMLButtonElement;
     const inspectorColormapButton = document.getElementById('colormap-toggle-button') as HTMLButtonElement;
-    const toolbarNoneButton = document.getElementById('toolbar-visualization-none-button') as HTMLButtonElement;
-    const toolbarColormapButton = document.getElementById('toolbar-colormap-toggle-button') as HTMLButtonElement;
 
     ui.setVisualizationMode('rgb');
 
     expect(inspectorNoneButton.getAttribute('aria-pressed')).toBe('true');
-    expect(toolbarNoneButton.getAttribute('aria-pressed')).toBe('true');
     expect(inspectorColormapButton.getAttribute('aria-pressed')).toBe('false');
-    expect(toolbarColormapButton.getAttribute('aria-pressed')).toBe('false');
     expect(inspectorColormapButton.getAttribute('aria-expanded')).toBe('false');
-    expect(toolbarColormapButton.getAttribute('aria-expanded')).toBe('false');
 
     ui.setVisualizationMode('colormap');
 
     expect(inspectorNoneButton.getAttribute('aria-pressed')).toBe('false');
-    expect(toolbarNoneButton.getAttribute('aria-pressed')).toBe('false');
     expect(inspectorColormapButton.getAttribute('aria-pressed')).toBe('true');
-    expect(toolbarColormapButton.getAttribute('aria-pressed')).toBe('true');
     expect(inspectorColormapButton.getAttribute('aria-expanded')).toBe('true');
-    expect(toolbarColormapButton.getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('syncs toolbar and inspector visualization mode disabled state', () => {
+  it('syncs inspector visualization mode disabled state', () => {
     installUiFixture();
 
     const ui = new ViewerUi(createUiCallbacks());
     const buttons = [
       document.getElementById('visualization-none-button') as HTMLButtonElement,
-      document.getElementById('colormap-toggle-button') as HTMLButtonElement,
-      document.getElementById('toolbar-visualization-none-button') as HTMLButtonElement,
-      document.getElementById('toolbar-colormap-toggle-button') as HTMLButtonElement
+      document.getElementById('colormap-toggle-button') as HTMLButtonElement
     ];
 
-    expect(buttons.map((button) => button.disabled)).toEqual([true, true, true, true]);
+    expect(buttons.map((button) => button.disabled)).toEqual([true, true]);
 
     ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
-    expect(buttons.map((button) => button.disabled)).toEqual([false, false, false, false]);
+    expect(buttons.map((button) => button.disabled)).toEqual([false, false]);
 
     ui.setLoading(true);
-    expect(buttons.map((button) => button.disabled)).toEqual([true, true, true, true]);
+    expect(buttons.map((button) => button.disabled)).toEqual([true, true]);
 
     ui.setLoading(false);
-    expect(buttons.map((button) => button.disabled)).toEqual([false, false, false, false]);
+    expect(buttons.map((button) => button.disabled)).toEqual([false, false]);
   });
 
-  it('syncs toolbar and inspector exposure controls through the shared exposure state', () => {
+  it('updates inspector exposure controls through the shared exposure state', () => {
     installUiFixture();
 
     const onExposureChange = vi.fn();
     const ui = new ViewerUi(createUiCallbacks({ onExposureChange }));
     const exposureSlider = document.getElementById('exposure-slider') as HTMLInputElement;
     const exposureValue = document.getElementById('exposure-value') as HTMLInputElement;
-    const toolbarExposureSlider = document.getElementById('toolbar-exposure-slider') as HTMLInputElement;
-    const toolbarExposureValue = document.getElementById('toolbar-exposure-value') as HTMLInputElement;
 
     ui.setExposure(1.2);
 
     expect(exposureSlider.value).toBe('1.2');
     expect(exposureValue.value).toBe('1.2');
-    expect(toolbarExposureSlider.value).toBe('1.2');
-    expect(toolbarExposureValue.value).toBe('1.2');
 
-    toolbarExposureSlider.value = '2.3';
-    toolbarExposureSlider.dispatchEvent(new Event('input', { bubbles: true }));
+    exposureSlider.value = '2.3';
+    exposureSlider.dispatchEvent(new Event('input', { bubbles: true }));
     expect(onExposureChange).toHaveBeenLastCalledWith(2.3);
 
     exposureValue.value = '-12';
@@ -694,28 +614,22 @@ describe('display toolbar', () => {
 
     expect(exposureSlider.value).toBe('-0.7');
     expect(exposureValue.value).toBe('-0.7');
-    expect(toolbarExposureSlider.value).toBe('-0.7');
-    expect(toolbarExposureValue.value).toBe('-0.7');
   });
 
-  it('hides toolbar exposure whenever inspector exposure is hidden', () => {
+  it('hides inspector exposure whenever visualization uses colormap', () => {
     installUiFixture();
 
     const ui = new ViewerUi(createUiCallbacks());
     const exposureControl = document.getElementById('exposure-control') as HTMLDivElement;
-    const toolbarExposureControl = document.getElementById('toolbar-exposure-control') as HTMLDivElement;
 
     ui.setVisualizationMode('rgb');
     expect(exposureControl.classList.contains('hidden')).toBe(false);
-    expect(toolbarExposureControl.classList.contains('hidden')).toBe(false);
 
     ui.setVisualizationMode('colormap');
     expect(exposureControl.classList.contains('hidden')).toBe(true);
-    expect(toolbarExposureControl.classList.contains('hidden')).toBe(true);
 
     ui.setVisualizationMode('rgb');
     expect(exposureControl.classList.contains('hidden')).toBe(false);
-    expect(toolbarExposureControl.classList.contains('hidden')).toBe(false);
   });
 });
 
@@ -1433,11 +1347,11 @@ describe('view menu', () => {
     expect(previewItem.getAttribute('aria-checked')).toBe('false');
   });
 
-  it('renders the Window menu items in normal-full-screen-preview-tool-bar order', () => {
+  it('renders the Window menu items in normal-full-screen-preview order', () => {
     installUiFixture();
 
     const labels = Array.from(document.querySelectorAll('#window-menu .app-menu-item')).map((item) => item.textContent?.trim());
-    expect(labels).toEqual(['Normal', 'Full Screen Preview', 'Tool bar']);
+    expect(labels).toEqual(['Normal', 'Full Screen Preview']);
   });
 
   it('renders Reset Settings in the settings dialog', () => {
@@ -3137,7 +3051,7 @@ describe('view menu', () => {
     const appShell = document.getElementById('app') as HTMLElement;
     const screenshotButton = document.getElementById('export-screenshot-button') as HTMLButtonElement;
     const openFileButton = document.getElementById('open-file-button') as HTMLButtonElement;
-    const toolbarResetButton = document.getElementById('toolbar-reset-view-button') as HTMLButtonElement;
+    const resetButton = document.getElementById('reset-view-button') as HTMLButtonElement;
     const overlay = document.getElementById('screenshot-selection-overlay') as HTMLDivElement;
     const overlayExportButton = document.getElementById('screenshot-selection-export-button') as HTMLButtonElement;
     const dialogBackdrop = document.getElementById('export-dialog-backdrop') as HTMLDivElement;
@@ -3147,7 +3061,7 @@ describe('view menu', () => {
     expect(appShell.classList.contains('is-screenshot-selecting')).toBe(true);
 
     openFileButton.click();
-    toolbarResetButton.click();
+    resetButton.click();
 
     expect(onOpenFileClick).not.toHaveBeenCalled();
     expect(onResetView).not.toHaveBeenCalled();

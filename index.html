@@ -152,15 +152,6 @@
               >
                 Full Screen Preview
               </button>
-              <button
-                id="window-toolbar-menu-item"
-                class="app-menu-item"
-                type="button"
-                role="menuitemcheckbox"
-                aria-checked="false"
-              >
-                Tool bar
-              </button>
             </div>
           </div>
           <div class="app-menu">
@@ -261,21 +252,6 @@
         <input id="file-input" type="file" accept=".exr,image/exr" hidden />
         <input id="folder-input" type="file" accept=".exr,image/exr" webkitdirectory multiple hidden />
       </header>
-
-      <div id="display-toolbar" class="display-toolbar hidden" aria-label="Display toolbar">
-        <button id="toolbar-reset-view-button" class="display-toolbar-reset" type="button">Reset</button>
-        <div class="display-toolbar-mode" aria-label="Visualization mode">
-          <button id="toolbar-visualization-none-button" type="button" aria-pressed="true">None</button>
-          <button id="toolbar-colormap-toggle-button" type="button" aria-pressed="false" aria-controls="colormap-range-control" aria-expanded="false">Colormap</button>
-        </div>
-        <div id="toolbar-exposure-control" class="display-toolbar-control">
-          <label for="toolbar-exposure-slider">Exposure (EV)</label>
-          <div class="display-toolbar-exposure-inputs">
-            <input id="toolbar-exposure-slider" type="range" min="-10" max="10" step="0.1" value="0" />
-            <input id="toolbar-exposure-value" type="number" min="-10" max="10" step="0.1" value="0.0" />
-          </div>
-        </div>
-      </div>
 
       <div id="settings-dialog-backdrop" class="app-dialog-backdrop hidden">
         <section

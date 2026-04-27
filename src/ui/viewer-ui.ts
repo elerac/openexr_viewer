@@ -89,7 +89,6 @@ import {
   getFolderLoadStats
 } from '../folder-load-limits';
 
-const DISPLAY_TOOLBAR_VISIBLE_STORAGE_KEY = 'openexr-viewer:display-toolbar-visible:v1';
 const AUTO_FIT_IMAGE_ON_SELECT_STORAGE_KEY = 'openexr-viewer:auto-fit-image-on-select:v1';
 
 export interface UiCallbacks {
@@ -457,7 +456,6 @@ export class ViewerUi implements Disposable {
     this.setViewerMode('image');
     this.setAutoFitImageOnSelect(readStoredAutoFitImageOnSelect(), false);
     this.callbacks.onAutoFitImageOnSelectChange(this.autoFitImageOnSelect);
-    this.setDisplayToolbarVisible(readStoredDisplayToolbarVisible(), false);
     this.updateViewerModeMenuItemsDisabled();
     this.updateFileMenuItemsDisabled();
     this.bindEvents();
@@ -531,7 +529,6 @@ export class ViewerUi implements Disposable {
     this.elements.openFolderButton.disabled = loading;
     this.elements.galleryCboxRgbButton.disabled = loading;
     this.elements.resetViewButton.disabled = loading;
-    this.elements.toolbarResetViewButton.disabled = loading;
     this.openedImagesPanel.setLoading(loading);
     this.layerPanel.setLoading(loading);
     this.channelPanel.setLoading(loading);
@@ -1552,11 +1549,6 @@ export class ViewerUi implements Disposable {
       void this.windowPreviewController.setEnabled(true);
     });
 
-    this.disposables.addEventListener(this.elements.windowToolbarMenuItem, 'click', () => {
-      this.setDisplayToolbarVisible(this.elements.displayToolbar.classList.contains('hidden'));
-      this.topMenuController.closeAll();
-    });
-
     this.disposables.addEventListener(this.elements.fileInput, 'change', (event) => {
       const input = event.currentTarget as HTMLInputElement;
       const file = input.files?.[0] ?? null;
@@ -1578,7 +1570,6 @@ export class ViewerUi implements Disposable {
     });
 
     this.bindResetViewButton(this.elements.resetViewButton);
-    this.bindResetViewButton(this.elements.toolbarResetViewButton);
     for (const group of STOKES_COLORMAP_DEFAULT_GROUPS) {
       this.bindStokesDefaultSettingRow(group);
     }
@@ -1802,14 +1793,6 @@ export class ViewerUi implements Disposable {
       controls
     };
   }
-
-  private setDisplayToolbarVisible(visible: boolean, persist = true): void {
-    this.elements.displayToolbar.classList.toggle('hidden', !visible);
-    this.elements.windowToolbarMenuItem.setAttribute('aria-checked', visible ? 'true' : 'false');
-    if (persist) {
-      saveStoredDisplayToolbarVisible(visible);
-    }
-  }
 }
 
 function toFiles(files: FileList | null | undefined): File[] {
@@ -1861,22 +1844,6 @@ function sameViewportRectSize(a: ViewportRect, b: ViewportRect): boolean {
 function buildScreenshotExportFilename(filename: string): string {
   const normalized = filename.toLocaleLowerCase().endsWith('.png') ? filename : `${filename}.png`;
   return normalized.replace(/\.png$/i, '-screenshot.png');
-}
-
-function readStoredDisplayToolbarVisible(): boolean {
-  try {
-    return window.localStorage.getItem(DISPLAY_TOOLBAR_VISIBLE_STORAGE_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
-
-function saveStoredDisplayToolbarVisible(visible: boolean): void {
-  try {
-    window.localStorage.setItem(DISPLAY_TOOLBAR_VISIBLE_STORAGE_KEY, String(visible));
-  } catch {
-    // Storage can be unavailable in private contexts; keep the runtime toolbar state anyway.
-  }
 }
 
 function readStoredAutoFitImageOnSelect(): boolean {
