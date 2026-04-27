@@ -84,6 +84,13 @@ import { syncSelectOptions } from './render-helpers';
 import type { ViewportClientRect } from '../interaction/image-geometry';
 import type { ThemeId } from '../theme';
 import {
+  DEFAULT_SPECTRUM_LATTICE_MOTION_PREFERENCE,
+  parseSpectrumLatticeMotionPreference,
+  readStoredSpectrumLatticeMotionPreference,
+  saveStoredSpectrumLatticeMotionPreference,
+  type SpectrumLatticeMotionPreference
+} from '../spectrum-lattice-motion';
+import {
   DEFAULT_FOLDER_LOAD_LIMITS,
   createFolderLoadAdmission,
   getFolderLoadStats
@@ -425,6 +432,7 @@ export class ViewerUi implements Disposable {
       viewerContainer: this.elements.viewerContainer,
       spectrumLatticeCanvas: this.elements.spectrumLatticeCanvas
     });
+    this.setSpectrumLatticeMotionPreference(readStoredSpectrumLatticeMotionPreference(), false);
     this.themeController = new ThemeController(this.elements, {
       onThemeChange: (theme) => {
         this.viewerBackgroundController.setTheme(theme);
@@ -623,6 +631,21 @@ export class ViewerUi implements Disposable {
     }
 
     this.themeController.setTheme(theme, { persist });
+  }
+
+  setSpectrumLatticeMotionPreference(
+    preference: SpectrumLatticeMotionPreference,
+    persist = true
+  ): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.elements.spectrumLatticeMotionSelect.value = preference;
+    this.viewerBackgroundController.setSpectrumLatticeMotionPreference(preference);
+    if (persist) {
+      saveStoredSpectrumLatticeMotionPreference(preference);
+    }
   }
 
   setViewerViewportRect(rect: ViewportClientRect): void {
@@ -1574,9 +1597,16 @@ export class ViewerUi implements Disposable {
       this.bindStokesDefaultSettingRow(group);
     }
 
+    this.disposables.addEventListener(this.elements.spectrumLatticeMotionSelect, 'change', () => {
+      this.setSpectrumLatticeMotionPreference(
+        parseSpectrumLatticeMotionPreference(this.elements.spectrumLatticeMotionSelect.value)
+      );
+    });
+
     this.disposables.addEventListener(this.elements.resetSettingsButton, 'click', () => {
       this.layoutSplitController.resetToDefaults();
       this.themeController.reset();
+      this.setSpectrumLatticeMotionPreference(DEFAULT_SPECTRUM_LATTICE_MOTION_PREFERENCE);
       this.setStokesDefaultSettingsOptions(
         this.stokesColormapOptions,
         createDefaultStokesColormapDefaultSettings()

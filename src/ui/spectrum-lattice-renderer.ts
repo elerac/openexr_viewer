@@ -1,4 +1,9 @@
 import { DisposableBag, type Disposable } from '../lifecycle';
+import {
+  SPECTRUM_LATTICE_MOTION_ANIMATE,
+  SPECTRUM_LATTICE_MOTION_FOLLOW_SYSTEM,
+  type SpectrumLatticeMotionPreference
+} from '../spectrum-lattice-motion';
 
 export type SpectrumLatticeMode = 'disabled' | 'idle' | 'active';
 
@@ -161,6 +166,7 @@ export class SpectrumLatticeRenderer implements Disposable {
   private transitionCompletionTimeoutId: number | null = null;
   private pointerTrackingActive = false;
   private reducedMotion = false;
+  private motionPreference: SpectrumLatticeMotionPreference = SPECTRUM_LATTICE_MOTION_ANIMATE;
 
   constructor(private readonly args: SpectrumLatticeRendererArgs) {
     this.hideCanvas();
@@ -201,6 +207,29 @@ export class SpectrumLatticeRenderer implements Disposable {
 
     this.setCanvasVisible(false);
     this.emitBlend(null);
+  }
+
+  setMotionPreference(preference: SpectrumLatticeMotionPreference): void {
+    if (this.disposed || this.motionPreference === preference) {
+      return;
+    }
+
+    this.motionPreference = preference;
+    if (this.mode !== 'idle' || !this.canvasVisible) {
+      return;
+    }
+
+    if (!this.gl || !this.program || !this.uniforms) {
+      return;
+    }
+
+    if (this.shouldAnimateIdle()) {
+      this.startAnimation(performance.now());
+      return;
+    }
+
+    this.stopAnimation();
+    this.renderStaticFrame(this.lastTimeSeconds);
   }
 
   resize(): void {
@@ -253,7 +282,7 @@ export class SpectrumLatticeRenderer implements Disposable {
       return;
     }
 
-    if (previousMode === 'active' && !this.reducedMotion) {
+    if (previousMode === 'active' && this.shouldAnimateIdle()) {
       this.transitionMotionTo(
         1,
         IDLE_PERCEIVED_BRIGHTNESS,
@@ -264,11 +293,11 @@ export class SpectrumLatticeRenderer implements Disposable {
     } else {
       this.setMotionState(1, IDLE_PERCEIVED_BRIGHTNESS, IDLE_CHECKER_OPACITY, IDLE_SPECTRUM_GRID_OPACITY);
     }
-    if (this.reducedMotion) {
+    if (this.shouldAnimateIdle()) {
+      this.startAnimation(now);
+    } else {
       this.renderStaticFrame(this.lastTimeSeconds);
       this.stopAnimation();
-    } else {
-      this.startAnimation(now);
     }
   }
 
@@ -288,7 +317,7 @@ export class SpectrumLatticeRenderer implements Disposable {
       return;
     }
 
-    if (previousMode === 'idle' && !this.reducedMotion) {
+    if (previousMode === 'idle' && this.shouldAnimateIdle()) {
       this.transitionMotionTo(
         0,
         ACTIVE_PERCEIVED_BRIGHTNESS,
@@ -487,7 +516,7 @@ export class SpectrumLatticeRenderer implements Disposable {
 
       if (this.mode === 'active' && this.targetMotionSpeed === 0) {
         this.stopAnimation();
-      } else if (this.mode === 'idle' && !this.reducedMotion && document.visibilityState !== 'hidden') {
+      } else if (this.mode === 'idle' && this.shouldAnimateIdle() && document.visibilityState !== 'hidden') {
         this.stopAnimation();
         this.startAnimation(performance.now());
       }
@@ -627,7 +656,7 @@ export class SpectrumLatticeRenderer implements Disposable {
     this.initialized = false;
     this.initialize();
     this.resize();
-    if (this.mode === 'idle' && !this.reducedMotion) {
+    if (this.mode === 'idle' && this.shouldAnimateIdle()) {
       this.startAnimation(performance.now());
     }
   };
@@ -643,12 +672,16 @@ export class SpectrumLatticeRenderer implements Disposable {
       return;
     }
 
-    if (this.mode === 'idle' && !this.reducedMotion) {
+    if (this.mode === 'idle' && this.shouldAnimateIdle()) {
       this.startAnimation(performance.now());
     } else {
       this.renderStaticFrame(this.lastTimeSeconds);
     }
   };
+
+  private shouldAnimateIdle(): boolean {
+    return this.motionPreference !== SPECTRUM_LATTICE_MOTION_FOLLOW_SYSTEM || !this.reducedMotion;
+  }
 }
 
 function createProgram(

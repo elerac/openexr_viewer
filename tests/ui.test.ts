@@ -27,6 +27,11 @@ import { formatProbeCoordinates } from '../src/ui/probe-readout';
 import { getListboxOptionIndexAtClientY } from '../src/ui/render-helpers';
 import { ViewerUi } from '../src/ui/viewer-ui';
 import { SPECTRUM_LATTICE_THEME_ID, THEME_STORAGE_KEY } from '../src/theme';
+import {
+  SPECTRUM_LATTICE_MOTION_ANIMATE,
+  SPECTRUM_LATTICE_MOTION_FOLLOW_SYSTEM,
+  SPECTRUM_LATTICE_MOTION_STORAGE_KEY
+} from '../src/spectrum-lattice-motion';
 import { createDefaultStokesColormapDefaultSettings } from '../src/stokes';
 
 interface ResizeObserverRegistration {
@@ -1034,6 +1039,7 @@ describe('panel split sizing', () => {
       })
     );
     window.localStorage.setItem(THEME_STORAGE_KEY, SPECTRUM_LATTICE_THEME_ID);
+    window.localStorage.setItem(SPECTRUM_LATTICE_MOTION_STORAGE_KEY, SPECTRUM_LATTICE_MOTION_FOLLOW_SYSTEM);
 
     const onResetSettings = vi.fn();
     const ui = new ViewerUi(createUiCallbacks({ onResetSettings }));
@@ -1054,6 +1060,7 @@ describe('panel split sizing', () => {
 
     const resetSettingsButton = document.getElementById('reset-settings-button') as HTMLButtonElement;
     const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
+    const spectrumMotionSelect = document.getElementById('spectrum-lattice-motion-select') as HTMLSelectElement;
     const stokesAolpSelect = document.getElementById('stokes-default-aolp-colormap-select') as HTMLSelectElement;
     const imageButton = document.getElementById('image-panel-collapse-button') as HTMLButtonElement;
     const rightButton = document.getElementById('right-panel-collapse-button') as HTMLButtonElement;
@@ -1067,15 +1074,18 @@ describe('panel split sizing', () => {
     expect(mainLayout.style.getPropertyValue('--right-panel-width')).toBe('0px');
     expect(mainLayout.style.getPropertyValue('--bottom-panel-height')).toBe('0px');
     expect(themeSelect.value).toBe(SPECTRUM_LATTICE_THEME_ID);
+    expect(spectrumMotionSelect.value).toBe(SPECTRUM_LATTICE_MOTION_FOLLOW_SYSTEM);
     expect(stokesAolpSelect.value).toBe('0');
 
     resetSettingsButton.click();
 
     expect(onResetSettings).toHaveBeenCalledTimes(1);
     expect(themeSelect.value).toBe('default');
+    expect(spectrumMotionSelect.value).toBe(SPECTRUM_LATTICE_MOTION_ANIMATE);
     expect(stokesAolpSelect.value).toBe('1');
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(SPECTRUM_LATTICE_MOTION_STORAGE_KEY)).toBeNull();
     expect(imageButton.getAttribute('aria-expanded')).toBe('true');
     expect(rightButton.getAttribute('aria-expanded')).toBe('true');
     expect(bottomButton.getAttribute('aria-expanded')).toBe('true');
@@ -1377,8 +1387,9 @@ describe('view menu', () => {
     const labels = Array.from(document.querySelectorAll('#settings-dialog .app-menu-setting-label'))
       .map((item) => item.textContent?.trim());
     const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
+    const spectrumMotionSelect = document.getElementById('spectrum-lattice-motion-select') as HTMLSelectElement;
 
-    expect(labels).toEqual(['Theme', 'Stokes Defaults', 'Memory Budget']);
+    expect(labels).toEqual(['Theme', 'Spectrum lattice motion', 'Stokes Defaults', 'Memory Budget']);
     expect(Array.from(document.querySelectorAll('#stokes-default-settings-table tbody th')).map((cell) => cell.textContent?.trim())).toEqual([
       'AoLP',
       'Degree',
@@ -1393,6 +1404,14 @@ describe('view menu', () => {
     expect(Array.from(themeSelect.options).map((option) => option.value)).toEqual([
       'default',
       SPECTRUM_LATTICE_THEME_ID
+    ]);
+    expect(Array.from(spectrumMotionSelect.options).map((option) => option.textContent)).toEqual([
+      'Animate',
+      'Follow system'
+    ]);
+    expect(Array.from(spectrumMotionSelect.options).map((option) => option.value)).toEqual([
+      SPECTRUM_LATTICE_MOTION_ANIMATE,
+      SPECTRUM_LATTICE_MOTION_FOLLOW_SYSTEM
     ]);
   });
 
@@ -1521,6 +1540,41 @@ describe('view menu', () => {
     expect(viewer.classList.contains('is-spectrum-lattice-idle')).toBe(true);
     expect(canvas.classList.contains('hidden')).toBe(false);
     expect(canvas.classList.contains('spectrum-lattice-canvas--fallback')).toBe(true);
+  });
+
+  it('applies, persists, and reads the Spectrum lattice motion preference from Settings', () => {
+    installUiFixture();
+
+    new ViewerUi(createUiCallbacks());
+    const spectrumMotionSelect = document.getElementById('spectrum-lattice-motion-select') as HTMLSelectElement;
+
+    expect(spectrumMotionSelect.value).toBe(SPECTRUM_LATTICE_MOTION_ANIMATE);
+    expect(window.localStorage.getItem(SPECTRUM_LATTICE_MOTION_STORAGE_KEY)).toBeNull();
+
+    spectrumMotionSelect.value = SPECTRUM_LATTICE_MOTION_FOLLOW_SYSTEM;
+    spectrumMotionSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(spectrumMotionSelect.value).toBe(SPECTRUM_LATTICE_MOTION_FOLLOW_SYSTEM);
+    expect(window.localStorage.getItem(SPECTRUM_LATTICE_MOTION_STORAGE_KEY)).toBe(
+      SPECTRUM_LATTICE_MOTION_FOLLOW_SYSTEM
+    );
+
+    spectrumMotionSelect.value = SPECTRUM_LATTICE_MOTION_ANIMATE;
+    spectrumMotionSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(spectrumMotionSelect.value).toBe(SPECTRUM_LATTICE_MOTION_ANIMATE);
+    expect(window.localStorage.getItem(SPECTRUM_LATTICE_MOTION_STORAGE_KEY)).toBeNull();
+  });
+
+  it('reads the stored Spectrum lattice motion preference during UI initialization', () => {
+    installUiFixture();
+    window.localStorage.setItem(SPECTRUM_LATTICE_MOTION_STORAGE_KEY, SPECTRUM_LATTICE_MOTION_FOLLOW_SYSTEM);
+
+    new ViewerUi(createUiCallbacks());
+
+    expect((document.getElementById('spectrum-lattice-motion-select') as HTMLSelectElement).value).toBe(
+      SPECTRUM_LATTICE_MOTION_FOLLOW_SYSTEM
+    );
   });
 
   it('defines controller-driven viewer background blend layers for Spectrum lattice', () => {
@@ -1936,6 +1990,7 @@ describe('view menu', () => {
     const settingsBackdrop = document.getElementById('settings-dialog-backdrop') as HTMLElement;
     const settingsDialog = document.getElementById('settings-dialog') as HTMLElement;
     const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
+    const spectrumMotionSelect = document.getElementById('spectrum-lattice-motion-select') as HTMLSelectElement;
     const aolpSelect = document.getElementById('stokes-default-aolp-colormap-select') as HTMLSelectElement;
     const aolpVmin = document.getElementById('stokes-default-aolp-vmin-input') as HTMLInputElement;
     const aolpVmax = document.getElementById('stokes-default-aolp-vmax-input') as HTMLInputElement;
@@ -1971,6 +2026,7 @@ describe('view menu', () => {
 
     expect(focusableSettingsControls).toEqual([
       themeSelect,
+      spectrumMotionSelect,
       aolpSelect,
       aolpVmin,
       aolpVmax,

@@ -774,6 +774,38 @@ test('persists Spectrum lattice as animated idle and frozen active chrome', asyn
   await expectViewerBackgroundLayerOpacity(page, { checker: 0, spectrumGrid: 1 });
 });
 
+test('animates Spectrum lattice by default and lets Settings follow reduced motion', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await gotoViewerApp(page);
+
+  const settingsDialogButton = page.getByRole('button', { name: 'Settings', exact: true });
+  const settingsDialog = page.locator('#settings-dialog');
+  const themeInput = page.locator('#theme-select');
+  const spectrumMotionInput = page.locator('#spectrum-lattice-motion-select');
+  const idleCanvas = page.locator('#spectrum-lattice-canvas');
+
+  await settingsDialogButton.click();
+  await expect(settingsDialog).toBeVisible();
+  await expect(spectrumMotionInput).toHaveValue('animate');
+  await themeInput.selectOption('spectrum-lattice');
+  await expect(idleCanvas).toBeVisible();
+
+  await expect.poll(async () => {
+    return (await readSpectrumLatticeCanvasState(page)).animated;
+  }, { timeout: 7000 }).toBe(true);
+
+  await spectrumMotionInput.selectOption('system');
+  await expect(spectrumMotionInput).toHaveValue('system');
+
+  const followSystemState = await readSpectrumLatticeCanvasState(page);
+  expect(followSystemState.hasWebGl2).toBe(true);
+  expect(followSystemState.fallback).toBe(false);
+  expect(followSystemState.animated).toBe(false);
+  await expect.poll(async () => {
+    return await page.evaluate(() => window.localStorage.getItem('openexr-viewer:spectrum-lattice-motion:v1'));
+  }).toBe('system');
+});
+
 test('resets settings back to the default budget and panel layout', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await gotoViewerApp(page);
@@ -781,6 +813,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   const settingsDialogButton = page.getByRole('button', { name: 'Settings', exact: true });
   const settingsDialog = page.locator('#settings-dialog');
   const themeInput = page.locator('#theme-select');
+  const spectrumMotionInput = page.locator('#spectrum-lattice-motion-select');
   const budgetInput = page.locator('#display-cache-budget-input');
   const usageReadout = page.locator('#display-cache-usage');
   const resetSettingsButton = page.getByRole('button', { name: 'Reset Settings', exact: true });
@@ -819,6 +852,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
         bottomExpanded: bottomCollapseButton.getAttribute('aria-expanded'),
         storedBudget: window.localStorage.getItem('openexr-viewer:display-cache-budget-mb:v1'),
         storedTheme: window.localStorage.getItem('openexr-viewer:theme:v1'),
+        storedSpectrumMotion: window.localStorage.getItem('openexr-viewer:spectrum-lattice-motion:v1'),
         storedPanel: window.localStorage.getItem('openexr-viewer:panel-splits:v1')
       };
     });
@@ -828,6 +862,8 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   await expect(settingsDialog).toBeVisible();
   await themeInput.selectOption('spectrum-lattice');
   await expect(themeInput).toHaveValue('spectrum-lattice');
+  await spectrumMotionInput.selectOption('system');
+  await expect(spectrumMotionInput).toHaveValue('system');
   await budgetInput.selectOption('128');
   await expect(budgetInput).toHaveValue('128');
   await expect(usageReadout).toContainText('/ 128 MB');
@@ -853,16 +889,19 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   expect(mutated.bottomExpanded).toBe('false');
   expect(mutated.storedBudget).toBe('128');
   expect(mutated.storedTheme).toBe('spectrum-lattice');
+  expect(mutated.storedSpectrumMotion).toBe('system');
 
   await settingsDialogButton.click();
   await expect(settingsDialog).toBeVisible();
   await expect(themeInput).toHaveValue('spectrum-lattice');
+  await expect(spectrumMotionInput).toHaveValue('system');
   await expect(budgetInput).toHaveValue('128');
   await resetSettingsButton.click();
 
   await expect(settingsDialog).toBeVisible();
   await expect(settingsDialogButton).toHaveAttribute('aria-expanded', 'true');
   await expect(themeInput).toHaveValue('default');
+  await expect(spectrumMotionInput).toHaveValue('animate');
   await expect(budgetInput).toHaveValue('256');
   await expect(usageReadout).toContainText('/ 256 MB');
 
@@ -875,6 +914,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   expect(afterReset.bottomExpanded).toBe('true');
   expect(afterReset.storedBudget).toBe('256');
   expect(afterReset.storedTheme).toBeNull();
+  expect(afterReset.storedSpectrumMotion).toBeNull();
   expect(JSON.parse(afterReset.storedPanel ?? '{}')).toEqual({
     imagePanelWidth: 220,
     rightPanelWidth: 280,
@@ -890,6 +930,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   await settingsDialogButton.click();
   await expect(settingsDialog).toBeVisible();
   await expect(themeInput).toHaveValue('default');
+  await expect(spectrumMotionInput).toHaveValue('animate');
   await expect(budgetInput).toHaveValue('256');
   await expect(usageReadout).toContainText('/ 256 MB');
 
@@ -902,6 +943,7 @@ test('resets settings back to the default budget and panel layout', async ({ pag
   expect(afterReload.bottomExpanded).toBe('true');
   expect(afterReload.storedBudget).toBe('256');
   expect(afterReload.storedTheme).toBeNull();
+  expect(afterReload.storedSpectrumMotion).toBeNull();
   expect(JSON.parse(afterReload.storedPanel ?? '{}')).toEqual({
     imagePanelWidth: 220,
     rightPanelWidth: 280,

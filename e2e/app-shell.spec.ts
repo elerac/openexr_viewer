@@ -185,6 +185,7 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   const closeAllMenuItem = page.locator('#close-all-opened-images-button');
   const autoFitButton = page.locator('#app-auto-fit-image-button');
   const themeInput = page.locator('#theme-select');
+  const spectrumMotionInput = page.locator('#spectrum-lattice-motion-select');
   const budgetInput = page.locator('#display-cache-budget-input');
   const usageReadout = page.locator('#display-cache-usage');
 
@@ -242,6 +243,9 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   await expect(themeInput).toBeVisible();
   await expect(themeInput).toHaveValue('default');
   await expect(themeInput.locator('option')).toHaveText(['Default', 'Spectrum lattice']);
+  await expect(spectrumMotionInput).toBeVisible();
+  await expect(spectrumMotionInput).toHaveValue('animate');
+  await expect(spectrumMotionInput.locator('option')).toHaveText(['Animate', 'Follow system']);
   await expect(budgetInput).toBeVisible();
   await expect(budgetInput).toHaveValue('256');
   await expect(budgetInput.locator('option')).toHaveText(['64', '128', '256', '512', '1024']);

@@ -1,6 +1,7 @@
 import type { ViewportClientRect } from '../interaction/image-geometry';
 import { DEFAULT_THEME_ID, SPECTRUM_LATTICE_THEME_ID, type ThemeId } from '../theme';
 import { type Disposable } from '../lifecycle';
+import type { SpectrumLatticeMotionPreference } from '../spectrum-lattice-motion';
 import type { Elements } from './elements';
 import { SpectrumLatticeRenderer, type SpectrumLatticeBlend, type SpectrumLatticeMode } from './spectrum-lattice-renderer';
 
@@ -38,6 +39,14 @@ export class ViewerBackgroundController implements Disposable {
 
     this.theme = theme;
     this.sync();
+  }
+
+  setSpectrumLatticeMotionPreference(preference: SpectrumLatticeMotionPreference): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.spectrumRenderer.setMotionPreference(preference);
   }
 
   setHasOpenImages(hasOpenImages: boolean): void {

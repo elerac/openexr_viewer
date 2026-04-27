@@ -32,6 +32,7 @@ export interface Elements {
   settingsDialog: HTMLElement;
   settingsDialogCloseButton: HTMLButtonElement;
   themeSelect: HTMLSelectElement;
+  spectrumLatticeMotionSelect: HTMLSelectElement;
   stokesDefaultSettingsTable: HTMLTableElement;
   resetSettingsButton: HTMLButtonElement;
   imageViewerMenuItem: HTMLButtonElement;
@@ -437,6 +438,7 @@ export function resolveElements(): Elements {
     settingsDialog: requireElement('settings-dialog', HTMLElement),
     settingsDialogCloseButton: requireElement('settings-dialog-close-button', HTMLButtonElement),
     themeSelect: requireElement('theme-select', HTMLSelectElement),
+    spectrumLatticeMotionSelect: requireElement('spectrum-lattice-motion-select', HTMLSelectElement),
     stokesDefaultSettingsTable: requireElement('stokes-default-settings-table', HTMLTableElement),
     resetSettingsButton: requireElement('reset-settings-button', HTMLButtonElement),
     imageViewerMenuItem: requireElement('image-viewer-menu-item', HTMLButtonElement),
