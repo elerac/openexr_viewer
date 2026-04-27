@@ -365,6 +365,34 @@ describe('display controller shim', () => {
     expect(core.getState().activeColormapLut).toEqual(luts['2']);
   });
 
+  it('preserves the in-session AoLP modulation mode across Stokes selections', async () => {
+    const decoded = createDecodedImage(['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3']);
+    const { controller, core } = createController(createSession(decoded));
+
+    await controller.initialize();
+    await controller.applyDisplaySelection(createStokesSelection('aolp'));
+    controller.toggleStokesDegreeModulation();
+    controller.setStokesAolpDegreeModulationMode('saturation');
+
+    expect(core.getState().sessionState).toMatchObject({
+      stokesDegreeModulation: {
+        aolp: true
+      },
+      stokesAolpDegreeModulationMode: 'saturation'
+    });
+
+    await controller.applyDisplaySelection(createStokesSelection('dolp'));
+    await controller.applyDisplaySelection(createStokesSelection('aolp'));
+
+    expect(core.getState().sessionState).toMatchObject({
+      displaySelection: createStokesSelection('aolp'),
+      stokesDegreeModulation: {
+        aolp: false
+      },
+      stokesAolpDegreeModulationMode: 'saturation'
+    });
+  });
+
   it('applies a changed Stokes colormap default immediately for the active group', async () => {
     const decoded = createDecodedImage(['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3']);
     const { controller, core } = createController(createSession(decoded));

@@ -224,7 +224,9 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
           colormapRange: stokesDefaults.range,
           colormapRangeMode: 'oneTime',
           colormapZeroCentered: stokesDefaults.zeroCentered,
-          ...buildStokesDefaultModulationPatch(selection, stokesDefaults, currentState)
+          ...buildStokesDefaultModulationPatch(selection, stokesDefaults, currentState, {
+            preserveAolpMode: isStokesSelection(currentState.displaySelection)
+          })
         };
       }
 
@@ -810,11 +812,16 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
 function buildStokesDefaultModulationPatch(
   selection: ViewerSessionState['displaySelection'],
   setting: StokesColormapDefaultSetting,
-  currentState: ViewerSessionState
+  currentState: ViewerSessionState,
+  options: { preserveAolpMode?: boolean } = {}
 ): Partial<ViewerSessionState> {
   if (!isStokesSelection(selection) || !isStokesDegreeModulationParameter(selection.parameter) || !setting.modulation) {
     return {};
   }
+
+  const aolpMode = options.preserveAolpMode
+    ? currentState.stokesAolpDegreeModulationMode
+    : setting.modulation.aolpMode ?? 'value';
 
   return {
     stokesDegreeModulation: {
@@ -822,7 +829,7 @@ function buildStokesDefaultModulationPatch(
       [selection.parameter]: setting.modulation.enabled
     },
     ...(selection.parameter === 'aolp'
-      ? { stokesAolpDegreeModulationMode: setting.modulation.aolpMode ?? 'value' }
+      ? { stokesAolpDegreeModulationMode: aolpMode }
       : {})
   };
 }
