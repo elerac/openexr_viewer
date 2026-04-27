@@ -155,6 +155,37 @@ export class OpenedImagesPanel implements Disposable {
         isDragging: false
       };
     });
+    this.disposables.addEventListener(this.elements.openedFilesList, 'dblclick', (event) => {
+      if (isOpenedFileRenameInput(event.target)) {
+        return;
+      }
+
+      const label =
+        event.target instanceof Element ? event.target.closest<HTMLElement>('.opened-file-label') : null;
+      if (!label) {
+        return;
+      }
+
+      const row = findClosestListRow(label, 'sessionId');
+      if (
+        !row ||
+        !row.contains(label) ||
+        row.getAttribute('aria-disabled') === 'true' ||
+        isNestedInteractiveListControl(event.target, row)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      if (!this.elements.openedImagesSelect.disabled) {
+        const sessionId = row.dataset.sessionId ?? '';
+        this.elements.openedImagesSelect.value = sessionId;
+        if (sessionId !== this.openedImagesActiveId) {
+          this.chooseOpenedImage(sessionId);
+        }
+        this.startOpenedFileRename(sessionId);
+      }
+    });
     this.disposables.addEventListener(this.elements.openedFilesList, 'keydown', (event) => {
       if (this.handleOpenedFileRenameInputKeyDown(event)) {
         return;

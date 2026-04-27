@@ -533,13 +533,14 @@ test('temporarily renames an open file from the Open Files list', async ({ page 
 
   const openedImages = page.locator('#opened-images-select');
   const openedFileRow = page.locator('#opened-files-list .opened-file-row').first();
+  const openedFileLabel = openedFileRow.locator('.opened-file-label');
   const fileMenuButton = page.getByRole('button', { name: 'File', exact: true });
   const exportMenuItem = page.locator('#export-image-button');
   const exportFilenameInput = page.locator('#export-filename-input');
 
   await expect(openedFileRow).toHaveCount(1);
   await expect(openedFileRow).toContainText('cbox_rgb.exr');
-  await openedFileRow.press('Enter');
+  await openedFileLabel.dblclick();
 
   const renameInput = openedFileRow.locator('.opened-file-rename-input');
   await expect(renameInput).toBeFocused();

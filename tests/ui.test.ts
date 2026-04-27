@@ -4355,6 +4355,45 @@ describe('opened files actions', () => {
     expect(document.querySelector('#opened-files-list .opened-file-rename-input')).toBeNull();
   });
 
+  it('starts inline rename with double-click on an open-file label and commits with Enter', () => {
+    installUiFixture();
+
+    const onOpenedImageDisplayNameChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageDisplayNameChange }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    const label = document.querySelector('#opened-files-list .opened-file-label') as HTMLSpanElement;
+    label.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, button: 0 }));
+
+    const input = document.querySelector('#opened-files-list .opened-file-rename-input') as HTMLInputElement;
+    expect(input).toBeInstanceOf(HTMLInputElement);
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe('image.exr');
+
+    input.value = '  Hero Plate.exr  ';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    expect(onOpenedImageDisplayNameChange).toHaveBeenCalledWith('session-1', 'Hero Plate.exr');
+    expect(document.querySelector('#opened-files-list .opened-file-rename-input')).toBeNull();
+  });
+
+  it('ignores double-click rename outside open-file labels', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    const row = document.querySelector('#opened-files-list .opened-file-row') as HTMLDivElement;
+    const grip = row.querySelector('.opened-file-grip') as HTMLElement;
+    const thumbnail = row.querySelector('.file-row-icon, .opened-file-thumbnail') as HTMLElement;
+    const reloadButton = row.querySelector('.opened-file-action-button--reload') as HTMLButtonElement;
+
+    for (const target of [row, grip, thumbnail, reloadButton]) {
+      target.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, button: 0 }));
+      expect(document.querySelector('#opened-files-list .opened-file-rename-input')).toBeNull();
+    }
+  });
+
   it('cancels inline rename with Escape and ignores blank or unchanged committed names', () => {
     installUiFixture();
 
