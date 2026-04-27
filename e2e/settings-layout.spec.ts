@@ -88,6 +88,82 @@ async function readViewerBackgroundState(page: Page): Promise<{
   });
 }
 
+async function readSpectrumLatticeCanvasState(page: Page): Promise<{
+  hasWebGl2: boolean;
+  fallback: boolean;
+  width: number;
+  height: number;
+  firstPixels: number[];
+  secondPixels: number[];
+  animated: boolean;
+}> {
+  return await page.evaluate(async () => {
+    const canvas = document.getElementById('spectrum-lattice-canvas');
+    if (!(canvas instanceof HTMLCanvasElement)) {
+      throw new Error('Missing Spectrum lattice canvas.');
+    }
+
+    const waitFrame = async () => {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+    };
+    const waitMs = async (ms: number) => {
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, ms);
+      });
+    };
+
+    await waitFrame();
+    await waitFrame();
+
+    const gl = canvas.getContext('webgl2');
+    if (!gl) {
+      return {
+        hasWebGl2: false,
+        fallback: canvas.classList.contains('spectrum-lattice-canvas--fallback'),
+        width: canvas.width,
+        height: canvas.height,
+        firstPixels: [],
+        secondPixels: [],
+        animated: false
+      };
+    }
+
+    const readPixels = (): number[] => {
+      if (canvas.width <= 0 || canvas.height <= 0) {
+        return [];
+      }
+
+      const samples: number[] = [];
+      for (const [xRatio, yRatio] of [[0.5, 0.5], [0.25, 0.35], [0.75, 0.65]]) {
+        const pixel = new Uint8Array(4);
+        const x = Math.min(canvas.width - 1, Math.max(0, Math.floor(canvas.width * xRatio)));
+        const y = Math.min(canvas.height - 1, Math.max(0, Math.floor(canvas.height * yRatio)));
+        gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+        samples.push(...pixel);
+      }
+      return samples;
+    };
+
+    const firstPixels = readPixels();
+    await waitMs(250);
+    await waitFrame();
+    await waitFrame();
+    const secondPixels = readPixels();
+
+    return {
+      hasWebGl2: true,
+      fallback: canvas.classList.contains('spectrum-lattice-canvas--fallback'),
+      width: canvas.width,
+      height: canvas.height,
+      firstPixels,
+      secondPixels,
+      animated: firstPixels.some((value, index) => value !== secondPixels[index])
+    };
+  });
+}
+
 async function expectViewerBackgroundLayerOpacity(
   page: Page,
   expected: { checker: number; spectrumGrid: number }
@@ -608,6 +684,13 @@ test('persists Spectrum lattice as animated idle and frozen active chrome', asyn
   const spectrumViewerBackground = await readViewerBackgroundState(page);
   expect(spectrumViewerBackground.checkerBackgroundImage).toContain('conic-gradient');
   expect(spectrumViewerBackground.spectrumGridBackgroundImage).toContain('linear-gradient');
+  const spectrumCanvasState = await readSpectrumLatticeCanvasState(page);
+  expect(spectrumCanvasState.hasWebGl2).toBe(true);
+  expect(spectrumCanvasState.fallback).toBe(false);
+  expect(spectrumCanvasState.width).toBeGreaterThan(0);
+  expect(spectrumCanvasState.height).toBeGreaterThan(0);
+  expect(spectrumCanvasState.firstPixels.length).toBeGreaterThan(0);
+  expect(spectrumCanvasState.animated).toBe(true);
   const spectrumLayoutState = await page.evaluate(() => {
     const appShell = document.getElementById('app');
     const mainLayout = document.getElementById('main-layout');

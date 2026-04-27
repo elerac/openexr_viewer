@@ -92,6 +92,20 @@ describe('SpectrumLatticeRenderer', () => {
     expect(canvas.height).toBe(320);
   });
 
+  it('uses defined shader math for Windows Chrome ANGLE portability', () => {
+    const { gl, renderer } = createHarness();
+
+    renderer.setMode('idle');
+
+    const fragmentSource = readSpectrumFragmentShaderSource(gl);
+    expect(fragmentSource).toContain('1.0 - smoothstep(0.72, 1.0, x)');
+    expect(fragmentSource).not.toContain('smoothstep(1.0, 0.72, x)');
+    expect(fragmentSource).toContain('pow(max(col, vec3(0.0)), vec3(0.92))');
+    expect(fragmentSource).toContain('pow(max(perceived, vec3(0.0)), vec3(PERCEPTUAL_GAMMA))');
+    expect(fragmentSource).not.toMatch(/\bpow\s*\(\s*col\s*,/);
+    expect(fragmentSource).not.toMatch(/\bpow\s*\(\s*perceived\s*,/);
+  });
+
   it('keeps fallback and blend state usable when WebGL is unavailable', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
     const canvas = document.createElement('canvas');
@@ -270,7 +284,19 @@ function readUniform1fValues(gl: ReturnType<typeof createWebGlContextMock>, name
     .map((call) => call[1] as number);
 }
 
+function readSpectrumFragmentShaderSource(gl: ReturnType<typeof createWebGlContextMock>): string {
+  const source = gl.shaderSource.mock.calls
+    .map((call) => call[1] as string)
+    .find((shaderSource) => shaderSource.includes('out vec4 fragColor'));
+  if (!source) {
+    throw new Error('Spectrum lattice fragment shader source was not compiled.');
+  }
+
+  return source;
+}
+
 function createWebGlContextMock(): WebGL2RenderingContext & {
+  shaderSource: ReturnType<typeof vi.fn>;
   uniform1f: ReturnType<typeof vi.fn>;
   drawArrays: ReturnType<typeof vi.fn>;
 } {
@@ -316,6 +342,7 @@ function createWebGlContextMock(): WebGL2RenderingContext & {
     deleteBuffer: vi.fn(),
     deleteVertexArray: vi.fn()
   } as unknown as WebGL2RenderingContext & {
+    shaderSource: ReturnType<typeof vi.fn>;
     uniform1f: ReturnType<typeof vi.fn>;
     drawArrays: ReturnType<typeof vi.fn>;
   };

@@ -56,7 +56,7 @@ float hash21(vec2 p) {
 vec3 spectral(float x) {
   x = clamp(x, 0.0, 1.0);
   vec3 c = 0.5 + 0.5 * cos(TAU * (x + vec3(0.02, 0.35, 0.68)));
-  c *= smoothstep(0.0, 0.08, x) * smoothstep(1.0, 0.72, x);
+  c *= smoothstep(0.0, 0.08, x) * (1.0 - smoothstep(0.72, 1.0, x));
   c += vec3(0.02, 0.06, 0.09);
   return pow(c, vec3(1.18));
 }
@@ -107,12 +107,12 @@ void main() {
   float scanline = 0.965 + 0.035 * sin(gl_FragCoord.y * PI);
   col += dust * 0.015;
   col *= scanline;
-  col = vignette(uv, col);
+  col = max(vignette(uv, col), vec3(0.0));
   col = 1.0 - exp(-col * 1.15);
-  col = pow(col, vec3(0.92));
+  col = pow(max(col, vec3(0.0)), vec3(0.92));
   vec3 perceived = pow(max(col, vec3(0.0)), vec3(INVERSE_PERCEPTUAL_GAMMA));
   perceived *= uPerceivedBrightness;
-  col = pow(perceived, vec3(PERCEPTUAL_GAMMA));
+  col = pow(max(perceived, vec3(0.0)), vec3(PERCEPTUAL_GAMMA));
 
   fragColor = vec4(col, 1.0);
 }
