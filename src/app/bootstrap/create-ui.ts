@@ -1,5 +1,7 @@
 import { DEFAULT_DISPLAY_CACHE_BUDGET_MB } from '../../display-cache';
 import { ViewerUi, type UiCallbacks } from '../../ui/viewer-ui';
+import { imageToScreen } from '../../interaction/image-geometry';
+import { getPanoramaProjectionDiameter } from '../../interaction/panorama-geometry';
 import {
   handleExportColormap,
   handleExportImage,
@@ -7,6 +9,8 @@ import {
   resolveExportImageBatchPreviewPixels
 } from './export-actions';
 import type { ExportImagePixels } from '../../export-image';
+import { mergeRenderState } from '../../view-state';
+import { selectActiveSession } from '../viewer-app-selectors';
 import { ViewerAppCore } from '../viewer-app-core';
 import type { DisplayController } from '../../controllers/display-controller';
 import type { SessionController } from '../../controllers/session-controller';
@@ -18,7 +22,9 @@ import type {
   ExportImagePreviewRequest,
   ExportImageRequest,
   OpenedImageDropPlacement,
-  ViewerKeyboardNavigationInput
+  ViewerKeyboardNavigationInput,
+  ViewportInfo,
+  ViewportRect
 } from '../../types';
 import type { StokesColormapDefaultGroup, StokesColormapDefaultSetting } from '../../stokes';
 import type { RenderCacheService } from '../../services/render-cache-service';
@@ -161,6 +167,37 @@ export function createViewerUi({
     onAutoFitImage: () => {
       getSessionController().fitActiveSessionToViewport();
     },
+    getScreenshotFitRect: () => {
+      const state = core.getState();
+      const activeSession = selectActiveSession(state);
+      if (!activeSession) {
+        return null;
+      }
+
+      const viewport = getRenderer().getViewport();
+      const renderState = mergeRenderState(state.sessionState, state.interactionState);
+      if (renderState.viewerMode === 'panorama') {
+        return resolveVisiblePanoramaRect(renderState.panoramaHfovDeg, viewport);
+      }
+
+      if (renderState.viewerMode !== 'image') {
+        return null;
+      }
+
+      const topLeft = imageToScreen(0, 0, renderState, viewport);
+      const bottomRight = imageToScreen(
+        activeSession.decoded.width,
+        activeSession.decoded.height,
+        renderState,
+        viewport
+      );
+      return intersectViewportRect({
+        x: Math.min(topLeft.x, bottomRight.x),
+        y: Math.min(topLeft.y, bottomRight.y),
+        width: Math.abs(bottomRight.x - topLeft.x),
+        height: Math.abs(bottomRight.y - topLeft.y)
+      }, viewport);
+    },
     onViewerModeChange: (mode) => {
       getDisplayController().setViewerMode(mode);
     },
@@ -213,4 +250,50 @@ export function createViewerUi({
   };
 
   return new ViewerUi(callbacks);
+}
+
+function resolveVisiblePanoramaRect(hfovDeg: number, viewport: ViewportInfo): ViewportRect | null {
+  const projectionDiameter = getPanoramaProjectionDiameter(viewport, hfovDeg);
+  return intersectViewportRect({
+    x: viewport.width * 0.5 - projectionDiameter * 0.5,
+    y: viewport.height * 0.5 - projectionDiameter * 0.5,
+    width: projectionDiameter,
+    height: projectionDiameter
+  }, viewport);
+}
+
+function intersectViewportRect(rect: ViewportRect, viewport: ViewportInfo): ViewportRect | null {
+  const viewportWidth = Math.max(0, viewport.width);
+  const viewportHeight = Math.max(0, viewport.height);
+  if (!isFinitePositiveRect(rect) || viewportWidth <= 0 || viewportHeight <= 0) {
+    return null;
+  }
+
+  const x0 = Math.max(0, Math.min(viewportWidth, rect.x));
+  const y0 = Math.max(0, Math.min(viewportHeight, rect.y));
+  const x1 = Math.max(0, Math.min(viewportWidth, rect.x + rect.width));
+  const y1 = Math.max(0, Math.min(viewportHeight, rect.y + rect.height));
+  const width = x1 - x0;
+  const height = y1 - y0;
+  if (width <= 0 || height <= 0) {
+    return null;
+  }
+
+  return {
+    x: x0,
+    y: y0,
+    width,
+    height
+  };
+}
+
+function isFinitePositiveRect(rect: ViewportRect): boolean {
+  return (
+    Number.isFinite(rect.x) &&
+    Number.isFinite(rect.y) &&
+    Number.isFinite(rect.width) &&
+    Number.isFinite(rect.height) &&
+    rect.width > 0 &&
+    rect.height > 0
+  );
 }

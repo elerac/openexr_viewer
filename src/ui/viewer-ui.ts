@@ -136,6 +136,7 @@ export interface UiCallbacks {
   onViewerKeyboardNavigationInputChange: (input: ViewerKeyboardNavigationInput) => void;
   onAutoFitImageOnSelectChange: (enabled: boolean) => void;
   onAutoFitImage: () => void;
+  getScreenshotFitRect: () => ViewportRect | null;
   onViewerModeChange: (mode: ViewerMode) => void;
   onLayerChange: (layerIndex: number) => void;
   onRgbGroupChange: (mapping: DisplaySelection) => void;
@@ -1194,6 +1195,23 @@ export class ViewerUi implements Disposable {
     });
   }
 
+  private fitScreenshotSelectionToCurrentImage(): void {
+    if (this.disposed || !this.screenshotSelection) {
+      return;
+    }
+
+    const rect = this.callbacks.getScreenshotFitRect();
+    if (!rect) {
+      return;
+    }
+
+    this.setScreenshotSelectionResizeActive(false);
+    this.setScreenshotSelectionRect(rect, {
+      squareSnapped: false,
+      snapGuide: createEmptySnapGuide()
+    });
+  }
+
   private openExportImageDialog(): void {
     if (this.elements.exportImageButton.disabled) {
       return;
@@ -1485,6 +1503,10 @@ export class ViewerUi implements Disposable {
       if (event.detail > 0) {
         this.elements.appAutoFitImageButton.blur();
       }
+    });
+
+    this.disposables.addEventListener(this.elements.screenshotSelectionFitButton, 'click', () => {
+      this.fitScreenshotSelectionToCurrentImage();
     });
 
     this.disposables.addEventListener(this.elements.screenshotSelectionCancelButton, 'click', () => {

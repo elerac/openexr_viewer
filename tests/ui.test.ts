@@ -27,6 +27,7 @@ import { formatProbeCoordinates } from '../src/ui/probe-readout';
 import { getListboxOptionIndexAtClientY } from '../src/ui/render-helpers';
 import { ViewerUi } from '../src/ui/viewer-ui';
 import { SPECTRUM_LATTICE_THEME_ID, THEME_STORAGE_KEY } from '../src/theme';
+import type { ViewportRect } from '../src/types';
 import {
   SPECTRUM_LATTICE_MOTION_ANIMATE,
   SPECTRUM_LATTICE_MOTION_FOLLOW_SYSTEM,
@@ -2719,6 +2720,90 @@ describe('view menu', () => {
     }, expect.any(AbortSignal));
 
     dialogCancelButton.click();
+  });
+
+  it('fits screenshot selection to the current visible image bounds', () => {
+    installUiFixture();
+
+    const getScreenshotFitRect = vi.fn(() => ({ x: 20, y: 10, width: 150, height: 72 }));
+    const ui = new ViewerUi(createUiCallbacks({ getScreenshotFitRect }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+    mockDomRect(viewerContainer, { top: 0, bottom: 120, height: 120, width: 220 });
+
+    const screenshotButton = document.getElementById('export-screenshot-button') as HTMLButtonElement;
+    const fitButton = document.getElementById('screenshot-selection-fit-button') as HTMLButtonElement;
+    const overlay = document.getElementById('screenshot-selection-overlay') as HTMLDivElement;
+    const selectionBox = document.getElementById('screenshot-selection-box') as HTMLDivElement;
+
+    screenshotButton.click();
+    ui.setScreenshotSelectionRect({ x: 30, y: 20, width: 80, height: 50 });
+    fitButton.click();
+
+    expect(getScreenshotFitRect).toHaveBeenCalledTimes(1);
+    expect(overlay.classList.contains('hidden')).toBe(false);
+    expect(selectionBox.style.left).toBe('20px');
+    expect(selectionBox.style.top).toBe('10px');
+    expect(selectionBox.style.width).toBe('150px');
+    expect(selectionBox.style.height).toBe('72px');
+
+    ui.cancelScreenshotSelection();
+  });
+
+  it('fits screenshot selection to clipped visible image bounds', () => {
+    installUiFixture();
+
+    const getScreenshotFitRect = vi.fn(() => ({ x: 0, y: 18, width: 96, height: 82 }));
+    const ui = new ViewerUi(createUiCallbacks({ getScreenshotFitRect }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+    mockDomRect(viewerContainer, { top: 0, bottom: 100, height: 100, width: 160 });
+
+    const screenshotButton = document.getElementById('export-screenshot-button') as HTMLButtonElement;
+    const fitButton = document.getElementById('screenshot-selection-fit-button') as HTMLButtonElement;
+    const selectionBox = document.getElementById('screenshot-selection-box') as HTMLDivElement;
+
+    screenshotButton.click();
+    fitButton.click();
+
+    expect(selectionBox.style.left).toBe('0px');
+    expect(selectionBox.style.top).toBe('18px');
+    expect(selectionBox.style.width).toBe('96px');
+    expect(selectionBox.style.height).toBe('82px');
+
+    ui.cancelScreenshotSelection();
+  });
+
+  it('leaves screenshot selection unchanged when fit bounds are unavailable', () => {
+    installUiFixture();
+
+    const getScreenshotFitRect = vi.fn(() => null);
+    const ui = new ViewerUi(createUiCallbacks({ getScreenshotFitRect }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+    mockDomRect(viewerContainer, { top: 0, bottom: 100, height: 100, width: 200 });
+
+    const screenshotButton = document.getElementById('export-screenshot-button') as HTMLButtonElement;
+    const fitButton = document.getElementById('screenshot-selection-fit-button') as HTMLButtonElement;
+    const selectionBox = document.getElementById('screenshot-selection-box') as HTMLDivElement;
+
+    screenshotButton.click();
+    ui.setScreenshotSelectionRect({ x: 40, y: 20, width: 120, height: 60 });
+    fitButton.click();
+
+    expect(getScreenshotFitRect).toHaveBeenCalledTimes(1);
+    expect(selectionBox.style.left).toBe('40px');
+    expect(selectionBox.style.top).toBe('20px');
+    expect(selectionBox.style.width).toBe('120px');
+    expect(selectionBox.style.height).toBe('60px');
+
+    ui.cancelScreenshotSelection();
   });
 
   it('starts screenshot selection from the top bar screenshot button', () => {
@@ -6479,6 +6564,7 @@ function createUiCallbacksBase() {
     onViewerKeyboardNavigationInputChange: () => {},
     onAutoFitImageOnSelectChange: () => {},
     onAutoFitImage: () => {},
+    getScreenshotFitRect: (): ViewportRect | null => null,
     onViewerModeChange: () => {},
     onLayerChange: () => {},
     onRgbGroupChange: () => {},

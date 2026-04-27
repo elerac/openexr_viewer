@@ -176,6 +176,7 @@ export interface Elements {
   screenshotSelectionBox: HTMLDivElement;
   screenshotSelectionSize: HTMLDivElement;
   screenshotSelectionControls: HTMLDivElement;
+  screenshotSelectionFitButton: HTMLButtonElement;
   screenshotSelectionCancelButton: HTMLButtonElement;
   screenshotSelectionExportButton: HTMLButtonElement;
   screenshotSelectionExportBatchButton: HTMLButtonElement;
@@ -582,6 +583,7 @@ export function resolveElements(): Elements {
     screenshotSelectionBox: requireElement('screenshot-selection-box', HTMLDivElement),
     screenshotSelectionSize: requireElement('screenshot-selection-size', HTMLDivElement),
     screenshotSelectionControls: requireElement('screenshot-selection-controls', HTMLDivElement),
+    screenshotSelectionFitButton: requireElement('screenshot-selection-fit-button', HTMLButtonElement),
     screenshotSelectionCancelButton: requireElement('screenshot-selection-cancel-button', HTMLButtonElement),
     screenshotSelectionExportButton: requireElement('screenshot-selection-export-button', HTMLButtonElement),
     screenshotSelectionExportBatchButton: requireElement('screenshot-selection-export-batch-button', HTMLButtonElement)
