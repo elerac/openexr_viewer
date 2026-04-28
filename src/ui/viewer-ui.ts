@@ -108,6 +108,7 @@ import {
 const AUTO_FIT_IMAGE_ON_SELECT_STORAGE_KEY = 'openexr-viewer:auto-fit-image-on-select:v1';
 const AUTO_EXPOSURE_STORAGE_KEY = 'openexr-viewer:auto-exposure:v1';
 const AUTO_EXPOSURE_PERCENTILE_STORAGE_KEY = 'openexr-viewer:auto-exposure-percentile:v1';
+const RULERS_VISIBLE_STORAGE_KEY = 'openexr-viewer:rulers-visible:v1';
 
 export interface UiCallbacks {
   onOpenFileClick: () => void;
@@ -150,6 +151,7 @@ export interface UiCallbacks {
   onAutoFitImage: () => void;
   onAutoExposureChange: (enabled: boolean) => void;
   onAutoExposurePercentileChange: (percentile: number) => void;
+  onRulersVisibleChange: (enabled: boolean) => void;
   getScreenshotFitRect: () => ViewportRect | null;
   onViewerModeChange: (mode: ViewerMode) => void;
   onLayerChange: (layerIndex: number) => void;
@@ -226,6 +228,7 @@ export class ViewerUi implements Disposable {
   private autoFitImageOnSelect = false;
   private autoExposureEnabled = false;
   private autoExposurePercentile = AUTO_EXPOSURE_PERCENTILE;
+  private rulersVisible = false;
   private hasActiveChannelImage = false;
   private disposed = false;
 
@@ -494,6 +497,8 @@ export class ViewerUi implements Disposable {
     this.callbacks.onAutoExposureChange(this.autoExposureEnabled);
     this.setAutoExposurePercentile(readStoredAutoExposurePercentile(), false);
     this.callbacks.onAutoExposurePercentileChange(this.autoExposurePercentile);
+    this.setRulersVisible(readStoredRulersVisible(), false);
+    this.callbacks.onRulersVisibleChange(this.rulersVisible);
     this.updateViewerModeMenuItemsDisabled();
     this.updateFileMenuItemsDisabled();
     this.bindEvents();
@@ -513,6 +518,10 @@ export class ViewerUi implements Disposable {
 
   get probeOverlayCanvas(): HTMLCanvasElement {
     return this.elements.probeOverlayCanvas;
+  }
+
+  get rulerOverlayCanvas(): HTMLCanvasElement {
+    return this.elements.rulerOverlayCanvas;
   }
 
   dispose(): void {
@@ -620,6 +629,18 @@ export class ViewerUi implements Disposable {
     this.elements.autoExposurePercentileInput.value = formatAutoExposurePercentile(this.autoExposurePercentile);
     if (persist) {
       saveStoredAutoExposurePercentile(this.autoExposurePercentile);
+    }
+  }
+
+  setRulersVisible(enabled: boolean, persist = false): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.rulersVisible = enabled;
+    this.elements.rulersMenuItem.setAttribute('aria-checked', enabled ? 'true' : 'false');
+    if (persist) {
+      saveStoredRulersVisible(enabled);
     }
   }
 
@@ -1661,6 +1682,13 @@ export class ViewerUi implements Disposable {
       this.callbacks.onViewerModeChange('panorama');
     });
 
+    this.disposables.addEventListener(this.elements.rulersMenuItem, 'click', () => {
+      const enabled = !this.rulersVisible;
+      this.setRulersVisible(enabled, true);
+      this.topMenuController.closeAll();
+      this.callbacks.onRulersVisibleChange(enabled);
+    });
+
     this.disposables.addEventListener(this.elements.windowNormalMenuItem, 'click', () => {
       this.topMenuController.closeAll();
       void this.windowPreviewController.setEnabled(false);
@@ -2036,6 +2064,22 @@ function saveStoredAutoExposurePercentile(percentile: number): void {
     }
 
     window.localStorage.setItem(AUTO_EXPOSURE_PERCENTILE_STORAGE_KEY, formatAutoExposurePercentile(value));
+  } catch {
+    // Storage can be unavailable in private contexts; keep the runtime state anyway.
+  }
+}
+
+function readStoredRulersVisible(): boolean {
+  try {
+    return window.localStorage.getItem(RULERS_VISIBLE_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function saveStoredRulersVisible(enabled: boolean): void {
+  try {
+    window.localStorage.setItem(RULERS_VISIBLE_STORAGE_KEY, String(enabled));
   } catch {
     // Storage can be unavailable in private contexts; keep the runtime state anyway.
   }

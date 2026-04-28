@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => {
     autoFitImageOnSelect: false,
     autoExposureEnabled: false,
     autoExposurePercentile: 99.5,
+    rulersVisible: false,
     pendingAutoExposureRequestId: null,
     pendingAutoExposureRequestKey: null,
     sessionState: {
@@ -217,6 +218,7 @@ vi.mock('../src/ui/viewer-ui', () => ({
     readonly glCanvas = document.createElement('canvas');
     readonly overlayCanvas = document.createElement('canvas');
     readonly probeOverlayCanvas = document.createElement('canvas');
+    readonly rulerOverlayCanvas = document.createElement('canvas');
     readonly dispose = mocks.uiDispose;
     readonly setViewerViewportRect = vi.fn((rect: { left: number; top: number }) => {
       this.viewerContainer.style.setProperty('--viewer-checker-offset-x', `${-rect.left}px`);
@@ -227,6 +229,7 @@ vi.mock('../src/ui/viewer-ui', () => ({
     readonly setRgbViewLoading = vi.fn();
     readonly setAutoFitImageOnSelect = vi.fn();
     readonly setAutoExposureEnabled = vi.fn();
+    readonly setRulersVisible = vi.fn();
     readonly setDisplayCacheBudget = vi.fn();
     readonly setDisplayCacheUsage = vi.fn();
     readonly setOpenedImageOptions = vi.fn();
@@ -257,6 +260,8 @@ vi.mock('../src/renderer', () => ({
     readonly renderImage = vi.fn();
     readonly renderValueOverlay = vi.fn();
     readonly renderProbeOverlay = vi.fn();
+    readonly renderRulerOverlay = vi.fn();
+    readonly setRulersVisible = vi.fn();
     readonly getViewport = vi.fn(() => ({ width: 320, height: 180 }));
     readonly clearImage = vi.fn();
     readonly setColormapTexture = vi.fn();

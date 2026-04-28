@@ -33,19 +33,20 @@ export const enum ViewerUiInvalidationFlags {
   ExportBatchTarget = 1 << 4,
   AutoFitImageOnSelect = 1 << 5,
   AutoExposure = 1 << 6,
-  Exposure = 1 << 7,
-  ViewerMode = 1 << 8,
-  VisualizationMode = 1 << 9,
-  StokesDegreeModulation = 1 << 10,
-  ActiveColormap = 1 << 11,
-  ColormapOptions = 1 << 12,
-  ColormapGradient = 1 << 13,
-  ColormapRange = 1 << 14,
-  LayerOptions = 1 << 15,
-  Metadata = 1 << 16,
-  RgbGroupOptions = 1 << 17,
-  ClearPanels = 1 << 18,
-  StokesColormapDefaults = 1 << 19
+  RulersVisible = 1 << 7,
+  Exposure = 1 << 8,
+  ViewerMode = 1 << 9,
+  VisualizationMode = 1 << 10,
+  StokesDegreeModulation = 1 << 11,
+  ActiveColormap = 1 << 12,
+  ColormapOptions = 1 << 13,
+  ColormapGradient = 1 << 14,
+  ColormapRange = 1 << 15,
+  LayerOptions = 1 << 16,
+  Metadata = 1 << 17,
+  RgbGroupOptions = 1 << 18,
+  ClearPanels = 1 << 19,
+  StokesColormapDefaults = 1 << 20
 }
 
 export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => ViewerUiSnapshot {
@@ -77,6 +78,7 @@ export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => Vie
       ),
       autoFitImageOnSelect: state.autoFitImageOnSelect,
       autoExposureEnabled: state.autoExposureEnabled,
+      rulersVisible: state.rulersVisible,
       activeSessionId: state.activeSessionId,
       openedImageOptions: selectOpenedImageOptions(state),
       exportTarget: selectExportTarget(activeSession),
@@ -153,6 +155,10 @@ export function computeViewerUiInvalidation(
 
   if (previous.autoExposureEnabled !== next.autoExposureEnabled) {
     flags |= ViewerUiInvalidationFlags.AutoExposure;
+  }
+
+  if (previous.rulersVisible !== next.rulersVisible) {
+    flags |= ViewerUiInvalidationFlags.RulersVisible;
   }
 
   if (previous.exposureEv !== next.exposureEv) {
@@ -399,6 +405,7 @@ function sameViewerUiSnapshot(a: ViewerUiSnapshot, b: ViewerUiSnapshot): boolean
     a.isDisplayOverlayLoading === b.isDisplayOverlayLoading &&
     a.autoFitImageOnSelect === b.autoFitImageOnSelect &&
     a.autoExposureEnabled === b.autoExposureEnabled &&
+    a.rulersVisible === b.rulersVisible &&
     a.activeSessionId === b.activeSessionId &&
     sameOpenedImageOptions(a.openedImageOptions, b.openedImageOptions) &&
     sameExportTarget(a.exportTarget, b.exportTarget) &&

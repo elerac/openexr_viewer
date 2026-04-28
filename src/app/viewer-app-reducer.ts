@@ -74,7 +74,8 @@ export function createInitialViewerAppState(): ViewerAppState {
     stokesColormapDefaults: createDefaultStokesColormapDefaultSettings(),
     autoFitImageOnSelect: false,
     autoExposureEnabled: false,
-    autoExposurePercentile: AUTO_EXPOSURE_PERCENTILE
+    autoExposurePercentile: AUTO_EXPOSURE_PERCENTILE,
+    rulersVisible: false
   };
 }
 
@@ -111,6 +112,11 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         pendingAutoExposureRequestKey: null
       };
     }
+    case 'rulersVisibleSet':
+      return state.rulersVisible === intent.enabled ? state : {
+        ...state,
+        rulersVisible: intent.enabled
+      };
     case 'colormapRegistryResolved': {
       const nextState = patchSessionState(state, {
         activeColormapId: intent.registry.defaultId

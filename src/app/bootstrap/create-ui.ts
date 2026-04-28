@@ -178,6 +178,9 @@ export function createViewerUi({
     onAutoExposurePercentileChange: (percentile) => {
       core.dispatch({ type: 'autoExposurePercentileSet', percentile });
     },
+    onRulersVisibleChange: (enabled) => {
+      core.dispatch({ type: 'rulersVisibleSet', enabled });
+    },
     getScreenshotFitRect: () => {
       const state = core.getState();
       const activeSession = selectActiveSession(state);

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { gotoViewerApp, openGalleryCbox } from './helpers/app';
 import { buildScalarChannelExr, buildSpectralExr } from './helpers/exr-fixtures';
 import { dragViewerRoi, readProbeCoords } from './helpers/viewer';
@@ -128,6 +128,27 @@ test('disables the top-bar auto-fit toggle while panorama view is active', async
   await expect(autoFitButton).toHaveAttribute('aria-pressed', 'true');
 });
 
+test('toggles pixel rulers in image view and clears them in panorama view', async ({ page }) => {
+  await gotoViewerApp(page);
+  await openGalleryCbox(page);
+
+  const viewMenuButton = page.locator('#view-menu-button');
+  const rulersMenuItem = page.locator('#rulers-menu-item');
+  const panoramaViewerMenuItem = page.locator('#panorama-viewer-menu-item');
+
+  await expect(rulersMenuItem).toHaveAttribute('aria-checked', 'false');
+  await viewMenuButton.click();
+  await rulersMenuItem.click();
+  await expect(rulersMenuItem).toHaveAttribute('aria-checked', 'true');
+
+  await expect.poll(async () => countRulerOverlayPixels(page), { timeout: 5000 }).toBeGreaterThan(0);
+
+  await viewMenuButton.click();
+  await panoramaViewerMenuItem.click();
+
+  await expect.poll(async () => countRulerOverlayPixels(page), { timeout: 5000 }).toBe(0);
+});
+
 test('creates ROI with shift-drag and keeps ROI editing disabled in panorama mode', async ({ page }) => {
   await gotoViewerApp(page);
   await openGalleryCbox(page);
@@ -152,6 +173,25 @@ test('creates ROI with shift-drag and keeps ROI editing disabled in panorama mod
 
   await expect(roiBounds).toHaveText(initialBounds);
 });
+
+async function countRulerOverlayPixels(page: Page): Promise<number> {
+  return page.locator('#ruler-overlay-canvas').evaluate((node) => {
+    const canvas = node as HTMLCanvasElement;
+    const context = canvas.getContext('2d');
+    if (!context || canvas.width <= 0 || canvas.height <= 0) {
+      return 0;
+    }
+
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let paintedPixels = 0;
+    for (let index = 3; index < pixels.length; index += 4) {
+      if (pixels[index] !== 0) {
+        paintedPixels += 1;
+      }
+    }
+    return paintedPixels;
+  });
+}
 
 test('carries ROI across open-file switches', async ({ page }) => {
   await gotoViewerApp(page);

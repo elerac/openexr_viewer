@@ -1,6 +1,7 @@
 import { GlImageRenderer } from './rendering/gl-image-renderer';
 import { OverlayRenderer } from './rendering/overlay-renderer';
 import { ProbeOverlayRenderer } from './rendering/probe-overlay-renderer';
+import { RulerOverlayRenderer } from './rendering/ruler-overlay-renderer';
 import type { ExportImagePixels } from './export-image';
 import type { Disposable } from './lifecycle';
 import type { DisplaySourceBinding } from './display-texture';
@@ -12,16 +13,20 @@ export class WebGlExrRenderer implements Disposable {
   private readonly imageRenderer: GlImageRenderer;
   private readonly overlayRenderer: OverlayRenderer;
   private readonly probeOverlayRenderer: ProbeOverlayRenderer;
+  private readonly rulerOverlayRenderer: RulerOverlayRenderer;
+  private rulersVisible = false;
   private disposed = false;
 
   constructor(
     glCanvas: HTMLCanvasElement,
     overlayCanvas: HTMLCanvasElement,
-    probeOverlayCanvas: HTMLCanvasElement
+    probeOverlayCanvas: HTMLCanvasElement,
+    rulerOverlayCanvas: HTMLCanvasElement
   ) {
     this.imageRenderer = new GlImageRenderer(glCanvas);
     this.overlayRenderer = new OverlayRenderer(overlayCanvas);
     this.probeOverlayRenderer = new ProbeOverlayRenderer(probeOverlayCanvas);
+    this.rulerOverlayRenderer = new RulerOverlayRenderer(rulerOverlayCanvas);
   }
 
   getViewport(): ViewportInfo {
@@ -41,6 +46,7 @@ export class WebGlExrRenderer implements Disposable {
     const viewport = this.imageRenderer.getViewport();
     this.overlayRenderer.resize(viewport.width, viewport.height);
     this.probeOverlayRenderer.resize(viewport.width, viewport.height);
+    this.rulerOverlayRenderer.resize(viewport.width, viewport.height);
   }
 
   ensureLayerChannelsResident(
@@ -76,6 +82,7 @@ export class WebGlExrRenderer implements Disposable {
     this.imageRenderer.setDisplaySelectionBindings(sessionId, layerIndex, width, height, binding);
     this.overlayRenderer.setDisplaySelectionContext(width, height, layer, selection, visualizationMode);
     this.probeOverlayRenderer.setImagePresent(true);
+    this.rulerOverlayRenderer.setImageSize(width, height);
   }
 
   setColormapTexture(entryCount: number, rgba8: Uint8Array): void {
@@ -118,6 +125,7 @@ export class WebGlExrRenderer implements Disposable {
     this.imageRenderer.clearImage();
     this.overlayRenderer.clearImage();
     this.probeOverlayRenderer.clearImage();
+    this.rulerOverlayRenderer.clearImage();
   }
 
   render(state: ViewerRenderState): void {
@@ -128,6 +136,7 @@ export class WebGlExrRenderer implements Disposable {
     this.renderImage(state);
     this.renderValueOverlay(state);
     this.renderProbeOverlay(state);
+    this.renderRulerOverlay(state);
   }
 
   renderImage(state: ViewerState): void {
@@ -154,6 +163,22 @@ export class WebGlExrRenderer implements Disposable {
     this.probeOverlayRenderer.render(state);
   }
 
+  setRulersVisible(visible: boolean): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.rulersVisible = visible;
+  }
+
+  renderRulerOverlay(state: ViewerState): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.rulerOverlayRenderer.render(state, this.rulersVisible);
+  }
+
   readExportPixels(args: ReadExportPixelsArgs): ExportImagePixels {
     if (this.disposed) {
       throw new Error('Renderer has been disposed.');
@@ -168,6 +193,7 @@ export class WebGlExrRenderer implements Disposable {
     }
 
     this.disposed = true;
+    this.rulerOverlayRenderer.dispose();
     this.probeOverlayRenderer.dispose();
     this.overlayRenderer.dispose();
     this.imageRenderer.dispose();

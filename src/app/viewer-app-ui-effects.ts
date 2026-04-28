@@ -34,6 +34,10 @@ export function applyUiEffects(ui: ViewerUi, transition: ViewerUiTransition): vo
     ui.setAutoExposureEnabled(snapshot.autoExposureEnabled);
   }
 
+  if (invalidation & ViewerUiInvalidationFlags.RulersVisible) {
+    ui.setRulersVisible(snapshot.rulersVisible);
+  }
+
   if (invalidation & ViewerUiInvalidationFlags.Exposure) {
     ui.setExposure(snapshot.exposureEv);
   }

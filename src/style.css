@@ -35,6 +35,10 @@
   --viewer-checker-offset-y: 0px;
   --viewer-checker-opacity: 1;
   --viewer-grid-opacity: 0;
+  --ruler-surface: rgba(13, 18, 26, 0.88);
+  --ruler-border: rgba(215, 221, 232, 0.24);
+  --ruler-tick: rgba(215, 221, 232, 0.72);
+  --ruler-text: rgba(215, 221, 232, 0.92);
   --screenshot-inactive-overlay: rgba(3, 7, 12, 0.46);
   --screenshot-inactive-resizer-opacity: 0.46;
   --z-app-menu: 20;
@@ -43,6 +47,7 @@
   --z-viewer-image: 2;
   --z-viewer-overlay: 3;
   --z-viewer-probe-overlay: 4;
+  --z-viewer-ruler-overlay: 5;
   --z-screenshot-selection: 6;
   --z-drop-overlay: 7;
   --z-loading-overlay: 8;
@@ -80,6 +85,10 @@
   --viewer-background: transparent;
   --viewer-checker-opacity: 0;
   --viewer-grid-opacity: 1;
+  --ruler-surface: rgba(6, 10, 16, 0.72);
+  --ruler-border: rgba(185, 215, 255, 0.2);
+  --ruler-tick: rgba(236, 246, 255, 0.62);
+  --ruler-text: rgba(236, 246, 255, 0.86);
   --screenshot-inactive-overlay: rgba(2, 5, 10, 0.38);
 }
 
@@ -1243,7 +1252,8 @@ body.is-resizing-panel-rows * {
 
 #gl-canvas,
 #overlay-canvas,
-#probe-overlay-canvas {
+#probe-overlay-canvas,
+#ruler-overlay-canvas {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -1271,7 +1281,8 @@ body.is-resizing-panel-rows * {
 }
 
 #overlay-canvas,
-#probe-overlay-canvas {
+#probe-overlay-canvas,
+#ruler-overlay-canvas {
   pointer-events: none;
 }
 
@@ -1281,6 +1292,10 @@ body.is-resizing-panel-rows * {
 
 #probe-overlay-canvas {
   z-index: var(--z-viewer-probe-overlay);
+}
+
+#ruler-overlay-canvas {
+  z-index: var(--z-viewer-ruler-overlay);
 }
 
 .screenshot-selection-overlay {

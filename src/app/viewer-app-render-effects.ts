@@ -36,6 +36,10 @@ export function applyRenderEffects(
     renderer.clearImage();
   }
 
+  if (invalidation & ViewerRenderInvalidationFlags.RenderRulerOverlay) {
+    renderer.setRulersVisible(snapshot.rulersVisible);
+  }
+
   if ((invalidation & ViewerRenderInvalidationFlags.ResourcePrepare) && activeSession) {
     renderCache.prepareActiveSession(activeSession, state.sessionState);
     synchronizeCachedDisplayRange(core, renderCache, activeSession.id, state.sessionState);
@@ -98,6 +102,9 @@ export function applyRenderEffects(
   }
 
   if (!activeSession) {
+    if (invalidation & ViewerRenderInvalidationFlags.RenderRulerOverlay) {
+      renderer.renderRulerOverlay(snapshot.renderState);
+    }
     return;
   }
 
@@ -111,6 +118,10 @@ export function applyRenderEffects(
 
   if (invalidation & ViewerRenderInvalidationFlags.RenderProbeOverlay) {
     renderer.renderProbeOverlay(snapshot.renderState);
+  }
+
+  if (invalidation & ViewerRenderInvalidationFlags.RenderRulerOverlay) {
+    renderer.renderRulerOverlay(snapshot.renderState);
   }
 }
 

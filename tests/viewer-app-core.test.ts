@@ -50,6 +50,18 @@ describe('viewer app core', () => {
     expect(core.getState().autoFitImageOnSelect).toBe(false);
   });
 
+  it('toggles image rulers as application state', () => {
+    const core = new ViewerAppCore();
+
+    expect(core.getState().rulersVisible).toBe(false);
+
+    core.dispatch({ type: 'rulersVisibleSet', enabled: true });
+    expect(core.getState().rulersVisible).toBe(true);
+
+    core.dispatch({ type: 'rulersVisibleSet', enabled: false });
+    expect(core.getState().rulersVisible).toBe(false);
+  });
+
   it('toggles auto exposure and applies resolved exposure only while enabled in None mode', () => {
     const core = new ViewerAppCore();
     const session = createSession('session-1');

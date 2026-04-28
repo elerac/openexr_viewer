@@ -121,6 +121,7 @@ export interface ViewerAppState {
   autoFitImageOnSelect: boolean;
   autoExposureEnabled: boolean;
   autoExposurePercentile: number;
+  rulersVisible: boolean;
 }
 
 export type ViewerIntent =
@@ -129,6 +130,7 @@ export type ViewerIntent =
   | { type: 'autoFitImageOnSelectSet'; enabled: boolean }
   | { type: 'autoExposureSet'; enabled: boolean }
   | { type: 'autoExposurePercentileSet'; percentile: number }
+  | { type: 'rulersVisibleSet'; enabled: boolean }
   | { type: 'colormapRegistryResolved'; registry: ColormapRegistry }
   | { type: 'colormapLoadStarted'; requestId: number }
   | { type: 'colormapLoadResolved'; requestId: number; colormapId: string; lut: ColormapLut }
@@ -216,6 +218,7 @@ export interface ViewerUiSnapshot {
   isDisplayOverlayLoading: boolean;
   autoFitImageOnSelect: boolean;
   autoExposureEnabled: boolean;
+  rulersVisible: boolean;
   activeSessionId: string | null;
   openedImageOptions: ViewerOpenedImageOption[];
   exportTarget: { filename: string } | null;
@@ -258,6 +261,7 @@ export interface ViewerRenderSnapshot {
   resourceTarget: ViewerResourceTarget | null;
   displayRangeRequest: ViewerDisplayRangeRequest | null;
   autoExposureRequest: ViewerAutoExposureRequest | null;
+  rulersVisible: boolean;
 }
 
 export interface ViewerRenderTransition extends ViewerStateTransition {

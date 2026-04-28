@@ -34,7 +34,8 @@ export const enum ViewerRenderInvalidationFlags {
   RenderImage = 1 << 6,
   RenderValueOverlay = 1 << 7,
   RenderProbeOverlay = 1 << 8,
-  ResourceRequestAutoExposure = 1 << 9
+  ResourceRequestAutoExposure = 1 << 9,
+  RenderRulerOverlay = 1 << 10
 }
 
 export function createViewerRenderSnapshotSelector(): (state: ViewerAppState) => ViewerRenderSnapshot {
@@ -59,7 +60,8 @@ export function createViewerRenderSnapshotSelector(): (state: ViewerAppState) =>
       roiReadout: selectRoiReadout(state, activeSession, activeLayer),
       resourceTarget: selectResourceTarget(state, activeSession),
       displayRangeRequest: selectDisplayRangeRequest(state, activeSession, activeLayer),
-      autoExposureRequest: selectAutoExposureRequest(state, activeSession, activeLayer)
+      autoExposureRequest: selectAutoExposureRequest(state, activeSession, activeLayer),
+      rulersVisible: state.rulersVisible
     };
 
     if (previousSnapshot && sameViewerRenderSnapshot(previousSnapshot, nextSnapshot)) {
@@ -119,6 +121,10 @@ export function computeViewerRenderInvalidation(
 
   if (next.activeSession && next.activeLayer && !sameRenderProbeOverlayInputs(previous, next)) {
     flags |= ViewerRenderInvalidationFlags.RenderProbeOverlay;
+  }
+
+  if (!sameRenderRulerOverlayInputs(previous, next)) {
+    flags |= ViewerRenderInvalidationFlags.RenderRulerOverlay;
   }
 
   return flags;
@@ -367,7 +373,8 @@ function sameViewerRenderSnapshot(a: ViewerRenderSnapshot, b: ViewerRenderSnapsh
     sameRoiReadout(a.roiReadout, b.roiReadout) &&
     sameResourceTarget(a.resourceTarget, b.resourceTarget) &&
     sameDisplayRangeRequest(a.displayRangeRequest, b.displayRangeRequest) &&
-    sameAutoExposureRequest(a.autoExposureRequest, b.autoExposureRequest)
+    sameAutoExposureRequest(a.autoExposureRequest, b.autoExposureRequest) &&
+    a.rulersVisible === b.rulersVisible
   );
 }
 
@@ -446,6 +453,25 @@ function sameRenderProbeOverlayInputs(a: ViewerRenderSnapshot, b: ViewerRenderSn
     samePixel(previous.hoveredPixel, next.hoveredPixel) &&
     sameRoi(previous.roi, next.roi) &&
     sameRoi(previous.draftRoi, next.draftRoi) &&
+    sameViewState(previous, next)
+  );
+}
+
+function sameRenderRulerOverlayInputs(a: ViewerRenderSnapshot, b: ViewerRenderSnapshot): boolean {
+  if (!a.rulersVisible && !b.rulersVisible) {
+    return true;
+  }
+
+  if (a.rulersVisible !== b.rulersVisible) {
+    return false;
+  }
+
+  const previous = a.renderState;
+  const next = b.renderState;
+  return (
+    a.activeSession?.id === b.activeSession?.id &&
+    a.activeSession?.decoded === b.activeSession?.decoded &&
+    previous.viewerMode === next.viewerMode &&
     sameViewState(previous, next)
   );
 }

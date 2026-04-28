@@ -39,6 +39,7 @@ export interface Elements {
   resetSettingsButton: HTMLButtonElement;
   imageViewerMenuItem: HTMLButtonElement;
   panoramaViewerMenuItem: HTMLButtonElement;
+  rulersMenuItem: HTMLButtonElement;
   windowNormalMenuItem: HTMLButtonElement;
   windowFullScreenPreviewMenuItem: HTMLButtonElement;
   galleryCboxRgbButton: HTMLButtonElement;
@@ -168,6 +169,7 @@ export interface Elements {
   glCanvas: HTMLCanvasElement;
   overlayCanvas: HTMLCanvasElement;
   probeOverlayCanvas: HTMLCanvasElement;
+  rulerOverlayCanvas: HTMLCanvasElement;
   screenshotSelectionOverlay: HTMLDivElement;
   screenshotSelectionMaskTop: HTMLDivElement;
   screenshotSelectionMaskRight: HTMLDivElement;
@@ -448,6 +450,7 @@ export function resolveElements(): Elements {
     resetSettingsButton: requireElement('reset-settings-button', HTMLButtonElement),
     imageViewerMenuItem: requireElement('image-viewer-menu-item', HTMLButtonElement),
     panoramaViewerMenuItem: requireElement('panorama-viewer-menu-item', HTMLButtonElement),
+    rulersMenuItem: requireElement('rulers-menu-item', HTMLButtonElement),
     windowNormalMenuItem: requireElement('window-normal-menu-item', HTMLButtonElement),
     windowFullScreenPreviewMenuItem: requireElement('window-full-screen-preview-menu-item', HTMLButtonElement),
     galleryCboxRgbButton: requireElement('gallery-cbox-rgb-button', HTMLButtonElement),
@@ -577,6 +580,7 @@ export function resolveElements(): Elements {
     glCanvas: requireElement('gl-canvas', HTMLCanvasElement),
     overlayCanvas: requireElement('overlay-canvas', HTMLCanvasElement),
     probeOverlayCanvas: requireElement('probe-overlay-canvas', HTMLCanvasElement),
+    rulerOverlayCanvas: requireElement('ruler-overlay-canvas', HTMLCanvasElement),
     screenshotSelectionOverlay: requireElement('screenshot-selection-overlay', HTMLDivElement),
     screenshotSelectionMaskTop: requireElement('screenshot-selection-mask-top', HTMLDivElement),
     screenshotSelectionMaskRight: requireElement('screenshot-selection-mask-right', HTMLDivElement),

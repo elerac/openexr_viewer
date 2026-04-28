@@ -127,6 +127,16 @@
               >
                 Panorama viewer
               </button>
+              <div class="app-menu-separator" role="separator" aria-orientation="horizontal"></div>
+              <button
+                id="rulers-menu-item"
+                class="app-menu-item"
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked="false"
+              >
+                Rulers
+              </button>
             </div>
           </div>
           <div class="app-menu">
@@ -807,6 +817,7 @@
           <canvas id="gl-canvas"></canvas>
           <canvas id="overlay-canvas"></canvas>
           <canvas id="probe-overlay-canvas"></canvas>
+          <canvas id="ruler-overlay-canvas" aria-hidden="true"></canvas>
           <div id="screenshot-selection-overlay" class="screenshot-selection-overlay hidden" aria-hidden="true">
             <div id="screenshot-selection-mask-top" class="screenshot-selection-mask"></div>
             <div id="screenshot-selection-mask-right" class="screenshot-selection-mask"></div>

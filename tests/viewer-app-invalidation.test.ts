@@ -123,6 +123,25 @@ describe('viewer app lanes', () => {
     expect(createRenderFlags(state, nextState)).toBe(ViewerRenderInvalidationFlags.None);
   });
 
+  it('exposes ruler visibility through UI and ruler render lanes only', () => {
+    const state = createActiveState();
+    const nextState = {
+      ...state,
+      rulersVisible: true
+    };
+    const selectUiSnapshot = createViewerUiSnapshotSelector();
+    const snapshot = selectUiSnapshot(nextState);
+    const uiFlags = createUiFlags(state, nextState);
+    const renderFlags = createRenderFlags(state, nextState);
+
+    expect(snapshot.rulersVisible).toBe(true);
+    expect(hasUiFlag(uiFlags, ViewerUiInvalidationFlags.RulersVisible)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderRulerOverlay)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(false);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderValueOverlay)).toBe(false);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderProbeOverlay)).toBe(false);
+  });
+
   it('exposes auto exposure through UI and render request lanes', () => {
     const state = createActiveState();
     const nextState = {
@@ -219,6 +238,26 @@ describe('viewer app lanes', () => {
     expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderValueOverlay)).toBe(true);
     expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderProbeOverlay)).toBe(true);
     expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ProbeReadout)).toBe(false);
+  });
+
+  it('redraws rulers on view-only changes when rulers are enabled', () => {
+    const previous = {
+      ...createActiveState(),
+      rulersVisible: true
+    };
+    const next = {
+      ...previous,
+      interactionState: {
+        ...previous.interactionState,
+        view: {
+          ...previous.interactionState.view,
+          panX: previous.interactionState.view.panX + 1
+        }
+      }
+    };
+
+    const renderFlags = createRenderFlags(previous, next);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderRulerOverlay)).toBe(true);
   });
 
   it('treats locked-pixel changes as render-lane probe invalidation', () => {

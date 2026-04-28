@@ -33,7 +33,13 @@ export function createBootstrapServices({
   loadQueue,
   isDisposed
 }: CreateBootstrapServicesArgs): BootstrapServices {
-  const renderer = new WebGlExrRenderer(ui.glCanvas, ui.overlayCanvas, ui.probeOverlayCanvas);
+  const renderer = new WebGlExrRenderer(
+    ui.glCanvas,
+    ui.overlayCanvas,
+    ui.probeOverlayCanvas,
+    ui.rulerOverlayCanvas
+  );
+  renderer.setRulersVisible(core.getState().rulersVisible);
   const renderCache = new RenderCacheService({
     ui,
     renderer,

@@ -37,6 +37,7 @@ import { createDefaultStokesColormapDefaultSettings } from '../src/stokes';
 import { AUTO_EXPOSURE_PERCENTILE } from '../src/auto-exposure';
 
 const AUTO_EXPOSURE_PERCENTILE_STORAGE_KEY = 'openexr-viewer:auto-exposure-percentile:v1';
+const RULERS_VISIBLE_STORAGE_KEY = 'openexr-viewer:rulers-visible:v1';
 
 interface ResizeObserverRegistration {
   callback: ResizeObserverCallback;
@@ -579,6 +580,37 @@ describe('top bar and display controls', () => {
     expect(mouseDownEvent.defaultPrevented).toBe(true);
     expect(button.getAttribute('aria-pressed')).toBe('true');
     expect(document.activeElement).not.toBe(button);
+  });
+
+  it('persists and dispatches the image ruler visibility toggle', () => {
+    installUiFixture();
+
+    const onRulersVisibleChange = vi.fn();
+    new ViewerUi(createUiCallbacks({ onRulersVisibleChange }));
+    const rulersItem = document.getElementById('rulers-menu-item') as HTMLButtonElement;
+
+    expect(rulersItem.getAttribute('aria-checked')).toBe('false');
+    expect(onRulersVisibleChange).toHaveBeenLastCalledWith(false);
+
+    rulersItem.click();
+
+    expect(rulersItem.getAttribute('aria-checked')).toBe('true');
+    expect(window.localStorage.getItem(RULERS_VISIBLE_STORAGE_KEY)).toBe('true');
+    expect(onRulersVisibleChange).toHaveBeenLastCalledWith(true);
+
+    installUiFixture();
+    const restoredCallback = vi.fn();
+    new ViewerUi(createUiCallbacks({ onRulersVisibleChange: restoredCallback }));
+    const restoredRulersItem = document.getElementById('rulers-menu-item') as HTMLButtonElement;
+
+    expect(restoredRulersItem.getAttribute('aria-checked')).toBe('true');
+    expect(restoredCallback).toHaveBeenLastCalledWith(true);
+
+    restoredRulersItem.click();
+
+    expect(restoredRulersItem.getAttribute('aria-checked')).toBe('false');
+    expect(window.localStorage.getItem(RULERS_VISIBLE_STORAGE_KEY)).toBe('false');
+    expect(restoredCallback).toHaveBeenLastCalledWith(false);
   });
 
   it('does not retain focus after pointer auto-fit activation', () => {
@@ -6862,6 +6894,7 @@ function createUiCallbacksBase() {
     onAutoFitImage: () => {},
     onAutoExposureChange: () => {},
     onAutoExposurePercentileChange: () => {},
+    onRulersVisibleChange: () => {},
     getScreenshotFitRect: (): ViewportRect | null => null,
     onViewerModeChange: () => {},
     onLayerChange: () => {},
