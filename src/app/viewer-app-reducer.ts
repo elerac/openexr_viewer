@@ -62,6 +62,8 @@ export function createInitialViewerAppState(): ViewerAppState {
     pendingSelectionTransitionRequestId: null,
     pendingDisplayRangeRequestId: null,
     pendingDisplayRangeRequestKey: null,
+    pendingAutoExposureRequestId: null,
+    pendingAutoExposureRequestKey: null,
     pendingThumbnailTokensBySessionId: {},
     thumbnailsBySessionId: {},
     pendingChannelThumbnailTokensByRequestKey: {},
@@ -69,7 +71,8 @@ export function createInitialViewerAppState(): ViewerAppState {
     channelThumbnailLatestRequestKeyByContextKey: {},
     stokesDisplayRestoreStates: {},
     stokesColormapDefaults: createDefaultStokesColormapDefaultSettings(),
-    autoFitImageOnSelect: false
+    autoFitImageOnSelect: false,
+    autoExposureEnabled: false
   };
 }
 
@@ -89,6 +92,13 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
       return state.autoFitImageOnSelect === intent.enabled ? state : {
         ...state,
         autoFitImageOnSelect: intent.enabled
+      };
+    case 'autoExposureSet':
+      return state.autoExposureEnabled === intent.enabled ? state : {
+        ...state,
+        autoExposureEnabled: intent.enabled,
+        pendingAutoExposureRequestId: intent.enabled ? state.pendingAutoExposureRequestId : null,
+        pendingAutoExposureRequestKey: intent.enabled ? state.pendingAutoExposureRequestKey : null
       };
     case 'colormapRegistryResolved': {
       const nextState = patchSessionState(state, {
@@ -741,6 +751,12 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         pendingDisplayRangeRequestId: intent.requestId,
         pendingDisplayRangeRequestKey: intent.requestKey
       };
+    case 'autoExposureRequestStarted':
+      return {
+        ...state,
+        pendingAutoExposureRequestId: intent.requestId,
+        pendingAutoExposureRequestKey: intent.requestKey
+      };
     case 'displayLuminanceRangeResolved': {
       if (intent.requestId !== null && state.pendingDisplayRangeRequestId !== intent.requestId) {
         return state;
@@ -805,6 +821,35 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
       }
 
       return nextState;
+    }
+    case 'autoExposureResolved': {
+      if (intent.requestId !== null && state.pendingAutoExposureRequestId !== intent.requestId) {
+        return state;
+      }
+
+      const requestMatchesPending = intent.requestId === state.pendingAutoExposureRequestId;
+      const nextState: ViewerAppState = {
+        ...state,
+        pendingAutoExposureRequestId: requestMatchesPending ? null : state.pendingAutoExposureRequestId,
+        pendingAutoExposureRequestKey: requestMatchesPending ? null : state.pendingAutoExposureRequestKey
+      };
+
+      const activeSession = selectActiveSession(nextState);
+      if (
+        !nextState.autoExposureEnabled ||
+        !activeSession ||
+        activeSession.id !== intent.sessionId ||
+        nextState.sessionState.activeLayer !== intent.activeLayer ||
+        nextState.sessionState.visualizationMode !== 'rgb' ||
+        intent.visualizationMode !== 'rgb' ||
+        !sameDisplaySelection(nextState.sessionState.displaySelection, intent.displaySelection)
+      ) {
+        return nextState;
+      }
+
+      return patchSessionState(nextState, {
+        exposureEv: intent.autoExposure?.exposureEv ?? 0
+      });
     }
   }
 }

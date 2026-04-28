@@ -32,19 +32,20 @@ export const enum ViewerUiInvalidationFlags {
   ExportTarget = 1 << 3,
   ExportBatchTarget = 1 << 4,
   AutoFitImageOnSelect = 1 << 5,
-  Exposure = 1 << 6,
-  ViewerMode = 1 << 7,
-  VisualizationMode = 1 << 8,
-  StokesDegreeModulation = 1 << 9,
-  ActiveColormap = 1 << 10,
-  ColormapOptions = 1 << 11,
-  ColormapGradient = 1 << 12,
-  ColormapRange = 1 << 13,
-  LayerOptions = 1 << 14,
-  Metadata = 1 << 15,
-  RgbGroupOptions = 1 << 16,
-  ClearPanels = 1 << 17,
-  StokesColormapDefaults = 1 << 18
+  AutoExposure = 1 << 6,
+  Exposure = 1 << 7,
+  ViewerMode = 1 << 8,
+  VisualizationMode = 1 << 9,
+  StokesDegreeModulation = 1 << 10,
+  ActiveColormap = 1 << 11,
+  ColormapOptions = 1 << 12,
+  ColormapGradient = 1 << 13,
+  ColormapRange = 1 << 14,
+  LayerOptions = 1 << 15,
+  Metadata = 1 << 16,
+  RgbGroupOptions = 1 << 17,
+  ClearPanels = 1 << 18,
+  StokesColormapDefaults = 1 << 19
 }
 
 export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => ViewerUiSnapshot {
@@ -75,6 +76,7 @@ export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => Vie
         state.pendingColormapActivation
       ),
       autoFitImageOnSelect: state.autoFitImageOnSelect,
+      autoExposureEnabled: state.autoExposureEnabled,
       activeSessionId: state.activeSessionId,
       openedImageOptions: selectOpenedImageOptions(state),
       exportTarget: selectExportTarget(activeSession),
@@ -147,6 +149,10 @@ export function computeViewerUiInvalidation(
 
   if (previous.autoFitImageOnSelect !== next.autoFitImageOnSelect) {
     flags |= ViewerUiInvalidationFlags.AutoFitImageOnSelect;
+  }
+
+  if (previous.autoExposureEnabled !== next.autoExposureEnabled) {
+    flags |= ViewerUiInvalidationFlags.AutoExposure;
   }
 
   if (previous.exposureEv !== next.exposureEv) {
@@ -392,6 +398,7 @@ function sameViewerUiSnapshot(a: ViewerUiSnapshot, b: ViewerUiSnapshot): boolean
     a.isDisplayBusy === b.isDisplayBusy &&
     a.isDisplayOverlayLoading === b.isDisplayOverlayLoading &&
     a.autoFitImageOnSelect === b.autoFitImageOnSelect &&
+    a.autoExposureEnabled === b.autoExposureEnabled &&
     a.activeSessionId === b.activeSessionId &&
     sameOpenedImageOptions(a.openedImageOptions, b.openedImageOptions) &&
     sameExportTarget(a.exportTarget, b.exportTarget) &&

@@ -184,6 +184,7 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   const reloadAllMenuItem = page.locator('#reload-all-opened-images-button');
   const closeAllMenuItem = page.locator('#close-all-opened-images-button');
   const autoFitButton = page.locator('#app-auto-fit-image-button');
+  const autoExposureButton = page.locator('#app-auto-exposure-button');
   const themeInput = page.locator('#theme-select');
   const spectrumMotionInput = page.locator('#spectrum-lattice-motion-select');
   const budgetInput = page.locator('#display-cache-budget-input');
@@ -213,6 +214,9 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   await expect(autoFitButton).toBeVisible();
   await expect(autoFitButton).toHaveAttribute('aria-label', 'Auto fit selected images');
   await expect(autoFitButton).toHaveAttribute('aria-pressed', 'false');
+  await expect(autoExposureButton).toBeVisible();
+  await expect(autoExposureButton).toHaveAttribute('aria-label', 'Auto exposure');
+  await expect(autoExposureButton).toHaveAttribute('aria-pressed', 'false');
   await expectViewerCheckerBackground(viewer);
 
   await autoFitButton.click();

@@ -30,6 +30,10 @@ export function applyUiEffects(ui: ViewerUi, transition: ViewerUiTransition): vo
     ui.setAutoFitImageOnSelect(snapshot.autoFitImageOnSelect);
   }
 
+  if (invalidation & ViewerUiInvalidationFlags.AutoExposure) {
+    ui.setAutoExposureEnabled(snapshot.autoExposureEnabled);
+  }
+
   if (invalidation & ViewerUiInvalidationFlags.Exposure) {
     ui.setExposure(snapshot.exposureEv);
   }

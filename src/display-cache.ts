@@ -1,3 +1,4 @@
+import type { AutoExposureResult } from './auto-exposure';
 import type { DecodedExrImage, DisplayLuminanceRange } from './types';
 
 export const DISPLAY_CACHE_BUDGET_STORAGE_KEY = 'openexr-viewer:display-cache-budget-mb:v1';
@@ -30,6 +31,7 @@ export interface SessionResourceEntry {
   decodedBytes: number;
   residentLayers: Map<number, ResidentLayerResourceEntry>;
   luminanceRangeByRevision: Map<string, DisplayLuminanceRange | null>;
+  autoExposureByRevision: Map<string, AutoExposureResult | null>;
 }
 
 export function createSessionResourceEntry(id: string): SessionResourceEntry {
@@ -38,7 +40,8 @@ export function createSessionResourceEntry(id: string): SessionResourceEntry {
     pinned: false,
     decodedBytes: 0,
     residentLayers: new Map<number, ResidentLayerResourceEntry>(),
-    luminanceRangeByRevision: new Map<string, DisplayLuminanceRange | null>()
+    luminanceRangeByRevision: new Map<string, DisplayLuminanceRange | null>(),
+    autoExposureByRevision: new Map<string, AutoExposureResult | null>()
   };
 }
 
@@ -47,6 +50,7 @@ export function clearSessionResources(entry: SessionResourceEntry): void {
   entry.decodedBytes = 0;
   entry.residentLayers.clear();
   entry.luminanceRangeByRevision.clear();
+  entry.autoExposureByRevision.clear();
 }
 
 export function getTrackedResidentChannelBytes(

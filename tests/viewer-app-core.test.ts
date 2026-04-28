@@ -49,6 +49,52 @@ describe('viewer app core', () => {
     expect(core.getState().autoFitImageOnSelect).toBe(false);
   });
 
+  it('toggles auto exposure and applies resolved exposure only while enabled in None mode', () => {
+    const core = new ViewerAppCore();
+    const session = createSession('session-1');
+    core.dispatch({ type: 'sessionLoaded', session });
+
+    expect(core.getState().autoExposureEnabled).toBe(false);
+
+    core.dispatch({ type: 'autoExposureSet', enabled: true });
+    expect(core.getState().autoExposureEnabled).toBe(true);
+
+    core.dispatch({
+      type: 'autoExposureResolved',
+      requestId: null,
+      sessionId: session.id,
+      activeLayer: 0,
+      visualizationMode: 'rgb',
+      displaySelection: core.getState().sessionState.displaySelection,
+      autoExposure: {
+        scalar: 4,
+        exposureEv: -2,
+        percentile: 99.5,
+        source: 'rgbMax'
+      }
+    });
+
+    expect(core.getState().sessionState.exposureEv).toBe(-2);
+
+    core.dispatch({ type: 'autoExposureSet', enabled: false });
+    core.dispatch({
+      type: 'autoExposureResolved',
+      requestId: null,
+      sessionId: session.id,
+      activeLayer: 0,
+      visualizationMode: 'rgb',
+      displaySelection: core.getState().sessionState.displaySelection,
+      autoExposure: {
+        scalar: 8,
+        exposureEv: -3,
+        percentile: 99.5,
+        source: 'rgbMax'
+      }
+    });
+
+    expect(core.getState().sessionState.exposureEv).toBe(-2);
+  });
+
   it('renames a session display name without changing the original source identity', () => {
     const core = new ViewerAppCore();
     const session = createSession('session-1');

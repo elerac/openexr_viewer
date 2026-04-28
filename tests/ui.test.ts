@@ -488,6 +488,53 @@ describe('top bar and display controls', () => {
     expect(button.getAttribute('aria-pressed')).toBe('true');
   });
 
+  it('persists and dispatches the top-bar auto exposure toggle', () => {
+    installUiFixture();
+
+    const onAutoExposureChange = vi.fn();
+    new ViewerUi(createUiCallbacks({ onAutoExposureChange }));
+    const button = document.getElementById('app-auto-exposure-button') as HTMLButtonElement;
+
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(onAutoExposureChange).toHaveBeenLastCalledWith(false);
+
+    button.click();
+
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(window.localStorage.getItem('openexr-viewer:auto-exposure:v1')).toBe('true');
+    expect(onAutoExposureChange).toHaveBeenLastCalledWith(true);
+
+    installUiFixture();
+    const restoredCallback = vi.fn();
+    new ViewerUi(createUiCallbacks({ onAutoExposureChange: restoredCallback }));
+    const restoredButton = document.getElementById('app-auto-exposure-button') as HTMLButtonElement;
+
+    expect(restoredButton.getAttribute('aria-pressed')).toBe('true');
+    expect(restoredCallback).toHaveBeenLastCalledWith(true);
+
+    restoredButton.click();
+
+    expect(restoredButton.getAttribute('aria-pressed')).toBe('false');
+    expect(window.localStorage.getItem('openexr-viewer:auto-exposure:v1')).toBe('false');
+    expect(restoredCallback).toHaveBeenLastCalledWith(false);
+  });
+
+  it('does not retain focus after pointer auto exposure activation', () => {
+    installUiFixture();
+
+    new ViewerUi(createUiCallbacks());
+    const button = document.getElementById('app-auto-exposure-button') as HTMLButtonElement;
+
+    button.focus();
+    const mouseDownEvent = new MouseEvent('mousedown', { bubbles: true, button: 0, cancelable: true });
+    button.dispatchEvent(mouseDownEvent);
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+
+    expect(mouseDownEvent.defaultPrevented).toBe(true);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).not.toBe(button);
+  });
+
   it('does not retain focus after pointer auto-fit activation', () => {
     installUiFixture();
 
@@ -1162,6 +1209,7 @@ describe('view menu', () => {
 
     const actions = document.querySelector('.app-menu-actions') as HTMLElement;
     const autoFitButton = document.getElementById('app-auto-fit-image-button') as HTMLButtonElement;
+    const autoExposureButton = document.getElementById('app-auto-exposure-button') as HTMLButtonElement;
     const screenshotButton = document.getElementById('app-screenshot-button') as HTMLButtonElement;
     const fullscreenButton = document.getElementById('app-fullscreen-button') as HTMLButtonElement;
     const settingsButton = document.getElementById('settings-dialog-button') as HTMLButtonElement;
@@ -1171,16 +1219,22 @@ describe('view menu', () => {
     expect(actions).not.toBeNull();
     expect(Array.from(actions.children).map((child) => child.id)).toEqual([
       'app-auto-fit-image-button',
+      'app-auto-exposure-button',
       'app-screenshot-button',
       'app-fullscreen-button',
       'settings-dialog-button'
     ]);
-    expect(screenshotButton.previousElementSibling).toBe(autoFitButton);
+    expect(autoExposureButton.previousElementSibling).toBe(autoFitButton);
+    expect(screenshotButton.previousElementSibling).toBe(autoExposureButton);
     expect(fullscreenButton.previousElementSibling).toBe(screenshotButton);
     expect(settingsButton.previousElementSibling).toBe(fullscreenButton);
     expect(autoFitButton.getAttribute('aria-label')).toBe('Auto fit selected images');
     expect(autoFitButton.dataset.tooltip).toBe('Auto fit selected images');
     expect(autoFitButton.title).toBe('Auto fit selected images');
+    expect(autoExposureButton.getAttribute('aria-label')).toBe('Auto exposure');
+    expect(autoExposureButton.getAttribute('aria-pressed')).toBe('false');
+    expect(autoExposureButton.dataset.tooltip).toBe('Auto exposure');
+    expect(autoExposureButton.title).toBe('Auto exposure');
     expect(screenshotButton.getAttribute('aria-label')).toBe('Export Screenshot...');
     expect(screenshotButton.dataset.tooltip).toBe('Export screenshot');
     expect(screenshotButton.title).toBe('Export Screenshot...');
@@ -6735,6 +6789,7 @@ function createUiCallbacksBase() {
     onViewerKeyboardZoomInputChange: () => {},
     onAutoFitImageOnSelectChange: () => {},
     onAutoFitImage: () => {},
+    onAutoExposureChange: () => {},
     getScreenshotFitRect: (): ViewportRect | null => null,
     onViewerModeChange: () => {},
     onLayerChange: () => {},

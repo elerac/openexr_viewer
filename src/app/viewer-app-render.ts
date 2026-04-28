@@ -1,4 +1,8 @@
-import { buildDisplayLuminanceRevisionKey } from '../display-texture';
+import { AUTO_EXPOSURE_PERCENTILE, AUTO_EXPOSURE_SOURCE } from '../auto-exposure';
+import {
+  buildDisplayAutoExposureRevisionKey,
+  buildDisplayLuminanceRevisionKey
+} from '../display-texture';
 import { sameDisplayLuminanceRange } from '../colormap-range';
 import { sameDisplaySelection } from '../display-model';
 import { mergeRenderState, samePixel, sameRoi, sameViewState } from '../view-state';
@@ -29,7 +33,8 @@ export const enum ViewerRenderInvalidationFlags {
   ResourceClearImage = 1 << 5,
   RenderImage = 1 << 6,
   RenderValueOverlay = 1 << 7,
-  RenderProbeOverlay = 1 << 8
+  RenderProbeOverlay = 1 << 8,
+  ResourceRequestAutoExposure = 1 << 9
 }
 
 export function createViewerRenderSnapshotSelector(): (state: ViewerAppState) => ViewerRenderSnapshot {
@@ -38,6 +43,7 @@ export function createViewerRenderSnapshotSelector(): (state: ViewerAppState) =>
   const selectRoiReadout = createRoiReadoutSelector();
   const selectResourceTarget = createResourceTargetSelector();
   const selectDisplayRangeRequest = createDisplayRangeRequestSelector();
+  const selectAutoExposureRequest = createAutoExposureRequestSelector();
 
   let previousSnapshot: ViewerRenderSnapshot | null = null;
   return (state) => {
@@ -52,7 +58,8 @@ export function createViewerRenderSnapshotSelector(): (state: ViewerAppState) =>
       probeReadout: selectProbeReadout(state, activeSession, activeLayer),
       roiReadout: selectRoiReadout(state, activeSession, activeLayer),
       resourceTarget: selectResourceTarget(state, activeSession),
-      displayRangeRequest: selectDisplayRangeRequest(state, activeSession, activeLayer)
+      displayRangeRequest: selectDisplayRangeRequest(state, activeSession, activeLayer),
+      autoExposureRequest: selectAutoExposureRequest(state, activeSession, activeLayer)
     };
 
     if (previousSnapshot && sameViewerRenderSnapshot(previousSnapshot, nextSnapshot)) {
@@ -92,6 +99,10 @@ export function computeViewerRenderInvalidation(
 
   if (!sameDisplayRangeRequest(previous.displayRangeRequest, next.displayRangeRequest) && next.displayRangeRequest) {
     flags |= ViewerRenderInvalidationFlags.ResourceRequestDisplayRange;
+  }
+
+  if (!sameAutoExposureRequest(previous.autoExposureRequest, next.autoExposureRequest) && next.autoExposureRequest) {
+    flags |= ViewerRenderInvalidationFlags.ResourceRequestAutoExposure;
   }
 
   if (previous.activeSession && !next.activeSession) {
@@ -313,6 +324,39 @@ function createDisplayRangeRequestSelector(): (
   };
 }
 
+function createAutoExposureRequestSelector(): (
+  state: ViewerAppState,
+  activeSession: OpenedImageSession | null,
+  activeLayer: ViewerRenderSnapshot['activeLayer']
+) => ViewerRenderSnapshot['autoExposureRequest'] {
+  let previousResult: ViewerRenderSnapshot['autoExposureRequest'] = null;
+  return (state, activeSession, activeLayer) => {
+    const shouldRequest = state.autoExposureEnabled && state.sessionState.visualizationMode === 'rgb';
+    const nextResult = activeSession && activeLayer && shouldRequest
+      ? {
+          sessionId: activeSession.id,
+          activeLayer: state.sessionState.activeLayer,
+          visualizationMode: 'rgb' as const,
+          displaySelection: state.sessionState.displaySelection,
+          decodedRef: activeSession.decoded,
+          percentile: AUTO_EXPOSURE_PERCENTILE,
+          source: AUTO_EXPOSURE_SOURCE,
+          requestKey: `${activeSession.id}:${buildDisplayAutoExposureRevisionKey({
+            activeLayer: state.sessionState.activeLayer,
+            displaySelection: state.sessionState.displaySelection,
+            visualizationMode: 'rgb'
+          }, AUTO_EXPOSURE_PERCENTILE)}`
+        }
+      : null;
+    if (sameAutoExposureRequest(previousResult, nextResult)) {
+      return previousResult;
+    }
+
+    previousResult = nextResult;
+    return previousResult;
+  };
+}
+
 function sameViewerRenderSnapshot(a: ViewerRenderSnapshot, b: ViewerRenderSnapshot): boolean {
   return (
     a.activeSession?.id === b.activeSession?.id &&
@@ -322,7 +366,24 @@ function sameViewerRenderSnapshot(a: ViewerRenderSnapshot, b: ViewerRenderSnapsh
     sameProbeReadout(a.probeReadout, b.probeReadout) &&
     sameRoiReadout(a.roiReadout, b.roiReadout) &&
     sameResourceTarget(a.resourceTarget, b.resourceTarget) &&
-    sameDisplayRangeRequest(a.displayRangeRequest, b.displayRangeRequest)
+    sameDisplayRangeRequest(a.displayRangeRequest, b.displayRangeRequest) &&
+    sameAutoExposureRequest(a.autoExposureRequest, b.autoExposureRequest)
+  );
+}
+
+function sameAutoExposureRequest(
+  a: ViewerRenderSnapshot['autoExposureRequest'],
+  b: ViewerRenderSnapshot['autoExposureRequest']
+): boolean {
+  return (
+    a?.requestKey === b?.requestKey &&
+    a?.sessionId === b?.sessionId &&
+    a?.activeLayer === b?.activeLayer &&
+    a?.visualizationMode === b?.visualizationMode &&
+    a?.decodedRef === b?.decodedRef &&
+    a?.percentile === b?.percentile &&
+    a?.source === b?.source &&
+    sameDisplaySelection(a?.displaySelection ?? null, b?.displaySelection ?? null)
   );
 }
 

@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { computeRec709Luminance } from '../src/color';
 import {
   buildDisplayLuminanceRevisionKey,
+  buildDisplayAutoExposureRevisionKey,
   buildDisplaySourceBinding,
   buildDisplayTexture,
   buildDisplayTextureRevisionKey,
   buildSelectedDisplayTexture,
   buildStokesDisplayTexture,
+  computeDisplaySelectionAutoExposure,
   computeDisplaySelectionRoiStats,
   computeDisplaySelectionLuminanceRange,
   readDisplaySelectionPixelValues,
@@ -102,6 +104,85 @@ describe('display texture', () => {
       displaySelection: createStokesSelection('aolp', 'stokesRgb'),
       visualizationMode: 'colormap'
     })).toBe('3:stokesAngle:aolp:rgbLuminance:colormap');
+  });
+
+  it('builds auto-exposure revision keys with rgb max percentile context', () => {
+    expect(buildDisplayAutoExposureRevisionKey({
+      activeLayer: 0,
+      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+    })).toBe('0:channelRgb:R:G:B::autoExposure:rgbMax:p99.5');
+  });
+
+  it('computes auto exposure from the lower-rank 99.5th percentile rgb max scalar', () => {
+    const layer = createLayerFromChannels({
+      R: [1, 2, 4, 8, 1000],
+      G: [0, 0, 0, 0, 0],
+      B: [0, 0, 0, 0, 0]
+    }, 'beauty');
+
+    const autoExposure = computeDisplaySelectionAutoExposure(
+      layer,
+      5,
+      1,
+      createChannelRgbSelection('R', 'G', 'B')
+    );
+
+    expect(autoExposure.scalar).toBe(8);
+    expect(autoExposure.exposureEv).toBe(-3);
+    expect(autoExposure.percentile).toBe(99.5);
+    expect(autoExposure.source).toBe('rgbMax');
+  });
+
+  it('computes auto exposure for mono selections while ignoring invalid and non-positive scalars', () => {
+    const layer = createLayerFromChannels({
+      Y: [Number.NaN, -1, 0, 0.25, 2]
+    }, 'gray');
+
+    const autoExposure = computeDisplaySelectionAutoExposure(
+      layer,
+      5,
+      1,
+      createChannelMonoSelection('Y')
+    );
+
+    expect(autoExposure.scalar).toBe(0.25);
+    expect(autoExposure.exposureEv).toBe(2);
+  });
+
+  it('falls back to neutral auto exposure when no positive scalars are available', () => {
+    const layer = createLayerFromChannels({
+      R: [0, -1],
+      G: [0, -2],
+      B: [0, -3]
+    }, 'beauty');
+
+    const autoExposure = computeDisplaySelectionAutoExposure(
+      layer,
+      2,
+      1,
+      createChannelRgbSelection('R', 'G', 'B')
+    );
+
+    expect(autoExposure.scalar).toBe(1);
+    expect(autoExposure.exposureEv).toBe(0);
+  });
+
+  it('clamps computed auto exposure to the existing exposure range', () => {
+    const bright = createLayerFromChannels({
+      R: [4096],
+      G: [0],
+      B: [0]
+    }, 'bright');
+    const dark = createLayerFromChannels({
+      R: [1 / 2048],
+      G: [0],
+      B: [0]
+    }, 'dark');
+
+    expect(computeDisplaySelectionAutoExposure(bright, 1, 1, createChannelRgbSelection('R', 'G', 'B')).exposureEv)
+      .toBe(-10);
+    expect(computeDisplaySelectionAutoExposure(dark, 1, 1, createChannelRgbSelection('R', 'G', 'B')).exposureEv)
+      .toBe(10);
   });
 
   it('builds scalar Stokes AoLP display textures with values duplicated across RGB', () => {

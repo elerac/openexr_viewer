@@ -47,6 +47,17 @@ export function createBootstrapServices({
         displaySelection: event.displaySelection,
         displayLuminanceRange: event.displayLuminanceRange
       });
+    },
+    onAutoExposureResolved: (event) => {
+      core.dispatch({
+        type: 'autoExposureResolved',
+        requestId: event.requestId,
+        sessionId: event.sessionId,
+        activeLayer: event.activeLayer,
+        visualizationMode: event.visualizationMode,
+        displaySelection: event.displaySelection,
+        autoExposure: event.autoExposure
+      });
     }
   });
   const thumbnailService = new ThumbnailService({

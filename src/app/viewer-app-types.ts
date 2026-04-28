@@ -1,4 +1,5 @@
 import type { ChannelViewThumbnailItem } from '../channel-view-items';
+import type { AutoExposureResult } from '../auto-exposure';
 import type { ColormapLut, ColormapRegistry } from '../colormaps';
 import type { ProbeColorPreview } from '../probe';
 import type {
@@ -85,6 +86,12 @@ export interface ViewerDisplayRangeRequest extends ViewerResourceTarget {
   requestKey: string;
 }
 
+export interface ViewerAutoExposureRequest extends ViewerResourceTarget {
+  requestKey: string;
+  percentile: number;
+  source: 'rgbMax';
+}
+
 export interface ViewerAppState {
   sessionState: ViewerSessionState;
   interactionState: ViewerInteractionState;
@@ -102,6 +109,8 @@ export interface ViewerAppState {
   pendingSelectionTransitionRequestId: number | null;
   pendingDisplayRangeRequestId: number | null;
   pendingDisplayRangeRequestKey: string | null;
+  pendingAutoExposureRequestId: number | null;
+  pendingAutoExposureRequestKey: string | null;
   pendingThumbnailTokensBySessionId: Record<string, number>;
   thumbnailsBySessionId: Record<string, string | null>;
   pendingChannelThumbnailTokensByRequestKey: Record<string, number>;
@@ -110,12 +119,14 @@ export interface ViewerAppState {
   stokesDisplayRestoreStates: Record<string, RestorableVisualizationState>;
   stokesColormapDefaults: StokesColormapDefaultSettings;
   autoFitImageOnSelect: boolean;
+  autoExposureEnabled: boolean;
 }
 
 export type ViewerIntent =
   | { type: 'errorSet'; message: string | null }
   | { type: 'loadingSet'; loading: boolean }
   | { type: 'autoFitImageOnSelectSet'; enabled: boolean }
+  | { type: 'autoExposureSet'; enabled: boolean }
   | { type: 'colormapRegistryResolved'; registry: ColormapRegistry }
   | { type: 'colormapLoadStarted'; requestId: number }
   | { type: 'colormapLoadResolved'; requestId: number; colormapId: string; lut: ColormapLut }
@@ -171,6 +182,7 @@ export type ViewerIntent =
       thumbnailDataUrl: string | null;
     }
   | { type: 'displayRangeRequestStarted'; requestId: number; requestKey: string }
+  | { type: 'autoExposureRequestStarted'; requestId: number; requestKey: string }
   | {
       type: 'displayLuminanceRangeResolved';
       requestId: number | null;
@@ -178,6 +190,15 @@ export type ViewerIntent =
       activeLayer: number;
       displaySelection: ViewerSessionState['displaySelection'];
       displayLuminanceRange: DisplayLuminanceRange | null;
+    }
+  | {
+      type: 'autoExposureResolved';
+      requestId: number | null;
+      sessionId: string;
+      activeLayer: number;
+      visualizationMode: ViewerSessionState['visualizationMode'];
+      displaySelection: ViewerSessionState['displaySelection'];
+      autoExposure: AutoExposureResult | null;
     };
 
 export interface ViewerStateTransition {
@@ -192,6 +213,7 @@ export interface ViewerUiSnapshot {
   isDisplayBusy: boolean;
   isDisplayOverlayLoading: boolean;
   autoFitImageOnSelect: boolean;
+  autoExposureEnabled: boolean;
   activeSessionId: string | null;
   openedImageOptions: ViewerOpenedImageOption[];
   exportTarget: { filename: string } | null;
@@ -233,6 +255,7 @@ export interface ViewerRenderSnapshot {
   roiReadout: RoiReadoutModel;
   resourceTarget: ViewerResourceTarget | null;
   displayRangeRequest: ViewerDisplayRangeRequest | null;
+  autoExposureRequest: ViewerAutoExposureRequest | null;
 }
 
 export interface ViewerRenderTransition extends ViewerStateTransition {

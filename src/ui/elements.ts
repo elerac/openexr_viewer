@@ -2,6 +2,7 @@ export interface Elements {
   appShell: HTMLElement;
   appMenuBar: HTMLElement;
   appAutoFitImageButton: HTMLButtonElement;
+  appAutoExposureButton: HTMLButtonElement;
   appScreenshotButton: HTMLButtonElement;
   appFullscreenButton: HTMLButtonElement;
   settingsDialogButton: HTMLButtonElement;
@@ -409,6 +410,7 @@ export function resolveElements(): Elements {
     appShell: requireElement('app', HTMLElement),
     appMenuBar: requireElement('app-menu-bar', HTMLElement),
     appAutoFitImageButton: requireElement('app-auto-fit-image-button', HTMLButtonElement),
+    appAutoExposureButton: requireElement('app-auto-exposure-button', HTMLButtonElement),
     appScreenshotButton: requireElement('app-screenshot-button', HTMLButtonElement),
     appFullscreenButton: requireElement('app-fullscreen-button', HTMLButtonElement),
     settingsDialogButton: requireElement('settings-dialog-button', HTMLButtonElement),

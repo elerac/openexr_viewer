@@ -265,6 +265,67 @@ describe('render cache service', () => {
     });
   });
 
+  it('computes and caches lazy, deduped auto exposure requests', async () => {
+    const decoded: DecodedExrImage = {
+      width: 5,
+      height: 1,
+      layers: [createLayerFromChannels({
+        R: [1, 2, 4, 8, 1000],
+        G: [0, 0, 0, 0, 0],
+        B: [0, 0, 0, 0, 0]
+      }, 'beauty')]
+    };
+    const session = createSession('session-1', decoded);
+    const ui = createUiMock();
+    const renderer = createRendererMock();
+    const { windowLike, flush } = createRenderCacheWindowLike();
+    const onAutoExposureResolved = vi.fn();
+    const service = new RenderCacheService({
+      ui,
+      renderer,
+      windowLike,
+      onAutoExposureResolved
+    });
+
+    const first = service.requestAutoExposure(session, session.state, 7);
+    const second = service.requestAutoExposure(session, session.state, 8);
+
+    expect(first).toEqual({
+      autoExposure: null,
+      pending: true
+    });
+    expect(second).toEqual({
+      autoExposure: null,
+      pending: true
+    });
+
+    await flush();
+
+    expect(onAutoExposureResolved).toHaveBeenCalledTimes(1);
+    expect(onAutoExposureResolved).toHaveBeenCalledWith({
+      requestId: 8,
+      sessionId: session.id,
+      activeLayer: 0,
+      visualizationMode: 'rgb',
+      displaySelection: session.state.displaySelection,
+      autoExposure: {
+        scalar: 8,
+        exposureEv: -3,
+        percentile: 99.5,
+        source: 'rgbMax'
+      }
+    });
+    expect(service.requestAutoExposure(session, session.state)).toEqual({
+      autoExposure: {
+        scalar: 8,
+        exposureEv: -3,
+        percentile: 99.5,
+        source: 'rgbMax'
+      },
+      pending: false
+    });
+  });
+
   it('reuses finite mono ranges across alpha-only selection changes', async () => {
     const decoded = createDecodedImage(2, 1, { R: 1, G: 0.5, B: 0, A: 0.25 });
     const session = createSession('session-1', decoded);
@@ -616,6 +677,49 @@ describe('render cache service', () => {
       onDisplayLuminanceRangeResolved: disposedCallback
     });
     expect(disposedService.requestDisplayLuminanceRange(session, session.state).pending).toBe(true);
+    disposedService.dispose();
+    await disposed.flush();
+    expect(disposedCallback).not.toHaveBeenCalled();
+  });
+
+  it('drops pending auto exposure callbacks after discard, clear, and dispose', async () => {
+    const session = createSession('session-1');
+
+    const discarded = createRenderCacheWindowLike();
+    const discardedCallback = vi.fn();
+    const discardedService = new RenderCacheService({
+      ui: createUiMock(),
+      renderer: createRendererMock(),
+      windowLike: discarded.windowLike,
+      onAutoExposureResolved: discardedCallback
+    });
+    expect(discardedService.requestAutoExposure(session, session.state).pending).toBe(true);
+    discardedService.discard(session.id);
+    await discarded.flush();
+    expect(discardedCallback).not.toHaveBeenCalled();
+
+    const cleared = createRenderCacheWindowLike();
+    const clearedCallback = vi.fn();
+    const clearedService = new RenderCacheService({
+      ui: createUiMock(),
+      renderer: createRendererMock(),
+      windowLike: cleared.windowLike,
+      onAutoExposureResolved: clearedCallback
+    });
+    expect(clearedService.requestAutoExposure(session, session.state).pending).toBe(true);
+    clearedService.clear();
+    await cleared.flush();
+    expect(clearedCallback).not.toHaveBeenCalled();
+
+    const disposed = createRenderCacheWindowLike();
+    const disposedCallback = vi.fn();
+    const disposedService = new RenderCacheService({
+      ui: createUiMock(),
+      renderer: createRendererMock(),
+      windowLike: disposed.windowLike,
+      onAutoExposureResolved: disposedCallback
+    });
+    expect(disposedService.requestAutoExposure(session, session.state).pending).toBe(true);
     disposedService.dispose();
     await disposed.flush();
     expect(disposedCallback).not.toHaveBeenCalled();

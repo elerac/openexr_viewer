@@ -123,6 +123,23 @@ describe('viewer app lanes', () => {
     expect(createRenderFlags(state, nextState)).toBe(ViewerRenderInvalidationFlags.None);
   });
 
+  it('exposes auto exposure through UI and render request lanes', () => {
+    const state = createActiveState();
+    const nextState = {
+      ...state,
+      autoExposureEnabled: true
+    };
+    const selectUiSnapshot = createViewerUiSnapshotSelector();
+    const snapshot = selectUiSnapshot(nextState);
+    const uiFlags = createUiFlags(state, nextState);
+    const renderFlags = createRenderFlags(state, nextState);
+
+    expect(snapshot.autoExposureEnabled).toBe(true);
+    expect(hasUiFlag(uiFlags, ViewerUiInvalidationFlags.AutoExposure)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ResourceRequestAutoExposure)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(false);
+  });
+
   it('keeps display selection transitions busy without requesting the full loading overlay', () => {
     const state = createActiveState();
     const selectUiSnapshot = createViewerUiSnapshotSelector();

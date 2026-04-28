@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { gotoViewerApp, openGalleryCbox } from './helpers/app';
 import {
+  buildAutoExposureRgbExr,
   buildDepthAlphaExr,
   buildNamedRgbaExr,
   buildNamedRgbBareAlphaExr,
@@ -39,6 +40,38 @@ test('carries exposure when opening and switching files', async ({ page }) => {
   await cboxRow.locator('.opened-file-label').click();
   await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr');
   await expect(exposureValue).toHaveValue('-2.5');
+});
+
+test('auto exposure updates in None mode and pauses while Colormap is active', async ({ page }) => {
+  await gotoViewerApp(page);
+
+  const openedImages = page.locator('#opened-images-select');
+  const autoExposureButton = page.locator('#app-auto-exposure-button');
+  const exposureControl = page.locator('#exposure-control');
+  const exposureValue = page.locator('#exposure-value');
+  const noneButton = page.locator('#visualization-none-button');
+  const colormapButton = page.locator('#colormap-toggle-button');
+
+  await page.setInputFiles('#file-input', {
+    name: 'auto_exposure.exr',
+    mimeType: 'image/exr',
+    buffer: buildAutoExposureRgbExr()
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('auto_exposure.exr', { timeout: 30000 });
+  await expect(exposureValue).toHaveValue('0.0');
+
+  await colormapButton.click();
+  await expect(colormapButton).toHaveAttribute('aria-pressed', 'true', { timeout: 30000 });
+  await expect(exposureControl).toBeHidden();
+
+  await autoExposureButton.click();
+  await expect(autoExposureButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(exposureValue).toHaveValue('0.0');
+
+  await noneButton.click();
+  await expect(noneButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(exposureControl).toBeVisible();
+  await expect(exposureValue).toHaveValue('-3.0', { timeout: 30000 });
 });
 
 test('loads arbitrary scalar channels as grayscale display options', async ({ page }) => {

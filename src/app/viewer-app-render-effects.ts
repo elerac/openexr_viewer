@@ -66,6 +66,37 @@ export function applyRenderEffects(
     }
   }
 
+  if (
+    (invalidation & ViewerRenderInvalidationFlags.ResourceRequestAutoExposure) &&
+    activeSession &&
+    snapshot.autoExposureRequest
+  ) {
+    const requestId = core.issueRequestId();
+    const result = renderCache.requestAutoExposure(
+      activeSession,
+      snapshot.autoExposureRequest,
+      requestId,
+      snapshot.autoExposureRequest.percentile
+    );
+    if (result.pending) {
+      core.dispatch({
+        type: 'autoExposureRequestStarted',
+        requestId,
+        requestKey: snapshot.autoExposureRequest.requestKey
+      });
+    } else {
+      core.dispatch({
+        type: 'autoExposureResolved',
+        requestId: null,
+        sessionId: activeSession.id,
+        activeLayer: state.sessionState.activeLayer,
+        visualizationMode: state.sessionState.visualizationMode,
+        displaySelection: state.sessionState.displaySelection,
+        autoExposure: result.autoExposure
+      });
+    }
+  }
+
   if (!activeSession) {
     return;
   }

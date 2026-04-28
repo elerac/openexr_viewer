@@ -98,6 +98,7 @@ import {
 } from '../folder-load-limits';
 
 const AUTO_FIT_IMAGE_ON_SELECT_STORAGE_KEY = 'openexr-viewer:auto-fit-image-on-select:v1';
+const AUTO_EXPOSURE_STORAGE_KEY = 'openexr-viewer:auto-exposure:v1';
 
 export interface UiCallbacks {
   onOpenFileClick: () => void;
@@ -138,6 +139,7 @@ export interface UiCallbacks {
   onViewerKeyboardZoomInputChange: (input: ViewerKeyboardZoomInput) => void;
   onAutoFitImageOnSelectChange: (enabled: boolean) => void;
   onAutoFitImage: () => void;
+  onAutoExposureChange: (enabled: boolean) => void;
   getScreenshotFitRect: () => ViewportRect | null;
   onViewerModeChange: (mode: ViewerMode) => void;
   onLayerChange: (layerIndex: number) => void;
@@ -212,6 +214,7 @@ export class ViewerUi implements Disposable {
   private stokesColormapDefaults: StokesColormapDefaultSettings = createDefaultStokesColormapDefaultSettings();
   private viewerMode: ViewerMode = 'image';
   private autoFitImageOnSelect = false;
+  private autoExposureEnabled = false;
   private hasActiveChannelImage = false;
   private disposed = false;
 
@@ -476,6 +479,8 @@ export class ViewerUi implements Disposable {
     this.setViewerMode('image');
     this.setAutoFitImageOnSelect(readStoredAutoFitImageOnSelect(), false);
     this.callbacks.onAutoFitImageOnSelectChange(this.autoFitImageOnSelect);
+    this.setAutoExposureEnabled(readStoredAutoExposure(), false);
+    this.callbacks.onAutoExposureChange(this.autoExposureEnabled);
     this.updateViewerModeMenuItemsDisabled();
     this.updateFileMenuItemsDisabled();
     this.bindEvents();
@@ -575,6 +580,18 @@ export class ViewerUi implements Disposable {
     this.elements.appAutoFitImageButton.setAttribute('aria-pressed', enabled ? 'true' : 'false');
     if (persist) {
       saveStoredAutoFitImageOnSelect(enabled);
+    }
+  }
+
+  setAutoExposureEnabled(enabled: boolean, persist = false): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.autoExposureEnabled = enabled;
+    this.elements.appAutoExposureButton.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    if (persist) {
+      saveStoredAutoExposure(enabled);
     }
   }
 
@@ -1494,6 +1511,14 @@ export class ViewerUi implements Disposable {
       event.preventDefault();
     });
 
+    this.disposables.addEventListener(this.elements.appAutoExposureButton, 'mousedown', (event) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+    });
+
     this.disposables.addEventListener(this.elements.appAutoFitImageButton, 'click', (event) => {
       if (this.elements.appAutoFitImageButton.disabled) {
         return;
@@ -1507,6 +1532,19 @@ export class ViewerUi implements Disposable {
       }
       if (event.detail > 0) {
         this.elements.appAutoFitImageButton.blur();
+      }
+    });
+
+    this.disposables.addEventListener(this.elements.appAutoExposureButton, 'click', (event) => {
+      if (this.elements.appAutoExposureButton.disabled) {
+        return;
+      }
+
+      const enabled = !this.autoExposureEnabled;
+      this.setAutoExposureEnabled(enabled, true);
+      this.callbacks.onAutoExposureChange(enabled);
+      if (event.detail > 0) {
+        this.elements.appAutoExposureButton.blur();
       }
     });
 
@@ -1924,6 +1962,22 @@ function readStoredAutoFitImageOnSelect(): boolean {
 function saveStoredAutoFitImageOnSelect(enabled: boolean): void {
   try {
     window.localStorage.setItem(AUTO_FIT_IMAGE_ON_SELECT_STORAGE_KEY, String(enabled));
+  } catch {
+    // Storage can be unavailable in private contexts; keep the runtime state anyway.
+  }
+}
+
+function readStoredAutoExposure(): boolean {
+  try {
+    return window.localStorage.getItem(AUTO_EXPOSURE_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function saveStoredAutoExposure(enabled: boolean): void {
+  try {
+    window.localStorage.setItem(AUTO_EXPOSURE_STORAGE_KEY, String(enabled));
   } catch {
     // Storage can be unavailable in private contexts; keep the runtime state anyway.
   }

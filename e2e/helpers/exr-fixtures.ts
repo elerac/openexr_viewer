@@ -226,6 +226,30 @@ export function buildLandscapeRgbExr(): Buffer {
   }
 }
 
+export function buildAutoExposureRgbExr(): Buffer {
+  ensureExrEncoderInitialized();
+
+  const encoder = new ExrEncoder(5, 1);
+  try {
+    encoder.addLayer(
+      null,
+      ['R', 'G', 'B'],
+      new Float32Array([
+        1, 0, 0,
+        2, 0, 0,
+        4, 0, 0,
+        8, 0, 0,
+        1000, 0, 0
+      ]),
+      SamplePrecision.F32,
+      CompressionMethod.None
+    );
+    return Buffer.from(encoder.encode());
+  } finally {
+    encoder.free();
+  }
+}
+
 export function buildPortraitRgbExr(): Buffer {
   ensureExrEncoderInitialized();
 

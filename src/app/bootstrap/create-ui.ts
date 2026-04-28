@@ -172,6 +172,9 @@ export function createViewerUi({
     onAutoFitImage: () => {
       getSessionController().fitActiveSessionToViewport();
     },
+    onAutoExposureChange: (enabled) => {
+      core.dispatch({ type: 'autoExposureSet', enabled });
+    },
     getScreenshotFitRect: () => {
       const state = core.getState();
       const activeSession = selectActiveSession(state);

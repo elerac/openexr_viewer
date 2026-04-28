@@ -22,6 +22,9 @@ const mocks = vi.hoisted(() => {
     loadedColormapId: null,
     stokesDisplayRestoreStates: {},
     autoFitImageOnSelect: false,
+    autoExposureEnabled: false,
+    pendingAutoExposureRequestId: null,
+    pendingAutoExposureRequestKey: null,
     sessionState: {
       exposureEv: 0,
       viewerMode: 'image',
@@ -222,6 +225,7 @@ vi.mock('../src/ui/viewer-ui', () => ({
     readonly setLoading = vi.fn();
     readonly setRgbViewLoading = vi.fn();
     readonly setAutoFitImageOnSelect = vi.fn();
+    readonly setAutoExposureEnabled = vi.fn();
     readonly setDisplayCacheBudget = vi.fn();
     readonly setDisplayCacheUsage = vi.fn();
     readonly setOpenedImageOptions = vi.fn();
@@ -339,6 +343,10 @@ vi.mock('../src/services/render-cache-service', () => ({
     readonly prepareActiveSession = mocks.renderCachePrepareActiveSession;
     readonly requestDisplayLuminanceRange = vi.fn(() => ({
       displayLuminanceRange: null,
+      pending: false
+    }));
+    readonly requestAutoExposure = vi.fn(() => ({
+      autoExposure: null,
       pending: false
     }));
     readonly getCachedLuminanceRange = vi.fn(() => null);

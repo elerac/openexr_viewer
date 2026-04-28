@@ -1,3 +1,9 @@
+import {
+  AUTO_EXPOSURE_PERCENTILE,
+  AUTO_EXPOSURE_SOURCE,
+  createAutoExposureResult,
+  type AutoExposureResult
+} from './auto-exposure';
 import { computeRec709Luminance } from './color';
 import {
   readPixelChannelValue,
@@ -165,6 +171,17 @@ export function buildDisplayLuminanceRevisionKey(
   return [
     state.activeLayer,
     serializeDisplaySelectionLuminanceKey(state.displaySelection, state.visualizationMode ?? 'rgb')
+  ].join(':');
+}
+
+export function buildDisplayAutoExposureRevisionKey(
+  state: Pick<ViewerState, 'activeLayer' | 'displaySelection'> & Partial<Pick<ViewerState, 'visualizationMode'>>,
+  percentile = AUTO_EXPOSURE_PERCENTILE
+): string {
+  return [
+    state.activeLayer,
+    serializeDisplaySelectionRevisionKey(state.displaySelection, state.visualizationMode ?? 'rgb'),
+    `autoExposure:${AUTO_EXPOSURE_SOURCE}:p${percentile}`
   ].join(':');
 }
 
@@ -355,6 +372,46 @@ export function computeDisplaySelectionLuminanceRange(
   }
 
   return { min, max };
+}
+
+export function computeDisplaySelectionAutoExposure(
+  layer: DecodedLayer,
+  width: number,
+  height: number,
+  selection: DisplaySelection | null,
+  visualizationMode: VisualizationMode = 'rgb',
+  percentile = AUTO_EXPOSURE_PERCENTILE
+): AutoExposureResult {
+  const pixelCount = Math.max(0, width * height);
+  if (pixelCount === 0) {
+    return createAutoExposureResult(1, percentile);
+  }
+
+  const evaluator = resolveDisplaySelectionEvaluator(layer, selection, visualizationMode);
+  const values = createDisplayPixelValues();
+  const scalars = new Float32Array(pixelCount);
+  let scalarCount = 0;
+
+  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
+    readDisplaySelectionPixelValuesAtIndex(evaluator, pixelIndex, values);
+    const scalar = Math.max(values.r, values.g, values.b);
+    if (!Number.isFinite(scalar) || scalar <= 0) {
+      continue;
+    }
+
+    scalars[scalarCount] = scalar;
+    scalarCount += 1;
+  }
+
+  if (scalarCount === 0) {
+    return createAutoExposureResult(1, percentile);
+  }
+
+  const percentile01 = Math.min(1, Math.max(0, percentile / 100));
+  const percentileIndex = Math.floor((scalarCount - 1) * percentile01);
+  const sortedScalars = scalars.subarray(0, scalarCount);
+  sortedScalars.sort();
+  return createAutoExposureResult(sortedScalars[percentileIndex] ?? 1, percentile);
 }
 
 export function computeDisplaySelectionRoiStats(
