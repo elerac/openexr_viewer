@@ -120,6 +120,7 @@ export interface ViewerAppState {
   stokesColormapDefaults: StokesColormapDefaultSettings;
   autoFitImageOnSelect: boolean;
   autoExposureEnabled: boolean;
+  autoExposurePercentile: number;
 }
 
 export type ViewerIntent =
@@ -127,6 +128,7 @@ export type ViewerIntent =
   | { type: 'loadingSet'; loading: boolean }
   | { type: 'autoFitImageOnSelectSet'; enabled: boolean }
   | { type: 'autoExposureSet'; enabled: boolean }
+  | { type: 'autoExposurePercentileSet'; percentile: number }
   | { type: 'colormapRegistryResolved'; registry: ColormapRegistry }
   | { type: 'colormapLoadStarted'; requestId: number }
   | { type: 'colormapLoadResolved'; requestId: number; colormapId: string; lut: ColormapLut }

@@ -1,4 +1,5 @@
 import { DEFAULT_COLORMAP_ID } from '../colormaps';
+import { AUTO_EXPOSURE_PERCENTILE, normalizeAutoExposurePercentile } from '../auto-exposure';
 import { buildChannelThumbnailSessionPrefix } from '../channel-thumbnail-keys';
 import {
   buildZeroCenteredColormapRange,
@@ -72,7 +73,8 @@ export function createInitialViewerAppState(): ViewerAppState {
     stokesDisplayRestoreStates: {},
     stokesColormapDefaults: createDefaultStokesColormapDefaultSettings(),
     autoFitImageOnSelect: false,
-    autoExposureEnabled: false
+    autoExposureEnabled: false,
+    autoExposurePercentile: AUTO_EXPOSURE_PERCENTILE
   };
 }
 
@@ -100,6 +102,15 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         pendingAutoExposureRequestId: intent.enabled ? state.pendingAutoExposureRequestId : null,
         pendingAutoExposureRequestKey: intent.enabled ? state.pendingAutoExposureRequestKey : null
       };
+    case 'autoExposurePercentileSet': {
+      const percentile = normalizeAutoExposurePercentile(intent.percentile);
+      return state.autoExposurePercentile === percentile ? state : {
+        ...state,
+        autoExposurePercentile: percentile,
+        pendingAutoExposureRequestId: null,
+        pendingAutoExposureRequestKey: null
+      };
+    }
     case 'colormapRegistryResolved': {
       const nextState = patchSessionState(state, {
         activeColormapId: intent.registry.defaultId

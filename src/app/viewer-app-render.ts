@@ -1,4 +1,4 @@
-import { AUTO_EXPOSURE_PERCENTILE, AUTO_EXPOSURE_SOURCE } from '../auto-exposure';
+import { AUTO_EXPOSURE_SOURCE } from '../auto-exposure';
 import {
   buildDisplayAutoExposureRevisionKey,
   buildDisplayLuminanceRevisionKey
@@ -339,13 +339,13 @@ function createAutoExposureRequestSelector(): (
           visualizationMode: 'rgb' as const,
           displaySelection: state.sessionState.displaySelection,
           decodedRef: activeSession.decoded,
-          percentile: AUTO_EXPOSURE_PERCENTILE,
+          percentile: state.autoExposurePercentile,
           source: AUTO_EXPOSURE_SOURCE,
           requestKey: `${activeSession.id}:${buildDisplayAutoExposureRevisionKey({
             activeLayer: state.sessionState.activeLayer,
             displaySelection: state.sessionState.displaySelection,
             visualizationMode: 'rgb'
-          }, AUTO_EXPOSURE_PERCENTILE)}`
+          }, state.autoExposurePercentile)}`
         }
       : null;
     if (sameAutoExposureRequest(previousResult, nextResult)) {

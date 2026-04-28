@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { AUTO_EXPOSURE_PERCENTILE } from '../src/auto-exposure';
 import { ViewerAppCore } from '../src/app/viewer-app-core';
 import { createInteractionState } from '../src/view-state';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
@@ -93,6 +94,21 @@ describe('viewer app core', () => {
     });
 
     expect(core.getState().sessionState.exposureEv).toBe(-2);
+  });
+
+  it('stores auto exposure percentile and clears pending auto exposure requests when it changes', () => {
+    const core = new ViewerAppCore();
+
+    expect(core.getState().autoExposurePercentile).toBe(AUTO_EXPOSURE_PERCENTILE);
+
+    core.dispatch({ type: 'autoExposureRequestStarted', requestId: 3, requestKey: 'session:old' });
+    expect(core.getState().pendingAutoExposureRequestId).toBe(3);
+
+    core.dispatch({ type: 'autoExposurePercentileSet', percentile: 98.24 });
+
+    expect(core.getState().autoExposurePercentile).toBe(98.2);
+    expect(core.getState().pendingAutoExposureRequestId).toBeNull();
+    expect(core.getState().pendingAutoExposureRequestKey).toBeNull();
   });
 
   it('renames a session display name without changing the original source identity', () => {

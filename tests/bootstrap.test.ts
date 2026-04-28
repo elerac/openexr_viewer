@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => {
     stokesDisplayRestoreStates: {},
     autoFitImageOnSelect: false,
     autoExposureEnabled: false,
+    autoExposurePercentile: 99.5,
     pendingAutoExposureRequestId: null,
     pendingAutoExposureRequestKey: null,
     sessionState: {

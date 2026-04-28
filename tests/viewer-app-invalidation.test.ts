@@ -140,6 +140,28 @@ describe('viewer app lanes', () => {
     expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(false);
   });
 
+  it('uses the configured auto exposure percentile in render requests', () => {
+    const state = {
+      ...createActiveState(),
+      autoExposureEnabled: true
+    };
+    const nextState = {
+      ...state,
+      autoExposurePercentile: 98.2
+    };
+    const selectRenderSnapshot = createViewerRenderSnapshotSelector();
+    const previousSnapshot = selectRenderSnapshot(state);
+    const nextSnapshot = selectRenderSnapshot(nextState);
+    const renderFlags = computeViewerRenderInvalidation(previousSnapshot, nextSnapshot);
+
+    expect(previousSnapshot.autoExposureRequest?.percentile).toBe(99.5);
+    expect(nextSnapshot.autoExposureRequest?.percentile).toBe(98.2);
+    expect(previousSnapshot.autoExposureRequest?.requestKey).toContain('p99.5');
+    expect(nextSnapshot.autoExposureRequest?.requestKey).toContain('p98.2');
+    expect(previousSnapshot.autoExposureRequest?.requestKey).not.toBe(nextSnapshot.autoExposureRequest?.requestKey);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ResourceRequestAutoExposure)).toBe(true);
+  });
+
   it('keeps display selection transitions busy without requesting the full loading overlay', () => {
     const state = createActiveState();
     const selectUiSnapshot = createViewerUiSnapshotSelector();

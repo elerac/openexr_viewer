@@ -324,6 +324,28 @@ describe('render cache service', () => {
       },
       pending: false
     });
+
+    expect(service.requestAutoExposure(session, session.state, null, 50)).toEqual({
+      autoExposure: null,
+      pending: true
+    });
+
+    await flush();
+
+    expect(onAutoExposureResolved).toHaveBeenCalledTimes(2);
+    expect(onAutoExposureResolved).toHaveBeenLastCalledWith({
+      requestId: null,
+      sessionId: session.id,
+      activeLayer: 0,
+      visualizationMode: 'rgb',
+      displaySelection: session.state.displaySelection,
+      autoExposure: {
+        scalar: 4,
+        exposureEv: -2,
+        percentile: 50,
+        source: 'rgbMax'
+      }
+    });
   });
 
   it('reuses finite mono ranges across alpha-only selection changes', async () => {

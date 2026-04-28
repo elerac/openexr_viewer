@@ -96,9 +96,18 @@ import {
   createFolderLoadAdmission,
   getFolderLoadStats
 } from '../folder-load-limits';
+import {
+  AUTO_EXPOSURE_PERCENTILE,
+  AUTO_EXPOSURE_PERCENTILE_MAX,
+  AUTO_EXPOSURE_PERCENTILE_MIN,
+  AUTO_EXPOSURE_PERCENTILE_STEP,
+  formatAutoExposurePercentile,
+  parseAutoExposurePercentile
+} from '../auto-exposure';
 
 const AUTO_FIT_IMAGE_ON_SELECT_STORAGE_KEY = 'openexr-viewer:auto-fit-image-on-select:v1';
 const AUTO_EXPOSURE_STORAGE_KEY = 'openexr-viewer:auto-exposure:v1';
+const AUTO_EXPOSURE_PERCENTILE_STORAGE_KEY = 'openexr-viewer:auto-exposure-percentile:v1';
 
 export interface UiCallbacks {
   onOpenFileClick: () => void;
@@ -140,6 +149,7 @@ export interface UiCallbacks {
   onAutoFitImageOnSelectChange: (enabled: boolean) => void;
   onAutoFitImage: () => void;
   onAutoExposureChange: (enabled: boolean) => void;
+  onAutoExposurePercentileChange: (percentile: number) => void;
   getScreenshotFitRect: () => ViewportRect | null;
   onViewerModeChange: (mode: ViewerMode) => void;
   onLayerChange: (layerIndex: number) => void;
@@ -215,6 +225,7 @@ export class ViewerUi implements Disposable {
   private viewerMode: ViewerMode = 'image';
   private autoFitImageOnSelect = false;
   private autoExposureEnabled = false;
+  private autoExposurePercentile = AUTO_EXPOSURE_PERCENTILE;
   private hasActiveChannelImage = false;
   private disposed = false;
 
@@ -481,6 +492,8 @@ export class ViewerUi implements Disposable {
     this.callbacks.onAutoFitImageOnSelectChange(this.autoFitImageOnSelect);
     this.setAutoExposureEnabled(readStoredAutoExposure(), false);
     this.callbacks.onAutoExposureChange(this.autoExposureEnabled);
+    this.setAutoExposurePercentile(readStoredAutoExposurePercentile(), false);
+    this.callbacks.onAutoExposurePercentileChange(this.autoExposurePercentile);
     this.updateViewerModeMenuItemsDisabled();
     this.updateFileMenuItemsDisabled();
     this.bindEvents();
@@ -592,6 +605,21 @@ export class ViewerUi implements Disposable {
     this.elements.appAutoExposureButton.setAttribute('aria-pressed', enabled ? 'true' : 'false');
     if (persist) {
       saveStoredAutoExposure(enabled);
+    }
+  }
+
+  setAutoExposurePercentile(percentile: number, persist = false): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.autoExposurePercentile = parseAutoExposurePercentile(String(percentile));
+    this.elements.autoExposurePercentileInput.min = String(AUTO_EXPOSURE_PERCENTILE_MIN);
+    this.elements.autoExposurePercentileInput.max = String(AUTO_EXPOSURE_PERCENTILE_MAX);
+    this.elements.autoExposurePercentileInput.step = String(AUTO_EXPOSURE_PERCENTILE_STEP);
+    this.elements.autoExposurePercentileInput.value = formatAutoExposurePercentile(this.autoExposurePercentile);
+    if (persist) {
+      saveStoredAutoExposurePercentile(this.autoExposurePercentile);
     }
   }
 
@@ -1678,10 +1706,18 @@ export class ViewerUi implements Disposable {
       );
     });
 
+    this.disposables.addEventListener(this.elements.autoExposurePercentileInput, 'change', () => {
+      const percentile = parseAutoExposurePercentile(this.elements.autoExposurePercentileInput.value);
+      this.setAutoExposurePercentile(percentile, true);
+      this.callbacks.onAutoExposurePercentileChange(percentile);
+    });
+
     this.disposables.addEventListener(this.elements.resetSettingsButton, 'click', () => {
       this.layoutSplitController.resetToDefaults();
       this.themeController.reset();
       this.setSpectrumLatticeMotionPreference(DEFAULT_SPECTRUM_LATTICE_MOTION_PREFERENCE);
+      this.setAutoExposurePercentile(AUTO_EXPOSURE_PERCENTILE, true);
+      this.callbacks.onAutoExposurePercentileChange(this.autoExposurePercentile);
       this.setStokesDefaultSettingsOptions(
         this.stokesColormapOptions,
         createDefaultStokesColormapDefaultSettings()
@@ -1978,6 +2014,28 @@ function readStoredAutoExposure(): boolean {
 function saveStoredAutoExposure(enabled: boolean): void {
   try {
     window.localStorage.setItem(AUTO_EXPOSURE_STORAGE_KEY, String(enabled));
+  } catch {
+    // Storage can be unavailable in private contexts; keep the runtime state anyway.
+  }
+}
+
+function readStoredAutoExposurePercentile(): number {
+  try {
+    return parseAutoExposurePercentile(window.localStorage.getItem(AUTO_EXPOSURE_PERCENTILE_STORAGE_KEY));
+  } catch {
+    return AUTO_EXPOSURE_PERCENTILE;
+  }
+}
+
+function saveStoredAutoExposurePercentile(percentile: number): void {
+  try {
+    const value = parseAutoExposurePercentile(String(percentile));
+    if (value === AUTO_EXPOSURE_PERCENTILE) {
+      window.localStorage.removeItem(AUTO_EXPOSURE_PERCENTILE_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(AUTO_EXPOSURE_PERCENTILE_STORAGE_KEY, formatAutoExposurePercentile(value));
   } catch {
     // Storage can be unavailable in private contexts; keep the runtime state anyway.
   }

@@ -34,6 +34,9 @@ import {
   SPECTRUM_LATTICE_MOTION_STORAGE_KEY
 } from '../src/spectrum-lattice-motion';
 import { createDefaultStokesColormapDefaultSettings } from '../src/stokes';
+import { AUTO_EXPOSURE_PERCENTILE } from '../src/auto-exposure';
+
+const AUTO_EXPOSURE_PERCENTILE_STORAGE_KEY = 'openexr-viewer:auto-exposure-percentile:v1';
 
 interface ResizeObserverRegistration {
   callback: ResizeObserverCallback;
@@ -517,6 +520,49 @@ describe('top bar and display controls', () => {
     expect(restoredButton.getAttribute('aria-pressed')).toBe('false');
     expect(window.localStorage.getItem('openexr-viewer:auto-exposure:v1')).toBe('false');
     expect(restoredCallback).toHaveBeenLastCalledWith(false);
+  });
+
+  it('persists and dispatches the auto exposure percentile setting', () => {
+    installUiFixture();
+
+    const onAutoExposurePercentileChange = vi.fn();
+    new ViewerUi(createUiCallbacks({ onAutoExposurePercentileChange }));
+    const input = document.getElementById('auto-exposure-percentile-input') as HTMLInputElement;
+
+    expect(input.value).toBe('99.5');
+    expect(input.min).toBe('1');
+    expect(input.max).toBe('100');
+    expect(input.step).toBe('0.1');
+    expect(onAutoExposurePercentileChange).toHaveBeenLastCalledWith(AUTO_EXPOSURE_PERCENTILE);
+
+    input.value = '98.24';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(input.value).toBe('98.2');
+    expect(window.localStorage.getItem(AUTO_EXPOSURE_PERCENTILE_STORAGE_KEY)).toBe('98.2');
+    expect(onAutoExposurePercentileChange).toHaveBeenLastCalledWith(98.2);
+
+    input.value = '500';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(input.value).toBe('100.0');
+    expect(window.localStorage.getItem(AUTO_EXPOSURE_PERCENTILE_STORAGE_KEY)).toBe('100.0');
+    expect(onAutoExposurePercentileChange).toHaveBeenLastCalledWith(100);
+
+    installUiFixture();
+    const restoredCallback = vi.fn();
+    new ViewerUi(createUiCallbacks({ onAutoExposurePercentileChange: restoredCallback }));
+    const restoredInput = document.getElementById('auto-exposure-percentile-input') as HTMLInputElement;
+
+    expect(restoredInput.value).toBe('100.0');
+    expect(restoredCallback).toHaveBeenLastCalledWith(100);
+
+    restoredInput.value = 'bad';
+    restoredInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(restoredInput.value).toBe('99.5');
+    expect(window.localStorage.getItem(AUTO_EXPOSURE_PERCENTILE_STORAGE_KEY)).toBeNull();
+    expect(restoredCallback).toHaveBeenLastCalledWith(99.5);
   });
 
   it('does not retain focus after pointer auto exposure activation', () => {
@@ -1109,6 +1155,9 @@ describe('panel split sizing', () => {
     const resetSettingsButton = document.getElementById('reset-settings-button') as HTMLButtonElement;
     const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
     const spectrumMotionSelect = document.getElementById('spectrum-lattice-motion-select') as HTMLSelectElement;
+    const autoExposurePercentileInput = document.getElementById(
+      'auto-exposure-percentile-input'
+    ) as HTMLInputElement;
     const stokesAolpSelect = document.getElementById('stokes-default-aolp-colormap-select') as HTMLSelectElement;
     const imageButton = document.getElementById('image-panel-collapse-button') as HTMLButtonElement;
     const rightButton = document.getElementById('right-panel-collapse-button') as HTMLButtonElement;
@@ -1124,16 +1173,21 @@ describe('panel split sizing', () => {
     expect(themeSelect.value).toBe(SPECTRUM_LATTICE_THEME_ID);
     expect(spectrumMotionSelect.value).toBe(SPECTRUM_LATTICE_MOTION_FOLLOW_SYSTEM);
     expect(stokesAolpSelect.value).toBe('0');
+    autoExposurePercentileInput.value = '97.5';
+    autoExposurePercentileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(window.localStorage.getItem(AUTO_EXPOSURE_PERCENTILE_STORAGE_KEY)).toBe('97.5');
 
     resetSettingsButton.click();
 
     expect(onResetSettings).toHaveBeenCalledTimes(1);
     expect(themeSelect.value).toBe('default');
     expect(spectrumMotionSelect.value).toBe(SPECTRUM_LATTICE_MOTION_ANIMATE);
+    expect(autoExposurePercentileInput.value).toBe('99.5');
     expect(stokesAolpSelect.value).toBe('1');
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
     expect(window.localStorage.getItem(SPECTRUM_LATTICE_MOTION_STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(AUTO_EXPOSURE_PERCENTILE_STORAGE_KEY)).toBeNull();
     expect(imageButton.getAttribute('aria-expanded')).toBe('true');
     expect(rightButton.getAttribute('aria-expanded')).toBe('true');
     expect(bottomButton.getAttribute('aria-expanded')).toBe('true');
@@ -1435,7 +1489,7 @@ describe('view menu', () => {
     expect(resetSettingsButton.type).toBe('button');
   });
 
-  it('renders the theme and Stokes defaults table before the memory budget setting', () => {
+  it('renders the theme and Stokes defaults table before the exposure and memory settings', () => {
     installUiFixture();
     new ViewerUi(createUiCallbacks());
 
@@ -1443,8 +1497,21 @@ describe('view menu', () => {
       .map((item) => item.textContent?.trim());
     const themeSelect = document.getElementById('theme-select') as HTMLSelectElement;
     const spectrumMotionSelect = document.getElementById('spectrum-lattice-motion-select') as HTMLSelectElement;
+    const autoExposurePercentileInput = document.getElementById(
+      'auto-exposure-percentile-input'
+    ) as HTMLInputElement;
 
-    expect(labels).toEqual(['Theme', 'Spectrum lattice motion', 'Stokes Defaults', 'Memory Budget']);
+    expect(labels).toEqual([
+      'Theme',
+      'Spectrum lattice motion',
+      'Stokes Defaults',
+      'Auto Exposure Percentile',
+      'Memory Budget'
+    ]);
+    expect(autoExposurePercentileInput.value).toBe('99.5');
+    expect(autoExposurePercentileInput.min).toBe('1');
+    expect(autoExposurePercentileInput.max).toBe('100');
+    expect(autoExposurePercentileInput.step).toBe('0.1');
     expect(Array.from(document.querySelectorAll('#stokes-default-settings-table tbody th')).map((cell) => cell.textContent?.trim())).toEqual([
       'AoLP',
       'Degree',
@@ -2072,6 +2139,9 @@ describe('view menu', () => {
     const normalizedZeroCenter = document.getElementById(
       'stokes-default-normalized-zero-center-checkbox'
     ) as HTMLInputElement;
+    const autoExposurePercentileInput = document.getElementById(
+      'auto-exposure-percentile-input'
+    ) as HTMLInputElement;
     const budgetInput = document.getElementById('display-cache-budget-input') as HTMLSelectElement;
     const resetSettingsButton = document.getElementById('reset-settings-button') as HTMLButtonElement;
     const closeButton = document.getElementById('settings-dialog-close-button') as HTMLButtonElement;
@@ -2106,6 +2176,7 @@ describe('view menu', () => {
       normalizedVmin,
       normalizedVmax,
       normalizedZeroCenter,
+      autoExposurePercentileInput,
       budgetInput,
       resetSettingsButton,
       closeButton
@@ -6790,6 +6861,7 @@ function createUiCallbacksBase() {
     onAutoFitImageOnSelectChange: () => {},
     onAutoFitImage: () => {},
     onAutoExposureChange: () => {},
+    onAutoExposurePercentileChange: () => {},
     getScreenshotFitRect: (): ViewportRect | null => null,
     onViewerModeChange: () => {},
     onLayerChange: () => {},
