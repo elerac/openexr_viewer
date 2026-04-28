@@ -609,6 +609,115 @@ describe('viewer interaction image keyboard panning', () => {
   });
 });
 
+describe('viewer interaction keyboard zoom', () => {
+  it('zooms image in and out around the viewport center when no pointer is available', () => {
+    const harness = createHarness();
+
+    harness.interaction.handleViewerKeyboardZoom('in');
+    expect(harness.getState().zoom).toBeCloseTo(12.5);
+    expect(harness.getState().panX).toBeCloseTo(5);
+    expect(harness.getState().panY).toBeCloseTo(5);
+
+    harness.interaction.handleViewerKeyboardZoom('out');
+    expect(harness.getState().zoom).toBeCloseTo(10);
+    expect(harness.getState().panX).toBeCloseTo(5);
+    expect(harness.getState().panY).toBeCloseTo(5);
+  });
+
+  it('zooms image around the last pointer position and refreshes hover', () => {
+    const harness = createHarness({}, {
+      imageSize: { width: 20, height: 20 },
+      viewport: { width: 100, height: 100 }
+    });
+
+    dispatchPointer(harness.element, 'pointermove', {
+      pointerId: 1,
+      clientX: 75,
+      clientY: 50
+    });
+    harness.onHoverPixel.mockClear();
+
+    harness.interaction.handleViewerKeyboardZoom('in');
+
+    expect(harness.getState().zoom).toBeCloseTo(12.5);
+    expect(harness.getState().panX).toBeCloseTo(5.5);
+    expect(harness.getState().panY).toBeCloseTo(5);
+
+    const expected = screenToImage(75, 50, harness.getState(), { width: 100, height: 100 }, 20, 20);
+    expect(expected).not.toBeNull();
+    expect(harness.onHoverPixel).toHaveBeenCalledWith(expected);
+  });
+
+  it('keeps tap zoom behavior and advances smoothly while an image zoom key is held', () => {
+    const harness = createHarness();
+
+    harness.interaction.setViewerKeyboardZoomInput(createViewerKeyboardZoomInput({ zoomIn: true }));
+    expect(harness.getState().zoom).toBeCloseTo(12.5);
+    expect(harness.hasScheduledFrame()).toBe(true);
+
+    harness.flushFrame(1000);
+    expect(harness.getState().zoom).toBeCloseTo(12.5);
+
+    harness.flushFrame(1020);
+    expect(harness.getState().zoom).toBeGreaterThan(12.5);
+    expect(harness.getState().zoom).toBeGreaterThan(12.65);
+    expect(harness.getState().zoom).toBeLessThan(12.7);
+    expect(harness.hasScheduledFrame()).toBe(true);
+
+    const zoomAfterHeldFrame = harness.getState().zoom;
+    harness.interaction.setViewerKeyboardZoomInput(createViewerKeyboardZoomInput());
+    expect(harness.hasScheduledFrame()).toBe(false);
+
+    harness.flushFrame(1040);
+    expect(harness.getState().zoom).toBe(zoomAfterHeldFrame);
+  });
+
+  it('is a no-op for image zoom when there is no active image or no valid viewport', () => {
+    const noImageHarness = createHarness({}, {
+      imageSize: null
+    });
+    noImageHarness.interaction.handleViewerKeyboardZoom('in');
+    expect(noImageHarness.onViewChange).not.toHaveBeenCalled();
+    expect(noImageHarness.onHoverPixel).not.toHaveBeenCalled();
+
+    const invalidViewportHarness = createHarness({}, {
+      viewport: { width: 0, height: 0 }
+    });
+    invalidViewportHarness.interaction.handleViewerKeyboardZoom('out');
+    expect(invalidViewportHarness.onViewChange).not.toHaveBeenCalled();
+    expect(invalidViewportHarness.onHoverPixel).not.toHaveBeenCalled();
+  });
+
+  it('zooms panorama FOV in and out while respecting clamps', () => {
+    const harness = createHarness({
+      viewerMode: 'panorama',
+      panoramaHfovDeg: 100
+    }, {
+      imageSize: { width: 360, height: 180 }
+    });
+
+    harness.interaction.handleViewerKeyboardZoom('in');
+    expect(harness.getState().panoramaHfovDeg).toBeCloseTo(80);
+
+    harness.interaction.handleViewerKeyboardZoom('out');
+    expect(harness.getState().panoramaHfovDeg).toBeCloseTo(100);
+
+    const minHarness = createHarness({
+      viewerMode: 'panorama',
+      panoramaHfovDeg: 1
+    });
+    minHarness.interaction.handleViewerKeyboardZoom('in');
+    expect(minHarness.getState().panoramaHfovDeg).toBe(1);
+
+    const maxHarness = createHarness({
+      viewerMode: 'panorama',
+      panoramaHfovDeg: 180
+    });
+    maxHarness.interaction.handleViewerKeyboardZoom('out');
+    expect(maxHarness.getState().panoramaHfovDeg).toBe(180);
+  });
+});
+
 describe('viewer interaction panorama keyboard orbit', () => {
   it('orbits panorama yaw with left and right keyboard input', () => {
     const harness = createHarness({
@@ -974,6 +1083,17 @@ function createViewerKeyboardNavigationInput(overrides: Partial<{
     left: false,
     down: false,
     right: false,
+    ...overrides
+  };
+}
+
+function createViewerKeyboardZoomInput(overrides: Partial<{
+  zoomIn: boolean;
+  zoomOut: boolean;
+}> = {}) {
+  return {
+    zoomIn: false,
+    zoomOut: false,
     ...overrides
   };
 }

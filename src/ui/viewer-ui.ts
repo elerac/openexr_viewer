@@ -57,6 +57,7 @@ import type {
   RoiStats,
   StokesAolpDegreeModulationMode,
   ViewerKeyboardNavigationInput,
+  ViewerKeyboardZoomInput,
   ViewerMode,
   ViewportInfo,
   ViewportRect,
@@ -134,6 +135,7 @@ export interface UiCallbacks {
   onDisplayCacheBudgetChange: (mb: number) => void;
   onExposureChange: (value: number) => void;
   onViewerKeyboardNavigationInputChange: (input: ViewerKeyboardNavigationInput) => void;
+  onViewerKeyboardZoomInputChange: (input: ViewerKeyboardZoomInput) => void;
   onAutoFitImageOnSelectChange: (enabled: boolean) => void;
   onAutoFitImage: () => void;
   getScreenshotFitRect: () => ViewportRect | null;
@@ -350,6 +352,9 @@ export class ViewerUi implements Disposable {
       getOpenedImageCount: () => this.openedImageCount,
       onViewerKeyboardNavigationInputChange: (input) => {
         this.callbacks.onViewerKeyboardNavigationInputChange(input);
+      },
+      onViewerKeyboardZoomInputChange: (input) => {
+        this.callbacks.onViewerKeyboardZoomInputChange(input);
       },
       routeVerticalNavigation: (target, delta) => {
         if (target === 'channelView') {

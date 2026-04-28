@@ -4,14 +4,28 @@ import type {
   PanoramaKeyboardOrbitInput,
   ViewerKeyboardNavigationDirection,
   ViewerKeyboardNavigationInput,
+  ViewerKeyboardZoomDirection,
+  ViewerKeyboardZoomInput,
   ViewportInfo,
   ViewerState
 } from '../types';
 import { imageToScreen } from './image-geometry';
-import { ImageKeyboardPanController, panImageFromDrag, zoomImageFromWheel } from './image-mode';
-import { orbitPanoramaFromDrag, PanoramaKeyboardOrbitController, zoomPanoramaFromWheel } from './panorama-mode';
+import {
+  ImageKeyboardPanController,
+  panImageFromDrag,
+  zoomImageByKeyboardStep,
+  zoomImageFromKeyboard,
+  zoomImageFromWheel
+} from './image-mode';
+import {
+  orbitPanoramaFromDrag,
+  PanoramaKeyboardOrbitController,
+  zoomPanoramaByKeyboardStep,
+  zoomPanoramaFromKeyboard,
+  zoomPanoramaFromWheel
+} from './panorama-mode';
 import { getPanoramaProjectionDiameter } from './panorama-geometry';
-import { resolveProbePixel } from './probe-mode';
+import { resolveHoverPixel, resolveProbePixel } from './probe-mode';
 import {
   commitRoiFromDrag,
   createDraftRoiFromAnchor,
@@ -30,12 +44,15 @@ import type { InteractionCallbacks, InteractionDependencies, PointerPosition } f
 export type { InteractionCallbacks, InteractionDependencies } from './shared';
 
 type DragMode = 'pan' | 'roi' | 'screenshot' | null;
+const KEYBOARD_ZOOM_SPEED_STEPS_PER_SECOND = 3;
+const KEYBOARD_ZOOM_MAX_FRAME_MS = 50;
 
 export class ViewerInteraction {
   private readonly element: HTMLElement;
   private readonly callbacks: InteractionCallbacks;
   private readonly imageKeyboardPan: ImageKeyboardPanController;
   private readonly panoramaKeyboardOrbit: PanoramaKeyboardOrbitController;
+  private readonly keyboardZoom: ViewerKeyboardZoomController;
   private dragging = false;
   private movedDuringDrag = false;
   private dragMode: DragMode = null;
@@ -67,6 +84,15 @@ export class ViewerInteraction {
       onHoverPixel: callbacks.onHoverPixel,
       getLastPointerInElement: () => this.lastPointerInElement
     }, dependencies);
+    this.keyboardZoom = new ViewerKeyboardZoomController({
+      getState: callbacks.getState,
+      getViewport: callbacks.getViewport,
+      getImageSize: callbacks.getImageSize,
+      onViewChange: callbacks.onViewChange,
+      onHoverPixel: callbacks.onHoverPixel,
+      getLastPointerInElement: () => this.lastPointerInElement,
+      isBlocked: () => this.getScreenshotSelection().active
+    }, dependencies);
 
     this.element.addEventListener('wheel', this.onWheel, { passive: false });
     this.element.addEventListener('pointerdown', this.onPointerDown);
@@ -85,6 +111,7 @@ export class ViewerInteraction {
     this.element.removeEventListener('contextmenu', this.onContextMenu);
     this.imageKeyboardPan.destroy();
     this.panoramaKeyboardOrbit.destroy();
+    this.keyboardZoom.destroy();
   }
 
   handlePanoramaKeyboardOrbit(direction: PanoramaKeyboardOrbitDirection): void {
@@ -105,6 +132,50 @@ export class ViewerInteraction {
     if (state.viewerMode === 'panorama') {
       this.panoramaKeyboardOrbit.handle(direction);
     }
+  }
+
+  handleViewerKeyboardZoom(direction: ViewerKeyboardZoomDirection): void {
+    if (this.getScreenshotSelection().active) {
+      return;
+    }
+
+    const imageSize = this.callbacks.getImageSize();
+    if (!imageSize) {
+      return;
+    }
+
+    const state = this.callbacks.getState();
+    const viewport = this.callbacks.getViewport();
+    if (viewport.width <= 0 || viewport.height <= 0) {
+      return;
+    }
+
+    if (state.viewerMode === 'panorama') {
+      const nextView = zoomPanoramaFromKeyboard(state, direction);
+      const nextState = { ...state, ...nextView };
+      this.callbacks.onViewChange(nextView);
+      this.callbacks.onHoverPixel(
+        resolveHoverPixel(this.lastPointerInElement, nextState, viewport, imageSize)
+      );
+      return;
+    }
+
+    if (state.viewerMode !== 'image') {
+      return;
+    }
+
+    const point = this.lastPointerInElement ?? {
+      x: viewport.width * 0.5,
+      y: viewport.height * 0.5
+    };
+    const nextView = zoomImageFromKeyboard(state, viewport, point, direction);
+    const nextState = { ...state, ...nextView };
+    this.callbacks.onViewChange(nextView);
+    this.callbacks.onHoverPixel(resolveProbePixel(point, nextState, viewport, imageSize));
+  }
+
+  setViewerKeyboardZoomInput(input: ViewerKeyboardZoomInput): void {
+    this.keyboardZoom.setInput(input);
   }
 
   setViewerKeyboardNavigationInput(input: ViewerKeyboardNavigationInput): void {
@@ -463,6 +534,190 @@ export class ViewerInteraction {
   private getScreenshotSelection() {
     return this.callbacks.getScreenshotSelection?.() ?? { active: false, rect: null };
   }
+}
+
+type ViewerKeyboardZoomCallbacks = Pick<
+  InteractionCallbacks,
+  'getState' | 'getViewport' | 'getImageSize' | 'onViewChange' | 'onHoverPixel'
+> & {
+  getLastPointerInElement: () => PointerPosition | null;
+  isBlocked: () => boolean;
+};
+
+class ViewerKeyboardZoomController {
+  private readonly callbacks: ViewerKeyboardZoomCallbacks;
+  private readonly scheduleFrame: NonNullable<InteractionDependencies['scheduleFrame']>;
+  private readonly cancelFrame: NonNullable<InteractionDependencies['cancelFrame']>;
+  private input = createViewerKeyboardZoomInput();
+  private frameId: number | null = null;
+  private lastFrameTime: number | null = null;
+
+  constructor(
+    callbacks: ViewerKeyboardZoomCallbacks,
+    dependencies: InteractionDependencies = {}
+  ) {
+    this.callbacks = callbacks;
+    this.scheduleFrame = dependencies.scheduleFrame ?? window.requestAnimationFrame.bind(window);
+    this.cancelFrame = dependencies.cancelFrame ?? window.cancelAnimationFrame.bind(window);
+  }
+
+  destroy(): void {
+    this.cancelScheduledFrame();
+    this.input = createViewerKeyboardZoomInput();
+    this.lastFrameTime = null;
+  }
+
+  setInput(input: ViewerKeyboardZoomInput): void {
+    const previousInput = this.input;
+    const nextInput = cloneViewerKeyboardZoomInput(input);
+    if (sameViewerKeyboardZoomInput(previousInput, nextInput)) {
+      if (hasViewerKeyboardZoomInput(nextInput)) {
+        this.ensureScheduledFrame();
+      } else {
+        this.cancelScheduledFrame();
+        this.lastFrameTime = null;
+      }
+      return;
+    }
+
+    this.input = nextInput;
+    const newlyPressedInput = getNewlyPressedViewerKeyboardZoomInput(previousInput, nextInput);
+    if (hasViewerKeyboardZoomInput(newlyPressedInput)) {
+      this.applyInput(newlyPressedInput, 1);
+    }
+
+    if (hasViewerKeyboardZoomInput(nextInput)) {
+      if (!hasViewerKeyboardZoomInput(previousInput)) {
+        this.lastFrameTime = null;
+      }
+      this.ensureScheduledFrame();
+      return;
+    }
+
+    this.cancelScheduledFrame();
+    this.lastFrameTime = null;
+  }
+
+  private applyInput(input: ViewerKeyboardZoomInput, stepRatio: number): void {
+    if (this.callbacks.isBlocked()) {
+      return;
+    }
+
+    const signedDirection = (input.zoomIn ? 1 : 0) - (input.zoomOut ? 1 : 0);
+    if (signedDirection === 0) {
+      return;
+    }
+
+    const imageSize = this.callbacks.getImageSize();
+    if (!imageSize) {
+      return;
+    }
+
+    const state = this.callbacks.getState();
+    const viewport = this.callbacks.getViewport();
+    if (viewport.width <= 0 || viewport.height <= 0) {
+      return;
+    }
+
+    if (state.viewerMode === 'panorama') {
+      const nextView = zoomPanoramaByKeyboardStep(state, signedDirection * stepRatio);
+      const nextState = { ...state, ...nextView };
+      this.callbacks.onViewChange(nextView);
+      this.callbacks.onHoverPixel(
+        resolveHoverPixel(this.callbacks.getLastPointerInElement(), nextState, viewport, imageSize)
+      );
+      return;
+    }
+
+    if (state.viewerMode !== 'image') {
+      return;
+    }
+
+    const point = this.callbacks.getLastPointerInElement() ?? {
+      x: viewport.width * 0.5,
+      y: viewport.height * 0.5
+    };
+    const nextView = zoomImageByKeyboardStep(state, viewport, point, signedDirection * stepRatio);
+    const nextState = { ...state, ...nextView };
+    this.callbacks.onViewChange(nextView);
+    this.callbacks.onHoverPixel(resolveProbePixel(point, nextState, viewport, imageSize));
+  }
+
+  private ensureScheduledFrame(): void {
+    if (this.frameId !== null || !hasViewerKeyboardZoomInput(this.input)) {
+      return;
+    }
+
+    this.frameId = this.scheduleFrame(this.onFrame);
+  }
+
+  private cancelScheduledFrame(): void {
+    if (this.frameId === null) {
+      return;
+    }
+
+    this.cancelFrame(this.frameId);
+    this.frameId = null;
+  }
+
+  private readonly onFrame = (timestamp: number): void => {
+    this.frameId = null;
+    if (!hasViewerKeyboardZoomInput(this.input)) {
+      this.lastFrameTime = null;
+      return;
+    }
+
+    if (this.lastFrameTime !== null) {
+      const elapsedMs = Math.min(
+        KEYBOARD_ZOOM_MAX_FRAME_MS,
+        Math.max(0, timestamp - this.lastFrameTime)
+      );
+      if (elapsedMs > 0) {
+        this.applyInput(
+          this.input,
+          KEYBOARD_ZOOM_SPEED_STEPS_PER_SECOND * (elapsedMs / 1000)
+        );
+      }
+    }
+
+    this.lastFrameTime = timestamp;
+    this.ensureScheduledFrame();
+  };
+}
+
+function createViewerKeyboardZoomInput(): ViewerKeyboardZoomInput {
+  return {
+    zoomIn: false,
+    zoomOut: false
+  };
+}
+
+function cloneViewerKeyboardZoomInput(input: ViewerKeyboardZoomInput): ViewerKeyboardZoomInput {
+  return {
+    zoomIn: input.zoomIn,
+    zoomOut: input.zoomOut
+  };
+}
+
+function getNewlyPressedViewerKeyboardZoomInput(
+  previousInput: ViewerKeyboardZoomInput,
+  nextInput: ViewerKeyboardZoomInput
+): ViewerKeyboardZoomInput {
+  return {
+    zoomIn: nextInput.zoomIn && !previousInput.zoomIn,
+    zoomOut: nextInput.zoomOut && !previousInput.zoomOut
+  };
+}
+
+function hasViewerKeyboardZoomInput(input: ViewerKeyboardZoomInput): boolean {
+  return input.zoomIn || input.zoomOut;
+}
+
+function sameViewerKeyboardZoomInput(
+  a: ViewerKeyboardZoomInput,
+  b: ViewerKeyboardZoomInput
+): boolean {
+  return a.zoomIn === b.zoomIn && a.zoomOut === b.zoomOut;
 }
 
 function isScreenshotSelectionDragButton(event: PointerEvent): boolean {

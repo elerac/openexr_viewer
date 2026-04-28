@@ -10,12 +10,18 @@ export type ColormapRangeMode = 'alwaysAuto' | 'oneTime';
 export type ViewerMode = 'image' | 'panorama';
 export type OpenedImageDropPlacement = 'before' | 'after';
 export type ViewerKeyboardNavigationDirection = 'up' | 'left' | 'down' | 'right';
+export type ViewerKeyboardZoomDirection = 'in' | 'out';
 
 export interface ViewerKeyboardNavigationInput {
   up: boolean;
   left: boolean;
   down: boolean;
   right: boolean;
+}
+
+export interface ViewerKeyboardZoomInput {
+  zoomIn: boolean;
+  zoomOut: boolean;
 }
 
 export type PanoramaKeyboardOrbitDirection = ViewerKeyboardNavigationDirection;

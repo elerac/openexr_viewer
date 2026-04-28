@@ -2,6 +2,8 @@ import { DisposableBag, type Disposable } from '../lifecycle';
 import type {
   ViewerKeyboardNavigationDirection,
   ViewerKeyboardNavigationInput,
+  ViewerKeyboardZoomDirection,
+  ViewerKeyboardZoomInput,
   ViewerMode
 } from '../types';
 import type { GlobalKeyboardControllerElements } from './elements';
@@ -31,6 +33,7 @@ interface GlobalKeyboardControllerCallbacks {
   getViewerMode: () => ViewerMode;
   getOpenedImageCount: () => number;
   onViewerKeyboardNavigationInputChange: (input: ViewerKeyboardNavigationInput) => void;
+  onViewerKeyboardZoomInputChange: (input: ViewerKeyboardZoomInput) => void;
   routeVerticalNavigation: (target: VerticalNavigationTarget, delta: -1 | 1) => boolean;
   routeOpenedFilesReorder: (delta: -1 | 1) => boolean;
   routeHorizontalNavigation: (delta: -1 | 1) => boolean;
@@ -40,6 +43,8 @@ interface GlobalKeyboardControllerCallbacks {
 export class GlobalKeyboardController implements Disposable {
   private readonly disposables = new DisposableBag();
   private viewerKeyboardNavigationInput = createViewerKeyboardNavigationInput();
+  private viewerKeyboardZoomInput = createViewerKeyboardZoomInput();
+  private viewerKeyboardZoomKeyCodes = createViewerKeyboardZoomKeyCodes();
   private verticalNavigationTarget: VerticalNavigationTarget = 'openedFiles';
   private disposed = false;
 
@@ -106,6 +111,10 @@ export class GlobalKeyboardController implements Disposable {
         return;
       }
 
+      if (this.handleGlobalViewerKeyboardZoomKeyDown(event)) {
+        return;
+      }
+
       if (this.handleGlobalViewerKeyboardNavigationKeyDown(event)) {
         return;
       }
@@ -132,6 +141,7 @@ export class GlobalKeyboardController implements Disposable {
     });
 
     this.disposables.addEventListener(document, 'keyup', (event) => {
+      this.handleGlobalViewerKeyboardZoomKeyUp(event);
       this.handleGlobalViewerKeyboardNavigationKeyUp(event);
     });
 
@@ -156,14 +166,22 @@ export class GlobalKeyboardController implements Disposable {
   }
 
   clearViewerKeyboardNavigationInput(): void {
-    if (!hasViewerKeyboardNavigationInput(this.viewerKeyboardNavigationInput)) {
-      return;
+    if (hasViewerKeyboardNavigationInput(this.viewerKeyboardNavigationInput)) {
+      this.viewerKeyboardNavigationInput = createViewerKeyboardNavigationInput();
+      this.callbacks.onViewerKeyboardNavigationInputChange({
+        ...this.viewerKeyboardNavigationInput
+      });
     }
 
-    this.viewerKeyboardNavigationInput = createViewerKeyboardNavigationInput();
-    this.callbacks.onViewerKeyboardNavigationInputChange({
-      ...this.viewerKeyboardNavigationInput
-    });
+    if (hasViewerKeyboardZoomInput(this.viewerKeyboardZoomInput)) {
+      this.viewerKeyboardZoomInput = createViewerKeyboardZoomInput();
+      this.viewerKeyboardZoomKeyCodes = createViewerKeyboardZoomKeyCodes();
+      this.callbacks.onViewerKeyboardZoomInputChange({
+        ...this.viewerKeyboardZoomInput
+      });
+    } else {
+      this.viewerKeyboardZoomKeyCodes = createViewerKeyboardZoomKeyCodes();
+    }
   }
 
   setVerticalNavigationTarget(target: VerticalNavigationTarget): void {
@@ -303,6 +321,54 @@ export class GlobalKeyboardController implements Disposable {
     return true;
   }
 
+  private handleGlobalViewerKeyboardZoomKeyDown(event: KeyboardEvent): boolean {
+    const direction = getViewerKeyboardZoomDirection(event);
+    if (
+      event.defaultPrevented ||
+      !direction ||
+      isEditableKeyboardEvent(event) ||
+      this.callbacks.isExportImageDialogOpen() ||
+      this.callbacks.isExportImageBatchDialogOpen() ||
+      this.callbacks.isExportColormapDialogOpen() ||
+      this.callbacks.isFolderLoadDialogOpen() ||
+      this.callbacks.isSettingsDialogOpen() ||
+      this.callbacks.isScreenshotSelectionActive() ||
+      this.callbacks.getOpenedImageCount() === 0 ||
+      this.callbacks.isWindowPreviewActive() ||
+      this.callbacks.hasOpenMenu()
+    ) {
+      return false;
+    }
+
+    const viewerMode = this.callbacks.getViewerMode();
+    if (viewerMode !== 'image' && viewerMode !== 'panorama') {
+      return false;
+    }
+
+    event.preventDefault();
+    if (event.repeat) {
+      return true;
+    }
+
+    this.setViewerKeyboardZoomDirectionPressed(direction, true, event.code);
+    return true;
+  }
+
+  private handleGlobalViewerKeyboardZoomKeyUp(event: KeyboardEvent): boolean {
+    if (event.defaultPrevented) {
+      return false;
+    }
+
+    const direction = this.getViewerKeyboardZoomReleaseDirection(event);
+    if (!direction || !this.isViewerKeyboardZoomDirectionPressed(direction)) {
+      return false;
+    }
+
+    event.preventDefault();
+    this.setViewerKeyboardZoomDirectionPressed(direction, false);
+    return true;
+  }
+
   private handleGlobalViewerKeyboardNavigationKeyUp(event: KeyboardEvent): boolean {
     if (event.defaultPrevented) {
       return false;
@@ -333,6 +399,70 @@ export class GlobalKeyboardController implements Disposable {
     this.callbacks.onViewerKeyboardNavigationInputChange({
       ...this.viewerKeyboardNavigationInput
     });
+  }
+
+  private isViewerKeyboardZoomDirectionPressed(direction: ViewerKeyboardZoomDirection): boolean {
+    return direction === 'in'
+      ? this.viewerKeyboardZoomInput.zoomIn
+      : this.viewerKeyboardZoomInput.zoomOut;
+  }
+
+  private setViewerKeyboardZoomDirectionPressed(
+    direction: ViewerKeyboardZoomDirection,
+    pressed: boolean,
+    code?: string
+  ): void {
+    const key = direction === 'in' ? 'zoomIn' : 'zoomOut';
+    if (this.viewerKeyboardZoomInput[key] === pressed) {
+      return;
+    }
+
+    if (pressed) {
+      this.viewerKeyboardZoomKeyCodes = {
+        ...this.viewerKeyboardZoomKeyCodes,
+        [key]: code && code.length > 0 ? code : null
+      };
+    } else {
+      this.viewerKeyboardZoomKeyCodes = {
+        ...this.viewerKeyboardZoomKeyCodes,
+        [key]: null
+      };
+    }
+
+    this.viewerKeyboardZoomInput = {
+      ...this.viewerKeyboardZoomInput,
+      [key]: pressed
+    };
+    this.callbacks.onViewerKeyboardZoomInputChange({
+      ...this.viewerKeyboardZoomInput
+    });
+  }
+
+  private getViewerKeyboardZoomReleaseDirection(event: KeyboardEvent): ViewerKeyboardZoomDirection | null {
+    const keyDirection = getViewerKeyboardZoomReleaseDirectionForKey(event.key);
+    if (keyDirection && this.isViewerKeyboardZoomDirectionPressed(keyDirection)) {
+      return keyDirection;
+    }
+
+    if (event.code.length === 0) {
+      return null;
+    }
+
+    if (
+      this.viewerKeyboardZoomInput.zoomIn &&
+      this.viewerKeyboardZoomKeyCodes.zoomIn === event.code
+    ) {
+      return 'in';
+    }
+
+    if (
+      this.viewerKeyboardZoomInput.zoomOut &&
+      this.viewerKeyboardZoomKeyCodes.zoomOut === event.code
+    ) {
+      return 'out';
+    }
+
+    return null;
   }
 
   private routeVerticalNavigation(delta: -1 | 1): boolean {
@@ -426,8 +556,26 @@ function createViewerKeyboardNavigationInput(): ViewerKeyboardNavigationInput {
   };
 }
 
+function createViewerKeyboardZoomInput(): ViewerKeyboardZoomInput {
+  return {
+    zoomIn: false,
+    zoomOut: false
+  };
+}
+
+function createViewerKeyboardZoomKeyCodes(): Record<keyof ViewerKeyboardZoomInput, string | null> {
+  return {
+    zoomIn: null,
+    zoomOut: null
+  };
+}
+
 function hasViewerKeyboardNavigationInput(input: ViewerKeyboardNavigationInput): boolean {
   return input.up || input.left || input.down || input.right;
+}
+
+function hasViewerKeyboardZoomInput(input: ViewerKeyboardZoomInput): boolean {
+  return input.zoomIn || input.zoomOut;
 }
 
 function getOpenedFilesKeyboardReorderDelta(event: KeyboardEvent): -1 | 1 | null {
@@ -463,4 +611,33 @@ function getViewerKeyboardNavigationDirection(key: string): ViewerKeyboardNaviga
     default:
       return null;
   }
+}
+
+function getViewerKeyboardZoomDirection(event: KeyboardEvent): ViewerKeyboardZoomDirection | null {
+  if (event.altKey) {
+    return null;
+  }
+
+  const hasPrimaryModifier = event.ctrlKey || event.metaKey;
+  if (event.key === '+' || (hasPrimaryModifier && event.key === '=')) {
+    return 'in';
+  }
+
+  if (event.key === '-') {
+    return 'out';
+  }
+
+  return null;
+}
+
+function getViewerKeyboardZoomReleaseDirectionForKey(key: string): ViewerKeyboardZoomDirection | null {
+  if (key === '+' || key === '=') {
+    return 'in';
+  }
+
+  if (key === '-') {
+    return 'out';
+  }
+
+  return null;
 }

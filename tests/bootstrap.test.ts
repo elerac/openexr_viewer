@@ -62,6 +62,7 @@ const mocks = vi.hoisted(() => {
   const rendererDispose = vi.fn();
   const interactionDestroy = vi.fn();
   const interactionSetViewerKeyboardNavigationInput = vi.fn();
+  const interactionSetViewerKeyboardZoomInput = vi.fn();
   const interactionCoordinatorDispose = vi.fn();
   const sessionDispose = vi.fn();
   const displayDispose = vi.fn();
@@ -132,6 +133,7 @@ const mocks = vi.hoisted(() => {
     rendererDispose,
     interactionDestroy,
     interactionSetViewerKeyboardNavigationInput,
+    interactionSetViewerKeyboardZoomInput,
     interactionCoordinatorDispose,
     sessionDispose,
     displayDispose,
@@ -291,6 +293,7 @@ vi.mock('../src/interaction/viewer-interaction', () => ({
   ViewerInteraction: class {
     readonly destroy = mocks.interactionDestroy;
     readonly setViewerKeyboardNavigationInput = mocks.interactionSetViewerKeyboardNavigationInput;
+    readonly setViewerKeyboardZoomInput = mocks.interactionSetViewerKeyboardZoomInput;
   }
 }));
 
@@ -632,6 +635,34 @@ describe('bootstrap app lifecycle', () => {
       left: false,
       down: false,
       right: true
+    });
+
+    app.dispose();
+  });
+
+  it('routes viewer keyboard zoom input callbacks to the live interaction instance', async () => {
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
+      observe(): void {}
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+    const { bootstrapApp } = await import('../src/app/bootstrap');
+    const app = await bootstrapApp();
+    const callbacks = mocks.getUiCallbacks() as {
+      onViewerKeyboardZoomInputChange: (input: { zoomIn: boolean; zoomOut: boolean }) => void;
+    };
+
+    callbacks.onViewerKeyboardZoomInputChange({ zoomIn: true, zoomOut: false });
+
+    expect(mocks.interactionSetViewerKeyboardZoomInput).toHaveBeenCalledWith({
+      zoomIn: true,
+      zoomOut: false
     });
 
     app.dispose();

@@ -1,6 +1,7 @@
 import type {
   ViewerKeyboardNavigationDirection,
   ViewerKeyboardNavigationInput,
+  ViewerKeyboardZoomDirection,
   ViewerState,
   ViewportInfo
 } from '../types';
@@ -15,6 +16,7 @@ import { resolveHoverPixel } from './probe-mode';
 const IMAGE_KEYBOARD_PAN_STEP_RATIO = 0.025;
 const IMAGE_KEYBOARD_PAN_SPEED_PER_SECOND = 1.5;
 const IMAGE_KEYBOARD_PAN_MAX_FRAME_MS = 50;
+const IMAGE_KEYBOARD_ZOOM_STEP = 1.25;
 
 type ImageKeyboardPanCallbacks = Pick<
   InteractionCallbacks,
@@ -32,6 +34,30 @@ export function zoomImageFromWheel(
   const zoomFactor = Math.exp(-deltaY * 0.0015);
   const requestedZoom = state.zoom * zoomFactor;
   return zoomAroundPoint(state, viewport, point.x, point.y, requestedZoom);
+}
+
+export function zoomImageFromKeyboard(
+  state: ViewerState,
+  viewport: ViewportInfo,
+  point: PointerPosition,
+  direction: ViewerKeyboardZoomDirection
+): Pick<ViewerState, 'zoom' | 'panX' | 'panY'> {
+  return zoomImageByKeyboardStep(
+    state,
+    viewport,
+    point,
+    direction === 'in' ? 1 : -1
+  );
+}
+
+export function zoomImageByKeyboardStep(
+  state: ViewerState,
+  viewport: ViewportInfo,
+  point: PointerPosition,
+  signedStep: number
+): Pick<ViewerState, 'zoom' | 'panX' | 'panY'> {
+  const zoomFactor = IMAGE_KEYBOARD_ZOOM_STEP ** signedStep;
+  return zoomAroundPoint(state, viewport, point.x, point.y, state.zoom * zoomFactor);
 }
 
 export function panImageFromDrag(

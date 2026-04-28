@@ -23,6 +23,7 @@ import type {
   ExportImageRequest,
   OpenedImageDropPlacement,
   ViewerKeyboardNavigationInput,
+  ViewerKeyboardZoomInput,
   ViewportInfo,
   ViewportRect
 } from '../../types';
@@ -32,6 +33,7 @@ import type { WebGlExrRenderer } from '../../renderer';
 
 interface InteractionInputBridge {
   setViewerKeyboardNavigationInput(input: ViewerKeyboardNavigationInput): void;
+  setViewerKeyboardZoomInput(input: ViewerKeyboardZoomInput): void;
 }
 
 interface CreateViewerUiDependencies {
@@ -160,6 +162,9 @@ export function createViewerUi({
     },
     onViewerKeyboardNavigationInputChange: (input) => {
       getInteraction()?.setViewerKeyboardNavigationInput(input);
+    },
+    onViewerKeyboardZoomInputChange: (input) => {
+      getInteraction()?.setViewerKeyboardZoomInput(input);
     },
     onAutoFitImageOnSelectChange: (enabled) => {
       core.dispatch({ type: 'autoFitImageOnSelectSet', enabled });

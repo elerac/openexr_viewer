@@ -5870,6 +5870,176 @@ describe('global panel arrow navigation', () => {
     expect(onReorderOpenedImage).not.toHaveBeenCalled();
   });
 
+  it('routes viewer keyboard zoom shortcuts while viewer input is available', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onViewerKeyboardZoomInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardZoomInputChange }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setViewerMode('image');
+
+    const plainPlus = dispatchViewerZoomKeyboardEvent(ui, { key: '+' });
+    dispatchViewerZoomKeyboardKeyUp(ui, { key: '+' });
+    const plainMinus = dispatchViewerZoomKeyboardEvent(ui, { key: '-' });
+    dispatchViewerZoomKeyboardKeyUp(ui, { key: '-' });
+    const primaryPlus = dispatchViewerZoomKeyboardEvent(ui, { key: '+', ctrlKey: true });
+    dispatchViewerZoomKeyboardKeyUp(ui, { key: '+' });
+    const primaryEquals = dispatchViewerZoomKeyboardEvent(ui, { key: '=', ctrlKey: true });
+    dispatchViewerZoomKeyboardKeyUp(ui, { key: '=' });
+    const metaMinus = dispatchViewerZoomKeyboardEvent(ui, { key: '-', metaKey: true });
+    dispatchViewerZoomKeyboardKeyUp(ui, { key: '-' });
+
+    expect(onViewerKeyboardZoomInputChange.mock.calls).toEqual([
+      [{ zoomIn: true, zoomOut: false }],
+      [{ zoomIn: false, zoomOut: false }],
+      [{ zoomIn: false, zoomOut: true }],
+      [{ zoomIn: false, zoomOut: false }],
+      [{ zoomIn: true, zoomOut: false }],
+      [{ zoomIn: false, zoomOut: false }],
+      [{ zoomIn: true, zoomOut: false }],
+      [{ zoomIn: false, zoomOut: false }],
+      [{ zoomIn: false, zoomOut: true }],
+      [{ zoomIn: false, zoomOut: false }]
+    ]);
+    expect(plainPlus.defaultPrevented).toBe(true);
+    expect(plainMinus.defaultPrevented).toBe(true);
+    expect(primaryPlus.defaultPrevented).toBe(true);
+    expect(primaryEquals.defaultPrevented).toBe(true);
+    expect(metaMinus.defaultPrevented).toBe(true);
+  });
+
+  it('releases viewer keyboard zoom by physical key code when shifted keyup reports another key', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onViewerKeyboardZoomInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardZoomInputChange }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setViewerMode('image');
+
+    const minusDown = dispatchViewerZoomKeyboardEvent(ui, { key: '-', code: 'Minus' });
+    const shiftDown = dispatchViewerZoomKeyboardEvent(ui, {
+      key: 'Shift',
+      code: 'ShiftLeft',
+      shiftKey: true
+    });
+    const shiftedMinusUp = dispatchViewerZoomKeyboardKeyUp(ui, {
+      key: '_',
+      code: 'Minus',
+      shiftKey: true
+    });
+    const shiftUp = dispatchViewerZoomKeyboardKeyUp(ui, { key: 'Shift', code: 'ShiftLeft' });
+
+    expect(onViewerKeyboardZoomInputChange.mock.calls).toEqual([
+      [{ zoomIn: false, zoomOut: true }],
+      [{ zoomIn: false, zoomOut: false }]
+    ]);
+    expect(minusDown.defaultPrevented).toBe(true);
+    expect(shiftDown.defaultPrevented).toBe(false);
+    expect(shiftedMinusUp.defaultPrevented).toBe(true);
+    expect(shiftUp.defaultPrevented).toBe(false);
+  });
+
+  it('does not start viewer keyboard zoom from shifted minus output alone', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onViewerKeyboardZoomInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardZoomInputChange }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setViewerMode('image');
+
+    const shiftedMinusDown = dispatchViewerZoomKeyboardEvent(ui, {
+      key: '_',
+      code: 'Minus',
+      shiftKey: true
+    });
+
+    expect(onViewerKeyboardZoomInputChange).not.toHaveBeenCalled();
+    expect(shiftedMinusDown.defaultPrevented).toBe(false);
+  });
+
+  it('ignores viewer keyboard zoom shortcuts when there is no opened image', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onViewerKeyboardZoomInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardZoomInputChange }));
+    ui.setViewerMode('image');
+
+    dispatchViewerZoomKeyboardEvent(ui, { key: '+' });
+
+    expect(onViewerKeyboardZoomInputChange).not.toHaveBeenCalled();
+  });
+
+  it('ignores viewer keyboard zoom shortcuts from editable controls', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onViewerKeyboardZoomInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardZoomInputChange }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setViewerMode('image');
+
+    const input = document.createElement('input');
+    document.body.append(input);
+    input.focus();
+    dispatchViewerZoomKeyboardEvent(ui, { key: '+' });
+
+    expect(onViewerKeyboardZoomInputChange).not.toHaveBeenCalled();
+  });
+
+  it('ignores viewer keyboard zoom shortcuts while dialogs, menus, or overlays are active', async () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const { requestFullscreen } = installFullscreenApiMock();
+    const onViewerKeyboardZoomInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardZoomInputChange }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setViewerMode('image');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    (document.getElementById('export-image-button') as HTMLButtonElement).click();
+    dispatchViewerZoomKeyboardEvent(ui, { key: '+' });
+
+    (document.getElementById('export-dialog-cancel-button') as HTMLButtonElement).click();
+    (document.getElementById('file-menu-button') as HTMLButtonElement).click();
+    dispatchViewerZoomKeyboardEvent(ui, { key: '+' });
+
+    (document.getElementById('file-menu-button') as HTMLButtonElement).click();
+    (document.getElementById('export-screenshot-button') as HTMLButtonElement).click();
+    dispatchViewerZoomKeyboardEvent(ui, { key: '+' });
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    (document.getElementById('window-full-screen-preview-menu-item') as HTMLButtonElement).click();
+    await flushMicrotasks();
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    dispatchViewerZoomKeyboardEvent(ui, { key: '+' });
+
+    expect(onViewerKeyboardZoomInputChange).not.toHaveBeenCalled();
+  });
+
+  it('ignores repeated viewer keyboard zoom keydown events and clears active zoom on blur', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onViewerKeyboardZoomInputChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerKeyboardZoomInputChange }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setViewerMode('image');
+
+    dispatchViewerZoomKeyboardEvent(ui, { key: '+' });
+    dispatchViewerZoomKeyboardEvent(ui, { key: '+', repeat: true });
+    window.dispatchEvent(new Event('blur'));
+
+    expect(onViewerKeyboardZoomInputChange.mock.calls).toEqual([
+      [{ zoomIn: true, zoomOut: false }],
+      [{ zoomIn: false, zoomOut: false }]
+    ]);
+  });
+
   it('starts and releases viewer keyboard navigation input on global w/a/s/d keydown and keyup', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
@@ -6562,6 +6732,7 @@ function createUiCallbacksBase() {
     onDisplayCacheBudgetChange: () => {},
     onExposureChange: () => {},
     onViewerKeyboardNavigationInputChange: () => {},
+    onViewerKeyboardZoomInputChange: () => {},
     onAutoFitImageOnSelectChange: () => {},
     onAutoFitImage: () => {},
     getScreenshotFitRect: (): ViewportRect | null => null,
@@ -6580,6 +6751,40 @@ function createUiCallbacksBase() {
     onResetSettings: () => {},
     onResetView: () => {}
   };
+}
+
+function dispatchViewerZoomKeyboardEvent(
+  ui: ViewerUi,
+  init: KeyboardEventInit & { key: string }
+): KeyboardEvent {
+  const event = new KeyboardEvent('keydown', {
+    bubbles: true,
+    cancelable: true,
+    ...init
+  });
+  (ui as unknown as {
+    globalKeyboardController: {
+      handleGlobalViewerKeyboardZoomKeyDown: (event: KeyboardEvent) => boolean;
+    };
+  }).globalKeyboardController.handleGlobalViewerKeyboardZoomKeyDown(event);
+  return event;
+}
+
+function dispatchViewerZoomKeyboardKeyUp(
+  ui: ViewerUi,
+  init: KeyboardEventInit & { key: string }
+): KeyboardEvent {
+  const event = new KeyboardEvent('keyup', {
+    bubbles: true,
+    cancelable: true,
+    ...init
+  });
+  (ui as unknown as {
+    globalKeyboardController: {
+      handleGlobalViewerKeyboardZoomKeyUp: (event: KeyboardEvent) => boolean;
+    };
+  }).globalKeyboardController.handleGlobalViewerKeyboardZoomKeyUp(event);
+  return event;
 }
 
 function createDeferred<T>() {

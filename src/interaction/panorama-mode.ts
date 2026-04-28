@@ -1,12 +1,14 @@
 import type {
   PanoramaKeyboardOrbitDirection,
   PanoramaKeyboardOrbitInput,
+  ViewerKeyboardZoomDirection,
   ViewerState,
   ViewportInfo
 } from '../types';
 import {
   getPanoramaProjectionDiameter,
   getPanoramaVerticalFovDeg,
+  clampPanoramaHfov,
   orbitPanorama,
   zoomPanorama
 } from './panorama-geometry';
@@ -20,6 +22,7 @@ import type {
 const PANORAMA_KEYBOARD_ORBIT_STEP_RATIO = 0.05;
 const PANORAMA_KEYBOARD_ORBIT_SPEED_PER_SECOND = 1.5;
 const PANORAMA_KEYBOARD_ORBIT_MAX_FRAME_MS = 50;
+const PANORAMA_KEYBOARD_ZOOM_STEP = 1.25;
 
 type PanoramaViewChange = Pick<
   ViewerState,
@@ -47,6 +50,25 @@ export function zoomPanoramaFromWheel(
   deltaY: number
 ): PanoramaViewChange {
   return zoomPanorama(state, deltaY);
+}
+
+export function zoomPanoramaFromKeyboard(
+  state: ViewerState,
+  direction: ViewerKeyboardZoomDirection
+): PanoramaViewChange {
+  return zoomPanoramaByKeyboardStep(state, direction === 'in' ? 1 : -1);
+}
+
+export function zoomPanoramaByKeyboardStep(
+  state: ViewerState,
+  signedStep: number
+): PanoramaViewChange {
+  const zoomFactor = PANORAMA_KEYBOARD_ZOOM_STEP ** signedStep;
+  return {
+    panoramaYawDeg: state.panoramaYawDeg,
+    panoramaPitchDeg: state.panoramaPitchDeg,
+    panoramaHfovDeg: clampPanoramaHfov(state.panoramaHfovDeg / zoomFactor)
+  };
 }
 
 export class PanoramaKeyboardOrbitController {
