@@ -780,6 +780,27 @@
                 </div>
               </section>
 
+              <section id="image-stats-panel" class="readout-block">
+                <div class="readout-block-header">
+                  <h2>Image Stats</h2>
+                  <button
+                    id="image-stats-toggle"
+                    class="readout-block-toggle"
+                    type="button"
+                    aria-expanded="true"
+                    aria-controls="image-stats-content"
+                    aria-label="Collapse Image Stats section"
+                  >
+                    <span class="readout-block-chevron" aria-hidden="true"></span>
+                  </button>
+                </div>
+                <div id="image-stats-content" class="readout-block-content">
+                  <p id="image-stats-empty-state" class="image-stats-empty-state">No image statistics available.</p>
+                  <p id="image-stats-loading-state" class="image-stats-loading-state hidden">Calculating...</p>
+                  <div id="image-stats-table" class="image-stats-table hidden" aria-label="Image statistics"></div>
+                </div>
+              </section>
+
               <section id="metadata-panel" class="readout-block">
                 <div class="readout-block-header">
                   <h2>Metadata</h2>

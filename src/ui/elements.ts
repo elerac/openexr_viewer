@@ -143,6 +143,11 @@ export interface Elements {
   channelViewToggle: HTMLButtonElement;
   channelViewList: HTMLElement;
   channelViewCount: HTMLElement;
+  imageStatsToggle: HTMLButtonElement;
+  imageStatsContent: HTMLDivElement;
+  imageStatsEmptyState: HTMLElement;
+  imageStatsLoadingState: HTMLElement;
+  imageStatsTable: HTMLElement;
   metadataToggle: HTMLButtonElement;
   metadataContent: HTMLDivElement;
   probeMode: HTMLElement;
@@ -366,6 +371,13 @@ export type ProbeReadoutElements = Pick<
 
 export type MetadataPanelElements = Pick<Elements, 'metadataEmptyState' | 'metadataTable'>;
 
+export type ImageStatsPanelElements = Pick<
+  Elements,
+  | 'imageStatsEmptyState'
+  | 'imageStatsLoadingState'
+  | 'imageStatsTable'
+>;
+
 export type RoiReadoutElements = Pick<
   Elements,
   | 'roiEmptyState'
@@ -400,6 +412,8 @@ export type CollapsibleSectionsElements = Pick<
   | 'partsLayersList'
   | 'channelViewToggle'
   | 'channelViewList'
+  | 'imageStatsToggle'
+  | 'imageStatsContent'
   | 'metadataToggle'
   | 'metadataContent'
   | 'probeToggle'
@@ -554,6 +568,11 @@ export function resolveElements(): Elements {
     channelViewToggle: requireElement('channel-view-toggle', HTMLButtonElement),
     channelViewList: requireElement('channel-view-list', HTMLElement),
     channelViewCount: requireElement('channel-view-count', HTMLElement),
+    imageStatsToggle: requireElement('image-stats-toggle', HTMLButtonElement),
+    imageStatsContent: requireElement('image-stats-content', HTMLDivElement),
+    imageStatsEmptyState: requireElement('image-stats-empty-state', HTMLElement),
+    imageStatsLoadingState: requireElement('image-stats-loading-state', HTMLElement),
+    imageStatsTable: requireElement('image-stats-table', HTMLElement),
     metadataToggle: requireElement('metadata-toggle', HTMLButtonElement),
     metadataContent: requireElement('metadata-content', HTMLDivElement),
     probeMode: requireElement('probe-mode', HTMLElement),

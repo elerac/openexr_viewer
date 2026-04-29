@@ -25,6 +25,7 @@ import {
   type ScreenshotSelectionSnapGuide
 } from '../interaction/screenshot-selection';
 import { resolveElements, type Elements } from './elements';
+import { setImageStats } from './image-stats-panel';
 import { setMetadata } from './metadata-panel';
 import { type LayerOptionItem, type OpenedImageOptionItem } from './image-browser-types';
 import { LayoutSplitController } from './layout-split-controller';
@@ -38,6 +39,7 @@ import { OpenedImagesPanel } from './opened-images-panel';
 import { DisposableBag, type Disposable } from '../lifecycle';
 import type { ColormapLut } from '../colormaps';
 import type { ExportImagePixels } from '../export-image';
+import type { ImageStatsReadoutModel } from '../app/viewer-app-types';
 import type {
   DisplaySelection,
   DisplayLuminanceRange,
@@ -1176,6 +1178,14 @@ export class ViewerUi implements Disposable {
     }
 
     setRoiReadout(this.elements, readout);
+  }
+
+  setImageStats(readout: ImageStatsReadoutModel): void {
+    if (this.disposed) {
+      return;
+    }
+
+    setImageStats(this.elements, readout);
   }
 
   showDropOverlay(show: boolean): void {

@@ -9,7 +9,7 @@ import {
   createLayerFromChannels,
   createStokesSelection
 } from './helpers/state-fixtures';
-import type { DecodedExrImage, OpenedImageSession } from '../src/types';
+import type { DecodedExrImage, ImageStats, OpenedImageSession } from '../src/types';
 
 function createDecodedImage(channelNames: string[] = ['R', 'G', 'B']): DecodedExrImage {
   const channelValues: Record<string, Float32Array> = {};
@@ -34,6 +34,26 @@ function createSession(id: string, decoded = createDecodedImage()): OpenedImageS
     source: { kind: 'url', url: `/${id}.exr` },
     decoded,
     state
+  };
+}
+
+function createImageStats(): ImageStats {
+  return {
+    width: 2,
+    height: 1,
+    pixelCount: 2,
+    channels: [
+      {
+        label: 'R',
+        min: 0,
+        mean: 0.5,
+        max: 1,
+        validPixelCount: 2,
+        nanPixelCount: 0,
+        negativeInfinityPixelCount: 0,
+        positiveInfinityPixelCount: 0
+      }
+    ]
   };
 }
 
@@ -121,6 +141,85 @@ describe('viewer app core', () => {
     expect(core.getState().autoExposurePercentile).toBe(98.2);
     expect(core.getState().pendingAutoExposureRequestId).toBeNull();
     expect(core.getState().pendingAutoExposureRequestKey).toBeNull();
+  });
+
+  it('applies matching image stats results and ignores stale stats callbacks', () => {
+    const core = new ViewerAppCore();
+    const session = createSession('session-1');
+    core.dispatch({ type: 'sessionLoaded', session });
+
+    const initialSelection = core.getState().sessionState.displaySelection;
+    const imageStats = createImageStats();
+
+    core.dispatch({ type: 'imageStatsRequestStarted', requestId: 3, requestKey: 'session-1:stats' });
+    core.dispatch({
+      type: 'imageStatsResolved',
+      requestId: 3,
+      sessionId: session.id,
+      activeLayer: 0,
+      visualizationMode: 'rgb',
+      displaySelection: initialSelection,
+      imageStats
+    });
+
+    expect(core.getState().activeImageStats).toEqual(imageStats);
+    expect(core.getState().pendingImageStatsRequestId).toBeNull();
+
+    core.dispatch({ type: 'imageStatsRequestStarted', requestId: 4, requestKey: 'session-1:stale' });
+    core.dispatch({ type: 'displaySelectionSet', displaySelection: createChannelMonoSelection('R') });
+    core.dispatch({
+      type: 'imageStatsResolved',
+      requestId: 4,
+      sessionId: session.id,
+      activeLayer: 0,
+      visualizationMode: 'rgb',
+      displaySelection: initialSelection,
+      imageStats
+    });
+
+    expect(core.getState().activeImageStats).toBeNull();
+    expect(core.getState().pendingImageStatsRequestId).toBeNull();
+  });
+
+  it('clears image stats context when the active session reloads or closes', () => {
+    const core = new ViewerAppCore();
+    const session = createSession('session-1');
+    core.dispatch({ type: 'sessionLoaded', session });
+
+    const imageStats = createImageStats();
+    core.dispatch({
+      type: 'imageStatsResolved',
+      requestId: null,
+      sessionId: session.id,
+      activeLayer: 0,
+      visualizationMode: 'rgb',
+      displaySelection: core.getState().sessionState.displaySelection,
+      imageStats
+    });
+    core.dispatch({ type: 'imageStatsRequestStarted', requestId: 5, requestKey: 'session-1:stats' });
+
+    core.dispatch({ type: 'sessionReloaded', sessionId: session.id, session: createSession(session.id) });
+
+    expect(core.getState().activeImageStats).toBeNull();
+    expect(core.getState().pendingImageStatsRequestId).toBeNull();
+    expect(core.getState().pendingImageStatsRequestKey).toBeNull();
+
+    core.dispatch({
+      type: 'imageStatsResolved',
+      requestId: null,
+      sessionId: session.id,
+      activeLayer: 0,
+      visualizationMode: 'rgb',
+      displaySelection: core.getState().sessionState.displaySelection,
+      imageStats
+    });
+    core.dispatch({ type: 'imageStatsRequestStarted', requestId: 6, requestKey: 'session-1:stats' });
+
+    core.dispatch({ type: 'sessionClosed', sessionId: session.id });
+
+    expect(core.getState().activeImageStats).toBeNull();
+    expect(core.getState().pendingImageStatsRequestId).toBeNull();
+    expect(core.getState().pendingImageStatsRequestKey).toBeNull();
   });
 
   it('renames a session display name without changing the original source identity', () => {

@@ -32,6 +32,10 @@ export function applyRenderEffects(
     ui.setRoiReadout(snapshot.roiReadout);
   }
 
+  if (invalidation & ViewerRenderInvalidationFlags.ImageStatsReadout) {
+    ui.setImageStats(snapshot.imageStatsReadout);
+  }
+
   if (invalidation & ViewerRenderInvalidationFlags.ResourceClearImage) {
     renderer.clearImage();
   }
@@ -66,6 +70,32 @@ export function applyRenderEffects(
         activeLayer: state.sessionState.activeLayer,
         displaySelection: state.sessionState.displaySelection,
         displayLuminanceRange: result.displayLuminanceRange
+      });
+    }
+  }
+
+  if (
+    (invalidation & ViewerRenderInvalidationFlags.ResourceRequestImageStats) &&
+    activeSession &&
+    snapshot.imageStatsRequest
+  ) {
+    const requestId = core.issueRequestId();
+    const result = renderCache.requestImageStats(activeSession, snapshot.imageStatsRequest, requestId);
+    if (result.pending) {
+      core.dispatch({
+        type: 'imageStatsRequestStarted',
+        requestId,
+        requestKey: snapshot.imageStatsRequest.requestKey
+      });
+    } else {
+      core.dispatch({
+        type: 'imageStatsResolved',
+        requestId: null,
+        sessionId: activeSession.id,
+        activeLayer: state.sessionState.activeLayer,
+        visualizationMode: state.sessionState.visualizationMode,
+        displaySelection: state.sessionState.displaySelection,
+        imageStats: result.imageStats
       });
     }
   }

@@ -2,10 +2,11 @@ import { sameDisplayLuminanceRange } from '../colormap-range';
 import { sameDisplaySelection } from '../display-model';
 import { sameImageRoi } from '../roi';
 import type { ProbeColorPreview, ProbeDisplayValue } from '../probe';
-import type { ExportImageBatchTarget, PixelSample, ViewerSessionState } from '../types';
+import type { ExportImageBatchTarget, ImageStats, PixelSample, ViewerSessionState } from '../types';
 import { samePixel, sameViewState } from '../view-state';
 import type {
   ProbeReadoutModel,
+  ImageStatsReadoutModel,
   RoiReadoutModel,
   StokesDegreeModulationControlModel,
   ViewerChannelThumbnailItem,
@@ -240,6 +241,14 @@ export function sameRoiReadout(a: RoiReadoutModel, b: RoiReadoutModel): boolean 
   return sameImageRoi(a.roi, b.roi) && sameRoiStats(a.stats, b.stats);
 }
 
+export function sameImageStatsReadout(a: ImageStatsReadoutModel, b: ImageStatsReadoutModel): boolean {
+  return (
+    a.hasActiveImage === b.hasActiveImage &&
+    a.isLoading === b.isLoading &&
+    sameImageStats(a.stats, b.stats)
+  );
+}
+
 export function sameDisplayRangeRequest(
   a: ViewerDisplayRangeRequest | null,
   b: ViewerDisplayRangeRequest | null
@@ -348,6 +357,40 @@ function sameRoiStats(
       && channel.min === other.min
       && channel.mean === other.mean
       && channel.max === other.max
-      && channel.validPixelCount === other.validPixelCount;
+      && channel.validPixelCount === other.validPixelCount
+      && channel.nanPixelCount === other.nanPixelCount
+      && channel.negativeInfinityPixelCount === other.negativeInfinityPixelCount
+      && channel.positiveInfinityPixelCount === other.positiveInfinityPixelCount;
+  });
+}
+
+function sameImageStats(a: ImageStats | null, b: ImageStats | null): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+
+  if (
+    a.width !== b.width ||
+    a.height !== b.height ||
+    a.pixelCount !== b.pixelCount ||
+    a.channels.length !== b.channels.length
+  ) {
+    return false;
+  }
+
+  return a.channels.every((channel, index) => {
+    const other = b.channels[index];
+    return Boolean(other)
+      && channel.label === other.label
+      && channel.min === other.min
+      && channel.mean === other.mean
+      && channel.max === other.max
+      && channel.validPixelCount === other.validPixelCount
+      && channel.nanPixelCount === other.nanPixelCount
+      && channel.negativeInfinityPixelCount === other.negativeInfinityPixelCount
+      && channel.positiveInfinityPixelCount === other.positiveInfinityPixelCount;
   });
 }

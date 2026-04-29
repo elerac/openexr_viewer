@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => {
     defaultColormapId: '0',
     activeColormapLut: null,
     activeDisplayLuminanceRange: null,
+    activeImageStats: null,
     loadedColormapId: null,
     stokesDisplayRestoreStates: {},
     autoFitImageOnSelect: false,
@@ -27,6 +28,8 @@ const mocks = vi.hoisted(() => {
     rulersVisible: false,
     pendingAutoExposureRequestId: null,
     pendingAutoExposureRequestKey: null,
+    pendingImageStatsRequestId: null,
+    pendingImageStatsRequestKey: null,
     sessionState: {
       exposureEv: 0,
       viewerMode: 'image',
@@ -246,6 +249,7 @@ vi.mock('../src/ui/viewer-ui', () => ({
     readonly setLayerOptions = vi.fn();
     readonly setMetadata = vi.fn();
     readonly setRoiReadout = vi.fn();
+    readonly setImageStats = vi.fn();
     readonly setRgbGroupOptions = vi.fn();
     readonly clearImageBrowserPanels = vi.fn();
     readonly setProbeReadout = vi.fn();
@@ -351,11 +355,16 @@ vi.mock('../src/services/render-cache-service', () => ({
       displayLuminanceRange: null,
       pending: false
     }));
+    readonly requestImageStats = vi.fn(() => ({
+      imageStats: null,
+      pending: false
+    }));
     readonly requestAutoExposure = vi.fn(() => ({
       autoExposure: null,
       pending: false
     }));
     readonly getCachedLuminanceRange = vi.fn(() => null);
+    readonly getCachedImageStats = vi.fn(() => null);
     readonly resolveDisplayLuminanceRange = vi.fn(() => null);
     readonly trackSession = vi.fn();
     readonly discard = vi.fn();

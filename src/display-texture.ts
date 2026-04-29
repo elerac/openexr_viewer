@@ -39,6 +39,7 @@ import {
   type DisplayLuminanceRange,
   type ImagePixel,
   type ImageRoi,
+  type ImageStats,
   type PixelSample,
   type RoiStats,
   type RoiStatsChannelSummary,
@@ -171,6 +172,15 @@ export function buildDisplayLuminanceRevisionKey(
   return [
     state.activeLayer,
     serializeDisplaySelectionLuminanceKey(state.displaySelection, state.visualizationMode ?? 'rgb')
+  ].join(':');
+}
+
+export function buildDisplayImageStatsRevisionKey(
+  state: Pick<ViewerState, 'activeLayer' | 'displaySelection'> & Partial<Pick<ViewerState, 'visualizationMode'>>
+): string {
+  return [
+    state.activeLayer,
+    serializeDisplaySelectionRevisionKey(state.displaySelection, state.visualizationMode ?? 'rgb')
   ].join(':');
 }
 
@@ -428,7 +438,7 @@ export function computeDisplaySelectionRoiStats(
   }
 
   const evaluator = resolveDisplaySelectionEvaluator(layer, selection, visualizationMode);
-  const accumulators = createRoiStatsAccumulators(evaluator, selection);
+  const accumulators = createDisplaySelectionStatsAccumulators(evaluator, selection);
   const pixelCount = getImageRoiPixelCount(clampedRoi);
 
   for (let iy = clampedRoi.y0; iy <= clampedRoi.y1; iy += 1) {
@@ -436,19 +446,7 @@ export function computeDisplaySelectionRoiStats(
     for (let ix = clampedRoi.x0; ix <= clampedRoi.x1; ix += 1) {
       const pixelIndex = rowOffset + ix;
       for (const accumulator of accumulators) {
-        const value = accumulator.read(pixelIndex);
-        if (!Number.isFinite(value)) {
-          continue;
-        }
-
-        accumulator.validPixelCount += 1;
-        accumulator.sum += value;
-        if (value < accumulator.min) {
-          accumulator.min = value;
-        }
-        if (value > accumulator.max) {
-          accumulator.max = value;
-        }
+        accumulateStatsValue(accumulator, accumulator.read(pixelIndex));
       }
     }
   }
@@ -459,6 +457,35 @@ export function computeDisplaySelectionRoiStats(
     height: getImageRoiHeight(clampedRoi),
     pixelCount,
     channels: accumulators.map(toRoiStatsChannelSummary)
+  };
+}
+
+export function computeDisplaySelectionImageStats(
+  layer: DecodedLayer,
+  width: number,
+  height: number,
+  selection: DisplaySelection | null,
+  visualizationMode: VisualizationMode = 'rgb'
+): ImageStats | null {
+  const pixelCount = Math.max(0, width * height);
+  if (pixelCount === 0) {
+    return null;
+  }
+
+  const evaluator = resolveDisplaySelectionEvaluator(layer, selection, visualizationMode);
+  const accumulators = createDisplaySelectionStatsAccumulators(evaluator, selection);
+
+  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
+    for (const accumulator of accumulators) {
+      accumulateStatsValue(accumulator, accumulator.read(pixelIndex));
+    }
+  }
+
+  return {
+    width,
+    height,
+    pixelCount,
+    channels: accumulators.map(toStatsChannelSummary)
   };
 }
 
@@ -981,10 +1008,13 @@ interface RoiStatsAccumulator {
   max: number;
   sum: number;
   validPixelCount: number;
+  nanPixelCount: number;
+  negativeInfinityPixelCount: number;
+  positiveInfinityPixelCount: number;
   read: (pixelIndex: number) => number;
 }
 
-function createRoiStatsAccumulators(
+function createDisplaySelectionStatsAccumulators(
   evaluator: DisplaySelectionEvaluator,
   selection: DisplaySelection | null
 ): RoiStatsAccumulator[] {
@@ -1074,8 +1104,39 @@ function createRoiStatsAccumulator(
     max: Number.NEGATIVE_INFINITY,
     sum: 0,
     validPixelCount: 0,
+    nanPixelCount: 0,
+    negativeInfinityPixelCount: 0,
+    positiveInfinityPixelCount: 0,
     read
   };
+}
+
+function accumulateStatsValue(accumulator: RoiStatsAccumulator, value: number): void {
+  if (Number.isFinite(value)) {
+    accumulator.validPixelCount += 1;
+    accumulator.sum += value;
+    if (value < accumulator.min) {
+      accumulator.min = value;
+    }
+    if (value > accumulator.max) {
+      accumulator.max = value;
+    }
+    return;
+  }
+
+  if (Number.isNaN(value)) {
+    accumulator.nanPixelCount += 1;
+    return;
+  }
+
+  if (value === Number.NEGATIVE_INFINITY) {
+    accumulator.negativeInfinityPixelCount += 1;
+    return;
+  }
+
+  if (value === Number.POSITIVE_INFINITY) {
+    accumulator.positiveInfinityPixelCount += 1;
+  }
 }
 
 function computeRawStokesDisplayValue(
@@ -1171,13 +1232,20 @@ function computeRawStokesNormalizedComponent(s0: number, component: number): num
 }
 
 function toRoiStatsChannelSummary(accumulator: RoiStatsAccumulator): RoiStatsChannelSummary {
+  return toStatsChannelSummary(accumulator);
+}
+
+function toStatsChannelSummary(accumulator: RoiStatsAccumulator): RoiStatsChannelSummary {
   if (accumulator.validPixelCount === 0) {
     return {
       label: accumulator.label,
       min: null,
       mean: null,
       max: null,
-      validPixelCount: 0
+      validPixelCount: 0,
+      nanPixelCount: accumulator.nanPixelCount,
+      negativeInfinityPixelCount: accumulator.negativeInfinityPixelCount,
+      positiveInfinityPixelCount: accumulator.positiveInfinityPixelCount
     };
   }
 
@@ -1186,7 +1254,10 @@ function toRoiStatsChannelSummary(accumulator: RoiStatsAccumulator): RoiStatsCha
     min: accumulator.min,
     mean: accumulator.sum / accumulator.validPixelCount,
     max: accumulator.max,
-    validPixelCount: accumulator.validPixelCount
+    validPixelCount: accumulator.validPixelCount,
+    nanPixelCount: accumulator.nanPixelCount,
+    negativeInfinityPixelCount: accumulator.negativeInfinityPixelCount,
+    positiveInfinityPixelCount: accumulator.positiveInfinityPixelCount
   };
 }
 

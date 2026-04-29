@@ -54,6 +54,17 @@ export function createBootstrapServices({
         displayLuminanceRange: event.displayLuminanceRange
       });
     },
+    onImageStatsResolved: (event) => {
+      core.dispatch({
+        type: 'imageStatsResolved',
+        requestId: event.requestId,
+        sessionId: event.sessionId,
+        activeLayer: event.activeLayer,
+        visualizationMode: event.visualizationMode,
+        displaySelection: event.displaySelection,
+        imageStats: event.imageStats
+      });
+    },
     onAutoExposureResolved: (event) => {
       core.dispatch({
         type: 'autoExposureResolved',

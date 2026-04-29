@@ -9,6 +9,7 @@ import {
   buildSelectedDisplayTexture,
   buildStokesDisplayTexture,
   computeDisplaySelectionAutoExposure,
+  computeDisplaySelectionImageStats,
   computeDisplaySelectionRoiStats,
   computeDisplaySelectionLuminanceRange,
   readDisplaySelectionPixelValues,
@@ -409,10 +410,10 @@ describe('display texture', () => {
 
     expect(stats?.pixelCount).toBe(4);
     expect(stats?.channels).toEqual([
-      { label: 'R', min: 1, mean: (1 + 2 + 4) / 3, max: 4, validPixelCount: 3 },
-      { label: 'G', min: 10, mean: 25, max: 40, validPixelCount: 4 },
-      { label: 'B', min: 100, mean: 250, max: 400, validPixelCount: 4 },
-      { label: 'A', min: 0.25, mean: (0.25 + 0.5 + 1) / 3, max: 1, validPixelCount: 3 }
+      createExpectedStatsChannel('R', 1, (1 + 2 + 4) / 3, 4, 3, 1, 0, 0),
+      createExpectedStatsChannel('G', 10, 25, 40, 4, 0, 0, 0),
+      createExpectedStatsChannel('B', 100, 250, 400, 4, 0, 0, 0),
+      createExpectedStatsChannel('A', 0.25, (0.25 + 0.5 + 1) / 3, 1, 3, 0, 0, 1)
     ]);
   });
 
@@ -429,7 +430,7 @@ describe('display texture', () => {
     );
 
     expect(monoStats?.channels).toEqual([
-      { label: 'Mono', min: 0, mean: 4 / 3, max: 3, validPixelCount: 3 }
+      createExpectedStatsChannel('Mono', 0, 4 / 3, 3, 3, 1, 0, 0)
     ]);
 
     const stokesLayer = createLayerFromChannels({
@@ -452,7 +453,10 @@ describe('display texture', () => {
         min: 0,
         mean: (0 + Math.PI / 4 + (3 * Math.PI) / 4) / 3,
         max: (3 * Math.PI) / 4,
-        validPixelCount: 3
+        validPixelCount: 3,
+        nanPixelCount: 1,
+        negativeInfinityPixelCount: 0,
+        positiveInfinityPixelCount: 0
       }
     ]);
   });
@@ -495,9 +499,9 @@ describe('display texture', () => {
     ) / computeRec709Luminance(1, 2, 4);
 
     expect(rgbStats?.channels).toEqual([
-      { label: 'R', min: 1, mean: 1, max: 1, validPixelCount: 1 },
-      { label: 'G', min: expectedG, mean: expectedG, max: expectedG, validPixelCount: 1 },
-      { label: 'B', min: 0.5, mean: 0.5, max: 0.5, validPixelCount: 1 }
+      createExpectedStatsChannel('R', 1, 1, 1, 1, 0, 0, 0),
+      createExpectedStatsChannel('G', expectedG, expectedG, expectedG, 1, 0, 0, 0),
+      createExpectedStatsChannel('B', 0.5, 0.5, 0.5, 1, 0, 0, 0)
     ]);
     expect(colormapStats?.channels).toEqual([
       {
@@ -505,9 +509,40 @@ describe('display texture', () => {
         min: expectedMono,
         mean: expectedMono,
         max: expectedMono,
-        validPixelCount: 1
+        validPixelCount: 1,
+        nanPixelCount: 0,
+        negativeInfinityPixelCount: 0,
+        positiveInfinityPixelCount: 0
       }
     ]);
+  });
+
+  it('computes whole-image stats for active display selections and counts invalid values', () => {
+    const layer = createLayerFromChannels({
+      R: [1, 2, Number.NaN, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY],
+      G: [0, -2, 4, 6, 8],
+      B: [Number.NaN, Number.NaN, Number.NaN, Number.NaN, Number.NaN],
+      A: [0.5, Number.POSITIVE_INFINITY, 1, Number.NEGATIVE_INFINITY, Number.NaN]
+    });
+
+    const stats = computeDisplaySelectionImageStats(
+      layer,
+      5,
+      1,
+      createChannelRgbSelection('R', 'G', 'B', 'A')
+    );
+
+    expect(stats).toEqual({
+      width: 5,
+      height: 1,
+      pixelCount: 5,
+      channels: [
+        createExpectedStatsChannel('R', 1, 1.5, 2, 2, 1, 1, 1),
+        createExpectedStatsChannel('G', -2, 3.2, 8, 5, 0, 0, 0),
+        createExpectedStatsChannel('B', null, null, null, 0, 5, 0, 0),
+        createExpectedStatsChannel('A', 0.5, 0.75, 1, 2, 1, 1, 1)
+      ]
+    });
   });
 
   it('reads per-pixel display values for overlays without overloading stokes alpha', () => {
@@ -551,3 +586,25 @@ describe('display texture', () => {
     expect(buildDisplayTextureRevisionKey(state)).toBe('2:channelMono:Y:A');
   });
 });
+
+function createExpectedStatsChannel(
+  label: string,
+  min: number | null,
+  mean: number | null,
+  max: number | null,
+  validPixelCount: number,
+  nanPixelCount: number,
+  negativeInfinityPixelCount: number,
+  positiveInfinityPixelCount: number
+) {
+  return {
+    label,
+    min,
+    mean,
+    max,
+    validPixelCount,
+    nanPixelCount,
+    negativeInfinityPixelCount,
+    positiveInfinityPixelCount
+  };
+}

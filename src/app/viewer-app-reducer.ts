@@ -58,11 +58,14 @@ export function createInitialViewerAppState(): ViewerAppState {
     activeColormapLut: null,
     loadedColormapId: null,
     activeDisplayLuminanceRange: null,
+    activeImageStats: null,
     pendingColormapActivation: null,
     pendingColormapRequestId: null,
     pendingSelectionTransitionRequestId: null,
     pendingDisplayRangeRequestId: null,
     pendingDisplayRangeRequestKey: null,
+    pendingImageStatsRequestId: null,
+    pendingImageStatsRequestKey: null,
     pendingAutoExposureRequestId: null,
     pendingAutoExposureRequestKey: null,
     pendingThumbnailTokensBySessionId: {},
@@ -482,9 +485,12 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         sessionState: cloneViewerSessionState(intent.session.state),
         interactionState: createInteractionState(intent.session.state),
         activeDisplayLuminanceRange: null,
+        activeImageStats: null,
         pendingColormapActivation: null,
         pendingDisplayRangeRequestId: null,
-        pendingDisplayRangeRequestKey: null
+        pendingDisplayRangeRequestKey: null,
+        pendingImageStatsRequestId: null,
+        pendingImageStatsRequestKey: null
       };
     case 'sessionReloaded': {
       const exists = state.sessions.find((session) => session.id === intent.sessionId);
@@ -509,9 +515,12 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         sessionState: cloneViewerSessionState(intent.session.state),
         interactionState: createInteractionState(intent.session.state),
         activeDisplayLuminanceRange: null,
+        activeImageStats: null,
         pendingColormapActivation: null,
         pendingDisplayRangeRequestId: null,
-        pendingDisplayRangeRequestKey: null
+        pendingDisplayRangeRequestKey: null,
+        pendingImageStatsRequestId: null,
+        pendingImageStatsRequestKey: null
       };
     }
     case 'sessionDisplayNameChanged': {
@@ -558,9 +567,12 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         sessionState: nextSessionState,
         interactionState: createInteractionState(nextSessionState),
         activeDisplayLuminanceRange: null,
+        activeImageStats: null,
         pendingColormapActivation: null,
         pendingDisplayRangeRequestId: null,
-        pendingDisplayRangeRequestKey: null
+        pendingDisplayRangeRequestKey: null,
+        pendingImageStatsRequestId: null,
+        pendingImageStatsRequestKey: null
       };
     }
     case 'sessionsReordered': {
@@ -635,9 +647,12 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
           sessionState: cleared,
           interactionState: createInteractionState(cleared),
           activeDisplayLuminanceRange: null,
+          activeImageStats: null,
           pendingColormapActivation: null,
           pendingDisplayRangeRequestId: null,
           pendingDisplayRangeRequestKey: null,
+          pendingImageStatsRequestId: null,
+          pendingImageStatsRequestKey: null,
           thumbnailsBySessionId,
           pendingThumbnailTokensBySessionId,
           ...channelThumbnailState,
@@ -663,9 +678,12 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         sessionState: nextSessionState,
         interactionState: createInteractionState(nextSessionState),
         activeDisplayLuminanceRange: null,
+        activeImageStats: null,
         pendingColormapActivation: null,
         pendingDisplayRangeRequestId: null,
         pendingDisplayRangeRequestKey: null,
+        pendingImageStatsRequestId: null,
+        pendingImageStatsRequestKey: null,
         thumbnailsBySessionId,
         pendingThumbnailTokensBySessionId,
         ...channelThumbnailState,
@@ -681,9 +699,12 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         sessionState: cleared,
         interactionState: createInteractionState(cleared),
         activeDisplayLuminanceRange: null,
+        activeImageStats: null,
         pendingColormapActivation: null,
         pendingDisplayRangeRequestId: null,
         pendingDisplayRangeRequestKey: null,
+        pendingImageStatsRequestId: null,
+        pendingImageStatsRequestKey: null,
         pendingThumbnailTokensBySessionId: {},
         thumbnailsBySessionId: {},
         pendingChannelThumbnailTokensByRequestKey: {},
@@ -768,6 +789,12 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         pendingDisplayRangeRequestId: intent.requestId,
         pendingDisplayRangeRequestKey: intent.requestKey
       };
+    case 'imageStatsRequestStarted':
+      return {
+        ...state,
+        pendingImageStatsRequestId: intent.requestId,
+        pendingImageStatsRequestKey: intent.requestKey
+      };
     case 'autoExposureRequestStarted':
       return {
         ...state,
@@ -838,6 +865,34 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
       }
 
       return nextState;
+    }
+    case 'imageStatsResolved': {
+      if (intent.requestId !== null && state.pendingImageStatsRequestId !== intent.requestId) {
+        return state;
+      }
+
+      const requestMatchesPending = intent.requestId === state.pendingImageStatsRequestId;
+      const activeSession = selectActiveSession(state);
+      if (
+        !activeSession ||
+        activeSession.id !== intent.sessionId ||
+        state.sessionState.activeLayer !== intent.activeLayer ||
+        state.sessionState.visualizationMode !== intent.visualizationMode ||
+        !sameDisplaySelection(state.sessionState.displaySelection, intent.displaySelection)
+      ) {
+        return {
+          ...state,
+          pendingImageStatsRequestId: requestMatchesPending ? null : state.pendingImageStatsRequestId,
+          pendingImageStatsRequestKey: requestMatchesPending ? null : state.pendingImageStatsRequestKey
+        };
+      }
+
+      return {
+        ...state,
+        activeImageStats: intent.imageStats,
+        pendingImageStatsRequestId: requestMatchesPending ? null : state.pendingImageStatsRequestId,
+        pendingImageStatsRequestKey: requestMatchesPending ? null : state.pendingImageStatsRequestKey
+      };
     }
     case 'autoExposureResolved': {
       if (intent.requestId !== null && state.pendingAutoExposureRequestId !== intent.requestId) {
@@ -921,6 +976,7 @@ function patchSessionState(
       draftRoi: null
     };
   }
+  const resetImageStatsContext = shouldResetImageStatsContext(state.sessionState, nextSessionState);
 
   return {
     ...state,
@@ -929,8 +985,19 @@ function patchSessionState(
     sessions: updateActiveSessionStoredState(state.sessions, state.activeSessionId, nextSessionState),
     activeDisplayLuminanceRange: options.resetDisplayRangeContext ? null : state.activeDisplayLuminanceRange,
     pendingDisplayRangeRequestId: options.resetDisplayRangeContext ? null : state.pendingDisplayRangeRequestId,
-    pendingDisplayRangeRequestKey: options.resetDisplayRangeContext ? null : state.pendingDisplayRangeRequestKey
+    pendingDisplayRangeRequestKey: options.resetDisplayRangeContext ? null : state.pendingDisplayRangeRequestKey,
+    activeImageStats: resetImageStatsContext ? null : state.activeImageStats,
+    pendingImageStatsRequestId: resetImageStatsContext ? null : state.pendingImageStatsRequestId,
+    pendingImageStatsRequestKey: resetImageStatsContext ? null : state.pendingImageStatsRequestKey
   };
+}
+
+function shouldResetImageStatsContext(previous: ViewerSessionState, next: ViewerSessionState): boolean {
+  return (
+    previous.activeLayer !== next.activeLayer ||
+    previous.visualizationMode !== next.visualizationMode ||
+    !sameDisplaySelection(previous.displaySelection, next.displaySelection)
+  );
 }
 
 function updateActiveSessionStoredState(

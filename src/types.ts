@@ -62,13 +62,19 @@ export interface ImageRoi {
   y1: number;
 }
 
-export interface RoiStatsChannelSummary {
+export interface StatsChannelSummary {
   label: string;
   min: number | null;
   mean: number | null;
   max: number | null;
   validPixelCount: number;
+  nanPixelCount: number;
+  negativeInfinityPixelCount: number;
+  positiveInfinityPixelCount: number;
 }
+
+export type RoiStatsChannelSummary = StatsChannelSummary;
+export type ImageStatsChannelSummary = StatsChannelSummary;
 
 export interface RoiStats {
   roi: ImageRoi;
@@ -76,6 +82,13 @@ export interface RoiStats {
   height: number;
   pixelCount: number;
   channels: RoiStatsChannelSummary[];
+}
+
+export interface ImageStats {
+  width: number;
+  height: number;
+  pixelCount: number;
+  channels: ImageStatsChannelSummary[];
 }
 
 export interface DecodedLayer {

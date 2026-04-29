@@ -321,6 +321,8 @@ describe('metadata inspector', () => {
     const probeContent = document.getElementById('probe-content') as HTMLDivElement;
     const roiToggle = document.getElementById('roi-toggle') as HTMLButtonElement;
     const roiContent = document.getElementById('roi-content') as HTMLDivElement;
+    const imageStatsToggle = document.getElementById('image-stats-toggle') as HTMLButtonElement;
+    const imageStatsContent = document.getElementById('image-stats-content') as HTMLDivElement;
 
     expect(metadataToggle.getAttribute('aria-expanded')).toBe('true');
     expect(metadataContent.hidden).toBe(false);
@@ -328,6 +330,8 @@ describe('metadata inspector', () => {
     expect(probeContent.hidden).toBe(false);
     expect(roiToggle.getAttribute('aria-expanded')).toBe('true');
     expect(roiContent.hidden).toBe(false);
+    expect(imageStatsToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(imageStatsContent.hidden).toBe(false);
 
     metadataToggle.click();
 
@@ -336,10 +340,12 @@ describe('metadata inspector', () => {
     expect((document.getElementById('metadata-panel') as HTMLElement).classList.contains('is-collapsed')).toBe(true);
     expect(probeContent.hidden).toBe(false);
     expect(roiContent.hidden).toBe(false);
+    expect(imageStatsContent.hidden).toBe(false);
 
     metadataToggle.click();
     probeToggle.click();
     roiToggle.click();
+    imageStatsToggle.click();
 
     expect(metadataToggle.getAttribute('aria-expanded')).toBe('true');
     expect(metadataContent.hidden).toBe(false);
@@ -347,8 +353,11 @@ describe('metadata inspector', () => {
     expect(probeContent.hidden).toBe(true);
     expect(roiToggle.getAttribute('aria-expanded')).toBe('false');
     expect(roiContent.hidden).toBe(true);
+    expect(imageStatsToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(imageStatsContent.hidden).toBe(true);
     expect(document.querySelector('#probe-panel .readout-block-header')).not.toBeNull();
     expect(document.querySelector('#roi-panel .readout-block-header')).not.toBeNull();
+    expect(document.querySelector('#image-stats-panel .readout-block-header')).not.toBeNull();
   });
 
   it('shows the empty state until metadata is available', () => {
@@ -790,8 +799,8 @@ describe('roi inspector', () => {
         height: 5,
         pixelCount: 20,
         channels: [
-          { label: 'Mono', min: 0.1, mean: 0.25, max: 0.5, validPixelCount: 18 },
-          { label: 'A', min: 0, mean: 0.5, max: 1, validPixelCount: 20 }
+          createStatsChannel('Mono', 0.1, 0.25, 0.5, 18),
+          createStatsChannel('A', 0, 0.5, 1, 20)
         ]
       }
     });
@@ -848,7 +857,7 @@ describe('roi inspector', () => {
         width: 4,
         height: 5,
         pixelCount: 20,
-        channels: [{ label: 'Mono', min: 0.1, mean: 0.25, max: 0.5, validPixelCount: 18 }]
+        channels: [createStatsChannel('Mono', 0.1, 0.25, 0.5, 18)]
       }
     });
 
@@ -862,6 +871,81 @@ describe('roi inspector', () => {
     ).toEqual([{ key: 'Y', value: '0.500' }]);
     expect((document.getElementById('roi-bounds') as HTMLElement).textContent).toBe('x 2..5  y 3..7');
     expect((document.getElementById('roi-valid-count') as HTMLElement).textContent).toBe('Mono 18/20');
+  });
+});
+
+describe('image stats inspector', () => {
+  it('places Image Stats between ROI and Metadata and renders the compact stats table', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setImageStats({
+      hasActiveImage: true,
+      isLoading: false,
+      stats: {
+        width: 5,
+        height: 4,
+        pixelCount: 20,
+        channels: [
+          createStatsChannel('R', 0.1, 0.25, 0.5, 18, 1, 0, 1),
+          createStatsChannel('G', null, null, null, 0, 20, 0, 0)
+        ]
+      }
+    });
+
+    const panelOrder = Array.from(document.querySelectorAll('.readout-block')).map((section) => section.id);
+    expect(panelOrder.indexOf('roi-panel')).toBeLessThan(panelOrder.indexOf('image-stats-panel'));
+    expect(panelOrder.indexOf('image-stats-panel')).toBeLessThan(panelOrder.indexOf('metadata-panel'));
+    expect((document.getElementById('image-stats-empty-state') as HTMLElement).classList.contains('hidden')).toBe(true);
+    expect((document.getElementById('image-stats-loading-state') as HTMLElement).classList.contains('hidden')).toBe(true);
+
+    const rows = Array.from(document.querySelectorAll('#image-stats-table .image-stats-row')).map((row) =>
+      Array.from(row.children).map((cell) => cell.textContent)
+    );
+    expect(rows).toEqual([
+      ['Channel', 'Min', 'Mean', 'Max', 'Finite', 'NaN', '-Inf', '+Inf', 'Invalid %'],
+      ['R', '0.100', '0.250', '0.500', '18', '1', '0', '1', '10%'],
+      ['G', 'n/a', 'n/a', 'n/a', '0', '20', '0', '0', '100%']
+    ]);
+  });
+
+  it('shows loading state and updates while collapsed', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const imageStatsToggle = document.getElementById('image-stats-toggle') as HTMLButtonElement;
+    const imageStatsContent = document.getElementById('image-stats-content') as HTMLDivElement;
+
+    ui.setImageStats({
+      hasActiveImage: true,
+      isLoading: true,
+      stats: null
+    });
+    expect((document.getElementById('image-stats-loading-state') as HTMLElement).classList.contains('hidden')).toBe(false);
+    expect((document.getElementById('image-stats-table') as HTMLElement).classList.contains('hidden')).toBe(true);
+
+    imageStatsToggle.click();
+    expect(imageStatsContent.hidden).toBe(true);
+
+    ui.setImageStats({
+      hasActiveImage: true,
+      isLoading: false,
+      stats: {
+        width: 1,
+        height: 1,
+        pixelCount: 1,
+        channels: [createStatsChannel('Mono', 1, 1, 1, 1)]
+      }
+    });
+
+    expect(
+      Array.from(document.querySelectorAll('#image-stats-table .image-stats-row')).map((row) =>
+        Array.from(row.children).map((cell) => cell.textContent)
+      )
+    ).toEqual([
+      ['Channel', 'Min', 'Mean', 'Max', 'Finite', 'NaN', '-Inf', '+Inf', 'Invalid %'],
+      ['Mono', '1.00', '1.00', '1.00', '1', '0', '0', '0', '0%']
+    ]);
   });
 });
 
@@ -6988,6 +7072,28 @@ function readStyleSheet(): string {
 
 function readIndexMarkup(): string {
   return readFileSync(resolve(process.cwd(), 'index.html'), 'utf8');
+}
+
+function createStatsChannel(
+  label: string,
+  min: number | null,
+  mean: number | null,
+  max: number | null,
+  validPixelCount: number,
+  nanPixelCount = 0,
+  negativeInfinityPixelCount = 0,
+  positiveInfinityPixelCount = 0
+) {
+  return {
+    label,
+    min,
+    mean,
+    max,
+    validPixelCount,
+    nanPixelCount,
+    negativeInfinityPixelCount,
+    positiveInfinityPixelCount
+  };
 }
 
 async function flushMicrotasks(): Promise<void> {

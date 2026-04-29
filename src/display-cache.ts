@@ -1,5 +1,5 @@
 import type { AutoExposureResult } from './auto-exposure';
-import type { DecodedExrImage, DisplayLuminanceRange } from './types';
+import type { DecodedExrImage, DisplayLuminanceRange, ImageStats } from './types';
 
 export const DISPLAY_CACHE_BUDGET_STORAGE_KEY = 'openexr-viewer:display-cache-budget-mb:v1';
 export const DISPLAY_CACHE_BUDGET_OPTIONS_MB = [64, 128, 256, 512, 1024] as const;
@@ -31,6 +31,7 @@ export interface SessionResourceEntry {
   decodedBytes: number;
   residentLayers: Map<number, ResidentLayerResourceEntry>;
   luminanceRangeByRevision: Map<string, DisplayLuminanceRange | null>;
+  imageStatsByRevision: Map<string, ImageStats | null>;
   autoExposureByRevision: Map<string, AutoExposureResult | null>;
 }
 
@@ -41,6 +42,7 @@ export function createSessionResourceEntry(id: string): SessionResourceEntry {
     decodedBytes: 0,
     residentLayers: new Map<number, ResidentLayerResourceEntry>(),
     luminanceRangeByRevision: new Map<string, DisplayLuminanceRange | null>(),
+    imageStatsByRevision: new Map<string, ImageStats | null>(),
     autoExposureByRevision: new Map<string, AutoExposureResult | null>()
   };
 }
@@ -50,6 +52,7 @@ export function clearSessionResources(entry: SessionResourceEntry): void {
   entry.decodedBytes = 0;
   entry.residentLayers.clear();
   entry.luminanceRangeByRevision.clear();
+  entry.imageStatsByRevision.clear();
   entry.autoExposureByRevision.clear();
 }
 

@@ -105,6 +105,7 @@ function getEntries(service: RenderCacheService): Map<string, {
     residentChannels: Map<string, { textureBytes: number; materializedBytes: number; lastAccessToken: number }>;
   }>;
   luminanceRangeByRevision: Map<string, { min: number; max: number } | null>;
+  imageStatsByRevision: Map<string, unknown>;
 }> {
   return (service as unknown as { entries: Map<string, never> }).entries as never;
 }
@@ -262,6 +263,71 @@ describe('render cache service', () => {
       activeLayer: 0,
       displaySelection: session.state.displaySelection,
       displayLuminanceRange: { min: 0.5702, max: 0.5702 }
+    });
+  });
+
+  it('computes and caches lazy, deduped image stats requests', async () => {
+    const decoded: DecodedExrImage = {
+      width: 5,
+      height: 1,
+      layers: [createLayerFromChannels({
+        R: [1, 2, Number.NaN, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY],
+        G: [0, -2, 4, 6, 8],
+        B: [Number.NaN, Number.NaN, Number.NaN, Number.NaN, Number.NaN]
+      }, 'beauty')]
+    };
+    const session = createSession('session-1', decoded);
+    const ui = createUiMock();
+    const renderer = createRendererMock();
+    const { windowLike, flush } = createRenderCacheWindowLike();
+    const onImageStatsResolved = vi.fn();
+    const service = new RenderCacheService({
+      ui,
+      renderer,
+      windowLike,
+      onImageStatsResolved
+    });
+
+    expect(getEntries(service).get(session.id)?.imageStatsByRevision.size ?? 0).toBe(0);
+
+    const first = service.requestImageStats(session, session.state);
+    const second = service.requestImageStats(session, session.state);
+
+    expect(first).toEqual({
+      imageStats: null,
+      pending: true
+    });
+    expect(second).toEqual({
+      imageStats: null,
+      pending: true
+    });
+    expect(service.getCachedImageStats(session.id, session.state)).toBeNull();
+
+    await flush();
+
+    const expectedStats = {
+      width: 5,
+      height: 1,
+      pixelCount: 5,
+      channels: [
+        createExpectedStatsChannel('R', 1, 1.5, 2, 2, 1, 1, 1),
+        createExpectedStatsChannel('G', -2, 3.2, 8, 5, 0, 0, 0),
+        createExpectedStatsChannel('B', null, null, null, 0, 5, 0, 0)
+      ]
+    };
+    expect(service.getCachedImageStats(session.id, session.state)).toEqual(expectedStats);
+    expect(service.requestImageStats(session, session.state)).toEqual({
+      imageStats: expectedStats,
+      pending: false
+    });
+    expect(onImageStatsResolved).toHaveBeenCalledTimes(1);
+    expect(onImageStatsResolved).toHaveBeenCalledWith({
+      requestId: null,
+      sessionId: session.id,
+      activeLayer: 0,
+      visualizationMode: session.state.visualizationMode,
+      displaySelection: session.state.displaySelection,
+      imageStats: expectedStats
     });
   });
 
@@ -704,6 +770,51 @@ describe('render cache service', () => {
     expect(disposedCallback).not.toHaveBeenCalled();
   });
 
+  it('drops pending image stats callbacks after discard, clear, and dispose', async () => {
+    const session = createSession('session-1');
+
+    const discarded = createRenderCacheWindowLike();
+    const discardedCallback = vi.fn();
+    const discardedService = new RenderCacheService({
+      ui: createUiMock(),
+      renderer: createRendererMock(),
+      windowLike: discarded.windowLike,
+      onImageStatsResolved: discardedCallback
+    });
+    expect(discardedService.requestImageStats(session, session.state).pending).toBe(true);
+    discardedService.discard(session.id);
+    await discarded.flush();
+    expect(discardedCallback).not.toHaveBeenCalled();
+    expect(discardedService.getCachedImageStats(session.id, session.state)).toBeNull();
+
+    const cleared = createRenderCacheWindowLike();
+    const clearedCallback = vi.fn();
+    const clearedService = new RenderCacheService({
+      ui: createUiMock(),
+      renderer: createRendererMock(),
+      windowLike: cleared.windowLike,
+      onImageStatsResolved: clearedCallback
+    });
+    expect(clearedService.requestImageStats(session, session.state).pending).toBe(true);
+    clearedService.clear();
+    await cleared.flush();
+    expect(clearedCallback).not.toHaveBeenCalled();
+    expect(clearedService.getCachedImageStats(session.id, session.state)).toBeNull();
+
+    const disposed = createRenderCacheWindowLike();
+    const disposedCallback = vi.fn();
+    const disposedService = new RenderCacheService({
+      ui: createUiMock(),
+      renderer: createRendererMock(),
+      windowLike: disposed.windowLike,
+      onImageStatsResolved: disposedCallback
+    });
+    expect(disposedService.requestImageStats(session, session.state).pending).toBe(true);
+    disposedService.dispose();
+    await disposed.flush();
+    expect(disposedCallback).not.toHaveBeenCalled();
+  });
+
   it('drops pending auto exposure callbacks after discard, clear, and dispose', async () => {
     const session = createSession('session-1');
 
@@ -747,3 +858,25 @@ describe('render cache service', () => {
     expect(disposedCallback).not.toHaveBeenCalled();
   });
 });
+
+function createExpectedStatsChannel(
+  label: string,
+  min: number | null,
+  mean: number | null,
+  max: number | null,
+  validPixelCount: number,
+  nanPixelCount: number,
+  negativeInfinityPixelCount: number,
+  positiveInfinityPixelCount: number
+) {
+  return {
+    label,
+    min,
+    mean,
+    max,
+    validPixelCount,
+    nanPixelCount,
+    negativeInfinityPixelCount,
+    positiveInfinityPixelCount
+  };
+}

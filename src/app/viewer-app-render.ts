@@ -1,6 +1,7 @@
 import { AUTO_EXPOSURE_SOURCE } from '../auto-exposure';
 import {
   buildDisplayAutoExposureRevisionKey,
+  buildDisplayImageStatsRevisionKey,
   buildDisplayLuminanceRevisionKey
 } from '../display-texture';
 import { sameDisplayLuminanceRange } from '../colormap-range';
@@ -11,6 +12,7 @@ import { buildProbeReadoutModel } from './probe-presentation';
 import { buildRoiReadoutModel } from './roi-presentation';
 import {
   sameDisplayRangeRequest,
+  sameImageStatsReadout,
   sameProbeReadout,
   sameRoiReadout,
   sameResourceTarget
@@ -19,6 +21,7 @@ import { selectActiveSession } from './viewer-app-selectors';
 import type {
   ViewerAppState,
   ViewerDisplayRangeRequest,
+  ViewerImageStatsRequest,
   ViewerRenderSnapshot,
   ViewerResourceTarget
 } from './viewer-app-types';
@@ -35,21 +38,26 @@ export const enum ViewerRenderInvalidationFlags {
   RenderValueOverlay = 1 << 7,
   RenderProbeOverlay = 1 << 8,
   ResourceRequestAutoExposure = 1 << 9,
-  RenderRulerOverlay = 1 << 10
+  RenderRulerOverlay = 1 << 10,
+  ImageStatsReadout = 1 << 11,
+  ResourceRequestImageStats = 1 << 12
 }
 
 export function createViewerRenderSnapshotSelector(): (state: ViewerAppState) => ViewerRenderSnapshot {
   const selectRenderState = createRenderStateSelector();
   const selectProbeReadout = createProbeReadoutSelector();
   const selectRoiReadout = createRoiReadoutSelector();
+  const selectImageStatsReadout = createImageStatsReadoutSelector();
   const selectResourceTarget = createResourceTargetSelector();
   const selectDisplayRangeRequest = createDisplayRangeRequestSelector();
+  const selectImageStatsRequest = createImageStatsRequestSelector();
   const selectAutoExposureRequest = createAutoExposureRequestSelector();
 
   let previousSnapshot: ViewerRenderSnapshot | null = null;
   return (state) => {
     const activeSession = selectActiveSession(state);
     const activeLayer = activeSession?.decoded.layers[state.sessionState.activeLayer] ?? null;
+    const imageStatsRequest = selectImageStatsRequest(state, activeSession, activeLayer);
 
     const nextSnapshot: ViewerRenderSnapshot = {
       activeSession,
@@ -58,8 +66,10 @@ export function createViewerRenderSnapshotSelector(): (state: ViewerAppState) =>
       activeColormapLut: state.activeColormapLut,
       probeReadout: selectProbeReadout(state, activeSession, activeLayer),
       roiReadout: selectRoiReadout(state, activeSession, activeLayer),
+      imageStatsReadout: selectImageStatsReadout(state, activeSession, activeLayer, imageStatsRequest),
       resourceTarget: selectResourceTarget(state, activeSession),
       displayRangeRequest: selectDisplayRangeRequest(state, activeSession, activeLayer),
+      imageStatsRequest,
       autoExposureRequest: selectAutoExposureRequest(state, activeSession, activeLayer),
       rulersVisible: state.rulersVisible
     };
@@ -95,12 +105,20 @@ export function computeViewerRenderInvalidation(
     flags |= ViewerRenderInvalidationFlags.RoiReadout;
   }
 
+  if (!sameImageStatsReadout(previous.imageStatsReadout, next.imageStatsReadout)) {
+    flags |= ViewerRenderInvalidationFlags.ImageStatsReadout;
+  }
+
   if (!sameResourceTarget(previous.resourceTarget, next.resourceTarget) && next.resourceTarget) {
     flags |= ViewerRenderInvalidationFlags.ResourcePrepare;
   }
 
   if (!sameDisplayRangeRequest(previous.displayRangeRequest, next.displayRangeRequest) && next.displayRangeRequest) {
     flags |= ViewerRenderInvalidationFlags.ResourceRequestDisplayRange;
+  }
+
+  if (!sameImageStatsRequest(previous.imageStatsRequest, next.imageStatsRequest) && next.imageStatsRequest) {
+    flags |= ViewerRenderInvalidationFlags.ResourceRequestImageStats;
   }
 
   if (!sameAutoExposureRequest(previous.autoExposureRequest, next.autoExposureRequest) && next.autoExposureRequest) {
@@ -295,6 +313,48 @@ function createRoiReadoutSelector(): (
   };
 }
 
+function createImageStatsReadoutSelector(): (
+  state: ViewerAppState,
+  activeSession: OpenedImageSession | null,
+  activeLayer: ViewerRenderSnapshot['activeLayer'],
+  imageStatsRequest: ViewerImageStatsRequest | null
+) => ViewerRenderSnapshot['imageStatsReadout'] {
+  let previousSessionId: string | null = null;
+  let previousLayer: ViewerRenderSnapshot['activeLayer'] = null;
+  let previousStats: ViewerAppState['activeImageStats'] = null;
+  let previousLoading = false;
+  let previousResult: ViewerRenderSnapshot['imageStatsReadout'] = {
+    hasActiveImage: false,
+    isLoading: false,
+    stats: null
+  };
+
+  return (state, activeSession, activeLayer, imageStatsRequest) => {
+    const sessionId = activeSession?.id ?? null;
+    const hasActiveImage = Boolean(activeSession && activeLayer);
+    const isLoading = Boolean(imageStatsRequest);
+    if (
+      sessionId === previousSessionId &&
+      activeLayer === previousLayer &&
+      state.activeImageStats === previousStats &&
+      isLoading === previousLoading
+    ) {
+      return previousResult;
+    }
+
+    previousSessionId = sessionId;
+    previousLayer = activeLayer;
+    previousStats = state.activeImageStats;
+    previousLoading = isLoading;
+    previousResult = {
+      hasActiveImage,
+      isLoading,
+      stats: hasActiveImage ? state.activeImageStats : null
+    };
+    return previousResult;
+  };
+}
+
 function createDisplayRangeRequestSelector(): (
   state: ViewerAppState,
   activeSession: OpenedImageSession | null,
@@ -322,6 +382,36 @@ function createDisplayRangeRequestSelector(): (
         }
       : null;
     if (sameDisplayRangeRequest(previousResult, nextResult)) {
+      return previousResult;
+    }
+
+    previousResult = nextResult;
+    return previousResult;
+  };
+}
+
+function createImageStatsRequestSelector(): (
+  state: ViewerAppState,
+  activeSession: OpenedImageSession | null,
+  activeLayer: ViewerRenderSnapshot['activeLayer']
+) => ViewerImageStatsRequest | null {
+  let previousResult: ViewerImageStatsRequest | null = null;
+  return (state, activeSession, activeLayer) => {
+    const nextResult = activeSession && activeLayer && !state.activeImageStats
+      ? {
+          sessionId: activeSession.id,
+          activeLayer: state.sessionState.activeLayer,
+          visualizationMode: state.sessionState.visualizationMode,
+          displaySelection: state.sessionState.displaySelection,
+          decodedRef: activeSession.decoded,
+          requestKey: `${activeSession.id}:${buildDisplayImageStatsRevisionKey({
+            activeLayer: state.sessionState.activeLayer,
+            displaySelection: state.sessionState.displaySelection,
+            visualizationMode: state.sessionState.visualizationMode
+          })}`
+        }
+      : null;
+    if (sameImageStatsRequest(previousResult, nextResult)) {
       return previousResult;
     }
 
@@ -371,10 +461,26 @@ function sameViewerRenderSnapshot(a: ViewerRenderSnapshot, b: ViewerRenderSnapsh
     a.activeColormapLut === b.activeColormapLut &&
     sameProbeReadout(a.probeReadout, b.probeReadout) &&
     sameRoiReadout(a.roiReadout, b.roiReadout) &&
+    sameImageStatsReadout(a.imageStatsReadout, b.imageStatsReadout) &&
     sameResourceTarget(a.resourceTarget, b.resourceTarget) &&
     sameDisplayRangeRequest(a.displayRangeRequest, b.displayRangeRequest) &&
+    sameImageStatsRequest(a.imageStatsRequest, b.imageStatsRequest) &&
     sameAutoExposureRequest(a.autoExposureRequest, b.autoExposureRequest) &&
     a.rulersVisible === b.rulersVisible
+  );
+}
+
+function sameImageStatsRequest(
+  a: ViewerRenderSnapshot['imageStatsRequest'],
+  b: ViewerRenderSnapshot['imageStatsRequest']
+): boolean {
+  return (
+    a?.requestKey === b?.requestKey &&
+    a?.sessionId === b?.sessionId &&
+    a?.activeLayer === b?.activeLayer &&
+    a?.visualizationMode === b?.visualizationMode &&
+    a?.decodedRef === b?.decodedRef &&
+    sameDisplaySelection(a?.displaySelection ?? null, b?.displaySelection ?? null)
   );
 }
 

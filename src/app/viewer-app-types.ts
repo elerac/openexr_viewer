@@ -7,6 +7,7 @@ import type {
   DisplayLuminanceRange,
   ExportImageBatchTarget,
   ExrMetadataEntry,
+  ImageStats,
   ImageRoi,
   OpenedImageDropPlacement,
   OpenedImageSession,
@@ -48,6 +49,12 @@ export interface ProbeReadoutModel {
 export interface RoiReadoutModel {
   roi: ImageRoi | null;
   stats: RoiStats | null;
+}
+
+export interface ImageStatsReadoutModel {
+  hasActiveImage: boolean;
+  isLoading: boolean;
+  stats: ImageStats | null;
 }
 
 export interface ViewerOpenedImageOption {
@@ -92,6 +99,10 @@ export interface ViewerAutoExposureRequest extends ViewerResourceTarget {
   source: 'rgbMax';
 }
 
+export interface ViewerImageStatsRequest extends ViewerResourceTarget {
+  requestKey: string;
+}
+
 export interface ViewerAppState {
   sessionState: ViewerSessionState;
   interactionState: ViewerInteractionState;
@@ -104,11 +115,14 @@ export interface ViewerAppState {
   activeColormapLut: ColormapLut | null;
   loadedColormapId: string | null;
   activeDisplayLuminanceRange: DisplayLuminanceRange | null;
+  activeImageStats: ImageStats | null;
   pendingColormapActivation: PendingColormapActivation | null;
   pendingColormapRequestId: number | null;
   pendingSelectionTransitionRequestId: number | null;
   pendingDisplayRangeRequestId: number | null;
   pendingDisplayRangeRequestKey: string | null;
+  pendingImageStatsRequestId: number | null;
+  pendingImageStatsRequestKey: string | null;
   pendingAutoExposureRequestId: number | null;
   pendingAutoExposureRequestKey: string | null;
   pendingThumbnailTokensBySessionId: Record<string, number>;
@@ -186,6 +200,7 @@ export type ViewerIntent =
       thumbnailDataUrl: string | null;
     }
   | { type: 'displayRangeRequestStarted'; requestId: number; requestKey: string }
+  | { type: 'imageStatsRequestStarted'; requestId: number; requestKey: string }
   | { type: 'autoExposureRequestStarted'; requestId: number; requestKey: string }
   | {
       type: 'displayLuminanceRangeResolved';
@@ -194,6 +209,15 @@ export type ViewerIntent =
       activeLayer: number;
       displaySelection: ViewerSessionState['displaySelection'];
       displayLuminanceRange: DisplayLuminanceRange | null;
+    }
+  | {
+      type: 'imageStatsResolved';
+      requestId: number | null;
+      sessionId: string;
+      activeLayer: number;
+      visualizationMode: ViewerSessionState['visualizationMode'];
+      displaySelection: ViewerSessionState['displaySelection'];
+      imageStats: ImageStats | null;
     }
   | {
       type: 'autoExposureResolved';
@@ -258,8 +282,10 @@ export interface ViewerRenderSnapshot {
   activeColormapLut: ColormapLut | null;
   probeReadout: ProbeReadoutModel;
   roiReadout: RoiReadoutModel;
+  imageStatsReadout: ImageStatsReadoutModel;
   resourceTarget: ViewerResourceTarget | null;
   displayRangeRequest: ViewerDisplayRangeRequest | null;
+  imageStatsRequest: ViewerImageStatsRequest | null;
   autoExposureRequest: ViewerAutoExposureRequest | null;
   rulersVisible: boolean;
 }
