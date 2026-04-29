@@ -32,6 +32,10 @@ export function applyRenderEffects(
     ui.setRoiReadout(snapshot.roiReadout);
   }
 
+  if (invalidation & ViewerRenderInvalidationFlags.ViewerStateReadout) {
+    ui.setViewerStateReadout(snapshot.viewerStateReadout);
+  }
+
   if (invalidation & ViewerRenderInvalidationFlags.ImageStatsReadout) {
     ui.setImageStats(snapshot.imageStatsReadout);
   }

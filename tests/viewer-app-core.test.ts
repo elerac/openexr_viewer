@@ -570,6 +570,93 @@ describe('viewer app core', () => {
     expect(core.getState().interactionState.hoveredPixel).toBeNull();
   });
 
+  it('applies edited viewer state with clamps while preserving non-view state', () => {
+    const core = new ViewerAppCore();
+    const session = createSession('session-1', createDecodedImage());
+    core.dispatch({ type: 'sessionLoaded', session });
+    core.dispatch({ type: 'exposureSet', exposureEv: 2 });
+    core.dispatch({ type: 'displaySelectionSet', displaySelection: createChannelMonoSelection('R') });
+    core.dispatch({ type: 'roiSet', roi: { x0: 0, y0: 0, x1: 1, y1: 0 } });
+    const stats = createImageStats();
+    core.dispatch({
+      type: 'imageStatsResolved',
+      requestId: null,
+      sessionId: session.id,
+      activeLayer: core.getState().sessionState.activeLayer,
+      visualizationMode: core.getState().sessionState.visualizationMode,
+      displaySelection: core.getState().sessionState.displaySelection,
+      imageStats: stats
+    });
+    core.dispatch({
+      type: 'interactionStatePublished',
+      interactionState: {
+        view: {
+          ...core.getState().interactionState.view,
+          zoom: 3,
+          panX: 20,
+          panY: 30
+        },
+        hoveredPixel: { ix: 1, iy: 0 },
+        draftRoi: null
+      }
+    });
+
+    core.dispatch({
+      type: 'viewerStateEdited',
+      patch: {
+        zoom: 999,
+        panX: 12.25,
+        panY: -4.5,
+        panoramaYawDeg: 190,
+        panoramaPitchDeg: -120,
+        panoramaHfovDeg: 0
+      }
+    });
+
+    expect(core.getState().sessionState).toMatchObject({
+      zoom: 512,
+      panX: 12.25,
+      panY: -4.5,
+      panoramaYawDeg: -170,
+      panoramaPitchDeg: -89,
+      panoramaHfovDeg: 1,
+      exposureEv: 2,
+      displaySelection: createChannelMonoSelection('R'),
+      roi: { x0: 0, y0: 0, x1: 1, y1: 0 }
+    });
+    expect(core.getState().interactionState.view).toMatchObject({
+      zoom: 512,
+      panX: 12.25,
+      panY: -4.5,
+      panoramaYawDeg: -170,
+      panoramaPitchDeg: -89,
+      panoramaHfovDeg: 1
+    });
+    expect(core.getState().interactionState.hoveredPixel).toBeNull();
+    expect(core.getState().activeImageStats).toBe(stats);
+    expect(core.getState().sessions[0]?.state.zoom).toBe(512);
+  });
+
+  it('ignores invalid edited viewer state values and no-ops without an active image', () => {
+    const core = new ViewerAppCore();
+    const previous = core.getState();
+    core.dispatch({ type: 'viewerStateEdited', patch: { zoom: 2 } });
+    expect(core.getState()).toBe(previous);
+
+    const session = createSession('session-1', createDecodedImage());
+    core.dispatch({ type: 'sessionLoaded', session });
+    core.dispatch({
+      type: 'viewerStateEdited',
+      patch: {
+        zoom: Number.NaN,
+        panX: 7
+      }
+    });
+
+    expect(core.getState().sessionState.zoom).toBe(session.state.zoom);
+    expect(core.getState().sessionState.panX).toBe(7);
+  });
+
   it('does not fit the active image while in panorama mode', () => {
     const core = new ViewerAppCore();
     const session = createSession('session-1');

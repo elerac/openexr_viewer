@@ -15,7 +15,8 @@ import {
   sameImageStatsReadout,
   sameProbeReadout,
   sameRoiReadout,
-  sameResourceTarget
+  sameResourceTarget,
+  sameViewerStateReadout
 } from './viewer-app-equality';
 import { selectActiveSession } from './viewer-app-selectors';
 import type {
@@ -40,7 +41,8 @@ export const enum ViewerRenderInvalidationFlags {
   ResourceRequestAutoExposure = 1 << 9,
   RenderRulerOverlay = 1 << 10,
   ImageStatsReadout = 1 << 11,
-  ResourceRequestImageStats = 1 << 12
+  ResourceRequestImageStats = 1 << 12,
+  ViewerStateReadout = 1 << 13
 }
 
 export function createViewerRenderSnapshotSelector(): (state: ViewerAppState) => ViewerRenderSnapshot {
@@ -66,6 +68,7 @@ export function createViewerRenderSnapshotSelector(): (state: ViewerAppState) =>
       activeColormapLut: state.activeColormapLut,
       probeReadout: selectProbeReadout(state, activeSession, activeLayer),
       roiReadout: selectRoiReadout(state, activeSession, activeLayer),
+      viewerStateReadout: buildViewerStateReadout(state, activeSession),
       imageStatsReadout: selectImageStatsReadout(state, activeSession, activeLayer, imageStatsRequest),
       resourceTarget: selectResourceTarget(state, activeSession),
       displayRangeRequest: selectDisplayRangeRequest(state, activeSession, activeLayer),
@@ -107,6 +110,10 @@ export function computeViewerRenderInvalidation(
 
   if (!sameImageStatsReadout(previous.imageStatsReadout, next.imageStatsReadout)) {
     flags |= ViewerRenderInvalidationFlags.ImageStatsReadout;
+  }
+
+  if (!sameViewerStateReadout(previous.viewerStateReadout, next.viewerStateReadout)) {
+    flags |= ViewerRenderInvalidationFlags.ViewerStateReadout;
   }
 
   if (!sameResourceTarget(previous.resourceTarget, next.resourceTarget) && next.resourceTarget) {
@@ -461,6 +468,7 @@ function sameViewerRenderSnapshot(a: ViewerRenderSnapshot, b: ViewerRenderSnapsh
     a.activeColormapLut === b.activeColormapLut &&
     sameProbeReadout(a.probeReadout, b.probeReadout) &&
     sameRoiReadout(a.roiReadout, b.roiReadout) &&
+    sameViewerStateReadout(a.viewerStateReadout, b.viewerStateReadout) &&
     sameImageStatsReadout(a.imageStatsReadout, b.imageStatsReadout) &&
     sameResourceTarget(a.resourceTarget, b.resourceTarget) &&
     sameDisplayRangeRequest(a.displayRangeRequest, b.displayRangeRequest) &&
@@ -468,6 +476,25 @@ function sameViewerRenderSnapshot(a: ViewerRenderSnapshot, b: ViewerRenderSnapsh
     sameAutoExposureRequest(a.autoExposureRequest, b.autoExposureRequest) &&
     a.rulersVisible === b.rulersVisible
   );
+}
+
+function buildViewerStateReadout(
+  state: ViewerAppState,
+  activeSession: OpenedImageSession | null
+): ViewerRenderSnapshot['viewerStateReadout'] {
+  const renderState = mergeRenderState(state.sessionState, state.interactionState);
+  return {
+    hasActiveImage: Boolean(activeSession),
+    viewerMode: renderState.viewerMode,
+    view: {
+      zoom: renderState.zoom,
+      panX: renderState.panX,
+      panY: renderState.panY,
+      panoramaYawDeg: renderState.panoramaYawDeg,
+      panoramaPitchDeg: renderState.panoramaPitchDeg,
+      panoramaHfovDeg: renderState.panoramaHfovDeg
+    }
+  };
 }
 
 function sameImageStatsRequest(

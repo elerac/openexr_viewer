@@ -874,8 +874,149 @@ describe('roi inspector', () => {
   });
 });
 
+describe('viewer state inspector', () => {
+  it('shows a disabled empty state until an image is active', () => {
+    installUiFixture();
+
+    new ViewerUi(createUiCallbacks());
+
+    expect((document.getElementById('viewer-state-empty-state') as HTMLElement).classList.contains('hidden')).toBe(false);
+    expect((document.getElementById('viewer-state-image-fields') as HTMLElement).classList.contains('hidden')).toBe(true);
+    expect((document.getElementById('viewer-state-panorama-fields') as HTMLElement).classList.contains('hidden')).toBe(true);
+    expect((document.getElementById('viewer-state-zoom-input') as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it('renders image view fields and commits edits on Enter or blur', () => {
+    installUiFixture();
+
+    const onViewerViewStateChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerViewStateChange }));
+    ui.setViewerStateReadout({
+      hasActiveImage: true,
+      viewerMode: 'image',
+      view: {
+        zoom: 2,
+        panX: 10,
+        panY: 12.5,
+        panoramaYawDeg: 30,
+        panoramaPitchDeg: 5,
+        panoramaHfovDeg: 80
+      }
+    });
+
+    const zoomInput = document.getElementById('viewer-state-zoom-input') as HTMLInputElement;
+    const panXInput = document.getElementById('viewer-state-pan-x-input') as HTMLInputElement;
+
+    expect((document.getElementById('viewer-state-empty-state') as HTMLElement).classList.contains('hidden')).toBe(true);
+    expect((document.getElementById('viewer-state-image-fields') as HTMLElement).classList.contains('hidden')).toBe(false);
+    expect((document.getElementById('viewer-state-panorama-fields') as HTMLElement).classList.contains('hidden')).toBe(true);
+    expect(zoomInput.value).toBe('2');
+    expect(panXInput.value).toBe('10');
+    expect((document.getElementById('viewer-state-pan-y-input') as HTMLInputElement).value).toBe('12.5');
+
+    zoomInput.value = '3.5';
+    const enterEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    zoomInput.dispatchEvent(enterEvent);
+
+    panXInput.value = '11.25';
+    panXInput.dispatchEvent(new Event('blur'));
+
+    expect(enterEvent.defaultPrevented).toBe(true);
+    expect(onViewerViewStateChange.mock.calls).toEqual([
+      [{ zoom: 3.5 }],
+      [{ panX: 11.25 }]
+    ]);
+  });
+
+  it('renders panorama view fields and normalizes typed values', () => {
+    installUiFixture();
+
+    const onViewerViewStateChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerViewStateChange }));
+    ui.setViewerStateReadout({
+      hasActiveImage: true,
+      viewerMode: 'panorama',
+      view: {
+        zoom: 2,
+        panX: 10,
+        panY: 12.5,
+        panoramaYawDeg: 30,
+        panoramaPitchDeg: 5,
+        panoramaHfovDeg: 80
+      }
+    });
+
+    const yawInput = document.getElementById('viewer-state-yaw-input') as HTMLInputElement;
+    const pitchInput = document.getElementById('viewer-state-pitch-input') as HTMLInputElement;
+    const hfovInput = document.getElementById('viewer-state-hfov-input') as HTMLInputElement;
+
+    expect((document.getElementById('viewer-state-image-fields') as HTMLElement).classList.contains('hidden')).toBe(true);
+    expect((document.getElementById('viewer-state-panorama-fields') as HTMLElement).classList.contains('hidden')).toBe(false);
+    expect(yawInput.value).toBe('30');
+    expect(pitchInput.value).toBe('5');
+    expect(hfovInput.value).toBe('80');
+
+    yawInput.value = '190';
+    yawInput.dispatchEvent(new Event('blur'));
+    pitchInput.value = '120';
+    pitchInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    hfovInput.value = '0';
+    hfovInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+
+    expect(yawInput.value).toBe('-170');
+    expect(pitchInput.value).toBe('89');
+    expect(hfovInput.value).toBe('1');
+    expect(onViewerViewStateChange.mock.calls).toEqual([
+      [{ panoramaYawDeg: -170 }],
+      [{ panoramaPitchDeg: 89 }],
+      [{ panoramaHfovDeg: 1 }]
+    ]);
+  });
+
+  it('rejects invalid typed values without dispatching edits', () => {
+    installUiFixture();
+
+    const onViewerViewStateChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onViewerViewStateChange }));
+    ui.setViewerStateReadout({
+      hasActiveImage: true,
+      viewerMode: 'image',
+      view: {
+        zoom: 2,
+        panX: 10,
+        panY: 12.5,
+        panoramaYawDeg: 30,
+        panoramaPitchDeg: 5,
+        panoramaHfovDeg: 80
+      }
+    });
+
+    const zoomInput = document.getElementById('viewer-state-zoom-input') as HTMLInputElement;
+    zoomInput.value = '';
+    zoomInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+
+    expect(zoomInput.getAttribute('aria-invalid')).toBe('true');
+    expect(onViewerViewStateChange).not.toHaveBeenCalled();
+
+    ui.setViewerStateReadout({
+      hasActiveImage: true,
+      viewerMode: 'image',
+      view: {
+        zoom: 4,
+        panX: 10,
+        panY: 12.5,
+        panoramaYawDeg: 30,
+        panoramaPitchDeg: 5,
+        panoramaHfovDeg: 80
+      }
+    });
+    expect(zoomInput.getAttribute('aria-invalid')).toBeNull();
+    expect(zoomInput.value).toBe('4');
+  });
+});
+
 describe('image stats inspector', () => {
-  it('places Image Stats between ROI and Metadata and renders the compact stats table', () => {
+  it('places Image Stats after View and before Metadata and renders the compact stats table', () => {
     installUiFixture();
 
     const ui = new ViewerUi(createUiCallbacks());
@@ -895,6 +1036,8 @@ describe('image stats inspector', () => {
 
     const panelOrder = Array.from(document.querySelectorAll('.readout-block')).map((section) => section.id);
     expect(panelOrder.indexOf('roi-panel')).toBeLessThan(panelOrder.indexOf('image-stats-panel'));
+    expect(panelOrder.indexOf('viewer-state-panel')).toBeGreaterThan(panelOrder.indexOf('roi-panel'));
+    expect(panelOrder.indexOf('viewer-state-panel')).toBeLessThan(panelOrder.indexOf('image-stats-panel'));
     expect(panelOrder.indexOf('image-stats-panel')).toBeLessThan(panelOrder.indexOf('metadata-panel'));
     expect((document.getElementById('image-stats-empty-state') as HTMLElement).classList.contains('hidden')).toBe(true);
     expect((document.getElementById('image-stats-loading-state') as HTMLElement).classList.contains('hidden')).toBe(true);
@@ -6974,6 +7117,7 @@ function createUiCallbacksBase() {
     onExposureChange: () => {},
     onViewerKeyboardNavigationInputChange: () => {},
     onViewerKeyboardZoomInputChange: () => {},
+    onViewerViewStateChange: () => {},
     onAutoFitImageOnSelectChange: () => {},
     onAutoFitImage: () => {},
     onAutoExposureChange: () => {},

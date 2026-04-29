@@ -170,6 +170,17 @@ export interface Elements {
   roiValidCount: HTMLElement;
   roiStats: HTMLElement;
   clearRoiButton: HTMLButtonElement;
+  viewerStateToggle: HTMLButtonElement;
+  viewerStateContent: HTMLDivElement;
+  viewerStateEmptyState: HTMLElement;
+  viewerStateImageFields: HTMLDivElement;
+  viewerStatePanoramaFields: HTMLDivElement;
+  viewerStateZoomInput: HTMLInputElement;
+  viewerStatePanXInput: HTMLInputElement;
+  viewerStatePanYInput: HTMLInputElement;
+  viewerStateYawInput: HTMLInputElement;
+  viewerStatePitchInput: HTMLInputElement;
+  viewerStateHfovInput: HTMLInputElement;
   spectrumLatticeCanvas: HTMLCanvasElement;
   glCanvas: HTMLCanvasElement;
   overlayCanvas: HTMLCanvasElement;
@@ -390,6 +401,19 @@ export type RoiReadoutElements = Pick<
   | 'roiStats'
 >;
 
+export type ViewerStatePanelElements = Pick<
+  Elements,
+  | 'viewerStateEmptyState'
+  | 'viewerStateImageFields'
+  | 'viewerStatePanoramaFields'
+  | 'viewerStateZoomInput'
+  | 'viewerStatePanXInput'
+  | 'viewerStatePanYInput'
+  | 'viewerStateYawInput'
+  | 'viewerStatePitchInput'
+  | 'viewerStateHfovInput'
+>;
+
 export type GlobalKeyboardControllerElements = Pick<
   Elements,
   | 'appMenuBar'
@@ -414,6 +438,8 @@ export type CollapsibleSectionsElements = Pick<
   | 'channelViewList'
   | 'imageStatsToggle'
   | 'imageStatsContent'
+  | 'viewerStateToggle'
+  | 'viewerStateContent'
   | 'metadataToggle'
   | 'metadataContent'
   | 'probeToggle'
@@ -595,6 +621,17 @@ export function resolveElements(): Elements {
     roiValidCount: requireElement('roi-valid-count', HTMLElement),
     roiStats: requireElement('roi-stats', HTMLElement),
     clearRoiButton: requireElement('clear-roi-button', HTMLButtonElement),
+    viewerStateToggle: requireElement('viewer-state-toggle', HTMLButtonElement),
+    viewerStateContent: requireElement('viewer-state-content', HTMLDivElement),
+    viewerStateEmptyState: requireElement('viewer-state-empty-state', HTMLElement),
+    viewerStateImageFields: requireElement('viewer-state-image-fields', HTMLDivElement),
+    viewerStatePanoramaFields: requireElement('viewer-state-panorama-fields', HTMLDivElement),
+    viewerStateZoomInput: requireElement('viewer-state-zoom-input', HTMLInputElement),
+    viewerStatePanXInput: requireElement('viewer-state-pan-x-input', HTMLInputElement),
+    viewerStatePanYInput: requireElement('viewer-state-pan-y-input', HTMLInputElement),
+    viewerStateYawInput: requireElement('viewer-state-yaw-input', HTMLInputElement),
+    viewerStatePitchInput: requireElement('viewer-state-pitch-input', HTMLInputElement),
+    viewerStateHfovInput: requireElement('viewer-state-hfov-input', HTMLInputElement),
     spectrumLatticeCanvas: requireElement('spectrum-lattice-canvas', HTMLCanvasElement),
     glCanvas: requireElement('gl-canvas', HTMLCanvasElement),
     overlayCanvas: requireElement('overlay-canvas', HTMLCanvasElement),

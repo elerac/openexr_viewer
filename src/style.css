@@ -2760,6 +2760,36 @@ body.is-resizing-panel-rows * {
   text-align: left;
 }
 
+.viewer-state-empty-state {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.viewer-state-fields {
+  display: grid;
+  grid-template-columns: minmax(4rem, auto) minmax(0, 1fr);
+  gap: 0.4rem 0.55rem;
+  align-items: center;
+}
+
+.viewer-state-fields label {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.viewer-state-input {
+  width: 100%;
+  min-width: 0;
+  font-family: "IBM Plex Mono", "Cascadia Mono", monospace;
+  font-size: 0.82rem;
+}
+
+.viewer-state-input[aria-invalid='true'] {
+  border-color: var(--error);
+  outline-color: var(--error);
+}
+
 .image-stats-empty-state,
 .image-stats-loading-state {
   color: var(--text-dim);

@@ -24,6 +24,7 @@ import type {
   OpenedImageDropPlacement,
   ViewerKeyboardNavigationInput,
   ViewerKeyboardZoomInput,
+  ViewerViewState,
   ViewportInfo,
   ViewportRect
 } from '../../types';
@@ -165,6 +166,12 @@ export function createViewerUi({
     },
     onViewerKeyboardZoomInputChange: (input) => {
       getInteraction()?.setViewerKeyboardZoomInput(input);
+    },
+    onViewerViewStateChange: (patch: Partial<ViewerViewState>) => {
+      core.dispatch({
+        type: 'viewerStateEdited',
+        patch
+      });
     },
     onAutoFitImageOnSelectChange: (enabled) => {
       core.dispatch({ type: 'autoFitImageOnSelectSet', enabled });

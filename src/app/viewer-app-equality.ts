@@ -13,7 +13,8 @@ import type {
   ViewerDisplayRangeRequest,
   ViewerLayerOption,
   ViewerOpenedImageOption,
-  ViewerResourceTarget
+  ViewerResourceTarget,
+  ViewerStateReadoutModel
 } from './viewer-app-types';
 
 export function sameViewerSessionState(a: ViewerSessionState, b: ViewerSessionState): boolean {
@@ -239,6 +240,17 @@ export function sameResourceTarget(a: ViewerResourceTarget | null, b: ViewerReso
 
 export function sameRoiReadout(a: RoiReadoutModel, b: RoiReadoutModel): boolean {
   return sameImageRoi(a.roi, b.roi) && sameRoiStats(a.stats, b.stats);
+}
+
+export function sameViewerStateReadout(
+  a: ViewerStateReadoutModel,
+  b: ViewerStateReadoutModel
+): boolean {
+  return (
+    a.hasActiveImage === b.hasActiveImage &&
+    a.viewerMode === b.viewerMode &&
+    sameViewState(a.view, b.view)
+  );
 }
 
 export function sameImageStatsReadout(a: ImageStatsReadoutModel, b: ImageStatsReadoutModel): boolean {

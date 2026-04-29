@@ -17,7 +17,8 @@ import type {
   ViewportInfo,
   ViewerInteractionState,
   ViewerRenderState,
-  ViewerSessionState
+  ViewerSessionState,
+  ViewerViewState
 } from '../types';
 import type {
   StokesColormapDefaultGroup,
@@ -55,6 +56,12 @@ export interface ImageStatsReadoutModel {
   hasActiveImage: boolean;
   isLoading: boolean;
   stats: ImageStats | null;
+}
+
+export interface ViewerStateReadoutModel {
+  hasActiveImage: boolean;
+  viewerMode: ViewerSessionState['viewerMode'];
+  view: ViewerViewState;
 }
 
 export interface ViewerOpenedImageOption {
@@ -172,6 +179,7 @@ export type ViewerIntent =
   | { type: 'stokesColormapDefaultsReset' }
   | { type: 'lockedPixelToggled'; pixel: ViewerSessionState['lockedPixel'] }
   | { type: 'roiSet'; roi: ViewerSessionState['roi'] }
+  | { type: 'viewerStateEdited'; patch: Partial<ViewerViewState> }
   | { type: 'interactionStatePublished'; interactionState: ViewerInteractionState }
   | { type: 'viewStateCommitted'; view: ViewerInteractionState['view'] }
   | { type: 'sessionLoaded'; session: OpenedImageSession }
@@ -282,6 +290,7 @@ export interface ViewerRenderSnapshot {
   activeColormapLut: ColormapLut | null;
   probeReadout: ProbeReadoutModel;
   roiReadout: RoiReadoutModel;
+  viewerStateReadout: ViewerStateReadoutModel;
   imageStatsReadout: ImageStatsReadoutModel;
   resourceTarget: ViewerResourceTarget | null;
   displayRangeRequest: ViewerDisplayRangeRequest | null;

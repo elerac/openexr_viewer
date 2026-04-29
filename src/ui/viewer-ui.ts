@@ -39,7 +39,7 @@ import { OpenedImagesPanel } from './opened-images-panel';
 import { DisposableBag, type Disposable } from '../lifecycle';
 import type { ColormapLut } from '../colormaps';
 import type { ExportImagePixels } from '../export-image';
-import type { ImageStatsReadoutModel } from '../app/viewer-app-types';
+import type { ImageStatsReadoutModel, ViewerStateReadoutModel } from '../app/viewer-app-types';
 import type {
   DisplaySelection,
   DisplayLuminanceRange,
@@ -61,6 +61,7 @@ import type {
   ViewerKeyboardNavigationInput,
   ViewerKeyboardZoomInput,
   ViewerMode,
+  ViewerViewState,
   ViewportInfo,
   ViewportRect,
   VisualizationMode
@@ -82,6 +83,7 @@ import {
 import { TopBarTooltipController } from './top-bar-tooltip-controller';
 import { TopMenuController } from './top-menu-controller';
 import { ViewerBackgroundController } from './viewer-background-controller';
+import { ViewerStatePanel } from './viewer-state-panel';
 import { WindowPreviewController } from './window-preview-controller';
 import { syncSelectOptions } from './render-helpers';
 import type { ViewportClientRect } from '../interaction/image-geometry';
@@ -149,6 +151,7 @@ export interface UiCallbacks {
   onExposureChange: (value: number) => void;
   onViewerKeyboardNavigationInputChange: (input: ViewerKeyboardNavigationInput) => void;
   onViewerKeyboardZoomInputChange: (input: ViewerKeyboardZoomInput) => void;
+  onViewerViewStateChange: (patch: Partial<ViewerViewState>) => void;
   onAutoFitImageOnSelectChange: (enabled: boolean) => void;
   onAutoFitImage: () => void;
   onAutoExposureChange: (enabled: boolean) => void;
@@ -204,6 +207,7 @@ export class ViewerUi implements Disposable {
   private readonly exportColormapDialog: ExportColormapDialogController;
   private readonly folderLoadDialog: FolderLoadDialogController;
   private readonly probeReadoutController: ProbeReadoutController;
+  private readonly viewerStatePanel: ViewerStatePanel;
   private readonly dragDropController: DragDropController;
   private readonly collapsibleSectionsController: CollapsibleSectionsController;
   private readonly themeController: ThemeController;
@@ -445,6 +449,11 @@ export class ViewerUi implements Disposable {
     });
     this.folderLoadDialog = new FolderLoadDialogController(this.elements);
     this.probeReadoutController = new ProbeReadoutController(this.elements);
+    this.viewerStatePanel = new ViewerStatePanel(this.elements, {
+      onViewerViewStateChange: (patch) => {
+        this.callbacks.onViewerViewStateChange(patch);
+      }
+    });
     this.dragDropController = new DragDropController(this.elements, {
       onFolderSelected: (files, options) => {
         void this.handleFolderSelected(files, options);
@@ -486,6 +495,7 @@ export class ViewerUi implements Disposable {
     this.disposables.addDisposable(this.exportImageBatchDialog);
     this.disposables.addDisposable(this.exportColormapDialog);
     this.disposables.addDisposable(this.folderLoadDialog);
+    this.disposables.addDisposable(this.viewerStatePanel);
     this.disposables.addDisposable(this.dragDropController);
     this.disposables.addDisposable(this.collapsibleSectionsController);
     this.disposables.addDisposable(this.viewerBackgroundController);
@@ -1178,6 +1188,14 @@ export class ViewerUi implements Disposable {
     }
 
     setRoiReadout(this.elements, readout);
+  }
+
+  setViewerStateReadout(readout: ViewerStateReadoutModel): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.viewerStatePanel.setReadout(readout);
   }
 
   setImageStats(readout: ImageStatsReadoutModel): void {

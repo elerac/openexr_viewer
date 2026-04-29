@@ -780,6 +780,41 @@
                 </div>
               </section>
 
+              <section id="viewer-state-panel" class="readout-block">
+                <div class="readout-block-header">
+                  <h2>View</h2>
+                  <button
+                    id="viewer-state-toggle"
+                    class="readout-block-toggle"
+                    type="button"
+                    aria-expanded="true"
+                    aria-controls="viewer-state-content"
+                    aria-label="Collapse View section"
+                  >
+                    <span class="readout-block-chevron" aria-hidden="true"></span>
+                  </button>
+                </div>
+                <div id="viewer-state-content" class="readout-block-content">
+                  <p id="viewer-state-empty-state" class="viewer-state-empty-state">Open an image to edit view state.</p>
+                  <div id="viewer-state-image-fields" class="viewer-state-fields hidden" aria-label="Image viewer state">
+                    <label for="viewer-state-zoom-input">Zoom</label>
+                    <input id="viewer-state-zoom-input" class="viewer-state-input" type="number" step="any" value="1" />
+                    <label for="viewer-state-pan-x-input">Pan X</label>
+                    <input id="viewer-state-pan-x-input" class="viewer-state-input" type="number" step="any" value="0" />
+                    <label for="viewer-state-pan-y-input">Pan Y</label>
+                    <input id="viewer-state-pan-y-input" class="viewer-state-input" type="number" step="any" value="0" />
+                  </div>
+                  <div id="viewer-state-panorama-fields" class="viewer-state-fields hidden" aria-label="Panorama viewer state">
+                    <label for="viewer-state-yaw-input">Yaw</label>
+                    <input id="viewer-state-yaw-input" class="viewer-state-input" type="number" step="any" value="0" />
+                    <label for="viewer-state-pitch-input">Pitch</label>
+                    <input id="viewer-state-pitch-input" class="viewer-state-input" type="number" step="any" value="0" />
+                    <label for="viewer-state-hfov-input">HFOV</label>
+                    <input id="viewer-state-hfov-input" class="viewer-state-input" type="number" step="any" value="100" />
+                  </div>
+                </div>
+              </section>
+
               <section id="image-stats-panel" class="readout-block">
                 <div class="readout-block-header">
                   <h2>Image Stats</h2>

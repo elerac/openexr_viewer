@@ -691,6 +691,34 @@ describe('bootstrap app lifecycle', () => {
     app.dispose();
   });
 
+  it('routes manual viewer state edits through app state dispatch', async () => {
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
+      observe(): void {}
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+
+    const { bootstrapApp } = await import('../src/app/bootstrap');
+    const app = await bootstrapApp();
+    const callbacks = mocks.getUiCallbacks() as {
+      onViewerViewStateChange: (patch: { zoom: number }) => void;
+    };
+
+    callbacks.onViewerViewStateChange({ zoom: 3 });
+
+    expect(mocks.coreDispatch).toHaveBeenCalledWith({
+      type: 'viewerStateEdited',
+      patch: { zoom: 3 }
+    });
+
+    app.dispose();
+  });
+
   it('exports registered colormaps as PNG gradients and triggers a download', async () => {
     vi.useFakeTimers();
 

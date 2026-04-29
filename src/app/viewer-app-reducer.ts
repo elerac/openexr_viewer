@@ -14,7 +14,12 @@ import {
   isStokesSelection,
   sameDisplaySelection
 } from '../display-model';
-import { computeFitView } from '../interaction/image-geometry';
+import { clampZoom, computeFitView } from '../interaction/image-geometry';
+import {
+  clampPanoramaHfov,
+  clampPanoramaPitch,
+  normalizePanoramaYaw
+} from '../interaction/panorama-geometry';
 import { cloneImageRoi } from '../roi';
 import { cloneViewerSessionState } from '../session-state';
 import {
@@ -26,7 +31,7 @@ import {
   type StokesColormapDefaultSetting
 } from '../stokes';
 import { sameStokesColormapDefaultSettings } from '../stokes-colormap-settings';
-import type { OpenedImageSession, ViewerSessionState } from '../types';
+import type { OpenedImageSession, ViewerSessionState, ViewerViewState } from '../types';
 import { createInteractionState } from '../view-state';
 import { buildViewerStateForLayer, createInitialState } from '../viewer-store';
 import { sameViewerSessionState } from './viewer-app-equality';
@@ -467,6 +472,16 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
       return patchSessionState(state, {
         roi: cloneImageRoi(intent.roi)
       });
+    case 'viewerStateEdited': {
+      if (!selectActiveSession(state)) {
+        return state;
+      }
+      const patch = normalizeViewerViewPatch(intent.patch);
+      return patch ? patchSessionState(state, patch, {
+        syncInteractionView: true,
+        clearHover: true
+      }) : state;
+    }
     case 'interactionStatePublished':
       return sameInteractionState(state.interactionState, intent.interactionState) ? state : {
         ...state,
@@ -949,6 +964,30 @@ function buildStokesDefaultModulationPatch(
       ? { stokesAolpDegreeModulationMode: aolpMode }
       : {})
   };
+}
+
+function normalizeViewerViewPatch(patch: Partial<ViewerViewState>): Partial<ViewerViewState> | null {
+  const normalized: Partial<ViewerViewState> = {};
+  if (patch.zoom !== undefined && Number.isFinite(patch.zoom)) {
+    normalized.zoom = clampZoom(patch.zoom);
+  }
+  if (patch.panX !== undefined && Number.isFinite(patch.panX)) {
+    normalized.panX = patch.panX;
+  }
+  if (patch.panY !== undefined && Number.isFinite(patch.panY)) {
+    normalized.panY = patch.panY;
+  }
+  if (patch.panoramaYawDeg !== undefined && Number.isFinite(patch.panoramaYawDeg)) {
+    normalized.panoramaYawDeg = normalizePanoramaYaw(patch.panoramaYawDeg);
+  }
+  if (patch.panoramaPitchDeg !== undefined && Number.isFinite(patch.panoramaPitchDeg)) {
+    normalized.panoramaPitchDeg = clampPanoramaPitch(patch.panoramaPitchDeg);
+  }
+  if (patch.panoramaHfovDeg !== undefined && Number.isFinite(patch.panoramaHfovDeg)) {
+    normalized.panoramaHfovDeg = clampPanoramaHfov(patch.panoramaHfovDeg);
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : null;
 }
 
 function patchSessionState(

@@ -237,6 +237,7 @@ describe('viewer app lanes', () => {
     expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(true);
     expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderValueOverlay)).toBe(true);
     expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderProbeOverlay)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ViewerStateReadout)).toBe(true);
     expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ProbeReadout)).toBe(false);
   });
 
