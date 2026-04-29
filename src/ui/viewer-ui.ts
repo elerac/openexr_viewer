@@ -532,8 +532,12 @@ export class ViewerUi implements Disposable {
     return this.elements.probeOverlayCanvas;
   }
 
-  get rulerOverlayCanvas(): HTMLCanvasElement {
-    return this.elements.rulerOverlayCanvas;
+  get rulerOverlaySvg(): SVGSVGElement {
+    return this.elements.rulerOverlaySvg;
+  }
+
+  get rulerLabelOverlay(): HTMLDivElement {
+    return this.elements.rulerLabelOverlay;
   }
 
   dispose(): void {

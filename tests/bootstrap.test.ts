@@ -221,7 +221,8 @@ vi.mock('../src/ui/viewer-ui', () => ({
     readonly glCanvas = document.createElement('canvas');
     readonly overlayCanvas = document.createElement('canvas');
     readonly probeOverlayCanvas = document.createElement('canvas');
-    readonly rulerOverlayCanvas = document.createElement('canvas');
+    readonly rulerOverlaySvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    readonly rulerLabelOverlay = document.createElement('div');
     readonly dispose = mocks.uiDispose;
     readonly setViewerViewportRect = vi.fn((rect: { left: number; top: number }) => {
       this.viewerContainer.style.setProperty('--viewer-checker-offset-x', `${-rect.left}px`);

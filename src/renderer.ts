@@ -21,12 +21,13 @@ export class WebGlExrRenderer implements Disposable {
     glCanvas: HTMLCanvasElement,
     overlayCanvas: HTMLCanvasElement,
     probeOverlayCanvas: HTMLCanvasElement,
-    rulerOverlayCanvas: HTMLCanvasElement
+    rulerOverlaySvg: SVGSVGElement,
+    rulerLabelOverlay: HTMLElement
   ) {
     this.imageRenderer = new GlImageRenderer(glCanvas);
     this.overlayRenderer = new OverlayRenderer(overlayCanvas);
     this.probeOverlayRenderer = new ProbeOverlayRenderer(probeOverlayCanvas);
-    this.rulerOverlayRenderer = new RulerOverlayRenderer(rulerOverlayCanvas);
+    this.rulerOverlayRenderer = new RulerOverlayRenderer(rulerOverlaySvg, rulerLabelOverlay);
   }
 
   getViewport(): ViewportInfo {

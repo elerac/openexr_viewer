@@ -37,7 +37,8 @@ export function createBootstrapServices({
     ui.glCanvas,
     ui.overlayCanvas,
     ui.probeOverlayCanvas,
-    ui.rulerOverlayCanvas
+    ui.rulerOverlaySvg,
+    ui.rulerLabelOverlay
   );
   renderer.setRulersVisible(core.getState().rulersVisible);
   const renderCache = new RenderCacheService({

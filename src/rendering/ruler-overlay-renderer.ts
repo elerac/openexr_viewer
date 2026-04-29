@@ -6,29 +6,24 @@ const RULER_SIZE = 24;
 const TARGET_MAJOR_TICK_PIXELS = 80;
 const MIN_MINOR_TICK_PIXELS = 8;
 const MAX_TICKS_PER_AXIS = 2000;
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
 interface RulerPalette {
   surface: string;
   border: string;
   tick: string;
-  text: string;
 }
 
 export class RulerOverlayRenderer implements Disposable {
-  private readonly canvas: HTMLCanvasElement;
-  private readonly context: CanvasRenderingContext2D;
+  private readonly svg: SVGSVGElement;
+  private readonly labelOverlay: HTMLElement;
   private viewport: ViewportInfo = { width: 1, height: 1 };
   private imageSize: { width: number; height: number } | null = null;
   private disposed = false;
 
-  constructor(canvas: HTMLCanvasElement) {
-    const context = canvas.getContext('2d');
-    if (!context) {
-      throw new Error('Unable to create ruler overlay 2D canvas context.');
-    }
-
-    this.canvas = canvas;
-    this.context = context;
+  constructor(svg: SVGSVGElement, labelOverlay: HTMLElement) {
+    this.svg = svg;
+    this.labelOverlay = labelOverlay;
   }
 
   resize(width: number, height: number): void {
@@ -40,8 +35,9 @@ export class RulerOverlayRenderer implements Disposable {
       width: Math.max(1, Math.floor(width)),
       height: Math.max(1, Math.floor(height))
     };
-    this.canvas.width = this.viewport.width;
-    this.canvas.height = this.viewport.height;
+    this.svg.setAttribute('width', String(this.viewport.width));
+    this.svg.setAttribute('height', String(this.viewport.height));
+    this.svg.setAttribute('viewBox', `0 0 ${this.viewport.width} ${this.viewport.height}`);
   }
 
   setImageSize(width: number, height: number): void {
@@ -80,30 +76,18 @@ export class RulerOverlayRenderer implements Disposable {
       return;
     }
 
-    const palette = readRulerPalette(this.canvas);
-    const ctx = this.context;
+    const palette = readRulerPalette(this.svg);
+    const fragment = document.createDocumentFragment();
 
-    ctx.fillStyle = palette.surface;
-    ctx.fillRect(0, 0, this.viewport.width, RULER_SIZE);
-    ctx.fillRect(0, 0, RULER_SIZE, this.viewport.height);
+    appendSvgRect(fragment, 0, 0, this.viewport.width, RULER_SIZE, palette.surface);
+    appendSvgRect(fragment, 0, 0, RULER_SIZE, this.viewport.height, palette.surface);
+    appendSvgLine(fragment, 0, RULER_SIZE - 0.5, this.viewport.width, RULER_SIZE - 0.5, palette.border);
+    appendSvgLine(fragment, RULER_SIZE - 0.5, 0, RULER_SIZE - 0.5, this.viewport.height, palette.border);
 
-    ctx.strokeStyle = palette.border;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, RULER_SIZE - 0.5);
-    ctx.lineTo(this.viewport.width, RULER_SIZE - 0.5);
-    ctx.moveTo(RULER_SIZE - 0.5, 0);
-    ctx.lineTo(RULER_SIZE - 0.5, this.viewport.height);
-    ctx.stroke();
+    drawHorizontalRuler(fragment, this.labelOverlay, state, this.viewport, imageSize.width, palette.tick);
+    drawVerticalRuler(fragment, this.labelOverlay, state, this.viewport, imageSize.height, palette.tick);
 
-    ctx.font = '10px "IBM Plex Mono", monospace';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = palette.text;
-    ctx.strokeStyle = palette.tick;
-    ctx.lineWidth = 1;
-
-    drawHorizontalRuler(ctx, state, this.viewport, imageSize.width);
-    drawVerticalRuler(ctx, state, this.viewport, imageSize.height);
+    this.svg.append(fragment);
   }
 
   dispose(): void {
@@ -117,15 +101,18 @@ export class RulerOverlayRenderer implements Disposable {
   }
 
   private clear(): void {
-    this.context.clearRect(0, 0, this.viewport.width, this.viewport.height);
+    this.svg.replaceChildren();
+    this.labelOverlay.replaceChildren();
   }
 }
 
 function drawHorizontalRuler(
-  ctx: CanvasRenderingContext2D,
+  svg: ParentNode,
+  labelOverlay: HTMLElement,
   state: ViewerState,
   viewport: ViewportInfo,
-  imageWidth: number
+  imageWidth: number,
+  tickColor: string
 ): void {
   const majorStep = resolveMajorTickStep(state.zoom);
   const minorStep = resolveMinorTickStep(majorStep, state.zoom);
@@ -133,28 +120,28 @@ function drawHorizontalRuler(
 
   drawMinorTicks(start, end, minorStep, majorStep, (position) => {
     const screen = imageToScreen(position, 0, state, viewport);
-    drawHorizontalTick(ctx, screen.x, 5);
+    drawHorizontalTick(svg, screen.x, 5, tickColor);
   });
 
   drawMajorTicks(start, end, majorStep, (position) => {
     const screen = imageToScreen(position, 0, state, viewport);
-    drawHorizontalTick(ctx, screen.x, 12);
-    ctx.textAlign = 'center';
-    ctx.fillText(String(position), clamp(screen.x, RULER_SIZE + 8, viewport.width - 8), 8);
+    drawHorizontalTick(svg, screen.x, 12, tickColor);
+    appendRulerLabel(labelOverlay, 'horizontal', String(position), clamp(screen.x, RULER_SIZE + 8, viewport.width - 8), 8);
   });
   if (imageWidth >= start && imageWidth <= end && imageWidth % majorStep !== 0) {
     const screen = imageToScreen(imageWidth, 0, state, viewport);
-    drawHorizontalTick(ctx, screen.x, 12);
-    ctx.textAlign = 'center';
-    ctx.fillText(String(imageWidth), clamp(screen.x, RULER_SIZE + 8, viewport.width - 8), 8);
+    drawHorizontalTick(svg, screen.x, 12, tickColor);
+    appendRulerLabel(labelOverlay, 'horizontal', String(imageWidth), clamp(screen.x, RULER_SIZE + 8, viewport.width - 8), 8);
   }
 }
 
 function drawVerticalRuler(
-  ctx: CanvasRenderingContext2D,
+  svg: ParentNode,
+  labelOverlay: HTMLElement,
   state: ViewerState,
   viewport: ViewportInfo,
-  imageHeight: number
+  imageHeight: number,
+  tickColor: string
 ): void {
   const majorStep = resolveMajorTickStep(state.zoom);
   const minorStep = resolveMinorTickStep(majorStep, state.zoom);
@@ -162,43 +149,63 @@ function drawVerticalRuler(
 
   drawMinorTicks(start, end, minorStep, majorStep, (position) => {
     const screen = imageToScreen(0, position, state, viewport);
-    drawVerticalTick(ctx, screen.y, 5);
+    drawVerticalTick(svg, screen.y, 5, tickColor);
   });
 
   drawMajorTicks(start, end, majorStep, (position) => {
     const screen = imageToScreen(0, position, state, viewport);
-    drawVerticalTick(ctx, screen.y, 12);
-    ctx.save();
-    ctx.translate(8, clamp(screen.y, RULER_SIZE + 8, viewport.height - 8));
-    ctx.rotate(-Math.PI / 2);
-    ctx.textAlign = 'center';
-    ctx.fillText(String(position), 0, 0);
-    ctx.restore();
+    drawVerticalTick(svg, screen.y, 12, tickColor);
+    appendRulerLabel(labelOverlay, 'vertical', String(position), 8, clamp(screen.y, RULER_SIZE + 8, viewport.height - 8));
   });
   if (imageHeight >= start && imageHeight <= end && imageHeight % majorStep !== 0) {
     const screen = imageToScreen(0, imageHeight, state, viewport);
-    drawVerticalTick(ctx, screen.y, 12);
-    ctx.save();
-    ctx.translate(8, clamp(screen.y, RULER_SIZE + 8, viewport.height - 8));
-    ctx.rotate(-Math.PI / 2);
-    ctx.textAlign = 'center';
-    ctx.fillText(String(imageHeight), 0, 0);
-    ctx.restore();
+    drawVerticalTick(svg, screen.y, 12, tickColor);
+    appendRulerLabel(labelOverlay, 'vertical', String(imageHeight), 8, clamp(screen.y, RULER_SIZE + 8, viewport.height - 8));
   }
 }
 
-function drawHorizontalTick(ctx: CanvasRenderingContext2D, x: number, length: number): void {
-  ctx.beginPath();
-  ctx.moveTo(x + 0.5, RULER_SIZE);
-  ctx.lineTo(x + 0.5, RULER_SIZE - length);
-  ctx.stroke();
+function appendRulerLabel(
+  labelOverlay: HTMLElement,
+  axis: 'horizontal' | 'vertical',
+  text: string,
+  x: number,
+  y: number
+): void {
+  const label = document.createElement('span');
+  label.className = `ruler-label ruler-label--${axis}`;
+  label.textContent = text;
+  label.style.left = `${x}px`;
+  label.style.top = `${y}px`;
+  labelOverlay.append(label);
 }
 
-function drawVerticalTick(ctx: CanvasRenderingContext2D, y: number, length: number): void {
-  ctx.beginPath();
-  ctx.moveTo(RULER_SIZE, y + 0.5);
-  ctx.lineTo(RULER_SIZE - length, y + 0.5);
-  ctx.stroke();
+function drawHorizontalTick(svg: ParentNode, x: number, length: number, color: string): void {
+  appendSvgLine(svg, x + 0.5, RULER_SIZE, x + 0.5, RULER_SIZE - length, color);
+}
+
+function drawVerticalTick(svg: ParentNode, y: number, length: number, color: string): void {
+  appendSvgLine(svg, RULER_SIZE, y + 0.5, RULER_SIZE - length, y + 0.5, color);
+}
+
+function appendSvgRect(svg: ParentNode, x: number, y: number, width: number, height: number, fill: string): void {
+  const rect = document.createElementNS(SVG_NS, 'rect');
+  rect.setAttribute('x', String(x));
+  rect.setAttribute('y', String(y));
+  rect.setAttribute('width', String(width));
+  rect.setAttribute('height', String(height));
+  rect.setAttribute('fill', fill);
+  svg.append(rect);
+}
+
+function appendSvgLine(svg: ParentNode, x1: number, y1: number, x2: number, y2: number, stroke: string): void {
+  const line = document.createElementNS(SVG_NS, 'line');
+  line.setAttribute('x1', String(x1));
+  line.setAttribute('y1', String(y1));
+  line.setAttribute('x2', String(x2));
+  line.setAttribute('y2', String(y2));
+  line.setAttribute('stroke', stroke);
+  line.setAttribute('stroke-width', '1');
+  svg.append(line);
 }
 
 function drawMinorTicks(
@@ -292,13 +299,12 @@ function resolveMinorTickStep(majorStep: number, zoom: number): number {
   return 0;
 }
 
-function readRulerPalette(element: HTMLElement): RulerPalette {
+function readRulerPalette(element: Element): RulerPalette {
   const style = getComputedStyle(element);
   return {
     surface: readCssColor(style, '--ruler-surface', 'rgba(12, 17, 24, 0.86)'),
     border: readCssColor(style, '--ruler-border', 'rgba(215, 221, 232, 0.24)'),
-    tick: readCssColor(style, '--ruler-tick', 'rgba(215, 221, 232, 0.72)'),
-    text: readCssColor(style, '--ruler-text', 'rgba(215, 221, 232, 0.92)')
+    tick: readCssColor(style, '--ruler-tick', 'rgba(215, 221, 232, 0.72)')
   };
 }
 

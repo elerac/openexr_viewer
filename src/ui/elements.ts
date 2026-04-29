@@ -185,7 +185,8 @@ export interface Elements {
   glCanvas: HTMLCanvasElement;
   overlayCanvas: HTMLCanvasElement;
   probeOverlayCanvas: HTMLCanvasElement;
-  rulerOverlayCanvas: HTMLCanvasElement;
+  rulerOverlaySvg: SVGSVGElement;
+  rulerLabelOverlay: HTMLDivElement;
   screenshotSelectionOverlay: HTMLDivElement;
   screenshotSelectionMaskTop: HTMLDivElement;
   screenshotSelectionMaskRight: HTMLDivElement;
@@ -636,7 +637,8 @@ export function resolveElements(): Elements {
     glCanvas: requireElement('gl-canvas', HTMLCanvasElement),
     overlayCanvas: requireElement('overlay-canvas', HTMLCanvasElement),
     probeOverlayCanvas: requireElement('probe-overlay-canvas', HTMLCanvasElement),
-    rulerOverlayCanvas: requireElement('ruler-overlay-canvas', HTMLCanvasElement),
+    rulerOverlaySvg: requireElement('ruler-overlay-svg', SVGSVGElement),
+    rulerLabelOverlay: requireElement('ruler-label-overlay', HTMLDivElement),
     screenshotSelectionOverlay: requireElement('screenshot-selection-overlay', HTMLDivElement),
     screenshotSelectionMaskTop: requireElement('screenshot-selection-mask-top', HTMLDivElement),
     screenshotSelectionMaskRight: requireElement('screenshot-selection-mask-right', HTMLDivElement),
