@@ -20,6 +20,13 @@ const RGB_STOKES_CHANNEL_NAMES = [
   'S3.R', 'S3.G', 'S3.B'
 ];
 
+const rulerFitInsets = {
+  top: 24,
+  right: 0,
+  bottom: 0,
+  left: 24
+};
+
 function createDecodedImage(width = 4, height = 4, channelNames: string[] = ['R', 'G', 'B']): DecodedExrImage {
   const pixelCount = width * height;
   const channelValues = Object.fromEntries(
@@ -67,13 +74,15 @@ function createFolderFile(
 
 function createController(options: {
   decodeBytes?: (bytes: Uint8Array, options?: DecodeBytesOptions) => Promise<DecodedExrImage>;
+  getFitInsets?: () => { top: number; right: number; bottom: number; left: number } | undefined;
 } = {}) {
   const core = new ViewerAppCore();
   const controller = new SessionController({
     core,
     loadQueue: new LoadQueueService(),
     decodeBytes: options.decodeBytes ?? (async () => createDecodedImage()),
-    getViewport: () => ({ width: 200, height: 100 })
+    getViewport: () => ({ width: 200, height: 100 }),
+    getFitInsets: options.getFitInsets ?? (() => undefined)
   });
 
   return { controller, core };
@@ -91,6 +100,19 @@ describe('session controller shim', () => {
     expect(session?.filename).toBe('beauty.exr');
     expect(core.getState().sessionState.activeColormapId).toBe(core.getState().defaultColormapId);
     expect(core.getState().sessionState.displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
+  });
+
+  it('uses current fit insets when applying the first decoded image', async () => {
+    const { controller, core } = createController({
+      decodeBytes: async () => createDecodedImage(4, 4),
+      getFitInsets: () => rulerFitInsets
+    });
+
+    await controller.enqueueFiles([createFile('beauty.exr')]);
+
+    expect(core.getState().sessionState.zoom).toBe(19);
+    expect(core.getState().sessionState.panX).toBeCloseTo(26 / 19);
+    expect(core.getState().sessionState.panY).toBeCloseTo(26 / 19);
   });
 
   it('passes per-decode signal and filename context to file decodes', async () => {

@@ -37,6 +37,13 @@ function createSession(id: string, decoded = createDecodedImage()): OpenedImageS
   };
 }
 
+const rulerFitInsets = {
+  top: 24,
+  right: 0,
+  bottom: 0,
+  left: 24
+};
+
 function createImageStats(): ImageStats {
   return {
     width: 2,
@@ -333,6 +340,26 @@ describe('viewer app core', () => {
     });
   });
 
+  it('fits selected images inside supplied insets when auto-fit is enabled', () => {
+    const core = new ViewerAppCore();
+    const first = createSession('first');
+    const second = createSession('second');
+    core.dispatch({ type: 'sessionLoaded', session: first });
+    core.dispatch({ type: 'sessionLoaded', session: second });
+    core.dispatch({ type: 'autoFitImageOnSelectSet', enabled: true });
+
+    core.dispatch({
+      type: 'activeSessionSwitched',
+      sessionId: first.id,
+      viewport: { width: 80, height: 80 },
+      fitInsets: rulerFitInsets
+    });
+
+    expect(core.getState().sessionState.zoom).toBe(28);
+    expect(core.getState().sessionState.panX).toBeCloseTo(4 / 7);
+    expect(core.getState().sessionState.panY).toBeCloseTo(1 / 14);
+  });
+
   it('does not apply image auto-fit while switching sessions in panorama mode', () => {
     const core = new ViewerAppCore();
     const first = createSession('first');
@@ -528,6 +555,22 @@ describe('viewer app core', () => {
     expect(core.getState().sessionState.roi).toBeNull();
   });
 
+  it('resets the active image to a fit view inside supplied insets', () => {
+    const core = new ViewerAppCore();
+    const session = createSession('session-1');
+    core.dispatch({ type: 'sessionLoaded', session });
+
+    core.dispatch({
+      type: 'activeSessionReset',
+      viewport: { width: 80, height: 80 },
+      fitInsets: rulerFitInsets
+    });
+
+    expect(core.getState().sessionState.zoom).toBe(28);
+    expect(core.getState().sessionState.panX).toBeCloseTo(4 / 7);
+    expect(core.getState().sessionState.panY).toBeCloseTo(1 / 14);
+  });
+
   it('fits the active image to the viewport while preserving non-view session state', () => {
     const core = new ViewerAppCore();
     const session = createSession('session-1', createDecodedImage());
@@ -568,6 +611,25 @@ describe('viewer app core', () => {
       panY: 0.5
     });
     expect(core.getState().interactionState.hoveredPixel).toBeNull();
+  });
+
+  it('fits the active image inside supplied insets', () => {
+    const core = new ViewerAppCore();
+    const session = createSession('session-1', createDecodedImage());
+    core.dispatch({ type: 'sessionLoaded', session });
+
+    core.dispatch({
+      type: 'activeSessionFitToViewport',
+      viewport: { width: 80, height: 80 },
+      fitInsets: rulerFitInsets
+    });
+
+    expect(core.getState().sessionState.zoom).toBe(28);
+    expect(core.getState().sessionState.panX).toBeCloseTo(4 / 7);
+    expect(core.getState().sessionState.panY).toBeCloseTo(1 / 14);
+    expect(core.getState().interactionState.view.zoom).toBe(28);
+    expect(core.getState().interactionState.view.panX).toBeCloseTo(4 / 7);
+    expect(core.getState().interactionState.view.panY).toBeCloseTo(1 / 14);
   });
 
   it('applies edited viewer state with clamps while preserving non-view state', () => {

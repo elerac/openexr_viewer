@@ -573,7 +573,8 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         state.sessionState,
         selectActiveSession(state)?.decoded ?? null,
         {
-          autoFitViewport: state.autoFitImageOnSelect ? intent.viewport ?? null : null
+          autoFitViewport: state.autoFitImageOnSelect ? intent.viewport ?? null : null,
+          autoFitInsets: state.autoFitImageOnSelect ? intent.fitInsets ?? null : null
         }
       );
       return {
@@ -733,7 +734,8 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
         selectActiveSession(state),
         state.sessionState,
         state.defaultColormapId,
-        intent.viewport
+        intent.viewport,
+        intent.fitInsets
       );
       return patchSessionState(state, nextSessionState, {
         syncInteractionView: true,
@@ -749,7 +751,7 @@ export function reduceViewerAppState(state: ViewerAppState, intent: ViewerIntent
 
       return patchSessionState(
         state,
-        computeFitView(intent.viewport, activeSession.decoded.width, activeSession.decoded.height),
+        computeFitView(intent.viewport, activeSession.decoded.width, activeSession.decoded.height, intent.fitInsets),
         {
           syncInteractionView: true,
           clearHover: true

@@ -11,7 +11,14 @@ import {
   getFolderExrFiles,
   getFolderLoadStats
 } from '../folder-load-limits';
-import type { DecodedExrImage, OpenedImageDropPlacement, OpenedImageSession, SessionSource, ViewportInfo } from '../types';
+import type {
+  DecodedExrImage,
+  OpenedImageDropPlacement,
+  OpenedImageSession,
+  SessionSource,
+  ViewportInfo,
+  ViewportInsets
+} from '../types';
 
 const GALLERY_IMAGES = [
   {
@@ -36,6 +43,7 @@ export interface SessionControllerDependencies {
   loadQueue: LoadQueueService;
   decodeBytes: (bytes: Uint8Array, options?: DecodeBytesOptions) => Promise<DecodedExrImage>;
   getViewport: () => ViewportInfo;
+  getFitInsets: () => ViewportInsets | undefined;
 }
 
 export class SessionController implements Disposable {
@@ -43,6 +51,7 @@ export class SessionController implements Disposable {
   private readonly loadQueue: LoadQueueService;
   private readonly decodeBytes: SessionControllerDependencies['decodeBytes'];
   private readonly getViewport: SessionControllerDependencies['getViewport'];
+  private readonly getFitInsets: SessionControllerDependencies['getFitInsets'];
 
   private readonly abortController = new AbortController();
   private queuedLoadCount = 0;
@@ -54,6 +63,7 @@ export class SessionController implements Disposable {
     this.loadQueue = dependencies.loadQueue;
     this.decodeBytes = dependencies.decodeBytes;
     this.getViewport = dependencies.getViewport;
+    this.getFitInsets = dependencies.getFitInsets;
   }
 
   enqueueFiles(files: File[]): Promise<void> {
@@ -200,7 +210,8 @@ export class SessionController implements Disposable {
     this.core.dispatch({
       type: 'activeSessionSwitched',
       sessionId,
-      viewport: state.autoFitImageOnSelect ? this.getViewport() : undefined
+      viewport: state.autoFitImageOnSelect ? this.getViewport() : undefined,
+      fitInsets: state.autoFitImageOnSelect ? this.getFitInsets() : undefined
     });
   }
 
@@ -271,7 +282,8 @@ export class SessionController implements Disposable {
 
     this.core.dispatch({
       type: 'activeSessionReset',
-      viewport: this.getViewport()
+      viewport: this.getViewport(),
+      fitInsets: this.getFitInsets()
     });
   }
 
@@ -282,7 +294,8 @@ export class SessionController implements Disposable {
 
     this.core.dispatch({
       type: 'activeSessionFitToViewport',
-      viewport: this.getViewport()
+      viewport: this.getViewport(),
+      fitInsets: this.getFitInsets()
     });
   }
 
@@ -431,6 +444,7 @@ export class SessionController implements Disposable {
       existingSessions: currentState.sessions,
       defaultColormapId: currentState.defaultColormapId,
       viewport: this.getViewport(),
+      fitInsets: this.getFitInsets(),
       currentSessionState: currentState.sessionState,
       hasActiveSession: Boolean(activeSession),
       previousImage: activeSession?.decoded ?? null,

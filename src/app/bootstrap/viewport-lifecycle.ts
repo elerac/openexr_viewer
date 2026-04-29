@@ -6,6 +6,7 @@ import {
 } from '../../interaction/image-geometry';
 import { ViewerInteraction } from '../../interaction/viewer-interaction';
 import { mergeRenderState } from '../../view-state';
+import { resolveRulerFitInsets } from '../../ruler-layout';
 import { selectActiveSession } from '../viewer-app-selectors';
 import { ViewerAppCore } from '../viewer-app-core';
 import type { ViewerInteractionCoordinator } from '../../interaction-coordinator';
@@ -120,17 +121,20 @@ export function initializeViewportLifecycle({
     const interactionState = interactionCoordinator.getState();
     const state = core.getState();
     const activeSession = selectActiveSession(state);
+    const fitInsets = resolveRulerFitInsets(state.rulersVisible);
     if (viewerContainerRect && state.sessionState.viewerMode === 'image') {
       const nextViewPatch = activeSession && isFitViewForViewport(
         interactionState.view,
         viewportInfoFromClientRect(viewerContainerRect),
         activeSession.decoded.width,
-        activeSession.decoded.height
+        activeSession.decoded.height,
+        fitInsets
       )
         ? computeFitView(
             viewportInfoFromClientRect(rect),
             activeSession.decoded.width,
-            activeSession.decoded.height
+            activeSession.decoded.height,
+            fitInsets
           )
         : preserveImagePanOnViewportChange(interactionState.view, viewerContainerRect, rect);
       if (hasImageViewPatchChanged(interactionState.view, nextViewPatch)) {

@@ -1,4 +1,4 @@
-import type { ImagePixel, ViewerState, ViewerViewState, ViewportInfo } from '../types';
+import type { ImagePixel, ViewerState, ViewerViewState, ViewportInfo, ViewportInsets } from '../types';
 
 export const MIN_ZOOM = 0.03125;
 export const MAX_ZOOM = 512;
@@ -77,14 +77,16 @@ export function imageToScreen(
 export function computeFitView(
   viewport: ViewportInfo,
   width: number,
-  height: number
+  height: number,
+  fitInsets?: Partial<ViewportInsets> | null
 ): { zoom: number; panX: number; panY: number } {
-  const fitZoom = clampZoom(Math.min(viewport.width / width, viewport.height / height));
+  const fitArea = resolveFitArea(viewport, fitInsets);
+  const fitZoom = clampZoom(Math.min(fitArea.width / width, fitArea.height / height));
 
   return {
     zoom: fitZoom,
-    panX: width * 0.5,
-    panY: height * 0.5
+    panX: width * 0.5 + (viewport.width * 0.5 - fitArea.centerX) / fitZoom,
+    panY: height * 0.5 + (viewport.height * 0.5 - fitArea.centerY) / fitZoom
   };
 }
 
@@ -92,9 +94,10 @@ export function isFitViewForViewport(
   view: Pick<ViewerViewState, 'zoom' | 'panX' | 'panY'>,
   viewport: ViewportInfo,
   width: number,
-  height: number
+  height: number,
+  fitInsets?: Partial<ViewportInsets> | null
 ): boolean {
-  const fitView = computeFitView(viewport, width, height);
+  const fitView = computeFitView(viewport, width, height, fitInsets);
   return (
     Math.abs(view.zoom - fitView.zoom) <= FIT_VIEW_EPSILON &&
     Math.abs(view.panX - fitView.panX) <= FIT_VIEW_EPSILON &&
@@ -123,6 +126,52 @@ export function preserveImagePanOnViewportChange(
     panX: state.panX + (nextCenterX - previousCenterX) / state.zoom,
     panY: state.panY + (nextCenterY - previousCenterY) / state.zoom
   };
+}
+
+function resolveFitArea(
+  viewport: ViewportInfo,
+  fitInsets?: Partial<ViewportInsets> | null
+): { width: number; height: number; centerX: number; centerY: number } {
+  const left = sanitizeInset(fitInsets?.left);
+  const right = sanitizeInset(fitInsets?.right);
+  const top = sanitizeInset(fitInsets?.top);
+  const bottom = sanitizeInset(fitInsets?.bottom);
+  const horizontal = resolveInsetAxis(viewport.width, left, right);
+  const vertical = resolveInsetAxis(viewport.height, top, bottom);
+
+  return {
+    width: horizontal.size,
+    height: vertical.size,
+    centerX: horizontal.center,
+    centerY: vertical.center
+  };
+}
+
+function resolveInsetAxis(
+  viewportSize: number,
+  leadingInset: number,
+  trailingInset: number
+): { size: number; center: number } {
+  const size = Math.max(1, Number.isFinite(viewportSize) ? viewportSize : 1);
+  const totalInset = leadingInset + trailingInset;
+  if (totalInset >= size) {
+    const scale = totalInset > 0 ? (size - 1) / totalInset : 0;
+    const leading = leadingInset * scale;
+    return {
+      size: 1,
+      center: leading + 0.5
+    };
+  }
+
+  const availableSize = size - totalInset;
+  return {
+    size: availableSize,
+    center: leadingInset + availableSize * 0.5
+  };
+}
+
+function sanitizeInset(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 export function zoomAroundPoint(

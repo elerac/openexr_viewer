@@ -75,6 +75,28 @@ describe('interaction math', () => {
     });
   });
 
+  it('computes fit view inside supplied viewport insets', () => {
+    const viewport = { width: 224, height: 124 };
+    const fitView = computeFitView(viewport, 100, 50, {
+      top: 24,
+      right: 0,
+      bottom: 0,
+      left: 24
+    });
+    const topLeft = imageToScreen(0, 0, { ...state, ...fitView }, viewport);
+    const bottomRight = imageToScreen(100, 50, { ...state, ...fitView }, viewport);
+
+    expect(fitView).toEqual({
+      zoom: 2,
+      panX: 44,
+      panY: 19
+    });
+    expect(topLeft.x).toBeCloseTo(24);
+    expect(topLeft.y).toBeCloseTo(24);
+    expect(bottomRight.x).toBeCloseTo(224);
+    expect(bottomRight.y).toBeCloseTo(124);
+  });
+
   it('detects whether a view is still the viewport fit view', () => {
     const viewport = { width: 800, height: 400 };
     const fitView = computeFitView(viewport, 1000, 500);
@@ -82,6 +104,15 @@ describe('interaction math', () => {
     expect(isFitViewForViewport(fitView, viewport, 1000, 500)).toBe(true);
     expect(isFitViewForViewport({ ...fitView, zoom: fitView.zoom + 1e-7 }, viewport, 1000, 500)).toBe(true);
     expect(isFitViewForViewport({ ...fitView, panY: fitView.panY + 0.01 }, viewport, 1000, 500)).toBe(false);
+  });
+
+  it('detects fit views using the same supplied viewport insets', () => {
+    const viewport = { width: 224, height: 124 };
+    const fitInsets = { top: 24, right: 0, bottom: 0, left: 24 };
+    const fitView = computeFitView(viewport, 100, 50, fitInsets);
+
+    expect(isFitViewForViewport(fitView, viewport, 100, 50, fitInsets)).toBe(true);
+    expect(isFitViewForViewport(fitView, viewport, 100, 50)).toBe(false);
   });
 
   it('maps screen coordinates into image pixels', () => {

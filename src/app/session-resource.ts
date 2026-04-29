@@ -20,6 +20,7 @@ import type {
   ImagePixel,
   OpenedImageSession,
   SessionSource,
+  ViewportInsets,
   ViewerSessionState,
   ViewportInfo
 } from '../types';
@@ -34,6 +35,7 @@ export interface BuildLoadedSessionArgs {
   existingSessions: OpenedImageSession[];
   defaultColormapId: string;
   viewport: ViewportInfo;
+  fitInsets?: ViewportInsets;
   currentSessionState: ViewerSessionState;
   hasActiveSession: boolean;
   previousImage: DecodedExrImage | null;
@@ -42,10 +44,11 @@ export interface BuildLoadedSessionArgs {
 
 export interface BuildSwitchedSessionStateOptions {
   autoFitViewport?: ViewportInfo | null;
+  autoFitInsets?: ViewportInsets | null;
 }
 
 export function buildLoadedSession(args: BuildLoadedSessionArgs): OpenedImageSession {
-  const fitView = computeFitView(args.viewport, args.decoded.width, args.decoded.height);
+  const fitView = computeFitView(args.viewport, args.decoded.width, args.decoded.height, args.fitInsets);
   const displayName = buildSessionDisplayName(
     args.filename,
     args.existingSessions.map((session) => session.filename)
@@ -71,7 +74,8 @@ export function buildLoadedSession(args: BuildLoadedSessionArgs): OpenedImageSes
   };
   const sessionState = args.hasActiveSession
     ? buildSwitchedSessionState(baseSession, args.currentSessionState, args.previousImage, {
-        autoFitViewport: args.autoFitImageOnSelect ? args.viewport : null
+        autoFitViewport: args.autoFitImageOnSelect ? args.viewport : null,
+        autoFitInsets: args.autoFitImageOnSelect ? args.fitInsets ?? null : null
       })
     : defaultSessionState;
 
@@ -227,7 +231,12 @@ function buildSwitchedImageCamera(
   }
 
   if (options.autoFitViewport) {
-    return computeFitView(options.autoFitViewport, nextSession.decoded.width, nextSession.decoded.height);
+    return computeFitView(
+      options.autoFitViewport,
+      nextSession.decoded.width,
+      nextSession.decoded.height,
+      options.autoFitInsets
+    );
   }
 
   return {
@@ -245,13 +254,14 @@ export function buildResetSessionState(
   activeSession: OpenedImageSession | null,
   currentState: ViewerSessionState,
   defaultColormapId: string,
-  viewport: ViewportInfo
+  viewport: ViewportInfo,
+  fitInsets?: ViewportInsets
 ): ViewerSessionState {
   if (!activeSession) {
     return createClearedViewerState(defaultColormapId);
   }
 
-  const fitView = computeFitView(viewport, activeSession.decoded.width, activeSession.decoded.height);
+  const fitView = computeFitView(viewport, activeSession.decoded.width, activeSession.decoded.height, fitInsets);
   return buildViewerStateForLayer(
     {
       ...createClearedViewerState(defaultColormapId),

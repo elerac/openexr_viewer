@@ -14,6 +14,7 @@ import type {
   PixelSample,
   RoiStats,
   StokesAolpDegreeModulationMode,
+  ViewportInsets,
   ViewportInfo,
   ViewerInteractionState,
   ViewerRenderState,
@@ -185,7 +186,7 @@ export type ViewerIntent =
   | { type: 'sessionLoaded'; session: OpenedImageSession }
   | { type: 'sessionReloaded'; sessionId: string; session: OpenedImageSession }
   | { type: 'sessionDisplayNameChanged'; sessionId: string; displayName: string }
-  | { type: 'activeSessionSwitched'; sessionId: string; viewport?: ViewportInfo }
+  | { type: 'activeSessionSwitched'; sessionId: string; viewport?: ViewportInfo; fitInsets?: ViewportInsets }
   | {
       type: 'sessionsReordered';
       draggedSessionId: string;
@@ -194,8 +195,8 @@ export type ViewerIntent =
     }
   | { type: 'sessionClosed'; sessionId: string }
   | { type: 'allSessionsClosed' }
-  | { type: 'activeSessionReset'; viewport: ViewportInfo }
-  | { type: 'activeSessionFitToViewport'; viewport: ViewportInfo }
+  | { type: 'activeSessionReset'; viewport: ViewportInfo; fitInsets?: ViewportInsets }
+  | { type: 'activeSessionFitToViewport'; viewport: ViewportInfo; fitInsets?: ViewportInsets }
   | { type: 'thumbnailRequested'; sessionId: string; token: number }
   | { type: 'thumbnailReady'; sessionId: string; token: number; thumbnailDataUrl: string | null }
   | { type: 'channelThumbnailRequested'; requestKey: string; token: number }

@@ -1,6 +1,7 @@
 import { disposeDecodeWorker, loadExrOffMainThread } from '../../exr-worker-client';
 import { ViewerInteractionCoordinator } from '../../interaction-coordinator';
 import { WebGlExrRenderer } from '../../renderer';
+import { resolveRulerFitInsets } from '../../ruler-layout';
 import { ChannelThumbnailService } from '../../services/channel-thumbnail-service';
 import { LoadQueueService } from '../../services/load-queue';
 import { RenderCacheService } from '../../services/render-cache-service';
@@ -111,7 +112,8 @@ export function createBootstrapServices({
     core,
     loadQueue,
     decodeBytes: loadExrOffMainThread,
-    getViewport: () => renderer.getViewport()
+    getViewport: () => renderer.getViewport(),
+    getFitInsets: () => resolveRulerFitInsets(core.getState().rulersVisible)
   });
   const interactionCoordinator = new ViewerInteractionCoordinator({
     initialSessionState: core.getState().sessionState,

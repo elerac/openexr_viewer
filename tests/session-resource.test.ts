@@ -139,6 +139,35 @@ describe('session resource auto-fit handling', () => {
       panY: 4
     });
   });
+
+  it('fits loaded images inside supplied insets', () => {
+    const session = buildLoadedSession({
+      sessionId: 'session-1',
+      decoded: createSizedImage(100, 50),
+      filename: 'first.exr',
+      fileSizeBytes: 16,
+      source: { kind: 'url', url: '/first.exr' },
+      existingSessions: [],
+      defaultColormapId: '0',
+      viewport: { width: 224, height: 124 },
+      fitInsets: {
+        top: 24,
+        right: 0,
+        bottom: 0,
+        left: 24
+      },
+      currentSessionState: createInitialState(),
+      hasActiveSession: false,
+      previousImage: null,
+      autoFitImageOnSelect: false
+    });
+
+    expect(session.state).toMatchObject({
+      zoom: 2,
+      panX: 44,
+      panY: 19
+    });
+  });
 });
 
 function createSizedImage(width: number, height: number): DecodedExrImage {

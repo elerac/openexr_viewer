@@ -274,35 +274,56 @@ vi.mock('../src/renderer', () => ({
   }
 }));
 
-vi.mock('../src/interaction/image-geometry', () => ({
-  computeFitView: vi.fn((viewport, width, height) => {
-    const zoom = Math.min(512, Math.max(0.03125, Math.min(viewport.width / width, viewport.height / height)));
+vi.mock('../src/interaction/image-geometry', () => {
+  function computeMockFitView(
+    viewport: { width: number; height: number },
+    width: number,
+    height: number,
+    fitInsets?: { top?: number; right?: number; bottom?: number; left?: number } | null
+  ) {
+    const left = sanitizeInset(fitInsets?.left);
+    const right = sanitizeInset(fitInsets?.right);
+    const top = sanitizeInset(fitInsets?.top);
+    const bottom = sanitizeInset(fitInsets?.bottom);
+    const fitWidth = Math.max(1, viewport.width - left - right);
+    const fitHeight = Math.max(1, viewport.height - top - bottom);
+    const centerX = left + fitWidth * 0.5;
+    const centerY = top + fitHeight * 0.5;
+    const zoom = Math.min(512, Math.max(0.03125, Math.min(fitWidth / width, fitHeight / height)));
     return {
       zoom,
-      panX: width * 0.5,
-      panY: height * 0.5
+      panX: width * 0.5 + (viewport.width * 0.5 - centerX) / zoom,
+      panY: height * 0.5 + (viewport.height * 0.5 - centerY) / zoom
     };
-  }),
-  isFitViewForViewport: vi.fn((view, viewport, width, height) => {
-    const zoom = Math.min(512, Math.max(0.03125, Math.min(viewport.width / width, viewport.height / height)));
-    const epsilon = 1e-6;
-    return (
-      Math.abs(view.zoom - zoom) <= epsilon &&
-      Math.abs(view.panX - width * 0.5) <= epsilon &&
-      Math.abs(view.panY - height * 0.5) <= epsilon
-    );
-  }),
-  preserveImagePanOnViewportChange: vi.fn((state, previousViewport, nextViewport) => ({
-    panX: state.panX + (
-      (nextViewport.left + nextViewport.width * 0.5) -
-      (previousViewport.left + previousViewport.width * 0.5)
-    ) / state.zoom,
-    panY: state.panY + (
-      (nextViewport.top + nextViewport.height * 0.5) -
-      (previousViewport.top + previousViewport.height * 0.5)
-    ) / state.zoom
-  }))
-}));
+  }
+
+  function sanitizeInset(value: number | undefined): number {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
+  return {
+    computeFitView: vi.fn(computeMockFitView),
+    isFitViewForViewport: vi.fn((view, viewport, width, height, fitInsets) => {
+      const fitView = computeMockFitView(viewport, width, height, fitInsets);
+      const epsilon = 1e-6;
+      return (
+        Math.abs(view.zoom - fitView.zoom) <= epsilon &&
+        Math.abs(view.panX - fitView.panX) <= epsilon &&
+        Math.abs(view.panY - fitView.panY) <= epsilon
+      );
+    }),
+    preserveImagePanOnViewportChange: vi.fn((state, previousViewport, nextViewport) => ({
+      panX: state.panX + (
+        (nextViewport.left + nextViewport.width * 0.5) -
+        (previousViewport.left + previousViewport.width * 0.5)
+      ) / state.zoom,
+      panY: state.panY + (
+        (nextViewport.top + nextViewport.height * 0.5) -
+        (previousViewport.top + previousViewport.height * 0.5)
+      ) / state.zoom
+    }))
+  };
+});
 
 vi.mock('../src/interaction/viewer-interaction', () => ({
   ViewerInteraction: class {
@@ -567,6 +588,68 @@ describe('bootstrap app lifecycle', () => {
       panX: 320,
       panY: 180
     });
+
+    app.dispose();
+  });
+
+  it('refits an auto-fitted image against ruler insets during resize', async () => {
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
+      observe(): void {}
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+    const mutableCoreState = mocks.coreState as unknown as {
+      activeSessionId: string | null;
+      rulersVisible: boolean;
+      sessions: unknown[];
+    };
+    mutableCoreState.activeSessionId = 'session-1';
+    mutableCoreState.rulersVisible = true;
+    mutableCoreState.sessions = [{
+      id: 'session-1',
+      filename: 'image.exr',
+      displayName: 'image.exr',
+      fileSizeBytes: 4,
+      source: { kind: 'url', url: '/image.exr' },
+      decoded: { width: 640, height: 360, layers: [] },
+      state: mocks.coreState.sessionState
+    }];
+    const previousZoom = (mocks.viewerRect.height - 24) / 360;
+    mocks.interactionCoordinatorGetState.mockImplementation(() => ({
+      view: {
+        zoom: previousZoom,
+        panX: 320 - 12 / previousZoom,
+        panY: 180 - 12 / previousZoom,
+        panoramaYawDeg: 0,
+        panoramaPitchDeg: 0,
+        panoramaHfovDeg: 100
+      },
+      hoveredPixel: null,
+      draftRoi: null
+    }));
+
+    const { bootstrapApp } = await import('../src/app/bootstrap');
+    const app = await bootstrapApp();
+    mocks.interactionCoordinatorEnqueueViewPatch.mockClear();
+
+    mocks.viewerRect.height = 146;
+    mocks.getResizeObserverCallback()?.([], {} as ResizeObserver);
+
+    const patch = mocks.interactionCoordinatorEnqueueViewPatch.mock.calls.at(-1)?.[0] as
+      | { zoom: number; panX: number; panY: number }
+      | undefined;
+    if (!patch) {
+      throw new Error('Expected resize to enqueue a view patch.');
+    }
+    const expectedZoom = (146 - 24) / 360;
+    expect(patch.zoom).toBeCloseTo(expectedZoom);
+    expect(patch.panX).toBeCloseTo(320 - 12 / expectedZoom);
+    expect(patch.panY).toBeCloseTo(180 - 12 / expectedZoom);
 
     app.dispose();
   });

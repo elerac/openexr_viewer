@@ -211,6 +211,13 @@ export interface ViewportInfo {
   height: number;
 }
 
+export interface ViewportInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 export interface ViewportRect {
   x: number;
   y: number;

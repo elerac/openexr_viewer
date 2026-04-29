@@ -1,8 +1,9 @@
 import { imageToScreen } from '../interaction/image-geometry';
 import type { Disposable } from '../lifecycle';
+import { RULER_SIZE_PX } from '../ruler-layout';
 import type { ViewerState, ViewportInfo } from '../types';
 
-const RULER_SIZE = 24;
+const RULER_SIZE = RULER_SIZE_PX;
 const TARGET_MAJOR_TICK_PIXELS = 80;
 const MIN_MINOR_TICK_PIXELS = 8;
 const MAX_TICKS_PER_AXIS = 2000;
