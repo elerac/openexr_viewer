@@ -7,12 +7,35 @@ const RULER_SIZE = RULER_SIZE_PX;
 const TARGET_MAJOR_TICK_PIXELS = 80;
 const MIN_MINOR_TICK_PIXELS = 8;
 const MAX_TICKS_PER_AXIS = 2000;
+const RULER_LABEL_EDGE_INSET = 8;
+const RULER_LABEL_MIN_GAP = 4;
+const RULER_LABEL_FALLBACK_FONT_SIZE = 10;
+const RULER_LABEL_FALLBACK_CHARACTER_WIDTH = 0.62;
+const RULER_LABEL_PRIORITY_NORMAL = 0;
+const RULER_LABEL_PRIORITY_MAX = 1;
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+type RulerAxis = 'horizontal' | 'vertical';
 
 interface RulerPalette {
   surface: string;
   border: string;
   tick: string;
+}
+
+interface RulerLabelCandidate {
+  axis: RulerAxis;
+  text: string;
+  x: number;
+  y: number;
+  priority: number;
+  order: number;
+}
+
+interface RulerLabelBounds {
+  axis: RulerAxis;
+  start: number;
+  end: number;
 }
 
 export class RulerOverlayRenderer implements Disposable {
@@ -118,6 +141,7 @@ function drawHorizontalRuler(
   const majorStep = resolveMajorTickStep(state.zoom);
   const minorStep = resolveMinorTickStep(majorStep, state.zoom);
   const { start, end } = resolveVisibleImageBoundaryRange(state.panX, state.zoom, viewport.width, imageWidth);
+  const labels: RulerLabelCandidate[] = [];
 
   drawMinorTicks(start, end, minorStep, majorStep, (position) => {
     const screen = imageToScreen(position, 0, state, viewport);
@@ -127,13 +151,29 @@ function drawHorizontalRuler(
   drawMajorTicks(start, end, majorStep, (position) => {
     const screen = imageToScreen(position, 0, state, viewport);
     drawHorizontalTick(svg, screen.x, 12, tickColor);
-    appendRulerLabel(labelOverlay, 'horizontal', String(position), clamp(screen.x, RULER_SIZE + 8, viewport.width - 8), 8);
+    addRulerLabelCandidate(
+      labels,
+      'horizontal',
+      String(position),
+      clamp(screen.x, RULER_SIZE + RULER_LABEL_EDGE_INSET, viewport.width - RULER_LABEL_EDGE_INSET),
+      RULER_LABEL_EDGE_INSET,
+      position === imageWidth ? RULER_LABEL_PRIORITY_MAX : RULER_LABEL_PRIORITY_NORMAL
+    );
   });
   if (imageWidth >= start && imageWidth <= end && imageWidth % majorStep !== 0) {
     const screen = imageToScreen(imageWidth, 0, state, viewport);
     drawHorizontalTick(svg, screen.x, 12, tickColor);
-    appendRulerLabel(labelOverlay, 'horizontal', String(imageWidth), clamp(screen.x, RULER_SIZE + 8, viewport.width - 8), 8);
+    addRulerLabelCandidate(
+      labels,
+      'horizontal',
+      String(imageWidth),
+      clamp(screen.x, RULER_SIZE + RULER_LABEL_EDGE_INSET, viewport.width - RULER_LABEL_EDGE_INSET),
+      RULER_LABEL_EDGE_INSET,
+      RULER_LABEL_PRIORITY_MAX
+    );
   }
+
+  appendRulerLabels(labelOverlay, labels);
 }
 
 function drawVerticalRuler(
@@ -147,6 +187,7 @@ function drawVerticalRuler(
   const majorStep = resolveMajorTickStep(state.zoom);
   const minorStep = resolveMinorTickStep(majorStep, state.zoom);
   const { start, end } = resolveVisibleImageBoundaryRange(state.panY, state.zoom, viewport.height, imageHeight);
+  const labels: RulerLabelCandidate[] = [];
 
   drawMinorTicks(start, end, minorStep, majorStep, (position) => {
     const screen = imageToScreen(0, position, state, viewport);
@@ -156,18 +197,34 @@ function drawVerticalRuler(
   drawMajorTicks(start, end, majorStep, (position) => {
     const screen = imageToScreen(0, position, state, viewport);
     drawVerticalTick(svg, screen.y, 12, tickColor);
-    appendRulerLabel(labelOverlay, 'vertical', String(position), 8, clamp(screen.y, RULER_SIZE + 8, viewport.height - 8));
+    addRulerLabelCandidate(
+      labels,
+      'vertical',
+      String(position),
+      RULER_LABEL_EDGE_INSET,
+      clamp(screen.y, RULER_SIZE + RULER_LABEL_EDGE_INSET, viewport.height - RULER_LABEL_EDGE_INSET),
+      position === imageHeight ? RULER_LABEL_PRIORITY_MAX : RULER_LABEL_PRIORITY_NORMAL
+    );
   });
   if (imageHeight >= start && imageHeight <= end && imageHeight % majorStep !== 0) {
     const screen = imageToScreen(0, imageHeight, state, viewport);
     drawVerticalTick(svg, screen.y, 12, tickColor);
-    appendRulerLabel(labelOverlay, 'vertical', String(imageHeight), 8, clamp(screen.y, RULER_SIZE + 8, viewport.height - 8));
+    addRulerLabelCandidate(
+      labels,
+      'vertical',
+      String(imageHeight),
+      RULER_LABEL_EDGE_INSET,
+      clamp(screen.y, RULER_SIZE + RULER_LABEL_EDGE_INSET, viewport.height - RULER_LABEL_EDGE_INSET),
+      RULER_LABEL_PRIORITY_MAX
+    );
   }
+
+  appendRulerLabels(labelOverlay, labels);
 }
 
 function appendRulerLabel(
   labelOverlay: HTMLElement,
-  axis: 'horizontal' | 'vertical',
+  axis: RulerAxis,
   text: string,
   x: number,
   y: number
@@ -178,6 +235,117 @@ function appendRulerLabel(
   label.style.left = `${x}px`;
   label.style.top = `${y}px`;
   labelOverlay.append(label);
+}
+
+function addRulerLabelCandidate(
+  labels: RulerLabelCandidate[],
+  axis: RulerAxis,
+  text: string,
+  x: number,
+  y: number,
+  priority: number
+): void {
+  labels.push({
+    axis,
+    text,
+    x,
+    y,
+    priority,
+    order: labels.length
+  });
+}
+
+function appendRulerLabels(labelOverlay: HTMLElement, labels: RulerLabelCandidate[]): void {
+  const visibleLabels = resolveVisibleRulerLabels(labelOverlay, labels);
+
+  for (const label of labels) {
+    if (!visibleLabels.has(label)) {
+      continue;
+    }
+    appendRulerLabel(labelOverlay, label.axis, label.text, label.x, label.y);
+  }
+}
+
+function resolveVisibleRulerLabels(
+  labelOverlay: HTMLElement,
+  labels: RulerLabelCandidate[]
+): Set<RulerLabelCandidate> {
+  const accepted: Array<{ label: RulerLabelCandidate; bounds: RulerLabelBounds }> = [];
+  const prioritizedLabels = [...labels].sort((a, b) => b.priority - a.priority || a.order - b.order);
+
+  for (const label of prioritizedLabels) {
+    const bounds = resolveRulerLabelBounds(labelOverlay, label);
+    const overlapsAcceptedLabel = accepted.some((acceptedLabel) => (
+      acceptedLabel.bounds.axis === bounds.axis &&
+      rulerLabelBoundsOverlap(acceptedLabel.bounds, bounds)
+    ));
+
+    if (!overlapsAcceptedLabel) {
+      accepted.push({ label, bounds });
+    }
+  }
+
+  return new Set(accepted.map((entry) => entry.label));
+}
+
+function resolveRulerLabelBounds(labelOverlay: HTMLElement, label: RulerLabelCandidate): RulerLabelBounds {
+  const center = label.axis === 'horizontal' ? label.x : label.y;
+  const extent = measureRulerLabelAxisExtent(labelOverlay, label.axis, label.text);
+
+  return {
+    axis: label.axis,
+    start: center - extent * 0.5,
+    end: center + extent * 0.5
+  };
+}
+
+function rulerLabelBoundsOverlap(a: RulerLabelBounds, b: RulerLabelBounds): boolean {
+  return a.start < b.end + RULER_LABEL_MIN_GAP && b.start < a.end + RULER_LABEL_MIN_GAP;
+}
+
+function measureRulerLabelAxisExtent(labelOverlay: HTMLElement, axis: RulerAxis, text: string): number {
+  const renderedExtent = measureRenderedRulerLabelAxisExtent(labelOverlay, axis, text);
+  if (renderedExtent > 0) {
+    return renderedExtent;
+  }
+
+  return estimateRulerLabelAxisExtent(labelOverlay, text);
+}
+
+function measureRenderedRulerLabelAxisExtent(labelOverlay: HTMLElement, axis: RulerAxis, text: string): number {
+  const label = document.createElement('span');
+  label.className = `ruler-label ruler-label--${axis}`;
+  label.textContent = text;
+  label.style.left = '0px';
+  label.style.top = '0px';
+  label.style.visibility = 'hidden';
+  labelOverlay.append(label);
+
+  const rect = label.getBoundingClientRect();
+  label.remove();
+
+  const extent = axis === 'horizontal' ? rect.width : rect.height;
+  return Number.isFinite(extent) && extent > 0 ? extent : 0;
+}
+
+function estimateRulerLabelAxisExtent(labelOverlay: HTMLElement, text: string): number {
+  const fontSize = readRulerLabelFontSize(labelOverlay);
+  const characterCount = Math.max(1, Array.from(text).length);
+  return Math.max(fontSize, characterCount * fontSize * RULER_LABEL_FALLBACK_CHARACTER_WIDTH);
+}
+
+function readRulerLabelFontSize(labelOverlay: HTMLElement): number {
+  const computedFontSize = Number.parseFloat(getComputedStyle(labelOverlay).fontSize);
+  if (Number.isFinite(computedFontSize) && computedFontSize > 0) {
+    return computedFontSize;
+  }
+
+  const inlineFontSize = Number.parseFloat(labelOverlay.style.fontSize);
+  if (Number.isFinite(inlineFontSize) && inlineFontSize > 0) {
+    return inlineFontSize;
+  }
+
+  return RULER_LABEL_FALLBACK_FONT_SIZE;
 }
 
 function drawHorizontalTick(svg: ParentNode, x: number, length: number, color: string): void {

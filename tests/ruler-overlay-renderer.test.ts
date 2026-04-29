@@ -96,6 +96,72 @@ describe('ruler overlay renderer', () => {
     ]);
     expect(Array.from(labelOverlay.children).map((label) => label.textContent)).not.toContain('-100');
   });
+
+  it('hides a horizontal major label that overlaps the max label while keeping its tick', () => {
+    const { renderer, svg, labelOverlay } = createRulerHarness();
+
+    renderer.resize(240, 120);
+    renderer.setImageSize(105, 50);
+    renderer.render(createViewerState({
+      viewerMode: 'image',
+      zoom: 1,
+      panX: 52.5,
+      panY: 25
+    }), true);
+
+    expect(readSvgLines(svg)).toEqual(
+      expect.arrayContaining([
+        { x1: '168', y1: '24', x2: '168', y2: '12' },
+        { x1: '173', y1: '24', x2: '173', y2: '12' }
+      ])
+    );
+    expect(readLabels(labelOverlay, 'horizontal')).toEqual([
+      { text: '0', left: '67.5px', top: '8px' },
+      { text: '105', left: '172.5px', top: '8px' }
+    ]);
+  });
+
+  it('hides a vertical major label that overlaps the max label while keeping its tick', () => {
+    const { renderer, svg, labelOverlay } = createRulerHarness();
+
+    renderer.resize(120, 240);
+    renderer.setImageSize(50, 105);
+    renderer.render(createViewerState({
+      viewerMode: 'image',
+      zoom: 1,
+      panX: 25,
+      panY: 52.5
+    }), true);
+
+    expect(readSvgLines(svg)).toEqual(
+      expect.arrayContaining([
+        { x1: '24', y1: '168', x2: '12', y2: '168' },
+        { x1: '24', y1: '173', x2: '12', y2: '173' }
+      ])
+    );
+    expect(readLabels(labelOverlay, 'vertical')).toEqual([
+      { text: '0', left: '8px', top: '67.5px' },
+      { text: '105', left: '8px', top: '172.5px' }
+    ]);
+  });
+
+  it('uses font size when keeping a max label that overlaps a normal major label', () => {
+    const { renderer, labelOverlay } = createRulerHarness();
+    labelOverlay.style.fontSize = '80px';
+
+    renderer.resize(220, 120);
+    renderer.setImageSize(100, 50);
+    renderer.render(createViewerState({
+      viewerMode: 'image',
+      zoom: 1,
+      panX: 50,
+      panY: 25
+    }), true);
+
+    expect(readLabels(labelOverlay, 'horizontal')).toEqual([
+      { text: '100', left: '160px', top: '8px' }
+    ]);
+  });
 });
 
 function createRulerHarness(): {
