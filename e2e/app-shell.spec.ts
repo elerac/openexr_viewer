@@ -189,6 +189,12 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   const spectrumMotionInput = page.locator('#spectrum-lattice-motion-select');
   const budgetInput = page.locator('#display-cache-budget-input');
   const usageReadout = page.locator('#display-cache-usage');
+  const viewerStatePanel = page.locator('#viewer-state-panel');
+  const viewerStateImageFields = page.locator('#viewer-state-image-fields');
+  const viewerStatePanoramaFields = page.locator('#viewer-state-panorama-fields');
+  const viewerStateInputs = page.locator(
+    '#viewer-state-zoom-input, #viewer-state-pan-x-input, #viewer-state-pan-y-input, #viewer-state-yaw-input, #viewer-state-pitch-input, #viewer-state-hfov-input'
+  );
 
   await expect(page.getByRole('heading', { name: 'Inspector' })).toHaveCount(0);
   await expect(appMenuTitle).toHaveText('OpenEXR Viewer');
@@ -205,7 +211,15 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   await expect(page.locator('.image-panel-actions')).toHaveCount(0);
   await expect(page.locator('.image-panel-titlebar')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Image', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'View', exact: true })).toHaveCount(0);
+  await expect(viewerStatePanel).toBeVisible();
+  await expect(viewerStatePanel.getByRole('heading', { name: 'View', exact: true })).toBeVisible();
+  await expect(page.locator('#viewer-state-empty-state')).toContainText('Open an image to edit view state.');
+  await expect(viewerStateImageFields).toBeHidden();
+  await expect(viewerStatePanoramaFields).toBeHidden();
+  await expect(viewerStateInputs).toHaveCount(6);
+  for (const viewerStateInput of await viewerStateInputs.all()) {
+    await expect(viewerStateInput).toBeDisabled();
+  }
   await expect(page.locator('#zoom-readout')).toHaveCount(0);
   await expect(page.locator('#pan-readout')).toHaveCount(0);
   await expect(openedImages.locator('option')).toHaveCount(0);
