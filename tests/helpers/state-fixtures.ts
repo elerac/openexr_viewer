@@ -130,10 +130,12 @@ export function createViewerSessionState(overrides: Partial<ViewerSessionState> 
 }
 
 export function createViewerState(overrides: Partial<ViewerState> = {}): ViewerState {
+  const sessionState = createViewerSessionState();
   return {
-    ...createViewerSessionState(),
+    ...sessionState,
     hoveredPixel: null,
     draftRoi: null,
+    roiInteraction: createInteractionState(sessionState).roiInteraction,
     ...overrides
   };
 }

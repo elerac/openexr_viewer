@@ -32,7 +32,7 @@ import {
 } from '../stokes';
 import { sameStokesColormapDefaultSettings } from '../stokes-colormap-settings';
 import type { OpenedImageSession, ViewerSessionState, ViewerViewState } from '../types';
-import { createInteractionState } from '../view-state';
+import { createEmptyRoiInteractionState, createInteractionState, sameRoiInteractionState } from '../view-state';
 import { buildViewerStateForLayer, createInitialState } from '../viewer-store';
 import { sameViewerSessionState } from './viewer-app-equality';
 import { selectActiveSession, shouldAutoEnterColormapMode } from './viewer-app-selectors';
@@ -1009,10 +1009,12 @@ function patchSessionState(
 
   let interactionState = state.interactionState;
   if (options.syncInteractionView || options.clearHover) {
+    const nextBaseInteractionState = createInteractionState(nextSessionState);
     interactionState = {
-      view: options.syncInteractionView ? createInteractionState(nextSessionState).view : state.interactionState.view,
+      view: options.syncInteractionView ? nextBaseInteractionState.view : state.interactionState.view,
       hoveredPixel: options.clearHover ? null : state.interactionState.hoveredPixel,
-      draftRoi: null
+      draftRoi: null,
+      roiInteraction: nextBaseInteractionState.roiInteraction
     };
   }
   const resetImageStatsContext = shouldResetImageStatsContext(state.sessionState, nextSessionState);
@@ -1101,7 +1103,8 @@ function cloneInteractionState(state: ViewerAppState['interactionState']): Viewe
   return {
     view: { ...state.view },
     hoveredPixel: state.hoveredPixel ? { ...state.hoveredPixel } : null,
-    draftRoi: cloneImageRoi(state.draftRoi)
+    draftRoi: cloneImageRoi(state.draftRoi),
+    roiInteraction: { ...(state.roiInteraction ?? createEmptyRoiInteractionState()) }
   };
 }
 
@@ -1112,7 +1115,11 @@ function sameInteractionState(
   return (
     sameViewCommit(a.view, b.view) &&
     samePixel(a.hoveredPixel, b.hoveredPixel) &&
-    sameImageRoi(a.draftRoi, b.draftRoi)
+    sameImageRoi(a.draftRoi, b.draftRoi) &&
+    sameRoiInteractionState(
+      a.roiInteraction ?? createEmptyRoiInteractionState(),
+      b.roiInteraction ?? createEmptyRoiInteractionState()
+    )
   );
 }
 

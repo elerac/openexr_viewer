@@ -69,6 +69,9 @@ export function createViewerInteraction({
         roi
       });
     },
+    onRoiInteractionState: (state) => {
+      interactionCoordinator.enqueueRoiInteractionState(state);
+    },
     getScreenshotSelection: () => ui.getScreenshotSelectionInteractionState(),
     onScreenshotSelectionRectChange: (update) => {
       ui.setScreenshotSelectionRect(update.rect, {

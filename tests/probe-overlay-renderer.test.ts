@@ -62,22 +62,45 @@ describe('probe overlay renderer', () => {
 
     expect(context.strokeRect).not.toHaveBeenCalled();
   });
+
+  it('renders ROI adjustment handles while editing', () => {
+    const { renderer, context } = createProbeOverlayHarness();
+
+    renderer.resize(128, 64);
+    renderer.setImagePresent(true);
+    renderer.render(createViewerState({
+      zoom: 16,
+      roi: { x0: 1, y0: 1, x1: 2, y1: 2 },
+      draftRoi: { x0: 1, y0: 1, x1: 3, y1: 3 },
+      roiInteraction: {
+        hoverHandle: 'edge-e',
+        activeHandle: 'edge-e'
+      }
+    }));
+
+    expect(context.fillRect).toHaveBeenCalled();
+    expect(context.strokeRect).toHaveBeenCalledTimes(10);
+  });
 });
 
 function createProbeOverlayHarness(): {
   renderer: ProbeOverlayRenderer;
   context: CanvasRenderingContext2D & {
     clearRect: ReturnType<typeof vi.fn>;
+    fillRect: ReturnType<typeof vi.fn>;
     strokeRect: ReturnType<typeof vi.fn>;
   };
 } {
   const context = {
     clearRect: vi.fn(),
+    fillRect: vi.fn(),
     strokeRect: vi.fn(),
+    fillStyle: '',
     lineWidth: 1,
     strokeStyle: ''
   } as unknown as CanvasRenderingContext2D & {
     clearRect: ReturnType<typeof vi.fn>;
+    fillRect: ReturnType<typeof vi.fn>;
     strokeRect: ReturnType<typeof vi.fn>;
   };
 

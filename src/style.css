@@ -1361,6 +1361,30 @@ body.is-resizing-panel-rows * {
   cursor: nesw-resize;
 }
 
+.viewer-container.is-roi-handle-move {
+  cursor: move;
+}
+
+.viewer-container.is-roi-handle-edge-n,
+.viewer-container.is-roi-handle-edge-s {
+  cursor: ns-resize;
+}
+
+.viewer-container.is-roi-handle-edge-e,
+.viewer-container.is-roi-handle-edge-w {
+  cursor: ew-resize;
+}
+
+.viewer-container.is-roi-handle-corner-nw,
+.viewer-container.is-roi-handle-corner-se {
+  cursor: nwse-resize;
+}
+
+.viewer-container.is-roi-handle-corner-ne,
+.viewer-container.is-roi-handle-corner-sw {
+  cursor: nesw-resize;
+}
+
 .screenshot-selection-mask {
   position: absolute;
   background: rgba(0, 0, 0, 0.48);

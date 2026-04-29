@@ -6,7 +6,14 @@ import {
 } from '../display-texture';
 import { sameDisplayLuminanceRange } from '../colormap-range';
 import { sameDisplaySelection } from '../display-model';
-import { mergeRenderState, samePixel, sameRoi, sameViewState } from '../view-state';
+import {
+  createEmptyRoiInteractionState,
+  mergeRenderState,
+  samePixel,
+  sameRoi,
+  sameRoiInteractionState,
+  sameViewState
+} from '../view-state';
 import type { OpenedImageSession, ViewerRenderState } from '../types';
 import { buildProbeReadoutModel } from './probe-presentation';
 import { buildRoiReadoutModel } from './roi-presentation';
@@ -586,6 +593,7 @@ function sameRenderProbeOverlayInputs(a: ViewerRenderSnapshot, b: ViewerRenderSn
     samePixel(previous.hoveredPixel, next.hoveredPixel) &&
     sameRoi(previous.roi, next.roi) &&
     sameRoi(previous.draftRoi, next.draftRoi) &&
+    sameRoiInteractionState(previous.roiInteraction, next.roiInteraction) &&
     sameViewState(previous, next)
   );
 }
@@ -628,7 +636,8 @@ function sameViewerRenderState(a: ViewerRenderState, b: ViewerRenderState): bool
     sameViewState(a, b) &&
     samePixel(a.hoveredPixel, b.hoveredPixel) &&
     sameRoi(a.roi, b.roi) &&
-    sameRoi(a.draftRoi, b.draftRoi)
+    sameRoi(a.draftRoi, b.draftRoi) &&
+    sameRoiInteractionState(a.roiInteraction, b.roiInteraction)
   );
 }
 
@@ -667,6 +676,7 @@ function stateLikeInteractionState(): ViewerAppState['interactionState'] {
     panoramaHfovDeg: 100
     },
     hoveredPixel: null,
-    draftRoi: null
+    draftRoi: null,
+    roiInteraction: createEmptyRoiInteractionState()
   };
 }

@@ -142,6 +142,99 @@ describe('viewer interaction roi gestures', () => {
     expect(harness.onViewChange).toHaveBeenCalled();
   });
 
+  it('moves an existing ROI with direct hit-edit drags', () => {
+    const harness = createHarness({
+      roi: { x0: 4, y0: 4, x1: 5, y1: 5 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', { pointerId: 1, clientX: 50, clientY: 50 });
+    dispatchPointer(harness.element, 'pointermove', { pointerId: 1, clientX: 70, clientY: 70 });
+    dispatchPointer(harness.element, 'pointerup', { pointerId: 1, clientX: 70, clientY: 70 });
+
+    expect(harness.onCommitRoi).toHaveBeenCalledWith({ x0: 6, y0: 6, x1: 7, y1: 7 });
+    expect(harness.onViewChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps click-without-drag on an existing ROI as probe lock toggling', () => {
+    const harness = createHarness({
+      roi: { x0: 4, y0: 4, x1: 5, y1: 5 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', { pointerId: 1, clientX: 50, clientY: 50 });
+    dispatchPointer(harness.element, 'pointerup', { pointerId: 1, clientX: 50, clientY: 50 });
+
+    expect(harness.onToggleLockPixel).toHaveBeenCalledWith({ ix: 5, iy: 5 });
+    expect(harness.onCommitRoi).not.toHaveBeenCalled();
+  });
+
+  it('keeps shift-drag outside an existing ROI as ROI creation', () => {
+    const harness = createHarness({
+      roi: { x0: 4, y0: 4, x1: 5, y1: 5 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', {
+      pointerId: 1,
+      clientX: 20,
+      clientY: 20,
+      shiftKey: true
+    });
+    dispatchPointer(harness.element, 'pointermove', {
+      pointerId: 1,
+      clientX: 70,
+      clientY: 70,
+      shiftKey: true
+    });
+    dispatchPointer(harness.element, 'pointerup', {
+      pointerId: 1,
+      clientX: 70,
+      clientY: 70,
+      shiftKey: true
+    });
+
+    expect(harness.onCommitRoi).toHaveBeenCalledWith({ x0: 2, y0: 2, x1: 7, y1: 7 });
+  });
+
+  it('uses shift on an existing ROI handle for aspect-locked adjustment', () => {
+    const harness = createHarness({
+      roi: { x0: 2, y0: 2, x1: 5, y1: 3 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', {
+      pointerId: 1,
+      clientX: 60,
+      clientY: 40,
+      shiftKey: true
+    });
+    dispatchPointer(harness.element, 'pointermove', {
+      pointerId: 1,
+      clientX: 80,
+      clientY: 43,
+      shiftKey: true
+    });
+    dispatchPointer(harness.element, 'pointerup', {
+      pointerId: 1,
+      clientX: 80,
+      clientY: 43,
+      shiftKey: true
+    });
+
+    expect(harness.onCommitRoi).toHaveBeenCalledWith({ x0: 2, y0: 2, x1: 7, y1: 4 });
+  });
+
+  it('reports active ROI handles while direct editing', () => {
+    const harness = createHarness({
+      roi: { x0: 2, y0: 2, x1: 3, y1: 3 }
+    });
+
+    dispatchPointer(harness.element, 'pointerdown', { pointerId: 1, clientX: 30, clientY: 30 });
+    dispatchPointer(harness.element, 'pointermove', { pointerId: 1, clientX: 49, clientY: 30 });
+
+    expect(harness.onRoiInteractionState).toHaveBeenCalledWith({
+      hoverHandle: 'move',
+      activeHandle: 'move'
+    });
+  });
+
   it('edits screenshot selection instead of panning, probing, or drawing ROI', () => {
     const harness = createHarness({}, {
       screenshotRect: { x: 20, y: 20, width: 40, height: 30 }
@@ -988,8 +1081,15 @@ function createHarness(
   });
   const onHoverPixel = vi.fn();
   const onToggleLockPixel = vi.fn();
-  const onDraftRoi = vi.fn();
-  const onCommitRoi = vi.fn();
+  const onDraftRoi = vi.fn((draftRoi) => {
+    state = { ...state, draftRoi };
+  });
+  const onCommitRoi = vi.fn((roi) => {
+    state = { ...state, roi };
+  });
+  const onRoiInteractionState = vi.fn((roiInteraction) => {
+    state = { ...state, roiInteraction };
+  });
   let screenshotRect = options.screenshotRect ?? null;
   const onScreenshotSelectionRectChange = vi.fn((update) => {
     screenshotRect = update.rect;
@@ -1015,6 +1115,7 @@ function createHarness(
     onToggleLockPixel,
     onDraftRoi,
     onCommitRoi,
+    onRoiInteractionState,
     getScreenshotSelection: () => ({
       active: screenshotRect !== null,
       rect: screenshotRect
@@ -1041,6 +1142,7 @@ function createHarness(
     onToggleLockPixel,
     onDraftRoi,
     onCommitRoi,
+    onRoiInteractionState,
     onScreenshotSelectionRectChange,
     onScreenshotSelectionHandleHover,
     onScreenshotSelectionResizeActiveChange,

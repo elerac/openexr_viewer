@@ -1,6 +1,13 @@
 import type { Disposable } from './lifecycle';
 import type { ViewerInteractionState, ViewerSessionState, ViewerViewState } from './types';
-import { createInteractionState, pickViewState, samePixel, sameRoi, sameViewState } from './view-state';
+import {
+  createInteractionState,
+  pickViewState,
+  samePixel,
+  sameRoi,
+  sameRoiInteractionState,
+  sameViewState
+} from './view-state';
 
 interface SessionSyncOptions {
   clearHover?: boolean;
@@ -94,6 +101,18 @@ export class ViewerInteractionCoordinator implements Disposable {
     this.scheduleFlush();
   }
 
+  enqueueRoiInteractionState(roiInteraction: ViewerInteractionState['roiInteraction']): void {
+    if (this.disposed || sameRoiInteractionState(this.state.roiInteraction, roiInteraction)) {
+      return;
+    }
+
+    this.state = {
+      ...this.state,
+      roiInteraction
+    };
+    this.scheduleFlush();
+  }
+
   syncSessionState(
     sessionState: ViewerSessionState,
     options: SessionSyncOptions = {}
@@ -102,7 +121,8 @@ export class ViewerInteractionCoordinator implements Disposable {
     const next: ViewerInteractionState = {
       view: pickViewState(sessionState),
       hoveredPixel: options.clearHover ? null : this.state.hoveredPixel,
-      draftRoi: null
+      draftRoi: null,
+      roiInteraction: createInteractionState(sessionState).roiInteraction
     };
 
     this.cancelScheduledFlush();
@@ -173,6 +193,7 @@ function sameInteractionState(a: ViewerInteractionState, b: ViewerInteractionSta
   return (
     sameViewState(a.view, b.view) &&
     samePixel(a.hoveredPixel, b.hoveredPixel) &&
-    sameRoi(a.draftRoi, b.draftRoi)
+    sameRoi(a.draftRoi, b.draftRoi) &&
+    sameRoiInteractionState(a.roiInteraction, b.roiInteraction)
   );
 }

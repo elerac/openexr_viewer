@@ -62,6 +62,22 @@ export interface ImageRoi {
   y1: number;
 }
 
+export type RoiAdjustmentHandle =
+  | 'move'
+  | 'edge-n'
+  | 'edge-e'
+  | 'edge-s'
+  | 'edge-w'
+  | 'corner-nw'
+  | 'corner-ne'
+  | 'corner-se'
+  | 'corner-sw';
+
+export interface ViewerRoiInteractionState {
+  hoverHandle: RoiAdjustmentHandle | null;
+  activeHandle: RoiAdjustmentHandle | null;
+}
+
 export interface StatsChannelSummary {
   label: string;
   min: number | null;
@@ -145,11 +161,13 @@ export interface ViewerInteractionState {
   view: ViewerViewState;
   hoveredPixel: ImagePixel | null;
   draftRoi: ImageRoi | null;
+  roiInteraction: ViewerRoiInteractionState;
 }
 
 export interface ViewerRenderState extends ViewerSessionState {
   hoveredPixel: ImagePixel | null;
   draftRoi: ImageRoi | null;
+  roiInteraction: ViewerRoiInteractionState;
 }
 
 export type ViewerState = ViewerRenderState;

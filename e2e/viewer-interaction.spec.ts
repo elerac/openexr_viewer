@@ -141,12 +141,12 @@ test('toggles pixel rulers in image view and clears them in panorama view', asyn
   await rulersMenuItem.click();
   await expect(rulersMenuItem).toHaveAttribute('aria-checked', 'true');
 
-  await expect.poll(async () => countRulerOverlayPixels(page), { timeout: 5000 }).toBeGreaterThan(0);
+  await expect.poll(async () => countRulerOverlayMarks(page), { timeout: 5000 }).toBeGreaterThan(0);
 
   await viewMenuButton.click();
   await panoramaViewerMenuItem.click();
 
-  await expect.poll(async () => countRulerOverlayPixels(page), { timeout: 5000 }).toBe(0);
+  await expect.poll(async () => countRulerOverlayMarks(page), { timeout: 5000 }).toBe(0);
 });
 
 test('creates ROI with shift-drag and keeps ROI editing disabled in panorama mode', async ({ page }) => {
@@ -174,23 +174,8 @@ test('creates ROI with shift-drag and keeps ROI editing disabled in panorama mod
   await expect(roiBounds).toHaveText(initialBounds);
 });
 
-async function countRulerOverlayPixels(page: Page): Promise<number> {
-  return page.locator('#ruler-overlay-canvas').evaluate((node) => {
-    const canvas = node as HTMLCanvasElement;
-    const context = canvas.getContext('2d');
-    if (!context || canvas.width <= 0 || canvas.height <= 0) {
-      return 0;
-    }
-
-    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-    let paintedPixels = 0;
-    for (let index = 3; index < pixels.length; index += 4) {
-      if (pixels[index] !== 0) {
-        paintedPixels += 1;
-      }
-    }
-    return paintedPixels;
-  });
+async function countRulerOverlayMarks(page: Page): Promise<number> {
+  return page.locator('#ruler-overlay-svg').evaluate((node) => node.childElementCount);
 }
 
 test('carries ROI across open-file switches', async ({ page }) => {
@@ -210,7 +195,7 @@ test('carries ROI across open-file switches', async ({ page }) => {
   await expect(openedImages.locator('option:checked')).toContainText('scalar_z.exr', { timeout: 30000 });
   await expect(roiEmptyState).toBeVisible();
 
-  await dragViewerRoi(page, viewer, { xRatio: 0.25, yRatio: 0.25 }, { xRatio: 0.75, yRatio: 0.75 });
+  await dragViewerRoi(page, viewer, { xRatio: 0.25, yRatio: 0.25 }, { xRatio: 0.25, yRatio: 0.75 });
 
   await expect(roiDetails).toBeVisible();
   const initialBounds = (await roiBounds.textContent())?.trim() ?? '';
@@ -224,7 +209,7 @@ test('carries ROI across open-file switches', async ({ page }) => {
   await expect(openedImages.locator('option:checked')).toContainText('spectral.exr', { timeout: 30000 });
   await expect(roiDetails).toBeVisible();
 
-  await dragViewerRoi(page, viewer, { xRatio: 0.25, yRatio: 0.25 }, { xRatio: 0.75, yRatio: 0.25 });
+  await dragViewerRoi(page, viewer, { xRatio: 0.75, yRatio: 0.25 }, { xRatio: 0.75, yRatio: 0.75 });
 
   const updatedBounds = (await roiBounds.textContent())?.trim() ?? '';
   expect(updatedBounds).toMatch(/^x \d+\.\.\d+ {2}y \d+\.\.\d+$/);

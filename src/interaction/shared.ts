@@ -1,4 +1,4 @@
-import type { ImagePixel, ViewerState, ViewportInfo, ViewportRect } from '../types';
+import type { ImagePixel, ViewerRoiInteractionState, ViewerState, ViewportInfo, ViewportRect } from '../types';
 import type {
   ScreenshotSelectionDragUpdate,
   ScreenshotSelectionHandle,
@@ -34,6 +34,7 @@ export interface InteractionCallbacks {
   onToggleLockPixel: (pixel: ImagePixel | null) => void;
   onDraftRoi: (roi: ViewerState['draftRoi']) => void;
   onCommitRoi: (roi: ViewerState['roi']) => void;
+  onRoiInteractionState?: (state: ViewerRoiInteractionState) => void;
   getScreenshotSelection?: () => ScreenshotSelectionInteractionState;
   onScreenshotSelectionRectChange?: (update: ScreenshotSelectionDragUpdate) => void;
   onScreenshotSelectionHandleHover?: (handle: ScreenshotSelectionHandle | null) => void;

@@ -597,7 +597,8 @@ describe('viewer app core', () => {
           panY: 30
         },
         hoveredPixel: { ix: 1, iy: 0 },
-        draftRoi: null
+        draftRoi: null,
+        roiInteraction: core.getState().interactionState.roiInteraction
       }
     });
 

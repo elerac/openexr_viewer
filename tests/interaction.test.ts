@@ -21,6 +21,7 @@ import {
   zoomPanorama
 } from '../src/interaction/panorama-geometry';
 import { ViewerState } from '../src/types';
+import { createEmptyRoiInteractionState } from '../src/view-state';
 import { createChannelMonoSelection, createChannelRgbSelection } from './helpers/state-fixtures';
 
 const state: ViewerState = {
@@ -44,7 +45,8 @@ const state: ViewerState = {
   hoveredPixel: null,
   lockedPixel: null,
   roi: null,
-  draftRoi: null
+  draftRoi: null,
+  roiInteraction: createEmptyRoiInteractionState()
 };
 
 describe('interaction math', () => {

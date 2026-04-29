@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { __debugGetMaterializedChannel, __debugGetMaterializedChannelCount } from '../src/channel-storage';
 import { buildDisplaySourceBinding } from '../src/display-texture';
 import { GlImageRenderer } from '../src/rendering/gl-image-renderer';
+import { createEmptyRoiInteractionState } from '../src/view-state';
 import { createInitialState } from '../src/viewer-store';
 import {
   createChannelMonoSelection,
@@ -171,7 +172,8 @@ describe('gl image renderer', () => {
       ...createInitialState(),
       displaySelection: createChannelRgbSelection('R', 'G', 'B'),
       hoveredPixel: null,
-      draftRoi: null
+      draftRoi: null,
+      roiInteraction: createEmptyRoiInteractionState()
     };
 
     renderer.ensureLayerChannelsResident('session-1', 0, 2, 1, layer, ['R', 'G', 'B']);
@@ -208,7 +210,8 @@ describe('gl image renderer', () => {
       ...createInitialState(),
       displaySelection: createChannelRgbSelection('R', 'G', 'B'),
       hoveredPixel: null,
-      draftRoi: null
+      draftRoi: null,
+      roiInteraction: createEmptyRoiInteractionState()
     };
 
     renderer.ensureLayerChannelsResident('session-1', 0, 2, 1, layer, ['R', 'G', 'B']);
@@ -258,7 +261,8 @@ describe('gl image renderer', () => {
       ...createInitialState(),
       displaySelection: createChannelRgbSelection('R', 'G', 'B'),
       hoveredPixel: null,
-      draftRoi: null
+      draftRoi: null,
+      roiInteraction: createEmptyRoiInteractionState()
     };
 
     renderer.ensureLayerChannelsResident('session-1', 0, 2, 2, layer, ['R', 'G', 'B']);
@@ -301,7 +305,8 @@ describe('gl image renderer', () => {
       ...createInitialState(),
       displaySelection: createChannelRgbSelection('R', 'G', 'B', 'A'),
       hoveredPixel: null,
-      draftRoi: null
+      draftRoi: null,
+      roiInteraction: createEmptyRoiInteractionState()
     };
 
     renderer.ensureLayerChannelsResident('session-1', 0, 1, 1, layer, ['R', 'G', 'B', 'A']);
@@ -344,7 +349,8 @@ describe('gl image renderer', () => {
       ...createInitialState(),
       displaySelection: createChannelRgbSelection('R', 'G', 'B'),
       hoveredPixel: null,
-      draftRoi: null
+      draftRoi: null,
+      roiInteraction: createEmptyRoiInteractionState()
     };
 
     renderer.ensureLayerChannelsResident('session-1', 0, 2, 2, layer, ['R', 'G', 'B']);
@@ -398,7 +404,8 @@ describe('gl image renderer', () => {
       ...createInitialState(),
       displaySelection: createChannelRgbSelection('R', 'G', 'B', 'A'),
       hoveredPixel: null,
-      draftRoi: null
+      draftRoi: null,
+      roiInteraction: createEmptyRoiInteractionState()
     };
 
     renderer.ensureLayerChannelsResident('session-1', 0, 4, 2, layer, ['R', 'G', 'B', 'A']);
@@ -452,7 +459,8 @@ describe('gl image renderer', () => {
       panY: 9,
       displaySelection: createChannelRgbSelection('R', 'G', 'B'),
       hoveredPixel: null,
-      draftRoi: null
+      draftRoi: null,
+      roiInteraction: createEmptyRoiInteractionState()
     };
 
     renderer.ensureLayerChannelsResident('session-1', 0, 2, 2, layer, ['R', 'G', 'B']);
@@ -503,7 +511,8 @@ describe('gl image renderer', () => {
       panoramaHfovDeg: 90,
       displaySelection: createChannelRgbSelection('R', 'G', 'B'),
       hoveredPixel: null,
-      draftRoi: null
+      draftRoi: null,
+      roiInteraction: createEmptyRoiInteractionState()
     };
 
     renderer.ensureLayerChannelsResident('session-1', 0, 2, 2, layer, ['R', 'G', 'B']);
@@ -545,7 +554,8 @@ describe('gl image renderer', () => {
       ...createInitialState(),
       displaySelection: createChannelRgbSelection('R', 'G', 'B'),
       hoveredPixel: null,
-      draftRoi: null
+      draftRoi: null,
+      roiInteraction: createEmptyRoiInteractionState()
     };
 
     renderer.ensureLayerChannelsResident('session-1', 0, 1, 1, layer, ['R', 'G', 'B']);

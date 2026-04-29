@@ -2,10 +2,12 @@ import type {
   ImagePixel,
   PanoramaKeyboardOrbitDirection,
   PanoramaKeyboardOrbitInput,
+  RoiAdjustmentHandle,
   ViewerKeyboardNavigationDirection,
   ViewerKeyboardNavigationInput,
   ViewerKeyboardZoomDirection,
   ViewerKeyboardZoomInput,
+  ViewerRoiInteractionState,
   ViewportInfo,
   ViewerState
 } from '../types';
@@ -28,8 +30,13 @@ import { getPanoramaProjectionDiameter } from './panorama-geometry';
 import { resolveHoverPixel, resolveProbePixel } from './probe-mode';
 import {
   commitRoiFromDrag,
+  createRoiAdjustmentDrag,
   createDraftRoiFromAnchor,
+  createRoiInteractionState,
   resolveRoiAnchorPixel,
+  resolveRoiAdjustmentHandle,
+  type RoiAdjustmentDrag,
+  updateRoiFromAdjustmentDrag,
   updateDraftRoiFromDrag
 } from './roi-mode';
 import {
@@ -43,7 +50,7 @@ import type { InteractionCallbacks, InteractionDependencies, PointerPosition } f
 
 export type { InteractionCallbacks, InteractionDependencies } from './shared';
 
-type DragMode = 'pan' | 'roi' | 'screenshot' | null;
+type DragMode = 'pan' | 'roi' | 'roi-adjust' | 'screenshot' | null;
 const KEYBOARD_ZOOM_SPEED_STEPS_PER_SECOND = 3;
 const KEYBOARD_ZOOM_MAX_FRAME_MS = 50;
 
@@ -59,6 +66,7 @@ export class ViewerInteraction {
   private previousPointer: PointerPosition | null = null;
   private lastPointerInElement: PointerPosition | null = null;
   private roiAnchorPixel: ImagePixel | null = null;
+  private roiAdjustmentDrag: RoiAdjustmentDrag | null = null;
   private screenshotDrag: ScreenshotSelectionDrag | null = null;
 
   constructor(
@@ -277,6 +285,27 @@ export class ViewerInteraction {
 
     const state = this.callbacks.getState();
     const viewport = this.callbacks.getViewport();
+    if (state.viewerMode === 'image') {
+      const handle = state.roi ? resolveRoiAdjustmentHandle(point, state.roi, state, viewport) : null;
+      this.setRoiInteractionState(createRoiInteractionState({ hoverHandle: handle }));
+      if (handle) {
+        this.dragging = true;
+        this.dragMode = 'roi-adjust';
+        this.movedDuringDrag = false;
+        this.roiAdjustmentDrag = createRoiAdjustmentDrag(handle, point, state.roi!);
+        this.previousPointer = point;
+        this.callbacks.onHoverPixel(resolveProbePixel(point, state, viewport, imageSize));
+        this.setRoiInteractionState(createRoiInteractionState({
+          hoverHandle: handle,
+          activeHandle: handle
+        }));
+        this.element.setPointerCapture(event.pointerId);
+        return;
+      }
+    } else {
+      this.setRoiInteractionState(createRoiInteractionState());
+    }
+
     if (state.viewerMode === 'image' && event.shiftKey) {
       const anchorPixel = resolveRoiAnchorPixel(point, state, viewport, imageSize);
       if (!anchorPixel) {
@@ -289,6 +318,7 @@ export class ViewerInteraction {
       this.roiAnchorPixel = anchorPixel;
       this.previousPointer = point;
       this.callbacks.onDraftRoi(createDraftRoiFromAnchor(anchorPixel));
+      this.setRoiInteractionState(createRoiInteractionState());
       this.element.setPointerCapture(event.pointerId);
       return;
     }
@@ -358,6 +388,22 @@ export class ViewerInteraction {
         this.callbacks.onDraftRoi(
           updateDraftRoiFromDrag(this.roiAnchorPixel, point, state, viewport, imageSize)
         );
+      } else if (this.dragMode === 'roi-adjust' && this.roiAdjustmentDrag) {
+        const roi = updateRoiFromAdjustmentDrag(
+          this.roiAdjustmentDrag,
+          point,
+          state,
+          imageSize,
+          {
+            preserveAspectRatio: event.shiftKey,
+            resizeFromCenter: this.roiAdjustmentDrag.handle !== 'move' && event.ctrlKey
+          }
+        );
+        this.callbacks.onDraftRoi(roi);
+        this.setRoiInteractionState(createRoiInteractionState({
+          hoverHandle: this.roiAdjustmentDrag.handle,
+          activeHandle: this.roiAdjustmentDrag.handle
+        }));
       } else if (state.viewerMode === 'panorama') {
         const nextView = orbitPanoramaFromDrag(state, viewport, deltaX, deltaY);
         hoverState = { ...state, ...nextView };
@@ -371,6 +417,9 @@ export class ViewerInteraction {
       this.previousPointer = point;
     }
 
+    if (!this.dragging) {
+      this.updateRoiHover(point, state, viewport);
+    }
     this.callbacks.onHoverPixel(resolveProbePixel(point, hoverState, viewport, imageSize));
   };
 
@@ -422,6 +471,38 @@ export class ViewerInteraction {
       return;
     }
 
+    if (this.dragging && this.dragMode === 'roi-adjust' && this.roiAdjustmentDrag) {
+      const state = this.callbacks.getState();
+      const viewport = this.callbacks.getViewport();
+      this.callbacks.onDraftRoi(null);
+      if (this.movedDuringDrag) {
+        const roi = updateRoiFromAdjustmentDrag(
+          this.roiAdjustmentDrag,
+          point,
+          state,
+          imageSize,
+          {
+            preserveAspectRatio: event.shiftKey,
+            resizeFromCenter: this.roiAdjustmentDrag.handle !== 'move' && event.ctrlKey
+          }
+        );
+        this.callbacks.onCommitRoi(roi);
+        this.clearDrag(event.pointerId);
+        this.setRoiInteractionState(createRoiInteractionState({
+          hoverHandle: resolveRoiAdjustmentHandle(point, roi, state, viewport)
+        }));
+        return;
+      }
+
+      this.callbacks.onToggleLockPixel(resolveProbePixel(point, state, viewport, imageSize));
+      const startRoi = this.roiAdjustmentDrag.startRoi;
+      this.clearDrag(event.pointerId);
+      this.setRoiInteractionState(createRoiInteractionState({
+        hoverHandle: resolveRoiAdjustmentHandle(point, startRoi, state, viewport)
+      }));
+      return;
+    }
+
     if (this.dragging && !this.movedDuringDrag) {
       const state = this.callbacks.getState();
       const viewport = this.callbacks.getViewport();
@@ -436,6 +517,9 @@ export class ViewerInteraction {
     this.callbacks.onHoverPixel(null);
     if (this.getScreenshotSelection().active && !this.dragging) {
       this.callbacks.onScreenshotSelectionHandleHover?.(null);
+    }
+    if (!this.dragging) {
+      this.setRoiInteractionState(createRoiInteractionState());
     }
   };
 
@@ -461,6 +545,7 @@ export class ViewerInteraction {
     this.movedDuringDrag = false;
     this.previousPointer = null;
     this.roiAnchorPixel = null;
+    this.roiAdjustmentDrag = null;
     this.screenshotDrag = null;
     if (wasScreenshotDrag) {
       this.callbacks.onScreenshotSelectionSquareSnapChange?.(false);
@@ -468,6 +553,41 @@ export class ViewerInteraction {
     }
     if (wasScreenshotResize) {
       this.callbacks.onScreenshotSelectionResizeActiveChange?.(false);
+    }
+  }
+
+  private updateRoiHover(point: PointerPosition, state: ViewerState, viewport: ViewportInfo): void {
+    if (state.viewerMode !== 'image' || !state.roi) {
+      this.setRoiInteractionState(createRoiInteractionState());
+      return;
+    }
+
+    this.setRoiInteractionState(createRoiInteractionState({
+      hoverHandle: resolveRoiAdjustmentHandle(point, state.roi, state, viewport)
+    }));
+  }
+
+  private setRoiInteractionState(state: ViewerRoiInteractionState): void {
+    this.callbacks.onRoiInteractionState?.(state);
+    this.renderRoiAdjustmentCursor(state.activeHandle ?? state.hoverHandle);
+  }
+
+  private renderRoiAdjustmentCursor(handle: RoiAdjustmentHandle | null): void {
+    const handleClassNames = [
+      'is-roi-handle-move',
+      'is-roi-handle-edge-n',
+      'is-roi-handle-edge-e',
+      'is-roi-handle-edge-s',
+      'is-roi-handle-edge-w',
+      'is-roi-handle-corner-nw',
+      'is-roi-handle-corner-ne',
+      'is-roi-handle-corner-se',
+      'is-roi-handle-corner-sw'
+    ];
+
+    this.element.classList.remove(...handleClassNames);
+    if (handle && !this.getScreenshotSelection().active) {
+      this.element.classList.add(`is-roi-handle-${handle}`);
     }
   }
 

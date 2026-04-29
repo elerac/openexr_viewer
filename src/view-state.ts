@@ -2,6 +2,7 @@ import type {
   ImagePixel,
   ViewerInteractionState,
   ViewerRenderState,
+  ViewerRoiInteractionState,
   ViewerSessionState,
   ViewerViewState
 } from './types';
@@ -22,7 +23,8 @@ export function createInteractionState(sessionState: ViewerSessionState): Viewer
   return {
     view: pickViewState(sessionState),
     hoveredPixel: null,
-    draftRoi: null
+    draftRoi: null,
+    roiInteraction: createEmptyRoiInteractionState()
   };
 }
 
@@ -34,7 +36,15 @@ export function mergeRenderState(
     ...sessionState,
     ...interactionState.view,
     hoveredPixel: interactionState.hoveredPixel,
-    draftRoi: interactionState.draftRoi
+    draftRoi: interactionState.draftRoi,
+    roiInteraction: interactionState.roiInteraction
+  };
+}
+
+export function createEmptyRoiInteractionState(): ViewerRoiInteractionState {
+  return {
+    hoverHandle: null,
+    activeHandle: null
   };
 }
 
@@ -63,4 +73,14 @@ export function samePixel(a: ImagePixel | null | undefined, b: ImagePixel | null
 
 export function sameRoi(a: ViewerSessionState['roi'] | ViewerInteractionState['draftRoi'], b: ViewerSessionState['roi'] | ViewerInteractionState['draftRoi']): boolean {
   return sameImageRoi(a, b);
+}
+
+export function sameRoiInteractionState(
+  a: ViewerRoiInteractionState,
+  b: ViewerRoiInteractionState
+): boolean {
+  return (
+    a.hoverHandle === b.hoverHandle &&
+    a.activeHandle === b.activeHandle
+  );
 }

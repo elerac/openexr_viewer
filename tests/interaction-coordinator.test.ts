@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ViewerInteractionCoordinator } from '../src/interaction-coordinator';
+import { createEmptyRoiInteractionState } from '../src/view-state';
 import { createInitialState } from '../src/viewer-store';
 
 function createHarness() {
@@ -71,7 +72,8 @@ describe('interaction coordinator', () => {
           panoramaHfovDeg: 100
         },
         hoveredPixel: { ix: 2, iy: 1 },
-        draftRoi: null
+        draftRoi: null,
+        roiInteraction: createEmptyRoiInteractionState()
       },
       {
         view: {
@@ -83,7 +85,8 @@ describe('interaction coordinator', () => {
           panoramaHfovDeg: 100
         },
         hoveredPixel: null,
-        draftRoi: null
+        draftRoi: null,
+        roiInteraction: createEmptyRoiInteractionState()
       }
     );
     expect(harness.commitViewState).toHaveBeenCalledTimes(1);
@@ -160,7 +163,8 @@ describe('interaction coordinator', () => {
         panoramaHfovDeg: 70
       },
       hoveredPixel: null,
-      draftRoi: null
+      draftRoi: null,
+      roiInteraction: createEmptyRoiInteractionState()
     });
     expect(sync.previous.hoveredPixel).toEqual({ ix: 4, iy: 4 });
     expect(harness.cancelFrame).toHaveBeenCalledTimes(0);
