@@ -283,6 +283,23 @@ test('boots an empty app shell with menu actions gated until an image opens', as
   await expect(settingsDialog).toBeHidden();
 });
 
+test('does not expose unchecked view menu checkmarks in the accessibility tree', async ({ page }) => {
+  await gotoViewerApp(page);
+
+  const viewMenuButton = page.getByRole('button', { name: 'View', exact: true });
+  const viewMenu = page.locator('#view-menu');
+
+  await viewMenuButton.click();
+
+  await expect(viewMenu).toMatchAriaSnapshot(`
+- menu:
+  - menuitemradio "✓ Image viewer" [checked]
+  - menuitemradio "Panorama viewer"
+  - separator
+  - menuitemcheckbox "Rulers"
+`);
+});
+
 test('distinguishes auto-fit pressed state from hover feedback', async ({ page }) => {
   await gotoViewerApp(page);
 

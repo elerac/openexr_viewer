@@ -367,10 +367,9 @@ output {
 
 .app-menu-item[role='menuitemradio']::before,
 .app-menu-item[role='menuitemcheckbox']::before {
-  content: "✓";
+  content: "";
   width: 0.8rem;
   color: var(--accent);
-  opacity: 0;
 }
 
 .app-menu-item[role='menuitemradio'][aria-checked='true'],
@@ -380,7 +379,7 @@ output {
 
 .app-menu-item[role='menuitemradio'][aria-checked='true']::before,
 .app-menu-item[role='menuitemcheckbox'][aria-checked='true']::before {
-  opacity: 1;
+  content: "✓";
 }
 
 .app-menu-item:hover:not(:disabled),
