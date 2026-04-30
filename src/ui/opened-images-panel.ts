@@ -108,11 +108,6 @@ export class OpenedImagesPanel implements Disposable {
         return;
       }
 
-      this.elements.openedImagesSelect.value = sessionId;
-      if (sessionId !== this.openedImagesActiveId) {
-        this.chooseOpenedImage(sessionId);
-      }
-
       this.openedImageDragState = {
         sessionId,
         startY: event.clientY,
@@ -142,10 +137,6 @@ export class OpenedImagesPanel implements Disposable {
       this.callbacks.onOpenedImageRowClick();
 
       const sessionId = row.dataset.sessionId ?? '';
-      this.elements.openedImagesSelect.value = sessionId;
-      if (sessionId !== this.openedImagesActiveId) {
-        this.chooseOpenedImage(sessionId);
-      }
 
       this.openedImageDragState = {
         sessionId,
@@ -246,7 +237,7 @@ export class OpenedImagesPanel implements Disposable {
       this.onOpenedImagesMouseMove(event);
     });
     this.disposables.addEventListener(window, 'mouseup', () => {
-      this.finishOpenedImagesDrag();
+      this.finishOpenedImagesDrag({ selectPendingClick: true });
     });
     this.disposables.addEventListener(window, 'blur', () => {
       this.commitActiveOpenedFileRename();
@@ -609,7 +600,7 @@ export class OpenedImagesPanel implements Disposable {
     this.callbacks.onReorderOpenedImage(dragState.sessionId, dropTarget.sessionId, dropTarget.placement);
   }
 
-  private finishOpenedImagesDrag(): void {
+  private finishOpenedImagesDrag(options: { selectPendingClick?: boolean } = {}): void {
     const dragState = this.openedImageDragState;
     this.openedImageDragState = null;
     this.elements.openedFilesList.classList.remove('is-reordering');
@@ -622,6 +613,11 @@ export class OpenedImagesPanel implements Disposable {
 
     if (dragState?.isDragging) {
       this.suppressOpenedImageSelectionUntilMs = performance.now() + 120;
+      return;
+    }
+
+    if (options.selectPendingClick && dragState?.sessionId) {
+      this.chooseOpenedImage(dragState.sessionId);
     }
   }
 

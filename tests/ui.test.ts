@@ -5064,6 +5064,63 @@ describe('opened files actions', () => {
 });
 
 describe('opened files reordering', () => {
+  it('keeps the active image selected when dragging another open file to reorder', () => {
+    installUiFixture();
+
+    const onOpenedImageSelected = vi.fn();
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected, onReorderOpenedImage }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'first.exr' },
+      { id: 'session-2', label: 'second.exr' },
+      { id: 'session-3', label: 'third.exr' }
+    ], 'session-1');
+
+    const rows = mockOpenedFilesListGeometry();
+    const secondRow = rows[1] as HTMLDivElement;
+    const thirdRow = rows[2] as HTMLDivElement;
+    const openedImagesSelect = document.getElementById('opened-images-select') as HTMLSelectElement;
+
+    thirdRow.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientY: 50 }));
+    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientY: 25 }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+    expect(onReorderOpenedImage).toHaveBeenCalledTimes(1);
+    expect(onReorderOpenedImage).toHaveBeenCalledWith('session-3', 'session-2', 'before');
+    expect(onOpenedImageSelected).not.toHaveBeenCalled();
+    expect(openedImagesSelect.value).toBe('session-1');
+    expect(secondRow.classList.contains('opened-file-row--drop-before')).toBe(false);
+    expect(thirdRow.classList.contains('opened-file-row--dragging')).toBe(false);
+  });
+
+  it('selects another open file when a row click does not become a reorder drag', () => {
+    installUiFixture();
+
+    const onOpenedImageSelected = vi.fn();
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected, onReorderOpenedImage }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'first.exr' },
+      { id: 'session-2', label: 'second.exr' }
+    ], 'session-1');
+
+    const rows = mockOpenedFilesListGeometry();
+    const secondRow = rows[1] as HTMLDivElement;
+    const openedImagesSelect = document.getElementById('opened-images-select') as HTMLSelectElement;
+
+    secondRow.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientY: 30 }));
+
+    expect(onOpenedImageSelected).not.toHaveBeenCalled();
+    expect(openedImagesSelect.value).toBe('session-1');
+
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+
+    expect(onReorderOpenedImage).not.toHaveBeenCalled();
+    expect(onOpenedImageSelected).toHaveBeenCalledTimes(1);
+    expect(onOpenedImageSelected).toHaveBeenCalledWith('session-2');
+    expect(openedImagesSelect.value).toBe('session-2');
+  });
+
   it('dispatches before-placement when dragging into the top half of a row', () => {
     installUiFixture();
 
