@@ -5365,6 +5365,167 @@ describe('channel thumbnail strip', () => {
     expect(document.querySelectorAll('#channel-thumbnail-strip .channel-thumbnail-image')).toHaveLength(2);
   });
 
+  it('selects a bottom thumbnail when it is dropped on the image viewer', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onRgbGroupChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onRgbGroupChange }));
+    const viewerContainer = ui.viewerContainer;
+    const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
+    const channelSelect = document.getElementById('rgb-group-select') as HTMLSelectElement;
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    })));
+    splitToggle.click();
+    onRgbGroupChange.mockClear();
+
+    const tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
+    const dataTransfer = createMockDataTransfer();
+    tiles[1]!.dispatchEvent(createChannelThumbnailDragEvent('dragstart', dataTransfer));
+    viewerContainer.dispatchEvent(createChannelThumbnailDragEvent('dragover', dataTransfer));
+
+    expect(viewerContainer.classList.contains('is-channel-thumbnail-drop-target')).toBe(true);
+    expect(onRgbGroupChange).not.toHaveBeenCalled();
+
+    viewerContainer.dispatchEvent(createChannelThumbnailDragEvent('drop', dataTransfer));
+
+    expect(viewerContainer.classList.contains('is-channel-thumbnail-drop-target')).toBe(false);
+    expect(channelSelect.value).toBe('channel:beauty.G');
+    expect(onRgbGroupChange).toHaveBeenCalledWith({
+      kind: 'channelMono',
+      channel: 'beauty.G',
+      alpha: null
+    });
+    expect(
+      document.querySelector<HTMLButtonElement>(
+        '#channel-thumbnail-strip .channel-thumbnail-tile[data-channel-value="channel:beauty.G"]'
+      )?.getAttribute('aria-selected')
+    ).toBe('true');
+  });
+
+  it('clears the viewer thumbnail-drop affordance when the drag leaves the viewer', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const viewerContainer = ui.viewerContainer;
+    const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    })));
+    splitToggle.click();
+
+    const tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
+    const dataTransfer = createMockDataTransfer();
+    tiles[1]!.dispatchEvent(createChannelThumbnailDragEvent('dragstart', dataTransfer));
+    viewerContainer.dispatchEvent(createChannelThumbnailDragEvent('dragover', dataTransfer));
+
+    expect(viewerContainer.classList.contains('is-channel-thumbnail-drop-target')).toBe(true);
+
+    viewerContainer.dispatchEvent(createChannelThumbnailDragEvent('dragleave', dataTransfer, document.body));
+
+    expect(viewerContainer.classList.contains('is-channel-thumbnail-drop-target')).toBe(false);
+  });
+
+  it('does not select a dragged thumbnail outside the viewer or from the drag-generated click', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onRgbGroupChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onRgbGroupChange }));
+    const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
+    const channelSelect = document.getElementById('rgb-group-select') as HTMLSelectElement;
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    })));
+    splitToggle.click();
+    onRgbGroupChange.mockClear();
+
+    const tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
+    const dataTransfer = createMockDataTransfer();
+    tiles[1]!.dispatchEvent(createChannelThumbnailDragEvent('dragstart', dataTransfer));
+    tiles[1]!.dispatchEvent(createChannelThumbnailDragEvent('dragend', dataTransfer));
+    tiles[1]!.click();
+
+    expect(channelSelect.value).toBe('channel:beauty.R');
+    expect(onRgbGroupChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps normal thumbnail clicks and file-drop routing unchanged', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const onRgbGroupChange = vi.fn();
+    const onFilesDropped = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onRgbGroupChange, onFilesDropped }));
+    const viewerContainer = ui.viewerContainer;
+    const dropOverlay = document.getElementById('drop-overlay') as HTMLDivElement;
+    const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
+    const channelSelect = document.getElementById('rgb-group-select') as HTMLSelectElement;
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'channelRgb',
+      r: 'beauty.R',
+      g: 'beauty.G',
+      b: 'beauty.B',
+      alpha: null
+    }, buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: null
+    })));
+    splitToggle.click();
+    onRgbGroupChange.mockClear();
+
+    let tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
+    tiles[2]!.click();
+
+    expect(channelSelect.value).toBe('channel:beauty.B');
+    expect(onRgbGroupChange).toHaveBeenCalledWith({
+      kind: 'channelMono',
+      channel: 'beauty.B',
+      alpha: null
+    });
+
+    onRgbGroupChange.mockClear();
+    tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
+    const dataTransfer = createMockDataTransfer();
+    tiles[1]!.dispatchEvent(createChannelThumbnailDragEvent('dragstart', dataTransfer));
+    viewerContainer.dispatchEvent(createChannelThumbnailDragEvent('dragover', dataTransfer));
+    viewerContainer.dispatchEvent(createChannelThumbnailDragEvent('drop', dataTransfer));
+
+    expect(onFilesDropped).not.toHaveBeenCalled();
+    expect(dropOverlay.classList.contains('hidden')).toBe(true);
+  });
+
   it('sizes thumbnail previews from the available strip height', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
@@ -7260,6 +7421,58 @@ function createFileDropEvent(type: 'drop' | 'dragover', files: File[] = [new Fil
     }
   });
   return event;
+}
+
+function createChannelThumbnailDragEvent(
+  type: 'dragstart' | 'dragover' | 'dragleave' | 'drop' | 'dragend',
+  dataTransfer: DataTransfer,
+  relatedTarget: EventTarget | null = null
+): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', {
+    value: dataTransfer
+  });
+  Object.defineProperty(event, 'relatedTarget', {
+    value: relatedTarget
+  });
+  return event;
+}
+
+function createMockDataTransfer(): DataTransfer {
+  const dragData = new Map<string, string>();
+  const types: string[] = [];
+  const transfer = {
+    dropEffect: 'none',
+    effectAllowed: 'uninitialized',
+    files: createFileList([]),
+    items: [] as unknown as DataTransferItemList,
+    get types() {
+      return types;
+    },
+    clearData: (type?: string) => {
+      if (type) {
+        dragData.delete(type);
+        const index = types.indexOf(type);
+        if (index >= 0) {
+          types.splice(index, 1);
+        }
+        return;
+      }
+
+      dragData.clear();
+      types.length = 0;
+    },
+    getData: (type: string) => dragData.get(type) ?? '',
+    setData: (type: string, value: string) => {
+      dragData.set(type, value);
+      if (!types.includes(type)) {
+        types.push(type);
+      }
+    },
+    setDragImage: () => {}
+  };
+
+  return transfer as DataTransfer;
 }
 
 function createHandleDropEvent(type: 'drop' | 'dragover', items: DataTransferItem[]): Event {

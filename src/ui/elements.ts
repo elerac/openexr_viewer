@@ -225,7 +225,7 @@ export type ChannelPanelElements = Pick<
   'rgbSplitToggleButton' | 'rgbGroupSelect' | 'channelViewList' | 'channelViewCount'
 >;
 
-export type ChannelThumbnailStripElements = Pick<Elements, 'channelThumbnailStrip'>;
+export type ChannelThumbnailStripElements = Pick<Elements, 'channelThumbnailStrip' | 'viewerContainer'>;
 
 export type ColormapPanelElements = Pick<
   Elements,

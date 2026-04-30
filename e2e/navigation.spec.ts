@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { gotoViewerApp, openGalleryCbox } from './helpers/app';
 import { buildScalarChannelExr, buildSizedRgbExr, buildSpectralExr } from './helpers/exr-fixtures';
 import { dragBy, readProbeCoords, resolveViewerPoint } from './helpers/viewer';
@@ -32,6 +32,26 @@ test('moves bottom-panel thumbnail selections with left and right arrow keys', a
   await page.keyboard.press('ArrowLeft');
   await expect(channelSelect.locator('option:checked')).toHaveText('G');
   await expect(thumbnailTiles.nth(1)).toBeFocused();
+});
+
+test('selects a bottom thumbnail when dragged into the image viewer', async ({ page }) => {
+  await gotoViewerApp(page);
+
+  const viewer = page.locator('#viewer-container');
+  const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
+  const channelSelect = page.locator('#rgb-group-select');
+  const thumbnailTiles = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile');
+
+  await openGalleryCbox(page);
+  await rgbSplitToggleButton.click();
+  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(channelSelect.locator('option:checked')).toHaveText('R');
+  await expect(thumbnailTiles).toHaveCount(3);
+
+  await dragLocatorToPoint(page, thumbnailTiles.nth(1), await resolveViewerPoint(viewer, 0.5, 0.5));
+
+  await expect(channelSelect.locator('option:checked')).toHaveText('G');
+  await expect(thumbnailTiles.nth(1)).toHaveAttribute('aria-selected', 'true');
 });
 
 test('keeps collapsed bottom channel names visible and selectable', async ({ page }) => {
@@ -263,3 +283,22 @@ test('auto-fits images selected from Open Files when the top-bar toggle is enabl
     y: 25
   });
 });
+
+async function dragLocatorToPoint(
+  page: Page,
+  locator: Locator,
+  point: { x: number; y: number }
+): Promise<void> {
+  const box = await locator.boundingBox();
+  if (!box) {
+    throw new Error('Drag source is not visible.');
+  }
+
+  const startX = box.x + box.width / 2;
+  const startY = box.y + box.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(point.x, point.y, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(100);
+}

@@ -19,11 +19,18 @@ interface ChannelThumbnailTileRefs {
   thumbnailDataUrl: string | null;
 }
 
+interface ChannelThumbnailDragState {
+  value: string;
+  tile: HTMLButtonElement;
+}
+
 const tileRefs = new WeakMap<HTMLElement, ChannelThumbnailTileRefs>();
+const CHANNEL_THUMBNAIL_DRAG_MIME = 'application/x-openexr-viewer-channel-thumbnail';
 const HOVER_PREVIEW_DELAY_MS = 500;
 const HOVER_PREVIEW_GAP_PX = 8;
 const HOVER_PREVIEW_VIEWPORT_MARGIN_PX = 8;
 const HOVER_PREVIEW_FALLBACK_SIZE_PX = 156;
+const DRAG_SUPPRESS_CLICK_MS = 180;
 const DEFAULT_STRIP_PADDING_TOP_PX = 7.2;
 const DEFAULT_STRIP_PADDING_BOTTOM_PX = 8.8;
 const DEFAULT_TILE_PADDING_PX = 5.12;
@@ -42,6 +49,8 @@ export class ChannelThumbnailStrip implements Disposable {
   private hoverPreviewTile: HTMLButtonElement | null = null;
   private hoverPreviewElement: HTMLElement | null = null;
   private hoverPreviewSessionActive = false;
+  private channelThumbnailDragState: ChannelThumbnailDragState | null = null;
+  private suppressClickUntilMs = 0;
   private disposed = false;
 
   constructor(
@@ -49,6 +58,12 @@ export class ChannelThumbnailStrip implements Disposable {
     private readonly callbacks: ChannelThumbnailStripCallbacks
   ) {
     this.disposables.addEventListener(this.elements.channelThumbnailStrip, 'click', (event) => {
+      if (performance.now() < this.suppressClickUntilMs) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
       const row = findClosestListRow(event.target, 'channelValue');
       if (!row || this.isLoading) {
         return;
@@ -66,6 +81,12 @@ export class ChannelThumbnailStrip implements Disposable {
     this.disposables.addEventListener(this.elements.channelThumbnailStrip, 'mouseout', (event) => {
       this.handleMouseOut(event);
     });
+    this.disposables.addEventListener(this.elements.channelThumbnailStrip, 'dragstart', (event) => {
+      this.handleThumbnailDragStart(event);
+    });
+    this.disposables.addEventListener(this.elements.channelThumbnailStrip, 'dragend', () => {
+      this.finishChannelThumbnailDrag(true);
+    });
     this.disposables.addEventListener(this.elements.channelThumbnailStrip, 'mouseleave', () => {
       this.endHoverPreviewSession();
     });
@@ -75,9 +96,24 @@ export class ChannelThumbnailStrip implements Disposable {
     this.disposables.addEventListener(window, 'resize', () => {
       this.endHoverPreviewSession();
     });
+    this.disposables.addEventListener(window, 'blur', () => {
+      this.finishChannelThumbnailDrag(true);
+    });
     this.disposables.addEventListener(document, 'click', () => {
       this.endHoverPreviewSession();
     }, true);
+    this.disposables.addEventListener(this.elements.viewerContainer, 'dragenter', (event) => {
+      this.handleViewerDragEnter(event);
+    });
+    this.disposables.addEventListener(this.elements.viewerContainer, 'dragover', (event) => {
+      this.handleViewerDragOver(event);
+    });
+    this.disposables.addEventListener(this.elements.viewerContainer, 'dragleave', (event) => {
+      this.handleViewerDragLeave(event);
+    });
+    this.disposables.addEventListener(this.elements.viewerContainer, 'drop', (event) => {
+      this.handleViewerDrop(event);
+    });
     this.resizeObserver = new ResizeObserver(() => {
       this.syncTileSizing();
       this.endHoverPreviewSession();
@@ -95,6 +131,7 @@ export class ChannelThumbnailStrip implements Disposable {
 
     this.disposed = true;
     this.endHoverPreviewSession();
+    this.finishChannelThumbnailDrag(false);
     this.disposables.dispose();
   }
 
@@ -168,6 +205,13 @@ export class ChannelThumbnailStrip implements Disposable {
   private render(): void {
     this.endHoverPreviewSession();
     const disabled = this.isLoading || this.items.length === 0;
+    if (
+      disabled ||
+      (this.channelThumbnailDragState && !this.items.some((item) => item.value === this.channelThumbnailDragState?.value))
+    ) {
+      this.finishChannelThumbnailDrag(false);
+    }
+
     const shouldRestoreFocus = !disabled && isFocusWithinElement(this.elements.channelThumbnailStrip);
     this.elements.channelThumbnailStrip.classList.toggle('is-disabled', disabled);
     this.callbacks.onCollapsedContentAvailabilityChange(this.items.length > 0);
@@ -196,6 +240,7 @@ export class ChannelThumbnailStrip implements Disposable {
       }
     );
     this.syncTileSizing();
+    this.applyChannelThumbnailDragState();
 
     if (shouldRestoreFocus) {
       focusSelectedTile(this.elements.channelThumbnailStrip);
@@ -210,6 +255,118 @@ export class ChannelThumbnailStrip implements Disposable {
     this.selectedValue = value;
     this.render();
     this.callbacks.onChannelViewChange(value);
+  }
+
+  private handleThumbnailDragStart(event: DragEvent): void {
+    const tile = findClosestListRow(event.target, 'channelValue') as HTMLButtonElement | null;
+    const value = tile?.dataset.channelValue ?? '';
+    if (!tile || tile.disabled || this.isLoading || !this.items.some((item) => item.value === value)) {
+      event.preventDefault();
+      return;
+    }
+
+    this.endHoverPreviewSession();
+    this.channelThumbnailDragState = {
+      value,
+      tile
+    };
+    tile.classList.add('channel-thumbnail-tile--dragging');
+
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'copy';
+      safelySetDragData(event.dataTransfer, CHANNEL_THUMBNAIL_DRAG_MIME, value);
+      safelySetDragData(event.dataTransfer, 'text/plain', tile.title || value);
+    }
+  }
+
+  private handleViewerDragEnter(event: DragEvent): void {
+    if (!this.canAcceptChannelThumbnailDrop(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.setViewerDropTarget(true);
+  }
+
+  private handleViewerDragOver(event: DragEvent): void {
+    if (!this.canAcceptChannelThumbnailDrop(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+    this.setViewerDropTarget(true);
+  }
+
+  private handleViewerDragLeave(event: DragEvent): void {
+    if (!this.channelThumbnailDragState) {
+      return;
+    }
+
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && this.elements.viewerContainer.contains(nextTarget)) {
+      return;
+    }
+
+    this.setViewerDropTarget(false);
+  }
+
+  private handleViewerDrop(event: DragEvent): void {
+    if (!this.canAcceptChannelThumbnailDrop(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    const value = this.channelThumbnailDragState?.value ?? '';
+    this.finishChannelThumbnailDrag(true);
+    this.chooseValue(value);
+  }
+
+  private canAcceptChannelThumbnailDrop(event: DragEvent): boolean {
+    const dragState = this.channelThumbnailDragState;
+    if (!dragState || this.isLoading || !this.items.some((item) => item.value === dragState.value)) {
+      return false;
+    }
+
+    const dataTransfer = event.dataTransfer;
+    if (!dataTransfer) {
+      return true;
+    }
+
+    const types = Array.from(dataTransfer.types ?? []);
+    return types.length === 0 || types.includes(CHANNEL_THUMBNAIL_DRAG_MIME) || !types.includes('Files');
+  }
+
+  private finishChannelThumbnailDrag(suppressClick: boolean): void {
+    if (this.channelThumbnailDragState) {
+      this.channelThumbnailDragState.tile.classList.remove('channel-thumbnail-tile--dragging');
+      this.channelThumbnailDragState = null;
+      if (suppressClick) {
+        this.suppressClickUntilMs = performance.now() + DRAG_SUPPRESS_CLICK_MS;
+      }
+    }
+
+    this.setViewerDropTarget(false);
+    this.applyChannelThumbnailDragState();
+  }
+
+  private applyChannelThumbnailDragState(): void {
+    const draggingValue = this.channelThumbnailDragState?.value ?? null;
+    for (const tile of this.elements.channelThumbnailStrip.querySelectorAll<HTMLButtonElement>('.channel-thumbnail-tile')) {
+      tile.classList.toggle(
+        'channel-thumbnail-tile--dragging',
+        Boolean(draggingValue && tile.dataset.channelValue === draggingValue)
+      );
+    }
+  }
+
+  private setViewerDropTarget(active: boolean): void {
+    this.elements.viewerContainer.classList.toggle('is-channel-thumbnail-drop-target', active);
   }
 
   private handleKeyDown(event: KeyboardEvent): void {
@@ -475,6 +632,7 @@ function updateChannelThumbnailTile(
   tile.setAttribute('aria-selected', options.selected ? 'true' : 'false');
   tile.setAttribute('aria-disabled', options.disabled ? 'true' : 'false');
   tile.disabled = options.disabled;
+  tile.draggable = !options.disabled;
   tile.title = item.label;
 
   const nextPreview = createChannelThumbnailPreview(item.thumbnailDataUrl);
@@ -582,4 +740,12 @@ function readCssPixels(value: string, fallback: number): number {
 
 function formatPixels(value: number): string {
   return `${Math.max(0, Math.round(value * 100) / 100)}px`;
+}
+
+function safelySetDragData(dataTransfer: DataTransfer, type: string, value: string): void {
+  try {
+    dataTransfer.setData(type, value);
+  } catch {
+    // Some browsers restrict custom drag data in edge cases; the in-memory drag state is authoritative.
+  }
 }
