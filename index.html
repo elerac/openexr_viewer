@@ -331,11 +331,11 @@
                   <tbody>
                     <tr data-stokes-group="aolp">
                       <th scope="row">AoLP</th>
-                      <td><select id="stokes-default-aolp-colormap-select" data-stokes-control="colormap"></select></td>
-                      <td><input id="stokes-default-aolp-vmin-input" data-stokes-control="vmin" type="number" step="any" aria-label="AoLP vmin" /></td>
-                      <td><input id="stokes-default-aolp-vmax-input" data-stokes-control="vmax" type="number" step="any" aria-label="AoLP vmax" /></td>
-                      <td><input id="stokes-default-aolp-zero-center-checkbox" data-stokes-control="zeroCentered" type="checkbox" aria-label="AoLP zero center" /></td>
-                      <td class="app-menu-setting-modulation-cell">
+                      <td data-label="Colormap"><select id="stokes-default-aolp-colormap-select" data-stokes-control="colormap"></select></td>
+                      <td data-label="vmin"><input id="stokes-default-aolp-vmin-input" data-stokes-control="vmin" type="number" step="any" aria-label="AoLP vmin" /></td>
+                      <td data-label="vmax"><input id="stokes-default-aolp-vmax-input" data-stokes-control="vmax" type="number" step="any" aria-label="AoLP vmax" /></td>
+                      <td data-label="Zero Center"><input id="stokes-default-aolp-zero-center-checkbox" data-stokes-control="zeroCentered" type="checkbox" aria-label="AoLP zero center" /></td>
+                      <td class="app-menu-setting-modulation-cell" data-label="Modulation">
                         <label class="app-menu-setting-checkbox">
                           <input id="stokes-default-aolp-modulation-checkbox" data-stokes-control="modulation" type="checkbox" />
                           On
@@ -348,19 +348,19 @@
                     </tr>
                     <tr data-stokes-group="degree">
                       <th scope="row">Degree</th>
-                      <td><select id="stokes-default-degree-colormap-select" data-stokes-control="colormap"></select></td>
-                      <td><input id="stokes-default-degree-vmin-input" data-stokes-control="vmin" type="number" step="any" aria-label="Degree vmin" /></td>
-                      <td><input id="stokes-default-degree-vmax-input" data-stokes-control="vmax" type="number" step="any" aria-label="Degree vmax" /></td>
-                      <td><input id="stokes-default-degree-zero-center-checkbox" data-stokes-control="zeroCentered" type="checkbox" aria-label="Degree zero center" /></td>
-                      <td><span class="app-menu-setting-na">N/A</span></td>
+                      <td data-label="Colormap"><select id="stokes-default-degree-colormap-select" data-stokes-control="colormap"></select></td>
+                      <td data-label="vmin"><input id="stokes-default-degree-vmin-input" data-stokes-control="vmin" type="number" step="any" aria-label="Degree vmin" /></td>
+                      <td data-label="vmax"><input id="stokes-default-degree-vmax-input" data-stokes-control="vmax" type="number" step="any" aria-label="Degree vmax" /></td>
+                      <td data-label="Zero Center"><input id="stokes-default-degree-zero-center-checkbox" data-stokes-control="zeroCentered" type="checkbox" aria-label="Degree zero center" /></td>
+                      <td data-label="Modulation"><span class="app-menu-setting-na">N/A</span></td>
                     </tr>
                     <tr data-stokes-group="cop">
                       <th scope="row">CoP</th>
-                      <td><select id="stokes-default-cop-colormap-select" data-stokes-control="colormap"></select></td>
-                      <td><input id="stokes-default-cop-vmin-input" data-stokes-control="vmin" type="number" step="any" aria-label="CoP vmin" /></td>
-                      <td><input id="stokes-default-cop-vmax-input" data-stokes-control="vmax" type="number" step="any" aria-label="CoP vmax" /></td>
-                      <td><input id="stokes-default-cop-zero-center-checkbox" data-stokes-control="zeroCentered" type="checkbox" aria-label="CoP zero center" /></td>
-                      <td>
+                      <td data-label="Colormap"><select id="stokes-default-cop-colormap-select" data-stokes-control="colormap"></select></td>
+                      <td data-label="vmin"><input id="stokes-default-cop-vmin-input" data-stokes-control="vmin" type="number" step="any" aria-label="CoP vmin" /></td>
+                      <td data-label="vmax"><input id="stokes-default-cop-vmax-input" data-stokes-control="vmax" type="number" step="any" aria-label="CoP vmax" /></td>
+                      <td data-label="Zero Center"><input id="stokes-default-cop-zero-center-checkbox" data-stokes-control="zeroCentered" type="checkbox" aria-label="CoP zero center" /></td>
+                      <td data-label="Modulation">
                         <label class="app-menu-setting-checkbox">
                           <input id="stokes-default-cop-modulation-checkbox" data-stokes-control="modulation" type="checkbox" />
                           On
@@ -369,11 +369,11 @@
                     </tr>
                     <tr data-stokes-group="top">
                       <th scope="row">ToP</th>
-                      <td><select id="stokes-default-top-colormap-select" data-stokes-control="colormap"></select></td>
-                      <td><input id="stokes-default-top-vmin-input" data-stokes-control="vmin" type="number" step="any" aria-label="ToP vmin" /></td>
-                      <td><input id="stokes-default-top-vmax-input" data-stokes-control="vmax" type="number" step="any" aria-label="ToP vmax" /></td>
-                      <td><input id="stokes-default-top-zero-center-checkbox" data-stokes-control="zeroCentered" type="checkbox" aria-label="ToP zero center" /></td>
-                      <td>
+                      <td data-label="Colormap"><select id="stokes-default-top-colormap-select" data-stokes-control="colormap"></select></td>
+                      <td data-label="vmin"><input id="stokes-default-top-vmin-input" data-stokes-control="vmin" type="number" step="any" aria-label="ToP vmin" /></td>
+                      <td data-label="vmax"><input id="stokes-default-top-vmax-input" data-stokes-control="vmax" type="number" step="any" aria-label="ToP vmax" /></td>
+                      <td data-label="Zero Center"><input id="stokes-default-top-zero-center-checkbox" data-stokes-control="zeroCentered" type="checkbox" aria-label="ToP zero center" /></td>
+                      <td data-label="Modulation">
                         <label class="app-menu-setting-checkbox">
                           <input id="stokes-default-top-modulation-checkbox" data-stokes-control="modulation" type="checkbox" />
                           On
@@ -382,11 +382,11 @@
                     </tr>
                     <tr data-stokes-group="normalized">
                       <th scope="row">Normalized</th>
-                      <td><select id="stokes-default-normalized-colormap-select" data-stokes-control="colormap"></select></td>
-                      <td><input id="stokes-default-normalized-vmin-input" data-stokes-control="vmin" type="number" step="any" aria-label="Normalized vmin" /></td>
-                      <td><input id="stokes-default-normalized-vmax-input" data-stokes-control="vmax" type="number" step="any" aria-label="Normalized vmax" /></td>
-                      <td><input id="stokes-default-normalized-zero-center-checkbox" data-stokes-control="zeroCentered" type="checkbox" aria-label="Normalized zero center" /></td>
-                      <td><span class="app-menu-setting-na">N/A</span></td>
+                      <td data-label="Colormap"><select id="stokes-default-normalized-colormap-select" data-stokes-control="colormap"></select></td>
+                      <td data-label="vmin"><input id="stokes-default-normalized-vmin-input" data-stokes-control="vmin" type="number" step="any" aria-label="Normalized vmin" /></td>
+                      <td data-label="vmax"><input id="stokes-default-normalized-vmax-input" data-stokes-control="vmax" type="number" step="any" aria-label="Normalized vmax" /></td>
+                      <td data-label="Zero Center"><input id="stokes-default-normalized-zero-center-checkbox" data-stokes-control="zeroCentered" type="checkbox" aria-label="Normalized zero center" /></td>
+                      <td data-label="Modulation"><span class="app-menu-setting-na">N/A</span></td>
                     </tr>
                   </tbody>
                 </table>

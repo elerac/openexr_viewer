@@ -738,6 +738,104 @@ test('persists the cache budget and keeps open-file actions limited to reload an
   await expect(page.getByRole('button', { name: /Pin cache|Unpin cache/ })).toHaveCount(0);
 });
 
+test('keeps Stokes Defaults table columns visible in Settings on desktop', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await gotoViewerApp(page);
+
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await expect(page.locator('#settings-dialog')).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const dialog = document.getElementById('settings-dialog');
+    const wrap = document.querySelector('#stokes-default-settings-control .app-menu-setting-table-wrap');
+    const table = document.getElementById('stokes-default-settings-table');
+    if (!(dialog instanceof HTMLElement) || !(wrap instanceof HTMLElement) || !(table instanceof HTMLTableElement)) {
+      throw new Error('Missing Stokes Defaults layout elements.');
+    }
+
+    const wrapRect = wrap.getBoundingClientRect();
+    const clippedHeaders = Array.from(table.querySelectorAll('thead th'))
+      .filter((header) => {
+        const rect = header.getBoundingClientRect();
+        return rect.left < wrapRect.left - 1 || rect.right > wrapRect.right + 1;
+      })
+      .map((header) => header.textContent?.trim() ?? '');
+
+    return {
+      dialogWidth: dialog.getBoundingClientRect().width,
+      wrapClientWidth: wrap.clientWidth,
+      wrapScrollWidth: wrap.scrollWidth,
+      clippedHeaders
+    };
+  });
+
+  expect(layout.dialogWidth).toBeGreaterThanOrEqual(680);
+  expect(layout.wrapScrollWidth).toBeLessThanOrEqual(layout.wrapClientWidth + 1);
+  expect(layout.clippedHeaders).toEqual([]);
+});
+
+test('stacks Stokes Defaults settings on narrow viewports without horizontal clipping', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 740 });
+  await gotoViewerApp(page);
+
+  await page.locator('#settings-dialog-button').dispatchEvent('click');
+  await expect(page.locator('#settings-dialog')).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const wrap = document.querySelector('#stokes-default-settings-control .app-menu-setting-table-wrap');
+    const table = document.getElementById('stokes-default-settings-table');
+    if (!(wrap instanceof HTMLElement) || !(table instanceof HTMLTableElement)) {
+      throw new Error('Missing Stokes Defaults layout elements.');
+    }
+
+    const targetControlIds = [
+      'stokes-default-aolp-vmax-input',
+      'stokes-default-aolp-zero-center-checkbox',
+      'stokes-default-aolp-modulation-checkbox',
+      'stokes-default-aolp-modulation-mode-select',
+      'stokes-default-degree-vmax-input',
+      'stokes-default-degree-zero-center-checkbox',
+      'stokes-default-cop-vmax-input',
+      'stokes-default-cop-zero-center-checkbox',
+      'stokes-default-cop-modulation-checkbox',
+      'stokes-default-top-vmax-input',
+      'stokes-default-top-zero-center-checkbox',
+      'stokes-default-top-modulation-checkbox',
+      'stokes-default-normalized-vmax-input',
+      'stokes-default-normalized-zero-center-checkbox'
+    ];
+    const wrapRect = wrap.getBoundingClientRect();
+    const clippedControls = targetControlIds.filter((id) => {
+      const element = document.getElementById(id);
+      if (!(element instanceof HTMLElement)) {
+        throw new Error(`Missing Stokes Defaults control: ${id}`);
+      }
+
+      const rect = element.getBoundingClientRect();
+      return rect.left < wrapRect.left - 1 || rect.right > wrapRect.right + 1;
+    });
+    const responsiveLabels = Array.from(table.querySelectorAll<HTMLTableCellElement>('tbody td[data-label]'))
+      .map((cell) => {
+        const content = getComputedStyle(cell, '::before').content;
+        return content.replace(/^"|"$/g, '');
+      })
+      .filter((label) => label === 'vmax' || label === 'Zero Center' || label === 'Modulation');
+
+    return {
+      tableDisplay: getComputedStyle(table).display,
+      wrapClientWidth: wrap.clientWidth,
+      wrapScrollWidth: wrap.scrollWidth,
+      clippedControls,
+      responsiveLabels: Array.from(new Set(responsiveLabels))
+    };
+  });
+
+  expect(layout.tableDisplay).toBe('grid');
+  expect(layout.wrapScrollWidth).toBeLessThanOrEqual(layout.wrapClientWidth + 1);
+  expect(layout.clippedControls).toEqual([]);
+  expect(layout.responsiveLabels).toEqual(expect.arrayContaining(['vmax', 'Zero Center', 'Modulation']));
+});
+
 test('persists Spectrum lattice as animated idle and frozen active chrome', async ({ page }) => {
   await installSpectrumLatticeRenderProbe(page);
   await gotoViewerApp(page);
