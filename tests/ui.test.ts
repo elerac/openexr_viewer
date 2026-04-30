@@ -4959,6 +4959,32 @@ describe('opened files actions', () => {
     expect(document.querySelector('#opened-files-list .opened-file-rename-input')).toBeNull();
   });
 
+  it('does not reselect the active open-file row before double-click rename', () => {
+    installUiFixture();
+
+    const onOpenedImageSelected = vi.fn();
+    const onOpenedImageDisplayNameChange = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected, onOpenedImageDisplayNameChange }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+
+    const row = document.querySelector('#opened-files-list .opened-file-row') as HTMLDivElement;
+    const label = row.querySelector('.opened-file-label') as HTMLSpanElement;
+    row.click();
+
+    expect(onOpenedImageSelected).not.toHaveBeenCalled();
+
+    label.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, button: 0 }));
+
+    const input = document.querySelector('#opened-files-list .opened-file-rename-input') as HTMLInputElement;
+    expect(input).toBeInstanceOf(HTMLInputElement);
+    expect(document.activeElement).toBe(input);
+
+    input.value = '  Hero Plate.exr  ';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    expect(onOpenedImageDisplayNameChange).toHaveBeenCalledWith('session-1', 'Hero Plate.exr');
+  });
+
   it('ignores double-click rename outside open-file labels', () => {
     installUiFixture();
 

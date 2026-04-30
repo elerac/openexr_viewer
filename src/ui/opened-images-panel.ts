@@ -466,6 +466,10 @@ export class OpenedImagesPanel implements Disposable {
     }
 
     this.elements.openedImagesSelect.value = sessionId;
+    if (sessionId === this.openedImagesActiveId) {
+      return;
+    }
+
     this.openedImagesActiveId = sessionId;
     this.renderOpenedFileRows();
     this.callbacks.onOpenedImageSelected(sessionId);
