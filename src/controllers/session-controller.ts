@@ -1,4 +1,11 @@
 import { createAbortError, isAbortError, throwIfAborted, type Disposable } from '../lifecycle';
+import {
+  errorResource,
+  isPendingMatch,
+  pendingResource,
+  successResource,
+  type AsyncResource
+} from '../async-resource';
 import { ViewerAppCore } from '../app/viewer-app-core';
 import { buildLoadedSession, buildReloadedSession } from '../app/session-resource';
 import { selectActiveSession } from '../app/viewer-app-selectors';
@@ -34,6 +41,11 @@ const LOAD_CATEGORY_GALLERY = 'gallery';
 const LOAD_CATEGORY_RELOAD_SESSION = 'reload-session';
 const LOAD_CATEGORY_RELOAD_ALL = 'reload-all';
 
+interface PendingLoadResource {
+  key: string;
+  requestId: number;
+}
+
 export interface FolderLoadOptions {
   overrideLimits?: boolean;
 }
@@ -54,7 +66,8 @@ export class SessionController implements Disposable {
   private readonly getFitInsets: SessionControllerDependencies['getFitInsets'];
 
   private readonly abortController = new AbortController();
-  private queuedLoadCount = 0;
+  private readonly loadResourcesByKey = new Map<string, AsyncResource<void>>();
+  private nextLoadRequestId = 1;
   private nextLoadGroupId = 1;
   private disposed = false;
 
@@ -326,32 +339,61 @@ export class SessionController implements Disposable {
     options: LoadQueueOptions,
     clearError = true
   ): Promise<void> {
-    this.beginQueuedLoad(clearError);
-    return this.loadQueue.enqueue(task, options).catch((error) => {
+    const loadResource = this.beginQueuedLoad(clearError);
+    return this.loadQueue.enqueue(task, options).then(() => {
+      this.finishQueuedLoad(loadResource);
+    }).catch((error) => {
+      this.finishQueuedLoad(loadResource, error);
       if (isAbortError(error)) {
         return;
       }
       throw error;
-    }).finally(() => {
-      this.finishQueuedLoad();
     });
   }
 
-  private beginQueuedLoad(clearError: boolean): void {
-    this.queuedLoadCount += 1;
-    if (this.queuedLoadCount === 1) {
+  private beginQueuedLoad(clearError: boolean): PendingLoadResource {
+    const requestId = this.nextLoadRequestId;
+    this.nextLoadRequestId += 1;
+    const key = `load:${requestId}`;
+    const hadPendingLoads = this.hasPendingLoadResources();
+    this.loadResourcesByKey.set(key, pendingResource(key, requestId));
+    if (!hadPendingLoads) {
       this.core.dispatch({ type: 'loadingSet', loading: true });
     }
     if (clearError) {
       this.core.dispatch({ type: 'errorSet', message: null });
     }
+    return { key, requestId };
   }
 
-  private finishQueuedLoad(): void {
-    this.queuedLoadCount = Math.max(0, this.queuedLoadCount - 1);
-    if (this.queuedLoadCount === 0) {
+  private finishQueuedLoad(loadResource: PendingLoadResource, error?: unknown): void {
+    const currentResource = this.loadResourcesByKey.get(loadResource.key);
+    if (
+      !currentResource ||
+      !isPendingMatch(currentResource, loadResource.key, loadResource.requestId)
+    ) {
+      return;
+    }
+
+    this.loadResourcesByKey.set(
+      loadResource.key,
+      error === undefined
+        ? successResource(loadResource.key, undefined)
+        : errorResource(loadResource.key, error)
+    );
+    this.loadResourcesByKey.delete(loadResource.key);
+    if (!this.hasPendingLoadResources()) {
       this.core.dispatch({ type: 'loadingSet', loading: false });
     }
+  }
+
+  private hasPendingLoadResources(): boolean {
+    for (const resource of this.loadResourcesByKey.values()) {
+      if (resource.status === 'pending') {
+        return true;
+      }
+    }
+    return false;
   }
 
   private cancelBackgroundLoads(message: string): void {

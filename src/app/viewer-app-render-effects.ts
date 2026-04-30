@@ -1,8 +1,10 @@
 import { WebGlExrRenderer } from '../renderer';
 import { RenderCacheService } from '../services/render-cache-service';
+import { buildDisplayLuminanceRevisionKey } from '../display-texture';
 import { ViewerUi } from '../ui/viewer-ui';
 import { ViewerAppCore } from './viewer-app-core';
 import { ViewerRenderInvalidationFlags } from './viewer-app-render';
+import { selectActiveDisplayLuminanceRange } from './viewer-app-selectors';
 import type { ViewerRenderTransition } from './viewer-app-types';
 
 export function applyRenderEffects(
@@ -70,6 +72,7 @@ export function applyRenderEffects(
       core.dispatch({
         type: 'displayLuminanceRangeResolved',
         requestId,
+        requestKey: snapshot.displayRangeRequest.requestKey,
         sessionId: activeSession.id,
         activeLayer: state.sessionState.activeLayer,
         displaySelection: state.sessionState.displaySelection,
@@ -95,6 +98,7 @@ export function applyRenderEffects(
       core.dispatch({
         type: 'imageStatsResolved',
         requestId: null,
+        requestKey: snapshot.imageStatsRequest.requestKey,
         sessionId: activeSession.id,
         activeLayer: state.sessionState.activeLayer,
         visualizationMode: state.sessionState.visualizationMode,
@@ -126,6 +130,7 @@ export function applyRenderEffects(
       core.dispatch({
         type: 'autoExposureResolved',
         requestId: null,
+        requestKey: snapshot.autoExposureRequest.requestKey,
         sessionId: activeSession.id,
         activeLayer: state.sessionState.activeLayer,
         visualizationMode: state.sessionState.visualizationMode,
@@ -166,9 +171,10 @@ function synchronizeCachedDisplayRange(
   sessionState: ViewerRenderTransition['state']['sessionState']
 ): void {
   const cachedRange = renderCache.getCachedLuminanceRange(sessionId, sessionState);
+  const activeRange = selectActiveDisplayLuminanceRange(core.getState());
   if (
-    cachedRange?.min === core.getState().activeDisplayLuminanceRange?.min &&
-    cachedRange?.max === core.getState().activeDisplayLuminanceRange?.max
+    cachedRange?.min === activeRange?.min &&
+    cachedRange?.max === activeRange?.max
   ) {
     return;
   }
@@ -176,6 +182,7 @@ function synchronizeCachedDisplayRange(
   core.dispatch({
     type: 'displayLuminanceRangeResolved',
     requestId: null,
+    requestKey: `${sessionId}:${buildDisplayLuminanceRevisionKey(sessionState)}`,
     sessionId,
     activeLayer: sessionState.activeLayer,
     displaySelection: sessionState.displaySelection,

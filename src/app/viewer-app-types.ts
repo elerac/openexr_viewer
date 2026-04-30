@@ -1,4 +1,5 @@
 import type { ChannelViewThumbnailItem } from '../channel-view-items';
+import type { AsyncResource, ViewerError } from '../async-resource';
 import type { AutoExposureResult } from '../auto-exposure';
 import type { ColormapLut, ColormapRegistry } from '../colormaps';
 import type { ProbeColorPreview } from '../probe';
@@ -120,23 +121,14 @@ export interface ViewerAppState {
   isLoading: boolean;
   colormapRegistry: ColormapRegistry | null;
   defaultColormapId: string;
-  activeColormapLut: ColormapLut | null;
-  loadedColormapId: string | null;
-  activeDisplayLuminanceRange: DisplayLuminanceRange | null;
-  activeImageStats: ImageStats | null;
+  colormapLutResource: AsyncResource<ColormapLut>;
+  displayRangeResource: AsyncResource<DisplayLuminanceRange | null>;
+  imageStatsResource: AsyncResource<ImageStats | null>;
+  autoExposureResource: AsyncResource<AutoExposureResult | null>;
   pendingColormapActivation: PendingColormapActivation | null;
-  pendingColormapRequestId: number | null;
   pendingSelectionTransitionRequestId: number | null;
-  pendingDisplayRangeRequestId: number | null;
-  pendingDisplayRangeRequestKey: string | null;
-  pendingImageStatsRequestId: number | null;
-  pendingImageStatsRequestKey: string | null;
-  pendingAutoExposureRequestId: number | null;
-  pendingAutoExposureRequestKey: string | null;
-  pendingThumbnailTokensBySessionId: Record<string, number>;
-  thumbnailsBySessionId: Record<string, string | null>;
-  pendingChannelThumbnailTokensByRequestKey: Record<string, number>;
-  channelThumbnailsByRequestKey: Record<string, string | null>;
+  thumbnailsBySessionId: Record<string, AsyncResource<string | null>>;
+  channelThumbnailsByRequestKey: Record<string, AsyncResource<string | null>>;
   channelThumbnailLatestRequestKeyByContextKey: Record<string, string>;
   stokesDisplayRestoreStates: Record<string, RestorableVisualizationState>;
   stokesColormapDefaults: StokesColormapDefaultSettings;
@@ -154,9 +146,9 @@ export type ViewerIntent =
   | { type: 'autoExposurePercentileSet'; percentile: number }
   | { type: 'rulersVisibleSet'; enabled: boolean }
   | { type: 'colormapRegistryResolved'; registry: ColormapRegistry }
-  | { type: 'colormapLoadStarted'; requestId: number }
+  | { type: 'colormapLoadStarted'; requestId: number; colormapId: string }
   | { type: 'colormapLoadResolved'; requestId: number; colormapId: string; lut: ColormapLut }
-  | { type: 'colormapLoadFailed'; requestId: number; message: string }
+  | { type: 'colormapLoadFailed'; requestId: number; colormapId: string; error: ViewerError | Error | string }
   | { type: 'displaySelectionTransitionStarted'; requestId: number }
   | { type: 'displaySelectionTransitionFinished'; requestId: number }
   | { type: 'exposureSet'; exposureEv: number }
@@ -214,6 +206,7 @@ export type ViewerIntent =
   | {
       type: 'displayLuminanceRangeResolved';
       requestId: number | null;
+      requestKey: string;
       sessionId: string;
       activeLayer: number;
       displaySelection: ViewerSessionState['displaySelection'];
@@ -222,6 +215,7 @@ export type ViewerIntent =
   | {
       type: 'imageStatsResolved';
       requestId: number | null;
+      requestKey: string;
       sessionId: string;
       activeLayer: number;
       visualizationMode: ViewerSessionState['visualizationMode'];
@@ -231,6 +225,7 @@ export type ViewerIntent =
   | {
       type: 'autoExposureResolved';
       requestId: number | null;
+      requestKey: string;
       sessionId: string;
       activeLayer: number;
       visualizationMode: ViewerSessionState['visualizationMode'];

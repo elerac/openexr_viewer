@@ -1,5 +1,6 @@
 import { cloneDisplayLuminanceRange } from '../../colormap-range';
 import { sameDisplaySelection } from '../../display-model';
+import { idleResource } from '../../async-resource';
 import { clampZoom } from '../../interaction/image-geometry';
 import {
   clampPanoramaHfov,
@@ -83,12 +84,9 @@ export function patchSessionState(
     sessionState: nextSessionState,
     interactionState,
     sessions: updateActiveSessionStoredState(state.sessions, state.activeSessionId, nextSessionState),
-    activeDisplayLuminanceRange: options.resetDisplayRangeContext ? null : state.activeDisplayLuminanceRange,
-    pendingDisplayRangeRequestId: options.resetDisplayRangeContext ? null : state.pendingDisplayRangeRequestId,
-    pendingDisplayRangeRequestKey: options.resetDisplayRangeContext ? null : state.pendingDisplayRangeRequestKey,
-    activeImageStats: resetImageStatsContext ? null : state.activeImageStats,
-    pendingImageStatsRequestId: resetImageStatsContext ? null : state.pendingImageStatsRequestId,
-    pendingImageStatsRequestKey: resetImageStatsContext ? null : state.pendingImageStatsRequestKey
+    displayRangeResource: options.resetDisplayRangeContext ? idleResource() : state.displayRangeResource,
+    imageStatsResource: resetImageStatsContext ? idleResource() : state.imageStatsResource,
+    autoExposureResource: resetImageStatsContext ? idleResource() : state.autoExposureResource
   };
 }
 
@@ -183,24 +181,18 @@ export function cloneRestorableVisualizationState(
 
 export function clearAnalysisContext(state: ViewerAppState): ViewerAppState {
   if (
-    state.activeDisplayLuminanceRange === null &&
-    state.activeImageStats === null &&
-    state.pendingDisplayRangeRequestId === null &&
-    state.pendingDisplayRangeRequestKey === null &&
-    state.pendingImageStatsRequestId === null &&
-    state.pendingImageStatsRequestKey === null
+    state.displayRangeResource.status === 'idle' &&
+    state.imageStatsResource.status === 'idle' &&
+    state.autoExposureResource.status === 'idle'
   ) {
     return state;
   }
 
   return {
     ...state,
-    activeDisplayLuminanceRange: null,
-    activeImageStats: null,
-    pendingDisplayRangeRequestId: null,
-    pendingDisplayRangeRequestKey: null,
-    pendingImageStatsRequestId: null,
-    pendingImageStatsRequestKey: null
+    displayRangeResource: idleResource(),
+    imageStatsResource: idleResource(),
+    autoExposureResource: idleResource()
   };
 }
 

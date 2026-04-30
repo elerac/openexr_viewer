@@ -1,3 +1,10 @@
+import {
+  errorResource,
+  isPendingMatch,
+  pendingResource,
+  successResource,
+  toViewerError
+} from '../../async-resource';
 import type { ViewerAppState, ViewerIntent } from '../viewer-app-types';
 import { patchSessionState, type ViewerReducerContext } from './shared';
 
@@ -30,27 +37,27 @@ export function resourceReducer(
     case 'colormapLoadStarted':
       return {
         ...state,
-        pendingColormapRequestId: intent.requestId
+        colormapLutResource: pendingResource(intent.colormapId, intent.requestId)
       };
     case 'colormapLoadResolved':
-      if (intent.requestId !== null && state.pendingColormapRequestId !== intent.requestId) {
+      if (intent.requestId !== null && !isPendingMatch(state.colormapLutResource, intent.colormapId, intent.requestId)) {
         return state;
       }
       return {
         ...state,
-        pendingColormapRequestId: null,
-        activeColormapLut: intent.lut,
-        loadedColormapId: intent.colormapId
+        colormapLutResource: successResource(intent.colormapId, intent.lut)
       };
-    case 'colormapLoadFailed':
-      if (intent.requestId !== null && state.pendingColormapRequestId !== intent.requestId) {
+    case 'colormapLoadFailed': {
+      if (intent.requestId !== null && !isPendingMatch(state.colormapLutResource, intent.colormapId, intent.requestId)) {
         return state;
       }
+      const error = toViewerError(intent.error, 'Failed to load colormap.');
       return {
         ...state,
-        pendingColormapRequestId: null,
-        errorMessage: intent.message
+        colormapLutResource: errorResource(intent.colormapId, error),
+        errorMessage: error.message
       };
+    }
     case 'displaySelectionTransitionStarted':
       return {
         ...state,

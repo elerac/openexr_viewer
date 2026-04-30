@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { successResource } from '../src/async-resource';
 import {
   createInterleavedChannelStorage,
   createPlanarChannelStorage
@@ -94,7 +95,7 @@ describe('display cache resource accounting', () => {
         ['R', { textureBytes: 24, materializedBytes: 12, lastAccessToken: 7 }]
       ])
     });
-    session.luminanceRangeByRevision.set('rev', { min: 0, max: 1 });
+    session.luminanceRangeByRevision.set('rev', successResource('a:rev', { min: 0, max: 1 }));
 
     clearSessionResources(session);
 

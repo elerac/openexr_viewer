@@ -4,6 +4,12 @@ import {
 } from '../../colormap-range';
 import { sameDisplaySelection } from '../../display-model';
 import {
+  idleResource,
+  isPendingMatch,
+  pendingResource,
+  successResource
+} from '../../async-resource';
+import {
   selectActiveSession,
   shouldAutoEnterColormapMode
 } from '../viewer-app-selectors';
@@ -43,20 +49,17 @@ export function analysisReducer(
     case 'displayRangeRequestStarted':
       return {
         ...state,
-        pendingDisplayRangeRequestId: intent.requestId,
-        pendingDisplayRangeRequestKey: intent.requestKey
+        displayRangeResource: pendingResource(intent.requestKey, intent.requestId)
       };
     case 'imageStatsRequestStarted':
       return {
         ...state,
-        pendingImageStatsRequestId: intent.requestId,
-        pendingImageStatsRequestKey: intent.requestKey
+        imageStatsResource: pendingResource(intent.requestKey, intent.requestId)
       };
     case 'autoExposureRequestStarted':
       return {
         ...state,
-        pendingAutoExposureRequestId: intent.requestId,
-        pendingAutoExposureRequestKey: intent.requestKey
+        autoExposureResource: pendingResource(intent.requestKey, intent.requestId)
       };
     case 'displayLuminanceRangeResolved':
       return reduceDisplayLuminanceRangeResolved(state, intent);
@@ -73,10 +76,12 @@ function reduceDisplayLuminanceRangeResolved(
   state: ViewerAppState,
   intent: Extract<ViewerIntent, { type: 'displayLuminanceRangeResolved' }>
 ): ViewerAppState {
-  if (intent.requestId !== null && state.pendingDisplayRangeRequestId !== intent.requestId) {
+  if (intent.requestId !== null && !isPendingMatch(state.displayRangeResource, intent.requestKey, intent.requestId)) {
     return state;
   }
 
+  const requestMatchesPending = intent.requestId !== null &&
+    isPendingMatch(state.displayRangeResource, intent.requestKey, intent.requestId);
   const activeSession = selectActiveSession(state);
   if (
     !activeSession ||
@@ -86,24 +91,13 @@ function reduceDisplayLuminanceRangeResolved(
   ) {
     return {
       ...state,
-      pendingDisplayRangeRequestId: intent.requestId === state.pendingDisplayRangeRequestId
-        ? null
-        : state.pendingDisplayRangeRequestId,
-      pendingDisplayRangeRequestKey: intent.requestId === state.pendingDisplayRangeRequestId
-        ? null
-        : state.pendingDisplayRangeRequestKey
+      displayRangeResource: requestMatchesPending ? idleResource() : state.displayRangeResource
     };
   }
 
   let nextState: ViewerAppState = {
     ...state,
-    activeDisplayLuminanceRange: intent.displayLuminanceRange,
-    pendingDisplayRangeRequestId: intent.requestId === state.pendingDisplayRangeRequestId
-      ? null
-      : state.pendingDisplayRangeRequestId,
-    pendingDisplayRangeRequestKey: intent.requestId === state.pendingDisplayRangeRequestId
-      ? null
-      : state.pendingDisplayRangeRequestKey
+    displayRangeResource: successResource(intent.requestKey, intent.displayLuminanceRange)
   };
 
   if (shouldAutoEnterColormapMode(nextState, intent.displayLuminanceRange)) {
@@ -142,11 +136,12 @@ function reduceImageStatsResolved(
   state: ViewerAppState,
   intent: Extract<ViewerIntent, { type: 'imageStatsResolved' }>
 ): ViewerAppState {
-  if (intent.requestId !== null && state.pendingImageStatsRequestId !== intent.requestId) {
+  if (intent.requestId !== null && !isPendingMatch(state.imageStatsResource, intent.requestKey, intent.requestId)) {
     return state;
   }
 
-  const requestMatchesPending = intent.requestId === state.pendingImageStatsRequestId;
+  const requestMatchesPending = intent.requestId !== null &&
+    isPendingMatch(state.imageStatsResource, intent.requestKey, intent.requestId);
   const activeSession = selectActiveSession(state);
   if (
     !activeSession ||
@@ -157,16 +152,13 @@ function reduceImageStatsResolved(
   ) {
     return {
       ...state,
-      pendingImageStatsRequestId: requestMatchesPending ? null : state.pendingImageStatsRequestId,
-      pendingImageStatsRequestKey: requestMatchesPending ? null : state.pendingImageStatsRequestKey
+      imageStatsResource: requestMatchesPending ? idleResource() : state.imageStatsResource
     };
   }
 
   return {
     ...state,
-    activeImageStats: intent.imageStats,
-    pendingImageStatsRequestId: requestMatchesPending ? null : state.pendingImageStatsRequestId,
-    pendingImageStatsRequestKey: requestMatchesPending ? null : state.pendingImageStatsRequestKey
+    imageStatsResource: successResource(intent.requestKey, intent.imageStats)
   };
 }
 
@@ -174,15 +166,17 @@ function reduceAutoExposureResolved(
   state: ViewerAppState,
   intent: Extract<ViewerIntent, { type: 'autoExposureResolved' }>
 ): ViewerAppState {
-  if (intent.requestId !== null && state.pendingAutoExposureRequestId !== intent.requestId) {
+  if (intent.requestId !== null && !isPendingMatch(state.autoExposureResource, intent.requestKey, intent.requestId)) {
     return state;
   }
 
-  const requestMatchesPending = intent.requestId === state.pendingAutoExposureRequestId;
+  const requestMatchesPending = intent.requestId !== null &&
+    isPendingMatch(state.autoExposureResource, intent.requestKey, intent.requestId);
   const nextState: ViewerAppState = {
     ...state,
-    pendingAutoExposureRequestId: requestMatchesPending ? null : state.pendingAutoExposureRequestId,
-    pendingAutoExposureRequestKey: requestMatchesPending ? null : state.pendingAutoExposureRequestKey
+    autoExposureResource: requestMatchesPending
+      ? idleResource()
+      : state.autoExposureResource
   };
 
   const activeSession = selectActiveSession(nextState);
@@ -198,7 +192,10 @@ function reduceAutoExposureResolved(
     return nextState;
   }
 
-  return patchSessionState(nextState, {
+  return patchSessionState({
+    ...nextState,
+    autoExposureResource: successResource(intent.requestKey, intent.autoExposure)
+  }, {
     exposureEv: intent.autoExposure?.exposureEv ?? 0
   });
 }

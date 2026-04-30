@@ -24,7 +24,10 @@ import {
   saveStoredStokesColormapDefaults
 } from '../stokes-colormap-settings';
 import { ViewerAppCore } from '../app/viewer-app-core';
-import { selectActiveSession } from '../app/viewer-app-selectors';
+import {
+  selectActiveSession,
+  selectColormapLutById
+} from '../app/viewer-app-selectors';
 import type { RestorableVisualizationState } from '../app/viewer-app-types';
 import type {
   DisplayLuminanceRange,
@@ -64,7 +67,8 @@ export class DisplayController implements Disposable {
       const requestId = this.core.issueRequestId();
       this.core.dispatch({
         type: 'colormapLoadStarted',
-        requestId
+        requestId,
+        colormapId: registry.defaultId
       });
       const lut = await loadColormapLut(registry, registry.defaultId, this.abortController.signal);
       this.throwIfStopped();
@@ -160,7 +164,8 @@ export class DisplayController implements Disposable {
         const colormapRequestId = this.core.issueRequestId();
         this.core.dispatch({
           type: 'colormapLoadStarted',
-          requestId: colormapRequestId
+          requestId: colormapRequestId,
+          colormapId
         });
         const lut = await loadColormapLut(latestState.colormapRegistry, colormapId, this.abortController.signal);
         this.throwIfStopped();
@@ -216,10 +221,8 @@ export class DisplayController implements Disposable {
       return;
     }
 
-    if (
-      state.sessionState.activeColormapId === colormapId &&
-      state.loadedColormapId === colormapId
-    ) {
+    const loadedLut = selectColormapLutById(state, colormapId);
+    if (state.sessionState.activeColormapId === colormapId && loadedLut) {
       return;
     }
 
@@ -227,11 +230,15 @@ export class DisplayController implements Disposable {
       type: 'activeColormapSet',
       colormapId
     });
+    if (loadedLut) {
+      return;
+    }
 
     const requestId = this.core.issueRequestId();
     this.core.dispatch({
       type: 'colormapLoadStarted',
-      requestId
+      requestId,
+      colormapId
     });
 
     try {
@@ -248,7 +255,8 @@ export class DisplayController implements Disposable {
         this.core.dispatch({
           type: 'colormapLoadFailed',
           requestId,
-          message: error instanceof Error ? error.message : 'Failed to load colormap.'
+          colormapId,
+          error: error instanceof Error ? error : 'Failed to load colormap.'
         });
       }
     }
@@ -387,7 +395,7 @@ export class DisplayController implements Disposable {
     }
 
     const state = this.core.getState();
-    if (state.loadedColormapId === state.sessionState.activeColormapId) {
+    if (selectColormapLutById(state, state.sessionState.activeColormapId)) {
       return;
     }
 
@@ -484,8 +492,7 @@ export class DisplayController implements Disposable {
   }
 
   getActiveColormapLutForState(colormapId: string): ColormapLut | null {
-    const state = this.core.getState();
-    return state.loadedColormapId === colormapId ? state.activeColormapLut : null;
+    return selectColormapLutById(this.core.getState(), colormapId);
   }
 
   dispose(): void {

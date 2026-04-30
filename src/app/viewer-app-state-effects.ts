@@ -144,8 +144,7 @@ function scheduleActiveChannelThumbnailGeneration(
       stokesAolpDegreeModulationMode: state.sessionState.stokesAolpDegreeModulationMode
     });
     if (
-      Object.prototype.hasOwnProperty.call(state.channelThumbnailsByRequestKey, requestKey) ||
-      Object.prototype.hasOwnProperty.call(state.pendingChannelThumbnailTokensByRequestKey, requestKey)
+      Object.prototype.hasOwnProperty.call(state.channelThumbnailsByRequestKey, requestKey)
     ) {
       continue;
     }

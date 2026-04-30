@@ -1,4 +1,5 @@
 import type { AutoExposureResult } from './auto-exposure';
+import type { AsyncResource } from './async-resource';
 import type { DecodedExrImage, DisplayLuminanceRange, ImageStats } from './types';
 
 export const DISPLAY_CACHE_BUDGET_STORAGE_KEY = 'openexr-viewer:display-cache-budget-mb:v1';
@@ -30,9 +31,9 @@ export interface SessionResourceEntry {
   pinned: boolean;
   decodedBytes: number;
   residentLayers: Map<number, ResidentLayerResourceEntry>;
-  luminanceRangeByRevision: Map<string, DisplayLuminanceRange | null>;
-  imageStatsByRevision: Map<string, ImageStats | null>;
-  autoExposureByRevision: Map<string, AutoExposureResult | null>;
+  luminanceRangeByRevision: Map<string, AsyncResource<DisplayLuminanceRange | null>>;
+  imageStatsByRevision: Map<string, AsyncResource<ImageStats | null>>;
+  autoExposureByRevision: Map<string, AsyncResource<AutoExposureResult | null>>;
 }
 
 export function createSessionResourceEntry(id: string): SessionResourceEntry {
@@ -41,9 +42,9 @@ export function createSessionResourceEntry(id: string): SessionResourceEntry {
     pinned: false,
     decodedBytes: 0,
     residentLayers: new Map<number, ResidentLayerResourceEntry>(),
-    luminanceRangeByRevision: new Map<string, DisplayLuminanceRange | null>(),
-    imageStatsByRevision: new Map<string, ImageStats | null>(),
-    autoExposureByRevision: new Map<string, AutoExposureResult | null>()
+    luminanceRangeByRevision: new Map<string, AsyncResource<DisplayLuminanceRange | null>>(),
+    imageStatsByRevision: new Map<string, AsyncResource<ImageStats | null>>(),
+    autoExposureByRevision: new Map<string, AsyncResource<AutoExposureResult | null>>()
   };
 }
 

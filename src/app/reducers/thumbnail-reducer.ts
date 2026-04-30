@@ -1,3 +1,9 @@
+import {
+  idleResource,
+  isPendingMatch,
+  pendingResource,
+  successResource
+} from '../../async-resource';
 import { buildChannelThumbnailSessionPrefix } from '../../channel-thumbnail-keys';
 import type { ViewerAppState, ViewerIntent } from '../viewer-app-types';
 import { sessionExists, type ViewerReducerContext } from './shared';
@@ -11,39 +17,47 @@ export function thumbnailReducer(
     case 'thumbnailRequested':
       return {
         ...state,
-        pendingThumbnailTokensBySessionId: {
-          ...state.pendingThumbnailTokensBySessionId,
-          [intent.sessionId]: intent.token
+        thumbnailsBySessionId: {
+          ...state.thumbnailsBySessionId,
+          [intent.sessionId]: pendingResource(intent.sessionId, intent.token)
         }
       };
     case 'thumbnailReady':
-      if (state.pendingThumbnailTokensBySessionId[intent.sessionId] !== intent.token) {
+      if (!isPendingMatch(
+        state.thumbnailsBySessionId[intent.sessionId] ?? idleResource(),
+        intent.sessionId,
+        intent.token
+      )) {
         return state;
       }
       return {
         ...state,
         thumbnailsBySessionId: {
           ...state.thumbnailsBySessionId,
-          [intent.sessionId]: intent.thumbnailDataUrl
+          [intent.sessionId]: successResource(intent.sessionId, intent.thumbnailDataUrl)
         }
       };
     case 'channelThumbnailRequested':
       return {
         ...state,
-        pendingChannelThumbnailTokensByRequestKey: {
-          ...state.pendingChannelThumbnailTokensByRequestKey,
-          [intent.requestKey]: intent.token
+        channelThumbnailsByRequestKey: {
+          ...state.channelThumbnailsByRequestKey,
+          [intent.requestKey]: pendingResource(intent.requestKey, intent.token)
         }
       };
     case 'channelThumbnailReady':
-      if (state.pendingChannelThumbnailTokensByRequestKey[intent.requestKey] !== intent.token) {
+      if (!isPendingMatch(
+        state.channelThumbnailsByRequestKey[intent.requestKey] ?? idleResource(),
+        intent.requestKey,
+        intent.token
+      )) {
         return state;
       }
       return {
         ...state,
         channelThumbnailsByRequestKey: {
           ...state.channelThumbnailsByRequestKey,
-          [intent.requestKey]: intent.thumbnailDataUrl
+          [intent.requestKey]: successResource(intent.requestKey, intent.thumbnailDataUrl)
         },
         channelThumbnailLatestRequestKeyByContextKey: {
           ...state.channelThumbnailLatestRequestKeyByContextKey,
@@ -64,9 +78,7 @@ export function thumbnailReducer(
     case 'allSessionsClosed':
       return {
         ...state,
-        pendingThumbnailTokensBySessionId: {},
         thumbnailsBySessionId: {},
-        pendingChannelThumbnailTokensByRequestKey: {},
         channelThumbnailsByRequestKey: {},
         channelThumbnailLatestRequestKeyByContextKey: {}
       };
@@ -80,15 +92,10 @@ function removeThumbnailStateForSession(state: ViewerAppState, sessionId: string
     [sessionId]: _removedThumb,
     ...thumbnailsBySessionId
   } = state.thumbnailsBySessionId;
-  const {
-    [sessionId]: _removedToken,
-    ...pendingThumbnailTokensBySessionId
-  } = state.pendingThumbnailTokensBySessionId;
 
   return {
     ...state,
     thumbnailsBySessionId,
-    pendingThumbnailTokensBySessionId,
     ...pruneChannelThumbnailStateForSession(state, sessionId)
   };
 }
@@ -96,22 +103,16 @@ function removeThumbnailStateForSession(state: ViewerAppState, sessionId: string
 function pruneChannelThumbnailStateForSession(
   state: Pick<
     ViewerAppState,
-    | 'pendingChannelThumbnailTokensByRequestKey'
     | 'channelThumbnailsByRequestKey'
     | 'channelThumbnailLatestRequestKeyByContextKey'
   >,
   sessionId: string
 ): Pick<
   ViewerAppState,
-  | 'pendingChannelThumbnailTokensByRequestKey'
   | 'channelThumbnailsByRequestKey'
   | 'channelThumbnailLatestRequestKeyByContextKey'
 > {
   const sessionPrefix = buildChannelThumbnailSessionPrefix(sessionId);
-  const pendingChannelThumbnailTokensByRequestKey = Object.fromEntries(
-    Object.entries(state.pendingChannelThumbnailTokensByRequestKey)
-      .filter(([requestKey]) => !requestKey.startsWith(sessionPrefix))
-  );
   const channelThumbnailsByRequestKey = Object.fromEntries(
     Object.entries(state.channelThumbnailsByRequestKey)
       .filter(([requestKey]) => !requestKey.startsWith(sessionPrefix))
@@ -123,7 +124,6 @@ function pruneChannelThumbnailStateForSession(
   );
 
   return {
-    pendingChannelThumbnailTokensByRequestKey,
     channelThumbnailsByRequestKey,
     channelThumbnailLatestRequestKeyByContextKey
   };

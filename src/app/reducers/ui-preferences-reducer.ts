@@ -1,4 +1,5 @@
 import { normalizeAutoExposurePercentile } from '../../auto-exposure';
+import { idleResource } from '../../async-resource';
 import type { ViewerAppState, ViewerIntent } from '../viewer-app-types';
 import type { ViewerReducerContext } from './shared';
 
@@ -17,16 +18,14 @@ export function uiPreferencesReducer(
       return state.autoExposureEnabled === intent.enabled ? state : {
         ...state,
         autoExposureEnabled: intent.enabled,
-        pendingAutoExposureRequestId: intent.enabled ? state.pendingAutoExposureRequestId : null,
-        pendingAutoExposureRequestKey: intent.enabled ? state.pendingAutoExposureRequestKey : null
+        autoExposureResource: intent.enabled ? state.autoExposureResource : idleResource()
       };
     case 'autoExposurePercentileSet': {
       const percentile = normalizeAutoExposurePercentile(intent.percentile);
       return state.autoExposurePercentile === percentile ? state : {
         ...state,
         autoExposurePercentile: percentile,
-        pendingAutoExposureRequestId: null,
-        pendingAutoExposureRequestKey: null
+        autoExposureResource: idleResource()
       };
     }
     case 'rulersVisibleSet':

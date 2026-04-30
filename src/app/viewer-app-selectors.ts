@@ -1,10 +1,11 @@
 import { buildChannelViewItems } from '../channel-view-items';
+import { getSuccessValue, idleResource } from '../async-resource';
 import { cloneDisplaySelection, sameDisplaySelection } from '../display-model';
 import {
   serializeChannelThumbnailContextKey,
   serializeChannelThumbnailRequestKey
 } from '../channel-thumbnail-keys';
-import { getColormapOptions } from '../colormaps';
+import { getColormapOptions, type ColormapLut } from '../colormaps';
 import {
   getStokesDegreeModulationLabel,
   isStokesDegreeModulationParameter
@@ -12,6 +13,7 @@ import {
 import type {
   DisplayLuminanceRange,
   ExportImageBatchTarget,
+  ImageStats,
   OpenedImageSession,
   ViewerSessionState
 } from '../types';
@@ -31,6 +33,24 @@ export function selectActiveSession(state: ViewerAppState): OpenedImageSession |
   return state.sessions.find((session) => session.id === state.activeSessionId) ?? null;
 }
 
+export function selectColormapLutById(state: ViewerAppState, colormapId: string): ColormapLut | null {
+  return state.colormapLutResource.status === 'success' && state.colormapLutResource.key === colormapId
+    ? state.colormapLutResource.value
+    : null;
+}
+
+export function selectActiveColormapLut(state: ViewerAppState): ColormapLut | null {
+  return selectColormapLutById(state, state.sessionState.activeColormapId);
+}
+
+export function selectActiveDisplayLuminanceRange(state: ViewerAppState): DisplayLuminanceRange | null {
+  return getSuccessValue(state.displayRangeResource) ?? null;
+}
+
+export function selectActiveImageStats(state: ViewerAppState): ImageStats | null {
+  return getSuccessValue(state.imageStatsResource) ?? null;
+}
+
 export function buildOpenedImageOptions(state: ViewerAppState): ViewerOpenedImageOption[] {
   const sources = state.sessions.map((session) => ({
     fallbackLabel: session.displayName,
@@ -43,7 +63,7 @@ export function buildOpenedImageOptions(state: ViewerAppState): ViewerOpenedImag
     label: labels[index] ?? session.displayName,
     sizeBytes: session.fileSizeBytes,
     sourceDetail: sources[index]?.sourceDetail ?? session.displayName,
-    thumbnailDataUrl: state.thumbnailsBySessionId[session.id] ?? null,
+    thumbnailDataUrl: getSuccessValue(state.thumbnailsBySessionId[session.id] ?? idleResource()) ?? null,
     thumbnailAspectRatio: resolveThumbnailAspectRatio(session.decoded.width, session.decoded.height)
   }));
 }
@@ -162,10 +182,10 @@ export function buildChannelThumbnailItems(state: ViewerAppState): ViewerChannel
     );
     const fallbackRequestKey = state.channelThumbnailLatestRequestKeyByContextKey[contextKey] ?? null;
     const exactThumbnailDataUrl = Object.prototype.hasOwnProperty.call(state.channelThumbnailsByRequestKey, requestKey)
-      ? state.channelThumbnailsByRequestKey[requestKey] ?? null
+      ? getSuccessValue(state.channelThumbnailsByRequestKey[requestKey] ?? idleResource()) ?? null
       : null;
     const fallbackThumbnailDataUrl = fallbackRequestKey
-      ? state.channelThumbnailsByRequestKey[fallbackRequestKey] ?? null
+      ? getSuccessValue(state.channelThumbnailsByRequestKey[fallbackRequestKey] ?? idleResource()) ?? null
       : null;
 
     return {

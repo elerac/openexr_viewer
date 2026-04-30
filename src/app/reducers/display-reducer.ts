@@ -8,6 +8,7 @@ import {
   cloneDisplaySelection,
   sameDisplaySelection
 } from '../../display-model';
+import { getSuccessValue } from '../../async-resource';
 import { computeFitView } from '../../interaction/image-geometry';
 import { cloneImageRoi } from '../../roi';
 import { samePixel } from '../../view-state';
@@ -123,10 +124,11 @@ export function displayReducer(
         };
       }
 
-      if (state.activeDisplayLuminanceRange) {
+      const activeDisplayLuminanceRange = getSuccessValue(state.displayRangeResource) ?? null;
+      if (activeDisplayLuminanceRange) {
         const nextRange = resolveColormapAutoRange(
           state.sessionState.displaySelection,
-          state.activeDisplayLuminanceRange,
+          activeDisplayLuminanceRange,
           state.sessionState.colormapZeroCentered
         );
         return patchSessionState(state, {
@@ -184,7 +186,7 @@ export function displayReducer(
 
       const nextRange = resolveColormapAutoRange(
         state.sessionState.displaySelection,
-        state.activeDisplayLuminanceRange,
+        getSuccessValue(state.displayRangeResource) ?? null,
         state.sessionState.colormapZeroCentered
       );
       return patchSessionState(state, {
@@ -202,11 +204,13 @@ export function displayReducer(
       const nextRange = state.sessionState.colormapRangeMode === 'alwaysAuto'
         ? resolveColormapAutoRange(
             state.sessionState.displaySelection,
-            state.activeDisplayLuminanceRange,
+            getSuccessValue(state.displayRangeResource) ?? null,
             nextZeroCentered
           ) ?? cloneDisplayLuminanceRange(state.sessionState.colormapRange)
         : nextZeroCentered
-          ? buildZeroCenteredColormapRange(state.sessionState.colormapRange ?? state.activeDisplayLuminanceRange)
+          ? buildZeroCenteredColormapRange(
+              state.sessionState.colormapRange ?? getSuccessValue(state.displayRangeResource) ?? null
+            )
           : cloneDisplayLuminanceRange(state.sessionState.colormapRange);
 
       return patchSessionState(state, {

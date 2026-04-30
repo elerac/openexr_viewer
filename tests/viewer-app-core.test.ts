@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AUTO_EXPOSURE_PERCENTILE } from '../src/auto-exposure';
+import { getSuccessValue } from '../src/async-resource';
 import { ViewerAppCore } from '../src/app/viewer-app-core';
 import { createInteractionState } from '../src/view-state';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
@@ -102,6 +103,7 @@ describe('viewer app core', () => {
     core.dispatch({
       type: 'autoExposureResolved',
       requestId: null,
+      requestKey: `${session.id}:auto`,
       sessionId: session.id,
       activeLayer: 0,
       visualizationMode: 'rgb',
@@ -120,6 +122,7 @@ describe('viewer app core', () => {
     core.dispatch({
       type: 'autoExposureResolved',
       requestId: null,
+      requestKey: `${session.id}:auto-disabled`,
       sessionId: session.id,
       activeLayer: 0,
       visualizationMode: 'rgb',
@@ -141,13 +144,16 @@ describe('viewer app core', () => {
     expect(core.getState().autoExposurePercentile).toBe(AUTO_EXPOSURE_PERCENTILE);
 
     core.dispatch({ type: 'autoExposureRequestStarted', requestId: 3, requestKey: 'session:old' });
-    expect(core.getState().pendingAutoExposureRequestId).toBe(3);
+    expect(core.getState().autoExposureResource).toMatchObject({
+      status: 'pending',
+      key: 'session:old',
+      requestId: 3
+    });
 
     core.dispatch({ type: 'autoExposurePercentileSet', percentile: 98.24 });
 
     expect(core.getState().autoExposurePercentile).toBe(98.2);
-    expect(core.getState().pendingAutoExposureRequestId).toBeNull();
-    expect(core.getState().pendingAutoExposureRequestKey).toBeNull();
+    expect(core.getState().autoExposureResource.status).toBe('idle');
   });
 
   it('applies matching image stats results and ignores stale stats callbacks', () => {
@@ -162,6 +168,7 @@ describe('viewer app core', () => {
     core.dispatch({
       type: 'imageStatsResolved',
       requestId: 3,
+      requestKey: 'session-1:stats',
       sessionId: session.id,
       activeLayer: 0,
       visualizationMode: 'rgb',
@@ -169,14 +176,18 @@ describe('viewer app core', () => {
       imageStats
     });
 
-    expect(core.getState().activeImageStats).toEqual(imageStats);
-    expect(core.getState().pendingImageStatsRequestId).toBeNull();
+    expect(core.getState().imageStatsResource).toMatchObject({
+      status: 'success',
+      key: 'session-1:stats'
+    });
+    expect(getSuccessValue(core.getState().imageStatsResource)).toEqual(imageStats);
 
     core.dispatch({ type: 'imageStatsRequestStarted', requestId: 4, requestKey: 'session-1:stale' });
     core.dispatch({ type: 'displaySelectionSet', displaySelection: createChannelMonoSelection('R') });
     core.dispatch({
       type: 'imageStatsResolved',
       requestId: 4,
+      requestKey: 'session-1:stale',
       sessionId: session.id,
       activeLayer: 0,
       visualizationMode: 'rgb',
@@ -184,8 +195,7 @@ describe('viewer app core', () => {
       imageStats
     });
 
-    expect(core.getState().activeImageStats).toBeNull();
-    expect(core.getState().pendingImageStatsRequestId).toBeNull();
+    expect(core.getState().imageStatsResource.status).toBe('idle');
   });
 
   it('clears image stats context when the active session reloads or closes', () => {
@@ -197,6 +207,7 @@ describe('viewer app core', () => {
     core.dispatch({
       type: 'imageStatsResolved',
       requestId: null,
+      requestKey: 'session-1:stats',
       sessionId: session.id,
       activeLayer: 0,
       visualizationMode: 'rgb',
@@ -207,13 +218,12 @@ describe('viewer app core', () => {
 
     core.dispatch({ type: 'sessionReloaded', sessionId: session.id, session: createSession(session.id) });
 
-    expect(core.getState().activeImageStats).toBeNull();
-    expect(core.getState().pendingImageStatsRequestId).toBeNull();
-    expect(core.getState().pendingImageStatsRequestKey).toBeNull();
+    expect(core.getState().imageStatsResource.status).toBe('idle');
 
     core.dispatch({
       type: 'imageStatsResolved',
       requestId: null,
+      requestKey: 'session-1:stats',
       sessionId: session.id,
       activeLayer: 0,
       visualizationMode: 'rgb',
@@ -224,9 +234,7 @@ describe('viewer app core', () => {
 
     core.dispatch({ type: 'sessionClosed', sessionId: session.id });
 
-    expect(core.getState().activeImageStats).toBeNull();
-    expect(core.getState().pendingImageStatsRequestId).toBeNull();
-    expect(core.getState().pendingImageStatsRequestKey).toBeNull();
+    expect(core.getState().imageStatsResource.status).toBe('idle');
   });
 
   it('renames a session display name without changing the original source identity', () => {
@@ -276,7 +284,11 @@ describe('viewer app core', () => {
     core.dispatch({ type: 'thumbnailReady', sessionId: session.id, token: 1, thumbnailDataUrl: 'stale' });
     core.dispatch({ type: 'thumbnailReady', sessionId: session.id, token: 2, thumbnailDataUrl: 'fresh' });
 
-    expect(core.getState().thumbnailsBySessionId[session.id]).toBe('fresh');
+    expect(core.getState().thumbnailsBySessionId[session.id]).toMatchObject({
+      status: 'success',
+      key: session.id,
+      value: 'fresh'
+    });
   });
 
   it('switches active sessions while carrying shared viewer state', () => {
@@ -453,11 +465,14 @@ describe('viewer app core', () => {
     core.dispatch({ type: 'sessionLoaded', session });
     core.dispatch({ type: 'visualizationModeRequested', visualizationMode: 'colormap' });
     const previousSelection = core.getState().sessionState.displaySelection;
+    const requestKey = `${session.id}:range-old`;
 
+    core.dispatch({ type: 'displayRangeRequestStarted', requestId: 1, requestKey });
     core.dispatch({ type: 'displaySelectionSet', displaySelection: createChannelMonoSelection('R') });
     core.dispatch({
       type: 'displayLuminanceRangeResolved',
       requestId: 1,
+      requestKey,
       sessionId: session.id,
       activeLayer: 0,
       displaySelection: previousSelection,
@@ -643,6 +658,7 @@ describe('viewer app core', () => {
     core.dispatch({
       type: 'imageStatsResolved',
       requestId: null,
+      requestKey: `${session.id}:stats`,
       sessionId: session.id,
       activeLayer: core.getState().sessionState.activeLayer,
       visualizationMode: core.getState().sessionState.visualizationMode,
@@ -696,7 +712,7 @@ describe('viewer app core', () => {
       panoramaHfovDeg: 1
     });
     expect(core.getState().interactionState.hoveredPixel).toBeNull();
-    expect(core.getState().activeImageStats).toBe(stats);
+    expect(getSuccessValue(core.getState().imageStatsResource)).toBe(stats);
     expect(core.getState().sessions[0]?.state.zoom).toBe(512);
   });
 

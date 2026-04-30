@@ -1,4 +1,5 @@
 import { AUTO_EXPOSURE_PERCENTILE } from '../auto-exposure';
+import { idleResource } from '../async-resource';
 import { DEFAULT_COLORMAP_ID } from '../colormaps';
 import { createDefaultStokesColormapDefaultSettings } from '../stokes';
 import { createInteractionState } from '../view-state';
@@ -37,22 +38,13 @@ export function createInitialViewerAppState(): ViewerAppState {
     isLoading: false,
     colormapRegistry: null,
     defaultColormapId: DEFAULT_COLORMAP_ID,
-    activeColormapLut: null,
-    loadedColormapId: null,
-    activeDisplayLuminanceRange: null,
-    activeImageStats: null,
+    colormapLutResource: idleResource(),
+    displayRangeResource: idleResource(),
+    imageStatsResource: idleResource(),
+    autoExposureResource: idleResource(),
     pendingColormapActivation: null,
-    pendingColormapRequestId: null,
     pendingSelectionTransitionRequestId: null,
-    pendingDisplayRangeRequestId: null,
-    pendingDisplayRangeRequestKey: null,
-    pendingImageStatsRequestId: null,
-    pendingImageStatsRequestKey: null,
-    pendingAutoExposureRequestId: null,
-    pendingAutoExposureRequestKey: null,
-    pendingThumbnailTokensBySessionId: {},
     thumbnailsBySessionId: {},
-    pendingChannelThumbnailTokensByRequestKey: {},
     channelThumbnailsByRequestKey: {},
     channelThumbnailLatestRequestKeyByContextKey: {},
     stokesDisplayRestoreStates: {},

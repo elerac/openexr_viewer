@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getSuccessValue } from '../src/async-resource';
 import { DisplayController } from '../src/controllers/display-controller';
 import { ViewerAppCore } from '../src/app/viewer-app-core';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
@@ -160,6 +161,15 @@ function createController(session: OpenedImageSession | null = null) {
   return { controller, core };
 }
 
+function getLoadedColormapId(core: ViewerAppCore): string | null {
+  const resource = core.getState().colormapLutResource;
+  return resource.status === 'success' ? resource.key : null;
+}
+
+function getLoadedColormapLut(core: ViewerAppCore) {
+  return getSuccessValue(core.getState().colormapLutResource) ?? null;
+}
+
 beforeEach(() => {
   stubWindow();
   colormapMocks.loadColormapRegistry.mockResolvedValue(registry);
@@ -185,7 +195,7 @@ describe('display controller shim', () => {
 
     expect(core.getState().defaultColormapId).toBe('0');
     expect(core.getState().sessionState.activeColormapId).toBe('0');
-    expect(core.getState().activeColormapLut).toEqual(luts['0']);
+    expect(getLoadedColormapLut(core)).toEqual(luts['0']);
   });
 
   it('ignores stale explicit colormap loads when a newer request wins', async () => {
@@ -212,7 +222,7 @@ describe('display controller shim', () => {
     await first;
 
     expect(core.getState().sessionState.activeColormapId).toBe('2');
-    expect(core.getState().loadedColormapId).toBe('2');
+    expect(getLoadedColormapId(core)).toBe('2');
   });
 
   it('persists the requested colormap before the lut resolves', async () => {
@@ -230,13 +240,16 @@ describe('display controller shim', () => {
     const pending = controller.setActiveColormap('1');
 
     expect(core.getState().sessionState.activeColormapId).toBe('1');
-    expect(core.getState().loadedColormapId).toBe('0');
+    expect(core.getState().colormapLutResource).toMatchObject({
+      status: 'pending',
+      key: '1'
+    });
 
     deferred.resolve(luts['1']);
     await pending;
 
     expect(core.getState().sessionState.activeColormapId).toBe('1');
-    expect(core.getState().loadedColormapId).toBe('1');
+    expect(getLoadedColormapId(core)).toBe('1');
   });
 
   it('applies stokes selection through the core and restores the previous non-stokes visualization state', async () => {
@@ -253,8 +266,8 @@ describe('display controller shim', () => {
 
     expect(core.getState().sessionState.visualizationMode).toBe('rgb');
     expect(core.getState().sessionState.activeColormapId).toBe('0');
-    expect(core.getState().loadedColormapId).toBe('0');
-    expect(core.getState().activeColormapLut).toEqual(luts['0']);
+    expect(getLoadedColormapId(core)).toBe('0');
+    expect(getLoadedColormapLut(core)).toEqual(luts['0']);
     expect(core.getState().sessionState.displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
   });
 
@@ -341,7 +354,7 @@ describe('display controller shim', () => {
       colormapZeroCentered: false,
       displaySelection: createStokesSelection('dolp')
     });
-    expect(core.getState().activeColormapLut).toEqual(luts['2']);
+    expect(getLoadedColormapLut(core)).toEqual(luts['2']);
   });
 
   it('uses configured Stokes defaults when switching across groups', async () => {
@@ -362,7 +375,7 @@ describe('display controller shim', () => {
       colormapZeroCentered: true,
       displaySelection: createStokesSelection('cop')
     });
-    expect(core.getState().activeColormapLut).toEqual(luts['2']);
+    expect(getLoadedColormapLut(core)).toEqual(luts['2']);
   });
 
   it('preserves the in-session AoLP modulation mode across Stokes selections', async () => {
@@ -425,7 +438,7 @@ describe('display controller shim', () => {
       stokesAolpDegreeModulationMode: 'saturation',
       displaySelection: createStokesSelection('aolp')
     });
-    expect(core.getState().activeColormapLut).toEqual(luts['2']);
+    expect(getLoadedColormapLut(core)).toEqual(luts['2']);
   });
 
   it('resets Stokes colormap defaults and immediately restores the active group default', async () => {
@@ -447,7 +460,7 @@ describe('display controller shim', () => {
       colormapZeroCentered: false,
       displaySelection: createStokesSelection('aolp')
     });
-    expect(core.getState().activeColormapLut).toEqual(luts['1']);
+    expect(getLoadedColormapLut(core)).toEqual(luts['1']);
   });
 
   it('resets colormap state when switching across Stokes colormap groups', async () => {
@@ -492,7 +505,7 @@ describe('display controller shim', () => {
       colormapZeroCentered: true,
       displaySelection: createStokesSelection('s1_over_s0')
     });
-    expect(core.getState().activeColormapLut).toEqual(luts['4']);
+    expect(getLoadedColormapLut(core)).toEqual(luts['4']);
   });
 
   it('keeps a manual colormap override when a split stokes selection is still transitioning', async () => {
@@ -562,6 +575,9 @@ describe('display controller shim', () => {
 
     await expect(pending).resolves.toBeUndefined();
     expect(core.getState().sessionState.activeColormapId).toBe('1');
-    expect(core.getState().loadedColormapId).toBe('0');
+    expect(core.getState().colormapLutResource).toMatchObject({
+      status: 'pending',
+      key: '1'
+    });
   });
 });

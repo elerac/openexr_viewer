@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RenderCacheService } from '../src/services/render-cache-service';
-import type { DecodedExrImage, DecodedLayer, OpenedImageSession } from '../src/types';
+import type { AsyncResource } from '../src/async-resource';
+import {
+  buildDisplayAutoExposureRevisionKey,
+  buildDisplayImageStatsRevisionKey,
+  buildDisplayLuminanceRevisionKey
+} from '../src/display-texture';
+import type { DecodedExrImage, DecodedLayer, DisplayLuminanceRange, ImageStats, OpenedImageSession } from '../src/types';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
 import {
   createChannelMonoSelection,
@@ -104,8 +110,8 @@ function getEntries(service: RenderCacheService): Map<string, {
   residentLayers: Map<number, {
     residentChannels: Map<string, { textureBytes: number; materializedBytes: number; lastAccessToken: number }>;
   }>;
-  luminanceRangeByRevision: Map<string, { min: number; max: number } | null>;
-  imageStatsByRevision: Map<string, unknown>;
+  luminanceRangeByRevision: Map<string, AsyncResource<DisplayLuminanceRange | null>>;
+  imageStatsByRevision: Map<string, AsyncResource<ImageStats | null>>;
 }> {
   return (service as unknown as { entries: Map<string, never> }).entries as never;
 }
@@ -259,6 +265,7 @@ describe('render cache service', () => {
     expect(onDisplayLuminanceRangeResolved).toHaveBeenCalledTimes(1);
     expect(onDisplayLuminanceRangeResolved).toHaveBeenCalledWith({
       requestId: null,
+      requestKey: `${session.id}:${buildDisplayLuminanceRevisionKey(session.state)}`,
       sessionId: session.id,
       activeLayer: 0,
       displaySelection: session.state.displaySelection,
@@ -323,6 +330,7 @@ describe('render cache service', () => {
     expect(onImageStatsResolved).toHaveBeenCalledTimes(1);
     expect(onImageStatsResolved).toHaveBeenCalledWith({
       requestId: null,
+      requestKey: `${session.id}:${buildDisplayImageStatsRevisionKey(session.state)}`,
       sessionId: session.id,
       activeLayer: 0,
       visualizationMode: session.state.visualizationMode,
@@ -370,6 +378,7 @@ describe('render cache service', () => {
     expect(onAutoExposureResolved).toHaveBeenCalledTimes(1);
     expect(onAutoExposureResolved).toHaveBeenCalledWith({
       requestId: 8,
+      requestKey: `${session.id}:${buildDisplayAutoExposureRevisionKey(session.state, 99.5)}`,
       sessionId: session.id,
       activeLayer: 0,
       visualizationMode: 'rgb',
@@ -401,6 +410,7 @@ describe('render cache service', () => {
     expect(onAutoExposureResolved).toHaveBeenCalledTimes(2);
     expect(onAutoExposureResolved).toHaveBeenLastCalledWith({
       requestId: null,
+      requestKey: `${session.id}:${buildDisplayAutoExposureRevisionKey(session.state, 50)}`,
       sessionId: session.id,
       activeLayer: 0,
       visualizationMode: 'rgb',

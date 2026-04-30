@@ -2,6 +2,15 @@ import {
   hasSplitChannelViewItems,
   selectVisibleChannelViewItems
 } from '../channel-view-items';
+import {
+  errorResource,
+  getSuccessValue,
+  idleResource,
+  isPendingMatch,
+  pendingResource,
+  successResource,
+  type AsyncResource
+} from '../async-resource';
 import { cloneDisplaySelection, sameDisplaySelection } from '../display-model';
 import { createPngDataUrlFromPixels, type ExportImagePixels } from '../export-image';
 import { createAbortError, DisposableBag, isAbortError, type Disposable } from '../lifecycle';
@@ -20,6 +29,7 @@ import type { ExportImageBatchDialogElements } from './elements';
 const DEFAULT_BATCH_ARCHIVE_FILENAME = 'openexr-export.zip';
 const DEFAULT_SCREENSHOT_BATCH_ARCHIVE_FILENAME = 'openexr-screenshot-export.zip';
 const CELL_KEY_SEPARATOR = '\u001f';
+const BATCH_EXPORT_RESOURCE_KEY = 'export-batch';
 type ExportBatchDialogMode = 'image' | 'screenshot';
 
 interface ExportImageBatchDialogCallbacks {
@@ -48,7 +58,7 @@ export class ExportImageBatchDialogController implements Disposable {
   private target: ExportImageBatchTarget | null = null;
   private checkedCellKeys = new Set<string>();
   private open = false;
-  private busy = false;
+  private exportResource: AsyncResource<void> = idleResource();
   private includeSplitRgbChannels = false;
   private dialogMode: ExportBatchDialogMode = 'image';
   private screenshotRegion: ExportScreenshotRegion | null = null;
@@ -58,8 +68,8 @@ export class ExportImageBatchDialogController implements Disposable {
   private previewAbortController: AbortController | null = null;
   private previewGeneration = 0;
   private previewQueue: Promise<void> = Promise.resolve();
-  private readonly previewDataUrlsByKey = new Map<string, string | null>();
-  private readonly pendingPreviewKeys = new Set<string>();
+  private readonly previewResourcesByKey = new Map<string, AsyncResource<string | null>>();
+  private nextRequestId = 1;
   private disposed = false;
 
   constructor(
@@ -135,6 +145,24 @@ export class ExportImageBatchDialogController implements Disposable {
 
   isBusy(): boolean {
     return this.busy;
+  }
+
+  private get busy(): boolean {
+    return this.exportResource.status === 'pending';
+  }
+
+  private getPreviewDataUrl(previewKey: string): string | null {
+    return getSuccessValue(this.previewResourcesByKey.get(previewKey) ?? idleResource()) ?? null;
+  }
+
+  private isPreviewPending(previewKey: string): boolean {
+    return this.previewResourcesByKey.get(previewKey)?.status === 'pending';
+  }
+
+  private takeRequestId(): number {
+    const requestId = this.nextRequestId;
+    this.nextRequestId += 1;
+    return requestId;
   }
 
   setTarget(target: ExportImageBatchTarget | null): void {
@@ -273,7 +301,12 @@ export class ExportImageBatchDialogController implements Disposable {
       return;
     }
 
-    this.busy = busy;
+    this.exportResource = busy ? pendingResource(BATCH_EXPORT_RESOURCE_KEY, this.takeRequestId()) : idleResource();
+    this.syncBusyControls();
+  }
+
+  private syncBusyControls(): void {
+    const busy = this.busy;
     this.elements.exportBatchArchiveFilenameInput.disabled = busy;
     this.elements.exportBatchWidthInput.disabled = busy;
     this.elements.exportBatchHeightInput.disabled = busy;
@@ -660,9 +693,9 @@ export class ExportImageBatchDialogController implements Disposable {
   ): HTMLElement {
     const previewKey = serializeCellKey(file.sessionId, columnKey);
     const canPreview = this.hasValidScreenshotOutputSize();
-    const dataUrl = canPreview ? this.previewDataUrlsByKey.get(previewKey) : null;
+    const dataUrl = canPreview ? this.getPreviewDataUrl(previewKey) : null;
     const isPending =
-      canPreview && (this.pendingPreviewKeys.has(previewKey) || !this.previewDataUrlsByKey.has(previewKey));
+      canPreview && (this.isPreviewPending(previewKey) || !this.previewResourcesByKey.has(previewKey));
     return createBatchCellPreview(previewKey, dataUrl, isPending);
   }
 
@@ -693,8 +726,7 @@ export class ExportImageBatchDialogController implements Disposable {
       this.disposed ||
       this.busy ||
       !this.open ||
-      this.previewDataUrlsByKey.has(previewKey) ||
-      this.pendingPreviewKeys.has(previewKey)
+      this.previewResourcesByKey.has(previewKey)
     ) {
       return;
     }
@@ -720,7 +752,8 @@ export class ExportImageBatchDialogController implements Disposable {
       }
       : baseRequest;
 
-    this.pendingPreviewKeys.add(previewKey);
+    const requestId = this.takeRequestId();
+    this.previewResourcesByKey.set(previewKey, pendingResource(previewKey, requestId));
     this.updatePreviewElements(previewKey);
     this.previewQueue = this.previewQueue
       .catch(() => undefined)
@@ -740,25 +773,26 @@ export class ExportImageBatchDialogController implements Disposable {
           if (
             this.disposed ||
             generation !== this.previewGeneration ||
-            abortController.signal.aborted
+            abortController.signal.aborted ||
+            !isPendingMatch(this.previewResourcesByKey.get(previewKey) ?? idleResource(), previewKey, requestId)
           ) {
             return;
           }
 
-          this.previewDataUrlsByKey.set(previewKey, createPngDataUrlFromPixels(pixels));
+          this.previewResourcesByKey.set(previewKey, successResource(previewKey, createPngDataUrlFromPixels(pixels)));
         } catch (error) {
           if (
             generation !== this.previewGeneration ||
             abortController.signal.aborted ||
-            isAbortError(error)
+            isAbortError(error) ||
+            !isPendingMatch(this.previewResourcesByKey.get(previewKey) ?? idleResource(), previewKey, requestId)
           ) {
             return;
           }
 
-          this.previewDataUrlsByKey.set(previewKey, null);
+          this.previewResourcesByKey.set(previewKey, errorResource(previewKey, error, 'Preview failed.'));
         } finally {
           if (generation === this.previewGeneration) {
-            this.pendingPreviewKeys.delete(previewKey);
             this.updatePreviewElements(previewKey);
           }
         }
@@ -777,15 +811,20 @@ export class ExportImageBatchDialogController implements Disposable {
     this.previewAbortController?.abort(createAbortError('Batch export preview cancelled.'));
     this.previewAbortController = null;
     this.previewQueue = Promise.resolve();
-    this.pendingPreviewKeys.clear();
     if (options.clearCache) {
-      this.previewDataUrlsByKey.clear();
+      this.previewResourcesByKey.clear();
+    } else {
+      for (const [previewKey, resource] of this.previewResourcesByKey.entries()) {
+        if (resource.status === 'pending') {
+          this.previewResourcesByKey.delete(previewKey);
+        }
+      }
     }
   }
 
   private updatePreviewElements(previewKey: string): void {
-    const dataUrl = this.previewDataUrlsByKey.get(previewKey);
-    const isPending = this.pendingPreviewKeys.has(previewKey) || !this.previewDataUrlsByKey.has(previewKey);
+    const dataUrl = this.getPreviewDataUrl(previewKey);
+    const isPending = this.isPreviewPending(previewKey) || !this.previewResourcesByKey.has(previewKey);
     for (const element of this.elements.exportBatchMatrix.querySelectorAll<HTMLElement>('.export-batch-cell-preview')) {
       if (element.dataset.previewKey === previewKey) {
         updateBatchCellPreview(element, dataUrl, isPending);
@@ -867,7 +906,9 @@ export class ExportImageBatchDialogController implements Disposable {
     this.setError(null);
     this.setStatus(`Exporting ${entries.length === 1 ? '1 image' : `${entries.length} images`}...`);
     this.abortPreviewWork({ clearCache: false });
-    this.setBusy(true);
+    const requestId = this.takeRequestId();
+    this.exportResource = pendingResource(BATCH_EXPORT_RESOURCE_KEY, requestId);
+    this.syncBusyControls();
 
     const abortController = new AbortController();
     this.abortController = abortController;
@@ -887,13 +928,21 @@ export class ExportImageBatchDialogController implements Disposable {
         return;
       }
 
-      this.setError(error instanceof Error ? error.message : 'Batch export failed.');
+      if (!isPendingMatch(this.exportResource, BATCH_EXPORT_RESOURCE_KEY, requestId)) {
+        return;
+      }
+
+      this.exportResource = errorResource(BATCH_EXPORT_RESOURCE_KEY, error, 'Batch export failed.');
+      this.setError(this.exportResource.status === 'error' ? this.exportResource.error.message : 'Batch export failed.');
     } finally {
       if (this.abortController === abortController) {
         this.abortController = null;
       }
       if (this.open) {
-        this.setBusy(false);
+        if (isPendingMatch(this.exportResource, BATCH_EXPORT_RESOURCE_KEY, requestId)) {
+          this.exportResource = idleResource();
+        }
+        this.syncBusyControls();
         this.updateStatus();
       }
     }

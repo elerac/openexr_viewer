@@ -20,6 +20,8 @@ import {
   buildLayerOptions,
   buildOpenedImageOptions,
   getViewerColormapOptions,
+  selectActiveColormapLut,
+  selectActiveDisplayLuminanceRange,
   selectActiveSession,
   selectStokesDegreeModulationControl
 } from './viewer-app-selectors';
@@ -63,17 +65,20 @@ export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => Vie
   let previousSnapshot: ViewerUiSnapshot | null = null;
   return (state) => {
     const activeSession = selectActiveSession(state);
+    const activeColormapLut = selectActiveColormapLut(state);
+    const activeDisplayLuminanceRange = selectActiveDisplayLuminanceRange(state);
+    const colormapIsLoading = state.colormapLutResource.status === 'pending';
 
     const nextSnapshot: ViewerUiSnapshot = {
       errorMessage: state.errorMessage,
       isLoading: state.isLoading,
       isDisplayBusy: Boolean(
         state.pendingSelectionTransitionRequestId ||
-        state.pendingColormapRequestId ||
+        colormapIsLoading ||
         state.pendingColormapActivation
       ),
       isDisplayOverlayLoading: Boolean(
-        state.pendingColormapRequestId ||
+        colormapIsLoading ||
         state.pendingColormapActivation
       ),
       autoFitImageOnSelect: state.autoFitImageOnSelect,
@@ -90,10 +95,10 @@ export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => Vie
       stokesColormapDefaults: state.stokesColormapDefaults,
       activeColormapId: state.sessionState.activeColormapId,
       defaultColormapId: state.defaultColormapId,
-      activeColormapLut: state.activeColormapLut,
+      activeColormapLut,
       colormapOptions: selectColormapOptions(state),
       colormapRange: state.sessionState.colormapRange,
-      activeDisplayLuminanceRange: state.activeDisplayLuminanceRange,
+      activeDisplayLuminanceRange,
       isColormapAutoRange: state.sessionState.colormapRangeMode === 'alwaysAuto',
       colormapZeroCentered: state.sessionState.colormapZeroCentered,
       layerOptions: selectLayerOptions(activeSession),

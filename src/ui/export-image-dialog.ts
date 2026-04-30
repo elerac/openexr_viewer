@@ -1,3 +1,11 @@
+import {
+  errorResource,
+  idleResource,
+  isPendingMatch,
+  pendingResource,
+  successResource,
+  type AsyncResource
+} from '../async-resource';
 import { renderPixelsToCanvas, type ExportImagePixels } from '../export-image';
 import { DisposableBag, isAbortError, type Disposable } from '../lifecycle';
 import type { ExportImagePreviewRequest, ExportImageRequest, ExportImageTarget } from '../types';
@@ -21,10 +29,11 @@ export class ExportImageDialogController implements Disposable {
   private exportTarget: ExportImageTarget | null = null;
   private dialogTarget: ExportImageTarget | null = null;
   private open = false;
-  private busy = false;
+  private exportResource: AsyncResource<void> = idleResource();
+  private previewResource: AsyncResource<ExportImagePixels> = idleResource();
   private restoreFocusTarget: HTMLElement | null = null;
   private exportImagePreviewAbortController: AbortController | null = null;
-  private exportImagePreviewRequestToken = 0;
+  private nextRequestId = 1;
   private syncingScreenshotSize = false;
   private disposed = false;
 
@@ -33,13 +42,13 @@ export class ExportImageDialogController implements Disposable {
     private readonly callbacks: ExportImageDialogCallbacks
   ) {
     this.disposables.addDisposable(bindDialogBackdropDismiss(this.elements.exportDialogBackdrop, () => {
-      if (!this.busy) {
+      if (!this.isExportPending()) {
         this.cancel(true);
       }
     }));
 
     this.disposables.addEventListener(this.elements.exportDialogCancelButton, 'click', () => {
-      if (this.busy) {
+      if (this.isExportPending()) {
         return;
       }
       this.cancel(true);
@@ -78,7 +87,7 @@ export class ExportImageDialogController implements Disposable {
   }
 
   isBusy(): boolean {
-    return this.busy;
+    return this.isExportPending();
   }
 
   setTarget(target: ExportImageTarget | null): void {
@@ -140,7 +149,7 @@ export class ExportImageDialogController implements Disposable {
   }
 
   cancel(restoreFocus = true): void {
-    if (this.disposed || this.busy || !this.open) {
+    if (this.disposed || this.isExportPending() || !this.open) {
       return;
     }
 
@@ -176,14 +185,8 @@ export class ExportImageDialogController implements Disposable {
       return;
     }
 
-    this.busy = busy;
-    this.elements.exportFilenameInput.disabled = busy;
-    this.elements.exportWidthInput.disabled = busy;
-    this.elements.exportHeightInput.disabled = busy;
-    this.elements.exportDialogCancelButton.disabled = busy;
-    this.elements.exportDialogSubmitButton.disabled = busy;
-    this.elements.exportDialogSubmitButton.textContent = busy ? 'Exporting...' : 'Export';
-    this.elements.exportFormatSelect.disabled = true;
+    this.exportResource = busy ? pendingResource('export-image', this.takeRequestId()) : idleResource();
+    this.syncBusyControls();
   }
 
   private setError(message: string | null): void {
@@ -207,7 +210,7 @@ export class ExportImageDialogController implements Disposable {
     }
 
     const target = this.dialogTarget ?? this.exportTarget;
-    if (!target || this.busy) {
+    if (!target || this.isExportPending()) {
       return;
     }
 
@@ -231,16 +234,28 @@ export class ExportImageDialogController implements Disposable {
 
     this.elements.exportFilenameInput.value = request.filename;
     this.setError(null);
-    this.setBusy(true);
+    const exportRequestId = this.takeRequestId();
+    this.exportResource = pendingResource('export-image', exportRequestId);
+    this.syncBusyControls();
 
     try {
       await this.callbacks.onExportImage(request);
+      if (!isPendingMatch(this.exportResource, 'export-image', exportRequestId)) {
+        return;
+      }
       this.close(true);
     } catch (error) {
-      this.setError(error instanceof Error ? error.message : 'Export failed.');
+      if (!isPendingMatch(this.exportResource, 'export-image', exportRequestId)) {
+        return;
+      }
+      this.exportResource = errorResource('export-image', error, 'Export failed.');
+      this.setError(this.exportResource.status === 'error' ? this.exportResource.error.message : 'Export failed.');
     } finally {
       if (this.open) {
-        this.setBusy(false);
+        if (isPendingMatch(this.exportResource, 'export-image', exportRequestId)) {
+          this.exportResource = idleResource();
+        }
+        this.syncBusyControls();
       }
     }
   }
@@ -303,7 +318,9 @@ export class ExportImageDialogController implements Disposable {
 
     const abortController = new AbortController();
     this.exportImagePreviewAbortController = abortController;
-    const requestToken = ++this.exportImagePreviewRequestToken;
+    const requestKey = serializeExportImagePreviewRequest(previewRequest);
+    const requestId = this.takeRequestId();
+    this.previewResource = pendingResource(requestKey, requestId);
 
     this.hidePreviewCanvas();
     this.setPreviewStatus(EXPORT_IMAGE_PREVIEW_LOADING_MESSAGE);
@@ -314,11 +331,12 @@ export class ExportImageDialogController implements Disposable {
         this.disposed ||
         !this.open ||
         abortController.signal.aborted ||
-        requestToken !== this.exportImagePreviewRequestToken
+        !isPendingMatch(this.previewResource, requestKey, requestId)
       ) {
         return;
       }
 
+      this.previewResource = successResource(requestKey, pixels);
       this.renderPreview(pixels);
     } catch (error) {
       if (
@@ -326,13 +344,14 @@ export class ExportImageDialogController implements Disposable {
         this.disposed ||
         !this.open ||
         abortController.signal.aborted ||
-        requestToken !== this.exportImagePreviewRequestToken
+        !isPendingMatch(this.previewResource, requestKey, requestId)
       ) {
         return;
       }
 
+      this.previewResource = errorResource(requestKey, error, 'Preview failed.');
       this.hidePreviewCanvas();
-      this.setPreviewStatus(error instanceof Error ? error.message : 'Preview failed.');
+      this.setPreviewStatus(this.previewResource.status === 'error' ? this.previewResource.error.message : 'Preview failed.');
     } finally {
       if (this.exportImagePreviewAbortController === abortController) {
         this.exportImagePreviewAbortController = null;
@@ -341,9 +360,9 @@ export class ExportImageDialogController implements Disposable {
   }
 
   private cancelPreview(): void {
-    this.exportImagePreviewRequestToken += 1;
     this.exportImagePreviewAbortController?.abort();
     this.exportImagePreviewAbortController = null;
+    this.previewResource = idleResource();
   }
 
   private resetPreview(): void {
@@ -373,6 +392,27 @@ export class ExportImageDialogController implements Disposable {
 
     this.elements.exportPreviewStatus.classList.remove('hidden');
     this.elements.exportPreviewStatus.textContent = message;
+  }
+
+  private isExportPending(): boolean {
+    return this.exportResource.status === 'pending';
+  }
+
+  private syncBusyControls(): void {
+    const busy = this.isExportPending();
+    this.elements.exportFilenameInput.disabled = busy;
+    this.elements.exportWidthInput.disabled = busy;
+    this.elements.exportHeightInput.disabled = busy;
+    this.elements.exportDialogCancelButton.disabled = busy;
+    this.elements.exportDialogSubmitButton.disabled = busy;
+    this.elements.exportDialogSubmitButton.textContent = busy ? 'Exporting...' : 'Export';
+    this.elements.exportFormatSelect.disabled = true;
+  }
+
+  private takeRequestId(): number {
+    const requestId = this.nextRequestId;
+    this.nextRequestId += 1;
+    return requestId;
   }
 }
 
@@ -513,4 +553,8 @@ function parsePositiveInteger(value: string): number | null {
   }
 
   return parsed;
+}
+
+function serializeExportImagePreviewRequest(request: ExportImagePreviewRequest): string {
+  return JSON.stringify(request);
 }

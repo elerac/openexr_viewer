@@ -50,6 +50,7 @@ export function createBootstrapServices({
       core.dispatch({
         type: 'displayLuminanceRangeResolved',
         requestId: event.requestId,
+        requestKey: event.requestKey,
         sessionId: event.sessionId,
         activeLayer: event.activeLayer,
         displaySelection: event.displaySelection,
@@ -60,6 +61,7 @@ export function createBootstrapServices({
       core.dispatch({
         type: 'imageStatsResolved',
         requestId: event.requestId,
+        requestKey: event.requestKey,
         sessionId: event.sessionId,
         activeLayer: event.activeLayer,
         visualizationMode: event.visualizationMode,
@@ -71,6 +73,7 @@ export function createBootstrapServices({
       core.dispatch({
         type: 'autoExposureResolved',
         requestId: event.requestId,
+        requestKey: event.requestKey,
         sessionId: event.sessionId,
         activeLayer: event.activeLayer,
         visualizationMode: event.visualizationMode,

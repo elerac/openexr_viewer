@@ -8,7 +8,11 @@ import { RenderCacheService } from '../../services/render-cache-service';
 import { getStokesDisplayColormapDefault, isStokesDegreeModulationParameter } from '../../stokes';
 import { buildDisplaySelectionThumbnailPixels } from '../../thumbnail';
 import { createInteractionState, mergeRenderState } from '../../view-state';
-import { selectActiveSession } from '../viewer-app-selectors';
+import {
+  selectActiveColormapLut,
+  selectActiveSession,
+  selectColormapLutById
+} from '../viewer-app-selectors';
 import { ViewerAppCore } from '../viewer-app-core';
 import type { ViewerAppState } from '../viewer-app-types';
 import type { DisplayController } from '../../controllers/display-controller';
@@ -673,9 +677,10 @@ async function resolveBatchExportColormapLut(
     return cached;
   }
 
-  if (appState.loadedColormapId === colormapId && appState.activeColormapLut) {
-    lutCache.set(colormapId, appState.activeColormapLut);
-    return appState.activeColormapLut;
+  const loadedLut = selectColormapLutById(appState, colormapId);
+  if (loadedLut) {
+    lutCache.set(colormapId, loadedLut);
+    return loadedLut;
   }
 
   const registry = appState.colormapRegistry;
@@ -702,8 +707,9 @@ function restoreActiveRendererBinding(
     return;
   }
 
-  if (state.activeColormapLut) {
-    renderer.setColormapTexture(state.activeColormapLut.entryCount, state.activeColormapLut.rgba8);
+  const activeColormapLut = selectActiveColormapLut(state);
+  if (activeColormapLut) {
+    renderer.setColormapTexture(activeColormapLut.entryCount, activeColormapLut.rgba8);
   }
   renderCache.prepareActiveSession(activeSession, state.sessionState);
   renderer.renderImage(mergeRenderState(state.sessionState, state.interactionState));

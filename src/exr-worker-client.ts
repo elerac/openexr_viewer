@@ -12,6 +12,13 @@ import {
   type DecodeErrorContext,
   type DecodeErrorPayload
 } from './exr-decode-context';
+import {
+  errorResource,
+  isPendingMatch,
+  pendingResource,
+  successResource,
+  type AsyncResource
+} from './async-resource';
 import type { DecodedExrImage } from './types';
 
 interface DecodeWorkerRequest {
@@ -37,6 +44,8 @@ type DecodeWorkerErrorPayload = Extract<DecodeWorkerResponse, { ok: false }>['er
 
 interface DecodeRequest {
   id: number;
+  key: string;
+  resource: AsyncResource<DecodedExrImage>;
   bytes: Uint8Array;
   filename: string | null;
   context: DecodeErrorContext;
@@ -78,6 +87,8 @@ export async function loadExrOffMainThread(
   return await new Promise<DecodedExrImage>((resolve, reject) => {
     const request: DecodeRequest = {
       id,
+      key: buildDecodeResourceKey(id),
+      resource: pendingResource(buildDecodeResourceKey(id), id),
       bytes,
       filename: context.filename,
       context,
@@ -106,8 +117,9 @@ function getDecodeWorker(): Worker {
     }
 
     activeDecode = null;
-    cleanupDecodeRequest(request);
     if (response.ok) {
+      request.resource = successResource(request.key, response.image);
+      cleanupDecodeRequest(request);
       request.resolve(response.image);
       pumpDecodeQueue();
       return;
@@ -278,6 +290,9 @@ function rejectActiveDecodeWithPayload(payload: DecodeErrorPayload): void {
 }
 
 function rejectDecodeRequest(request: DecodeRequest, error: Error): void {
+  if (isPendingMatch(request.resource, request.key, request.id)) {
+    request.resource = errorResource(request.key, error);
+  }
   cleanupDecodeRequest(request);
   request.reject(error);
 }
@@ -311,6 +326,10 @@ function createEmptyDecodeContext(): DecodeErrorContext {
     headerSummary: null,
     unsupportedFeatureReason: null
   };
+}
+
+function buildDecodeResourceKey(id: number): string {
+  return `decode:${id}`;
 }
 
 function prepareTransferableBytes(bytes: Uint8Array): { bytes: Uint8Array; transferables: Transferable[] } {

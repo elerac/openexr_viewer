@@ -1,3 +1,11 @@
+import {
+  errorResource,
+  idleResource,
+  isPendingMatch,
+  pendingResource,
+  successResource,
+  type AsyncResource
+} from '../async-resource';
 import { renderPixelsToCanvas, type ExportImagePixels } from '../export-image';
 import { DisposableBag, isAbortError, type Disposable } from '../lifecycle';
 import type {
@@ -30,11 +38,12 @@ export class ExportColormapDialogController implements Disposable {
   private defaultColormapId = '';
   private activeColormapId = '';
   private open = false;
-  private busy = false;
+  private exportResource: AsyncResource<void> = idleResource();
+  private previewResource: AsyncResource<ExportImagePixels> = idleResource();
   private restoreFocusTarget: HTMLElement | null = null;
   private exportColormapAutoFilename = '';
   private exportColormapPreviewAbortController: AbortController | null = null;
-  private exportColormapPreviewRequestToken = 0;
+  private nextRequestId = 1;
   private disposed = false;
 
   constructor(
@@ -75,13 +84,13 @@ export class ExportColormapDialogController implements Disposable {
     });
 
     this.disposables.addDisposable(bindDialogBackdropDismiss(this.elements.exportColormapDialogBackdrop, () => {
-      if (!this.busy) {
+      if (!this.isExportPending()) {
         this.close(true);
       }
     }));
 
     this.disposables.addEventListener(this.elements.exportColormapDialogCancelButton, 'click', () => {
-      if (this.busy) {
+      if (this.isExportPending()) {
         return;
       }
 
@@ -113,7 +122,7 @@ export class ExportColormapDialogController implements Disposable {
   }
 
   isBusy(): boolean {
-    return this.busy;
+    return this.isExportPending();
   }
 
   setOptions(items: Array<{ id: string; label: string }>, defaultId: string): void {
@@ -251,15 +260,8 @@ export class ExportColormapDialogController implements Disposable {
       return;
     }
 
-    this.busy = busy;
-    this.elements.exportColormapSelect.disabled = busy;
-    this.elements.exportColormapWidthInput.disabled = busy;
-    this.elements.exportColormapHeightInput.disabled = busy;
-    this.elements.exportColormapOrientationSelect.disabled = busy;
-    this.elements.exportColormapFilenameInput.disabled = busy;
-    this.elements.exportColormapDialogCancelButton.disabled = busy;
-    this.elements.exportColormapDialogSubmitButton.disabled = busy;
-    this.elements.exportColormapDialogSubmitButton.textContent = busy ? 'Exporting...' : 'Export';
+    this.exportResource = busy ? pendingResource('export-colormap', this.takeRequestId()) : idleResource();
+    this.syncBusyControls();
   }
 
   private setError(message: string | null): void {
@@ -278,7 +280,7 @@ export class ExportColormapDialogController implements Disposable {
   }
 
   private async handleSubmit(): Promise<void> {
-    if (this.disposed || this.busy) {
+    if (this.disposed || this.isExportPending()) {
       return;
     }
 
@@ -320,16 +322,28 @@ export class ExportColormapDialogController implements Disposable {
     this.elements.exportColormapHeightInput.value = String(request.height);
     this.elements.exportColormapFilenameInput.value = request.filename;
     this.setError(null);
-    this.setBusy(true);
+    const exportRequestId = this.takeRequestId();
+    this.exportResource = pendingResource('export-colormap', exportRequestId);
+    this.syncBusyControls();
 
     try {
       await this.callbacks.onExportColormap(request);
+      if (!isPendingMatch(this.exportResource, 'export-colormap', exportRequestId)) {
+        return;
+      }
       this.close(true);
     } catch (error) {
-      this.setError(error instanceof Error ? error.message : 'Export failed.');
+      if (!isPendingMatch(this.exportResource, 'export-colormap', exportRequestId)) {
+        return;
+      }
+      this.exportResource = errorResource('export-colormap', error, 'Export failed.');
+      this.setError(this.exportResource.status === 'error' ? this.exportResource.error.message : 'Export failed.');
     } finally {
       if (this.open) {
-        this.setBusy(false);
+        if (isPendingMatch(this.exportResource, 'export-colormap', exportRequestId)) {
+          this.exportResource = idleResource();
+        }
+        this.syncBusyControls();
       }
     }
   }
@@ -365,7 +379,9 @@ export class ExportColormapDialogController implements Disposable {
     this.cancelPreview();
     const abortController = new AbortController();
     this.exportColormapPreviewAbortController = abortController;
-    const requestToken = ++this.exportColormapPreviewRequestToken;
+    const requestKey = serializeExportColormapPreviewRequest(request);
+    const requestId = this.takeRequestId();
+    this.previewResource = pendingResource(requestKey, requestId);
 
     this.hidePreviewCanvas();
     this.setPreviewStatus(COLORMAP_EXPORT_PREVIEW_LOADING_MESSAGE);
@@ -376,11 +392,12 @@ export class ExportColormapDialogController implements Disposable {
         this.disposed ||
         !this.open ||
         abortController.signal.aborted ||
-        requestToken !== this.exportColormapPreviewRequestToken
+        !isPendingMatch(this.previewResource, requestKey, requestId)
       ) {
         return;
       }
 
+      this.previewResource = successResource(requestKey, pixels);
       this.renderPreview(pixels);
     } catch (error) {
       if (
@@ -388,13 +405,14 @@ export class ExportColormapDialogController implements Disposable {
         this.disposed ||
         !this.open ||
         abortController.signal.aborted ||
-        requestToken !== this.exportColormapPreviewRequestToken
+        !isPendingMatch(this.previewResource, requestKey, requestId)
       ) {
         return;
       }
 
+      this.previewResource = errorResource(requestKey, error, 'Preview failed.');
       this.hidePreviewCanvas();
-      this.setPreviewStatus(error instanceof Error ? error.message : 'Preview failed.');
+      this.setPreviewStatus(this.previewResource.status === 'error' ? this.previewResource.error.message : 'Preview failed.');
     } finally {
       if (this.exportColormapPreviewAbortController === abortController) {
         this.exportColormapPreviewAbortController = null;
@@ -403,9 +421,9 @@ export class ExportColormapDialogController implements Disposable {
   }
 
   private cancelPreview(): void {
-    this.exportColormapPreviewRequestToken += 1;
     this.exportColormapPreviewAbortController?.abort();
     this.exportColormapPreviewAbortController = null;
+    this.previewResource = idleResource();
   }
 
   private resetPreview(): void {
@@ -435,6 +453,28 @@ export class ExportColormapDialogController implements Disposable {
 
     this.elements.exportColormapPreviewStatus.classList.remove('hidden');
     this.elements.exportColormapPreviewStatus.textContent = message;
+  }
+
+  private isExportPending(): boolean {
+    return this.exportResource.status === 'pending';
+  }
+
+  private syncBusyControls(): void {
+    const busy = this.isExportPending();
+    this.elements.exportColormapSelect.disabled = busy;
+    this.elements.exportColormapWidthInput.disabled = busy;
+    this.elements.exportColormapHeightInput.disabled = busy;
+    this.elements.exportColormapOrientationSelect.disabled = busy;
+    this.elements.exportColormapFilenameInput.disabled = busy;
+    this.elements.exportColormapDialogCancelButton.disabled = busy;
+    this.elements.exportColormapDialogSubmitButton.disabled = busy;
+    this.elements.exportColormapDialogSubmitButton.textContent = busy ? 'Exporting...' : 'Export';
+  }
+
+  private takeRequestId(): number {
+    const requestId = this.nextRequestId;
+    this.nextRequestId += 1;
+    return requestId;
   }
 }
 
@@ -510,4 +550,8 @@ function parsePositiveIntegerInput(value: string): number | null {
   }
 
   return parsed;
+}
+
+function serializeExportColormapPreviewRequest(request: ExportColormapPreviewRequest): string {
+  return JSON.stringify(request);
 }

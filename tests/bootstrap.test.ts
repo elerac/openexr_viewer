@@ -17,19 +17,26 @@ const mocks = vi.hoisted(() => {
         }
       | null,
     defaultColormapId: '0',
-    activeColormapLut: null,
-    activeDisplayLuminanceRange: null,
-    activeImageStats: null,
-    loadedColormapId: null,
+    colormapLutResource: { status: 'idle' },
+    displayRangeResource: { status: 'idle' },
+    imageStatsResource: { status: 'idle' },
+    autoExposureResource: { status: 'idle' },
+    pendingColormapActivation: null,
+    pendingSelectionTransitionRequestId: null,
+    thumbnailsBySessionId: {},
+    channelThumbnailsByRequestKey: {},
+    channelThumbnailLatestRequestKeyByContextKey: {},
     stokesDisplayRestoreStates: {},
+    stokesColormapDefaults: {
+      degree: { colormapLabel: 'HSV', range: { min: 0, max: 1 }, zeroCentered: false },
+      aolp: { colormapLabel: 'HSV', range: { min: 0, max: Math.PI }, zeroCentered: false, modulation: { enabled: false, aolpMode: 'value' } },
+      cop: { colormapLabel: 'Yellow-Black-Blue', range: { min: -Math.PI / 4, max: Math.PI / 4 }, zeroCentered: true },
+      top: { colormapLabel: 'Yellow-Cyan-Yellow', range: { min: -Math.PI / 4, max: Math.PI / 4 }, zeroCentered: true }
+    },
     autoFitImageOnSelect: false,
     autoExposureEnabled: false,
     autoExposurePercentile: 99.5,
     rulersVisible: false,
-    pendingAutoExposureRequestId: null,
-    pendingAutoExposureRequestKey: null,
-    pendingImageStatsRequestId: null,
-    pendingImageStatsRequestKey: null,
     sessionState: {
       exposureEv: 0,
       viewerMode: 'image',
@@ -1786,16 +1793,14 @@ describe('bootstrap app lifecycle', () => {
       activeSessionId: string | null;
       sessions: unknown[];
       colormapRegistry: typeof registry;
-      loadedColormapId: string | null;
-      activeColormapLut: unknown;
+      colormapLutResource: unknown;
       sessionState: Record<string, unknown>;
       stokesDisplayRestoreStates: Record<string, unknown>;
     };
     mutableCoreState.activeSessionId = 'session-1';
     mutableCoreState.sessions = [session1, session2];
     mutableCoreState.colormapRegistry = registry;
-    mutableCoreState.loadedColormapId = '1';
-    mutableCoreState.activeColormapLut = luts['1'];
+    mutableCoreState.colormapLutResource = { status: 'success', key: '1', value: luts['1'] };
     Object.assign(mutableCoreState.sessionState, {
       visualizationMode: 'colormap',
       activeColormapId: '1',

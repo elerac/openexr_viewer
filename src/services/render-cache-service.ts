@@ -16,6 +16,10 @@ import {
   type AutoExposureResult
 } from '../auto-exposure';
 import {
+  pendingResource,
+  successResource
+} from '../async-resource';
+import {
   buildDisplayAutoExposureRevisionKey,
   buildDisplayImageStatsRevisionKey,
   buildDisplayLuminanceRevisionKey,
@@ -60,6 +64,7 @@ export interface RequestImageStatsResult {
 
 export interface DisplayLuminanceRangeResolvedEvent {
   requestId: number | null;
+  requestKey: string;
   sessionId: string;
   activeLayer: number;
   displaySelection: DisplaySelection | null;
@@ -68,6 +73,7 @@ export interface DisplayLuminanceRangeResolvedEvent {
 
 export interface ImageStatsResolvedEvent {
   requestId: number | null;
+  requestKey: string;
   sessionId: string;
   activeLayer: number;
   visualizationMode: ViewerSessionState['visualizationMode'];
@@ -77,6 +83,7 @@ export interface ImageStatsResolvedEvent {
 
 export interface AutoExposureResolvedEvent {
   requestId: number | null;
+  requestKey: string;
   sessionId: string;
   activeLayer: number;
   visualizationMode: ViewerSessionState['visualizationMode'];
@@ -345,9 +352,10 @@ export class RenderCacheService implements Disposable {
 
     const entry = this.getOrCreateEntry(session.id);
     const revisionKey = buildDisplayLuminanceRevisionKey(state);
-    if (entry.luminanceRangeByRevision.has(revisionKey)) {
+    const cachedRange = entry.luminanceRangeByRevision.get(revisionKey);
+    if (cachedRange?.status === 'success') {
       return {
-        displayLuminanceRange: entry.luminanceRangeByRevision.get(revisionKey) ?? null,
+        displayLuminanceRange: cachedRange.value,
         pending: false
       };
     }
@@ -357,6 +365,10 @@ export class RenderCacheService implements Disposable {
       const existingJob = pendingJobs.get(revisionKey);
       if (existingJob) {
         existingJob.requestId = requestId;
+        entry.luminanceRangeByRevision.set(
+          revisionKey,
+          pendingResource(buildSessionResourceKey(session.id, revisionKey), requestId ?? 0)
+        );
       }
       return {
         displayLuminanceRange: null,
@@ -376,6 +388,10 @@ export class RenderCacheService implements Disposable {
       layer
     };
     pendingJobs.set(revisionKey, job);
+    entry.luminanceRangeByRevision.set(
+      revisionKey,
+      pendingResource(buildSessionResourceKey(session.id, revisionKey), requestId ?? 0)
+    );
     this.queuedDisplayLuminanceRangeJobs.push(job);
     void this.processDisplayLuminanceRangeJobs();
 
@@ -407,9 +423,10 @@ export class RenderCacheService implements Disposable {
 
     const entry = this.getOrCreateEntry(session.id);
     const revisionKey = buildDisplayImageStatsRevisionKey(state);
-    if (entry.imageStatsByRevision.has(revisionKey)) {
+    const cachedStats = entry.imageStatsByRevision.get(revisionKey);
+    if (cachedStats?.status === 'success') {
       return {
-        imageStats: entry.imageStatsByRevision.get(revisionKey) ?? null,
+        imageStats: cachedStats.value,
         pending: false
       };
     }
@@ -419,6 +436,10 @@ export class RenderCacheService implements Disposable {
       const existingJob = pendingJobs.get(revisionKey);
       if (existingJob) {
         existingJob.requestId = requestId;
+        entry.imageStatsByRevision.set(
+          revisionKey,
+          pendingResource(buildSessionResourceKey(session.id, revisionKey), requestId ?? 0)
+        );
       }
       return {
         imageStats: null,
@@ -438,6 +459,10 @@ export class RenderCacheService implements Disposable {
       layer
     };
     pendingJobs.set(revisionKey, job);
+    entry.imageStatsByRevision.set(
+      revisionKey,
+      pendingResource(buildSessionResourceKey(session.id, revisionKey), requestId ?? 0)
+    );
     this.queuedImageStatsJobs.push(job);
     void this.processImageStatsJobs();
 
@@ -470,9 +495,10 @@ export class RenderCacheService implements Disposable {
 
     const entry = this.getOrCreateEntry(session.id);
     const revisionKey = buildDisplayAutoExposureRevisionKey(state, percentile);
-    if (entry.autoExposureByRevision.has(revisionKey)) {
+    const cachedAutoExposure = entry.autoExposureByRevision.get(revisionKey);
+    if (cachedAutoExposure?.status === 'success') {
       return {
-        autoExposure: entry.autoExposureByRevision.get(revisionKey) ?? null,
+        autoExposure: cachedAutoExposure.value,
         pending: false
       };
     }
@@ -482,6 +508,10 @@ export class RenderCacheService implements Disposable {
       const existingJob = pendingJobs.get(revisionKey);
       if (existingJob) {
         existingJob.requestId = requestId;
+        entry.autoExposureByRevision.set(
+          revisionKey,
+          pendingResource(buildSessionResourceKey(session.id, revisionKey), requestId ?? 0)
+        );
       }
       return {
         autoExposure: null,
@@ -502,6 +532,10 @@ export class RenderCacheService implements Disposable {
       layer
     };
     pendingJobs.set(revisionKey, job);
+    entry.autoExposureByRevision.set(
+      revisionKey,
+      pendingResource(buildSessionResourceKey(session.id, revisionKey), requestId ?? 0)
+    );
     this.queuedAutoExposureJobs.push(job);
     void this.processAutoExposureJobs();
 
@@ -524,7 +558,8 @@ export class RenderCacheService implements Disposable {
       return null;
     }
 
-    return entry.luminanceRangeByRevision.get(buildDisplayLuminanceRevisionKey(state)) ?? null;
+    const resource = entry.luminanceRangeByRevision.get(buildDisplayLuminanceRevisionKey(state));
+    return resource?.status === 'success' ? resource.value : null;
   }
 
   getCachedImageStats(
@@ -540,7 +575,8 @@ export class RenderCacheService implements Disposable {
       return null;
     }
 
-    return entry.imageStatsByRevision.get(buildDisplayImageStatsRevisionKey(state)) ?? null;
+    const resource = entry.imageStatsByRevision.get(buildDisplayImageStatsRevisionKey(state));
+    return resource?.status === 'success' ? resource.value : null;
   }
 
   resolveDisplayLuminanceRange(
@@ -558,8 +594,9 @@ export class RenderCacheService implements Disposable {
 
     const entry = this.getOrCreateEntry(session.id);
     const revisionKey = buildDisplayLuminanceRevisionKey(state);
-    if (entry.luminanceRangeByRevision.has(revisionKey)) {
-      return entry.luminanceRangeByRevision.get(revisionKey) ?? null;
+    const cachedRange = entry.luminanceRangeByRevision.get(revisionKey);
+    if (cachedRange?.status === 'success') {
+      return cachedRange.value;
     }
 
     const range = this.getOrComputeDisplayLuminanceRange(
@@ -569,7 +606,10 @@ export class RenderCacheService implements Disposable {
       state.displaySelection,
       state.visualizationMode
     );
-    entry.luminanceRangeByRevision.set(revisionKey, range);
+    entry.luminanceRangeByRevision.set(
+      revisionKey,
+      successResource(buildSessionResourceKey(session.id, revisionKey), range)
+    );
     return range;
   }
 
@@ -722,9 +762,11 @@ export class RenderCacheService implements Disposable {
             continue;
           }
 
-          entry.luminanceRangeByRevision.set(job.revisionKey, range);
+          const requestKey = buildSessionResourceKey(job.sessionId, job.revisionKey);
+          entry.luminanceRangeByRevision.set(job.revisionKey, successResource(requestKey, range));
           this.onDisplayLuminanceRangeResolved({
             requestId: job.requestId,
+            requestKey,
             sessionId: job.sessionId,
             activeLayer: job.activeLayer,
             displaySelection: cloneDisplaySelection(job.displaySelection),
@@ -788,9 +830,11 @@ export class RenderCacheService implements Disposable {
             continue;
           }
 
-          entry.imageStatsByRevision.set(job.revisionKey, imageStats);
+          const requestKey = buildSessionResourceKey(job.sessionId, job.revisionKey);
+          entry.imageStatsByRevision.set(job.revisionKey, successResource(requestKey, imageStats));
           this.onImageStatsResolved({
             requestId: job.requestId,
+            requestKey,
             sessionId: job.sessionId,
             activeLayer: job.activeLayer,
             visualizationMode: job.visualizationMode,
@@ -856,9 +900,11 @@ export class RenderCacheService implements Disposable {
             continue;
           }
 
-          entry.autoExposureByRevision.set(job.revisionKey, autoExposure);
+          const requestKey = buildSessionResourceKey(job.sessionId, job.revisionKey);
+          entry.autoExposureByRevision.set(job.revisionKey, successResource(requestKey, autoExposure));
           this.onAutoExposureResolved({
             requestId: job.requestId,
+            requestKey,
             sessionId: job.sessionId,
             activeLayer: job.activeLayer,
             visualizationMode: job.visualizationMode,
@@ -1302,4 +1348,8 @@ function resolveWindowLike(): RenderCacheWindowLike | null {
   }
 
   return window;
+}
+
+function buildSessionResourceKey(sessionId: string, revisionKey: string): string {
+  return `${sessionId}:${revisionKey}`;
 }

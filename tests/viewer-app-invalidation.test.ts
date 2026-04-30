@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { pendingResource, successResource } from '../src/async-resource';
 import { createInitialViewerAppState } from '../src/app/viewer-app-core';
 import { buildChannelViewItems } from '../src/channel-view-items';
 import {
@@ -194,7 +195,7 @@ describe('viewer app lanes', () => {
 
     const pendingColormap = selectUiSnapshot({
       ...state,
-      pendingColormapRequestId: 2
+      colormapLutResource: pendingResource('2', 2)
     });
     expect(pendingColormap.isDisplayBusy).toBe(true);
     expect(pendingColormap.isDisplayOverlayLoading).toBe(true);
@@ -358,7 +359,7 @@ describe('viewer app lanes', () => {
     const pendingState = {
       ...previous,
       channelThumbnailsByRequestKey: {
-        [previousRequestKey]: 'thumb-0'
+        [previousRequestKey]: successResource(previousRequestKey, 'thumb-0')
       },
       channelThumbnailLatestRequestKeyByContextKey: {
         [contextKey]: previousRequestKey
@@ -390,7 +391,7 @@ describe('viewer app lanes', () => {
     const next = {
       ...previous,
       channelThumbnailsByRequestKey: {
-        [requestKey]: 'thumb-0'
+        [requestKey]: successResource(requestKey, 'thumb-0')
       },
       channelThumbnailLatestRequestKeyByContextKey: {
         [contextKey]: requestKey
@@ -405,7 +406,12 @@ describe('viewer app lanes', () => {
     const previous = createActiveState();
     const next = {
       ...previous,
-      activeColormapLut: { id: '0', label: 'Default', entryCount: 2, rgba8: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]) }
+      colormapLutResource: successResource('0', {
+        id: '0',
+        label: 'Default',
+        entryCount: 2,
+        rgba8: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255])
+      })
     };
 
     const uiFlags = createUiFlags(previous, next);
@@ -431,7 +437,7 @@ describe('viewer app lanes', () => {
         ...previous.sessionState,
         colormapRange: { min: 0, max: 1 }
       },
-      activeDisplayLuminanceRange: { min: 0, max: 1 }
+      displayRangeResource: successResource('session-1:range', { min: 0, max: 1 })
     };
 
     const uiFlags = createUiFlags(previous, next);

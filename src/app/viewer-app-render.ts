@@ -14,7 +14,7 @@ import {
   sameRoiInteractionState,
   sameViewState
 } from '../view-state';
-import type { OpenedImageSession, ViewerRenderState } from '../types';
+import type { DisplayLuminanceRange, OpenedImageSession, ViewerRenderState } from '../types';
 import { buildProbeReadoutModel } from './probe-presentation';
 import { buildRoiReadoutModel } from './roi-presentation';
 import {
@@ -25,7 +25,12 @@ import {
   sameResourceTarget,
   sameViewerStateReadout
 } from './viewer-app-equality';
-import { selectActiveSession } from './viewer-app-selectors';
+import {
+  selectActiveColormapLut,
+  selectActiveDisplayLuminanceRange,
+  selectActiveImageStats,
+  selectActiveSession
+} from './viewer-app-selectors';
 import type {
   ViewerAppState,
   ViewerDisplayRangeRequest,
@@ -66,13 +71,14 @@ export function createViewerRenderSnapshotSelector(): (state: ViewerAppState) =>
   return (state) => {
     const activeSession = selectActiveSession(state);
     const activeLayer = activeSession?.decoded.layers[state.sessionState.activeLayer] ?? null;
+    const activeColormapLut = selectActiveColormapLut(state);
     const imageStatsRequest = selectImageStatsRequest(state, activeSession, activeLayer);
 
     const nextSnapshot: ViewerRenderSnapshot = {
       activeSession,
       activeLayer,
       renderState: selectRenderState(state),
-      activeColormapLut: state.activeColormapLut,
+      activeColormapLut,
       probeReadout: selectProbeReadout(state, activeSession, activeLayer),
       roiReadout: selectRoiReadout(state, activeSession, activeLayer),
       viewerStateReadout: buildViewerStateReadout(state, activeSession),
@@ -190,8 +196,8 @@ function createProbeReadoutSelector(): (
   let previousExposureEv = 0;
   let previousVisualizationMode: ViewerAppState['sessionState']['visualizationMode'] = 'rgb';
   let previousColormapRange: ViewerAppState['sessionState']['colormapRange'] = null;
-  let previousActiveDisplayLuminanceRange: ViewerAppState['activeDisplayLuminanceRange'] = null;
-  let previousActiveColormapLut: ViewerAppState['activeColormapLut'] = null;
+  let previousActiveDisplayLuminanceRange: DisplayLuminanceRange | null = null;
+  let previousActiveColormapLut: ViewerRenderSnapshot['activeColormapLut'] = null;
   let previousStokesDegreeModulation = { aolp: false, cop: false, top: false };
   let previousStokesAolpDegreeModulationMode: ViewerAppState['sessionState']['stokesAolpDegreeModulationMode'] = 'value';
   let previousResult = buildProbeReadoutModel({
@@ -209,6 +215,8 @@ function createProbeReadoutSelector(): (
     const height = activeSession?.decoded.height ?? 0;
     const nextStokesDegreeModulation = state.sessionState.stokesDegreeModulation;
     const usesColormap = state.sessionState.visualizationMode === 'colormap';
+    const activeDisplayLuminanceRange = selectActiveDisplayLuminanceRange(state);
+    const activeColormapLut = selectActiveColormapLut(state);
     const depsMatch =
       sessionId === previousSessionId &&
       activeLayer === previousLayer &&
@@ -222,8 +230,8 @@ function createProbeReadoutSelector(): (
       (
         !usesColormap || (
           sameDisplayLuminanceRange(state.sessionState.colormapRange, previousColormapRange) &&
-          sameDisplayLuminanceRange(state.activeDisplayLuminanceRange, previousActiveDisplayLuminanceRange) &&
-          state.activeColormapLut === previousActiveColormapLut &&
+          sameDisplayLuminanceRange(activeDisplayLuminanceRange, previousActiveDisplayLuminanceRange) &&
+          activeColormapLut === previousActiveColormapLut &&
           nextStokesDegreeModulation.aolp === previousStokesDegreeModulation.aolp &&
           nextStokesDegreeModulation.cop === previousStokesDegreeModulation.cop &&
           nextStokesDegreeModulation.top === previousStokesDegreeModulation.top &&
@@ -245,8 +253,8 @@ function createProbeReadoutSelector(): (
     previousExposureEv = state.sessionState.exposureEv;
     previousVisualizationMode = state.sessionState.visualizationMode;
     previousColormapRange = state.sessionState.colormapRange;
-    previousActiveDisplayLuminanceRange = state.activeDisplayLuminanceRange;
-    previousActiveColormapLut = state.activeColormapLut;
+    previousActiveDisplayLuminanceRange = activeDisplayLuminanceRange;
+    previousActiveColormapLut = activeColormapLut;
     previousStokesDegreeModulation = nextStokesDegreeModulation;
     previousStokesAolpDegreeModulationMode = state.sessionState.stokesAolpDegreeModulationMode;
     previousResult = buildProbeReadoutModel({
@@ -254,8 +262,8 @@ function createProbeReadoutSelector(): (
       activeLayer,
       sessionState: state.sessionState,
       interactionState: state.interactionState,
-      activeColormapLut: state.activeColormapLut,
-      activeDisplayLuminanceRange: state.activeDisplayLuminanceRange
+      activeColormapLut,
+      activeDisplayLuminanceRange
     });
     return previousResult;
   };
@@ -335,7 +343,7 @@ function createImageStatsReadoutSelector(): (
 ) => ViewerRenderSnapshot['imageStatsReadout'] {
   let previousSessionId: string | null = null;
   let previousLayer: ViewerRenderSnapshot['activeLayer'] = null;
-  let previousStats: ViewerAppState['activeImageStats'] = null;
+  let previousStats: ViewerRenderSnapshot['imageStatsReadout']['stats'] = null;
   let previousLoading = false;
   let previousResult: ViewerRenderSnapshot['imageStatsReadout'] = {
     hasActiveImage: false,
@@ -347,10 +355,11 @@ function createImageStatsReadoutSelector(): (
     const sessionId = activeSession?.id ?? null;
     const hasActiveImage = Boolean(activeSession && activeLayer);
     const isLoading = Boolean(imageStatsRequest);
+    const activeImageStats = selectActiveImageStats(state);
     if (
       sessionId === previousSessionId &&
       activeLayer === previousLayer &&
-      state.activeImageStats === previousStats &&
+      activeImageStats === previousStats &&
       isLoading === previousLoading
     ) {
       return previousResult;
@@ -358,12 +367,12 @@ function createImageStatsReadoutSelector(): (
 
     previousSessionId = sessionId;
     previousLayer = activeLayer;
-    previousStats = state.activeImageStats;
+    previousStats = activeImageStats;
     previousLoading = isLoading;
     previousResult = {
       hasActiveImage,
       isLoading,
-      stats: hasActiveImage ? state.activeImageStats : null
+      stats: hasActiveImage ? activeImageStats : null
     };
     return previousResult;
   };
@@ -411,7 +420,7 @@ function createImageStatsRequestSelector(): (
 ) => ViewerImageStatsRequest | null {
   let previousResult: ViewerImageStatsRequest | null = null;
   return (state, activeSession, activeLayer) => {
-    const nextResult = activeSession && activeLayer && !state.activeImageStats
+    const nextResult = activeSession && activeLayer && !selectActiveImageStats(state)
       ? {
           sessionId: activeSession.id,
           activeLayer: state.sessionState.activeLayer,
