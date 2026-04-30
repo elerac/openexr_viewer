@@ -7,13 +7,10 @@ import {
   findClosestListRow,
   focusSelectedImageBrowserRow,
   getImageBrowserRows,
-  getImageBrowserRowValueAtClientY,
-  getListboxOptionIndexAtClientY,
   handleImageBrowserListKeyDown,
   isFocusWithinElement,
   isNestedInteractiveListControl,
   renderEmptyListMessage,
-  type ListboxHitTestMetrics,
   renderKeyedChildren,
   syncSelectOptions
 } from './render-helpers';
@@ -42,10 +39,10 @@ interface OpenedImageDropTarget {
 
 interface OpenedImageDragState {
   sessionId: string;
-  startY: number;
   lastTargetKey: string | null;
   dropTarget: OpenedImageDropTarget | null;
   isDragging: boolean;
+  dragImage: HTMLElement | null;
 }
 
 interface OpenedFileRenameState {
@@ -62,6 +59,9 @@ interface OpenedFileRowRefs {
 }
 
 const openedFileRowRefs = new WeakMap<HTMLElement, OpenedFileRowRefs>();
+const OPENED_FILE_DRAG_MIME = 'application/x-openexr-viewer-opened-file';
+const OPENED_FILE_DRAG_IMAGE_OFFSET_X = 16;
+const OPENED_FILE_DRAG_IMAGE_OFFSET_Y = 16;
 
 export class OpenedImagesPanel implements Disposable {
   private readonly disposables = new DisposableBag();
@@ -95,56 +95,62 @@ export class OpenedImagesPanel implements Disposable {
     };
     this.disposables.addEventListener(this.elements.openedImagesSelect, 'change', onOpenedImagesSelect);
     this.disposables.addEventListener(this.elements.openedImagesSelect, 'input', onOpenedImagesSelect);
-    this.disposables.addEventListener(this.elements.openedImagesSelect, 'mousedown', (event) => {
-      if (event.button !== 0 || this.elements.openedImagesSelect.disabled) {
-        return;
-      }
-      // Use a controlled interaction model; native listbox drag-selection causes unstable row switching.
-      event.preventDefault();
-      this.elements.openedImagesSelect.focus();
-
-      const sessionId = this.getOpenedImageSessionAtClientY(event.clientY);
-      if (!sessionId) {
+    this.disposables.addEventListener(this.elements.openedFilesList, 'click', (event) => {
+      if (this.openedImageDragState || performance.now() < this.suppressOpenedImageSelectionUntilMs) {
+        event.preventDefault();
         return;
       }
 
-      this.openedImageDragState = {
-        sessionId,
-        startY: event.clientY,
-        lastTargetKey: null,
-        dropTarget: null,
-        isDragging: false
-      };
-    });
-    this.disposables.addEventListener(this.elements.openedFilesList, 'mousedown', (event) => {
       if (isOpenedFileRenameInput(event.target)) {
         return;
       }
 
       this.commitActiveOpenedFileRename();
 
-      if (event.button !== 0 || this.elements.openedImagesSelect.disabled) {
+      if (this.elements.openedImagesSelect.disabled) {
         return;
       }
 
       const row = findClosestListRow(event.target, 'sessionId');
-      if (!row) {
+      if (
+        !row ||
+        row.getAttribute('aria-disabled') === 'true' ||
+        isNestedInteractiveListControl(event.target, row)
+      ) {
         return;
       }
 
       event.preventDefault();
       row.focus();
       this.callbacks.onOpenedImageRowClick();
-
-      const sessionId = row.dataset.sessionId ?? '';
-
-      this.openedImageDragState = {
-        sessionId,
-        startY: event.clientY,
-        lastTargetKey: null,
-        dropTarget: null,
-        isDragging: false
-      };
+      this.chooseOpenedImage(row.dataset.sessionId ?? '');
+    });
+    this.disposables.addEventListener(this.elements.openedFilesList, 'dragstart', (event) => {
+      this.handleOpenedFileDragStart(event);
+    });
+    this.disposables.addEventListener(this.elements.openedFilesList, 'dragover', (event) => {
+      this.handleOpenedFilesListDragOver(event);
+    });
+    this.disposables.addEventListener(this.elements.openedFilesList, 'dragleave', (event) => {
+      this.handleOpenedFilesListDragLeave(event);
+    });
+    this.disposables.addEventListener(this.elements.openedFilesList, 'drop', (event) => {
+      this.handleOpenedFilesListDrop(event);
+    });
+    this.disposables.addEventListener(this.elements.openedFilesList, 'dragend', () => {
+      this.finishOpenedImagesDrag();
+    });
+    this.disposables.addEventListener(this.elements.viewerContainer, 'dragenter', (event) => {
+      this.handleViewerOpenedFileDragEnter(event);
+    });
+    this.disposables.addEventListener(this.elements.viewerContainer, 'dragover', (event) => {
+      this.handleViewerOpenedFileDragOver(event);
+    });
+    this.disposables.addEventListener(this.elements.viewerContainer, 'dragleave', (event) => {
+      this.handleViewerOpenedFileDragLeave(event);
+    });
+    this.disposables.addEventListener(this.elements.viewerContainer, 'drop', (event) => {
+      this.handleViewerOpenedFileDrop(event);
     });
     this.disposables.addEventListener(this.elements.openedFilesList, 'dblclick', (event) => {
       if (isOpenedFileRenameInput(event.target)) {
@@ -233,12 +239,6 @@ export class OpenedImagesPanel implements Disposable {
       this.callbacks.onDisplayCacheBudgetChange(value);
     });
 
-    this.disposables.addEventListener(window, 'mousemove', (event) => {
-      this.onOpenedImagesMouseMove(event);
-    });
-    this.disposables.addEventListener(window, 'mouseup', () => {
-      this.finishOpenedImagesDrag({ selectPendingClick: true });
-    });
     this.disposables.addEventListener(window, 'blur', () => {
       this.commitActiveOpenedFileRename();
       this.finishOpenedImagesDrag();
@@ -553,39 +553,76 @@ export class OpenedImagesPanel implements Disposable {
     return null;
   }
 
-  private onOpenedImagesMouseMove(event: MouseEvent): void {
-    if (this.disposed) {
+  private handleOpenedFileDragStart(event: DragEvent): void {
+    const row = findClosestListRow(event.target, 'sessionId');
+    if (
+      !row ||
+      row.getAttribute('aria-disabled') === 'true' ||
+      isNestedInteractiveListControl(event.target, row) ||
+      this.elements.openedImagesSelect.disabled
+    ) {
+      event.preventDefault();
       return;
     }
 
-    const dragState = this.openedImageDragState;
-    if (!dragState) {
-      return;
-    }
-    event.preventDefault();
-
-    if ((event.buttons & 1) !== 1) {
-      this.finishOpenedImagesDrag();
+    const sessionId = row.dataset.sessionId ?? '';
+    const item = this.openedImageItems.find((current) => current.id === sessionId);
+    if (!item || !event.dataTransfer) {
+      event.preventDefault();
       return;
     }
 
-    if (Math.abs(event.clientY - dragState.startY) < 6) {
-      return;
-    }
+    this.commitActiveOpenedFileRename();
+    row.focus();
+    this.callbacks.onOpenedImageRowClick();
 
-    if (!dragState.isDragging) {
-      dragState.isDragging = true;
-      this.elements.openedFilesList.classList.add('is-reordering');
-    }
+    const dragImage = createOpenedFileDragImage(item);
+    document.body.append(dragImage);
 
-    const dropTarget = this.getOpenedImageDropTargetAtClientY(event.clientY);
-    dragState.dropTarget = dropTarget;
+    this.openedImageDragState = {
+      sessionId,
+      lastTargetKey: null,
+      dropTarget: null,
+      isDragging: true,
+      dragImage
+    };
+    this.elements.openedFilesList.classList.add('is-reordering');
     this.applyOpenedImageDragState();
 
-    if (!dropTarget) {
-      dragState.lastTargetKey = null;
+    event.dataTransfer.effectAllowed = 'copyMove';
+    safelySetDragData(event.dataTransfer, OPENED_FILE_DRAG_MIME, sessionId);
+    safelySetDragData(event.dataTransfer, 'text/plain', item.label);
+    safelySetDragImage(
+      event.dataTransfer,
+      dragImage,
+      OPENED_FILE_DRAG_IMAGE_OFFSET_X,
+      OPENED_FILE_DRAG_IMAGE_OFFSET_Y
+    );
+  }
+
+  private handleOpenedFilesListDragOver(event: DragEvent): void {
+    if (!this.canAcceptOpenedFileDrag(event)) {
       return;
     }
+
+    const dragState = this.openedImageDragState!;
+    const dropTarget = this.getOpenedImageDropTargetAtClientPoint(event.clientX, event.clientY);
+    if (!dropTarget) {
+      dragState.dropTarget = null;
+      dragState.lastTargetKey = null;
+      this.applyOpenedImageDragState();
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+
+    this.setOpenedFileViewerDropTarget(false);
+    dragState.dropTarget = dropTarget;
+    this.applyOpenedImageDragState();
 
     const targetKey = serializeOpenedImageDropTarget(dropTarget);
     if (targetKey === dragState.lastTargetKey) {
@@ -600,10 +637,88 @@ export class OpenedImagesPanel implements Disposable {
     this.callbacks.onReorderOpenedImage(dragState.sessionId, dropTarget.sessionId, dropTarget.placement);
   }
 
-  private finishOpenedImagesDrag(options: { selectPendingClick?: boolean } = {}): void {
+  private handleOpenedFilesListDragLeave(event: DragEvent): void {
+    if (!this.openedImageDragState) {
+      return;
+    }
+
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && this.elements.openedFilesList.contains(nextTarget)) {
+      return;
+    }
+
+    this.openedImageDragState.dropTarget = null;
+    this.openedImageDragState.lastTargetKey = null;
+    this.applyOpenedImageDragState();
+  }
+
+  private handleOpenedFilesListDrop(event: DragEvent): void {
+    if (!this.canAcceptOpenedFileDrag(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.finishOpenedImagesDrag();
+  }
+
+  private handleViewerOpenedFileDragEnter(event: DragEvent): void {
+    if (!this.canAcceptOpenedFileDrag(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.clearOpenedFileReorderTarget();
+    this.setOpenedFileViewerDropTarget(true);
+  }
+
+  private handleViewerOpenedFileDragOver(event: DragEvent): void {
+    if (!this.canAcceptOpenedFileDrag(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+    this.clearOpenedFileReorderTarget();
+    this.setOpenedFileViewerDropTarget(true);
+  }
+
+  private handleViewerOpenedFileDragLeave(event: DragEvent): void {
+    if (!this.openedImageDragState) {
+      return;
+    }
+
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && this.elements.viewerContainer.contains(nextTarget)) {
+      return;
+    }
+
+    this.setOpenedFileViewerDropTarget(false);
+  }
+
+  private handleViewerOpenedFileDrop(event: DragEvent): void {
+    if (!this.canAcceptOpenedFileDrag(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const sessionId = this.openedImageDragState?.sessionId ?? '';
+    this.finishOpenedImagesDrag();
+    this.chooseOpenedImage(sessionId);
+  }
+
+  private finishOpenedImagesDrag(): void {
     const dragState = this.openedImageDragState;
     this.openedImageDragState = null;
     this.elements.openedFilesList.classList.remove('is-reordering');
+    this.setOpenedFileViewerDropTarget(false);
+    dragState?.dragImage?.remove();
     this.applyOpenedImageDragState();
 
     const activeId = this.openedImagesActiveId;
@@ -613,11 +728,6 @@ export class OpenedImagesPanel implements Disposable {
 
     if (dragState?.isDragging) {
       this.suppressOpenedImageSelectionUntilMs = performance.now() + 120;
-      return;
-    }
-
-    if (options.selectPendingClick && dragState?.sessionId) {
-      this.chooseOpenedImage(dragState.sessionId);
     }
   }
 
@@ -640,46 +750,50 @@ export class OpenedImagesPanel implements Disposable {
     }
   }
 
-  private getOpenedImageSessionAtClientY(clientY: number): string | null {
-    const rowSessionId = getImageBrowserRowValueAtClientY(this.elements.openedFilesList, clientY, 'sessionId');
-    if (rowSessionId) {
-      return rowSessionId;
-    }
-
-    const select = this.elements.openedImagesSelect;
-    const options = select.options;
-    if (options.length === 0) {
-      return null;
-    }
-
-    const rect = select.getBoundingClientRect();
-    if (rect.height <= 0) {
-      return null;
-    }
-
-    const top = rect.top + select.clientTop;
-    const height = Math.max(1, select.clientHeight);
-    const index = getListboxOptionIndexAtClientY(clientY, {
-      top,
-      height,
-      scrollTop: select.scrollTop,
-      scrollHeight: select.scrollHeight,
-      optionCount: options.length
-    } satisfies ListboxHitTestMetrics);
-    if (index < 0) {
-      return null;
-    }
-    return options[index]?.value ?? null;
+  private setOpenedFileViewerDropTarget(active: boolean): void {
+    this.elements.viewerContainer.classList.toggle('is-opened-file-drop-target', active);
   }
 
-  private getOpenedImageDropTargetAtClientY(clientY: number): OpenedImageDropTarget | null {
+  private clearOpenedFileReorderTarget(): void {
+    if (!this.openedImageDragState) {
+      return;
+    }
+
+    this.openedImageDragState.dropTarget = null;
+    this.openedImageDragState.lastTargetKey = null;
+    this.applyOpenedImageDragState();
+  }
+
+  private canAcceptOpenedFileDrag(event: DragEvent): boolean {
+    const dragState = this.openedImageDragState;
+    if (!dragState || this.isLoading || !this.openedImageItems.some((item) => item.id === dragState.sessionId)) {
+      return false;
+    }
+
+    const dataTransfer = event.dataTransfer;
+    if (!dataTransfer) {
+      return true;
+    }
+
+    const types = Array.from(dataTransfer.types ?? []);
+    return types.length === 0 || types.includes(OPENED_FILE_DRAG_MIME);
+  }
+
+  private getOpenedImageDropTargetAtClientPoint(clientX: number, clientY: number): OpenedImageDropTarget | null {
     const rows = getImageBrowserRows(this.elements.openedFilesList);
     if (rows.length === 0) {
       return null;
     }
 
     const listRect = this.elements.openedFilesList.getBoundingClientRect();
-    if (listRect.height <= 0 || clientY < listRect.top || clientY > listRect.bottom) {
+    if (
+      listRect.height <= 0 ||
+      listRect.width <= 0 ||
+      clientX < listRect.left ||
+      clientX > listRect.right ||
+      clientY < listRect.top ||
+      clientY > listRect.bottom
+    ) {
       return null;
     }
 
@@ -771,6 +885,33 @@ function createOpenedFileRow(
   return row;
 }
 
+function createOpenedFileDragImage(item: OpenedImageOptionItem): HTMLDivElement {
+  const dragImage = document.createElement('div');
+  dragImage.className = 'opened-file-drag-image';
+  dragImage.dataset.sessionId = item.id;
+  dragImage.setAttribute('aria-hidden', 'true');
+
+  const visual = document.createElement('span');
+  visual.className = 'opened-file-drag-image-visual';
+  if (item.thumbnailDataUrl) {
+    const image = document.createElement('img');
+    image.className = 'opened-file-drag-image-thumbnail';
+    image.src = item.thumbnailDataUrl;
+    image.alt = '';
+    image.draggable = false;
+    visual.append(image);
+  } else {
+    visual.append(createOpenedFileThumbnail(null));
+  }
+
+  const label = document.createElement('span');
+  label.className = 'opened-file-drag-image-label';
+  label.textContent = item.label;
+
+  dragImage.append(visual, label);
+  return dragImage;
+}
+
 function updateOpenedFileRow(
   row: HTMLDivElement,
   item: OpenedImageOptionItem,
@@ -793,6 +934,7 @@ function updateOpenedFileRow(
   row.setAttribute('aria-selected', options.selected ? 'true' : 'false');
   row.setAttribute('aria-disabled', options.disabled ? 'true' : 'false');
   row.tabIndex = options.disabled ? -1 : 0;
+  row.draggable = !options.disabled && !options.editing;
   row.classList.toggle('opened-file-row--dragging', options.dragging);
   row.classList.toggle('opened-file-row--drop-before', options.dropPlacement === 'before');
   row.classList.toggle('opened-file-row--drop-after', options.dropPlacement === 'after');
@@ -985,6 +1127,22 @@ function createSvgElement<K extends keyof SVGElementTagNameMap>(tagName: K): SVG
 
 function isOpenedFileRenameInput(target: EventTarget | null): target is HTMLInputElement {
   return target instanceof HTMLInputElement && target.classList.contains('opened-file-rename-input');
+}
+
+function safelySetDragData(dataTransfer: DataTransfer, type: string, value: string): void {
+  try {
+    dataTransfer.setData(type, value);
+  } catch {
+    // Some browsers restrict custom drag data in edge cases; in-memory drag state remains authoritative.
+  }
+}
+
+function safelySetDragImage(dataTransfer: DataTransfer, image: Element, x: number, y: number): void {
+  try {
+    dataTransfer.setDragImage(image, x, y);
+  } catch {
+    // Drag images are an affordance only; default browser drag feedback is acceptable as a fallback.
+  }
 }
 
 function getOpenedFilesKeyboardReorderDelta(event: KeyboardEvent): -1 | 1 | null {

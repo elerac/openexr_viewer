@@ -208,6 +208,7 @@ export type OpenedImagesPanelElements = Pick<
   | 'openedImagesSelect'
   | 'openedFilesList'
   | 'openedFilesCount'
+  | 'viewerContainer'
   | 'displayCacheControl'
   | 'displayCacheBudgetInput'
   | 'displayCacheUsage'

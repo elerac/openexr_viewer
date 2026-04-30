@@ -54,6 +54,41 @@ test('selects a bottom thumbnail when dragged into the image viewer', async ({ p
   await expect(thumbnailTiles.nth(1)).toHaveAttribute('aria-selected', 'true');
 });
 
+test('selects an open file when dragged into the image viewer', async ({ page }) => {
+  await gotoViewerApp(page);
+
+  const openedImages = page.locator('#opened-images-select');
+  const viewer = page.locator('#viewer-container');
+
+  await openGalleryCbox(page);
+  await page.setInputFiles('#file-input', {
+    name: 'scalar_z.exr',
+    mimeType: 'image/exr',
+    buffer: buildScalarChannelExr()
+  });
+  await expect(openedImages.locator('option:checked')).toContainText('scalar_z.exr', { timeout: 30000 });
+
+  const cboxRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'cbox_rgb.exr' });
+  const cboxRowBox = await cboxRow.boundingBox();
+  if (!cboxRowBox) {
+    throw new Error('Open file row is not visible.');
+  }
+
+  const target = await resolveViewerPoint(viewer, 0.5, 0.5);
+  await page.mouse.move(cboxRowBox.x + cboxRowBox.width / 2, cboxRowBox.y + cboxRowBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x, target.y, { steps: 8 });
+
+  await expect(viewer).toHaveClass(/is-opened-file-drop-target/);
+
+  await page.mouse.up();
+  await page.waitForTimeout(100);
+
+  await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr');
+  await expect(cboxRow).toHaveAttribute('aria-selected', 'true');
+  await expect(viewer).not.toHaveClass(/is-opened-file-drop-target/);
+});
+
 test('keeps collapsed bottom channel names visible and selectable', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await gotoViewerApp(page);

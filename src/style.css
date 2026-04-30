@@ -1314,7 +1314,8 @@ body.is-resizing-panel-rows * {
   background: var(--viewer-fullscreen-background);
 }
 
-.viewer-container.is-channel-thumbnail-drop-target {
+.viewer-container.is-channel-thumbnail-drop-target,
+.viewer-container.is-opened-file-drop-target {
   border-color: color-mix(in srgb, var(--accent) 82%, white 8%);
   box-shadow:
     inset 0 0 0 2px color-mix(in srgb, var(--accent) 58%, transparent),
@@ -1955,6 +1956,61 @@ body.is-resizing-panel-rows * {
 
 .opened-file-row--dragging {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent) inset;
+}
+
+.opened-file-drag-image {
+  position: fixed;
+  left: -10000px;
+  top: -10000px;
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  max-width: min(18rem, calc(100vw - 2rem));
+  padding: 0.34rem 0.62rem 0.34rem 0.42rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 52%, var(--panel-border));
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--panel) 92%, #000);
+  box-shadow:
+    0 0.75rem 1.8rem rgba(0, 0, 0, 0.36),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  pointer-events: none;
+  user-select: none;
+}
+
+.opened-file-drag-image-visual {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--text) 92%, var(--accent) 8%);
+}
+
+.opened-file-drag-image-thumbnail {
+  display: block;
+  max-width: 2rem;
+  max-height: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 0.24rem;
+  background: #171b21;
+}
+
+.opened-file-drag-image .file-row-icon {
+  width: 0.9rem;
+  height: 1.15rem;
+}
+
+.opened-file-drag-image-label {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .opened-file-row::before,

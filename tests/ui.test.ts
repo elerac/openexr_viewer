@@ -4800,13 +4800,16 @@ describe('ui disposal', () => {
     ], 'session-1');
 
     const firstRow = document.querySelector('.opened-file-row') as HTMLDivElement;
-    firstRow.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientY: 10 }));
+    const dataTransfer = createMockDataTransfer();
+    firstRow.dispatchEvent(createOpenedFileDragEvent('dragstart', dataTransfer));
+    expect(document.querySelector('.opened-file-drag-image')).toBeInstanceOf(HTMLDivElement);
 
     ui.dispose();
+    expect(document.querySelector('.opened-file-drag-image')).toBeNull();
 
     (document.getElementById('open-file-button') as HTMLButtonElement).click();
     window.dispatchEvent(createFileDropEvent('drop'));
-    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientY: 80 }));
+    firstRow.dispatchEvent(createOpenedFileDragEvent('dragover', dataTransfer, { clientX: 20, clientY: 80 }));
 
     expect(onOpenFileClick).not.toHaveBeenCalled();
     expect(onFilesDropped).not.toHaveBeenCalled();
@@ -4864,14 +4867,19 @@ describe('opened files actions', () => {
 
     expect(openedFilesList.getAttribute('aria-describedby')).toBe('opened-files-reorder-hint');
     expect(document.getElementById('opened-files-reorder-hint')?.textContent).toBe(
-      'Drag rows or press Alt+Up/Down or Option+Up/Down to reorder open files.'
+      'Drag rows to reorder open files or drop a row on the image viewer to select it. Press Alt+Up/Down or Option+Up/Down to reorder open files.'
     );
     expect(openedFilesList.querySelector('.opened-file-grip')).toBeInstanceOf(HTMLSpanElement);
     expect(openedFilesList.querySelector('.opened-file-thumbnail')).toBeInstanceOf(HTMLImageElement);
     expect(firstRow.childElementCount).toBe(4);
+    expect(firstRow.draggable).toBe(true);
     expect(actionLabels).toEqual(['Reload beauty.exr', 'Close beauty.exr']);
     expect(openedFilesList.querySelectorAll('button')).toHaveLength(2);
     expect(document.querySelector('[aria-label="Pin cache for beauty.exr"]')).toBeNull();
+
+    ui.setLoading(true);
+
+    expect((openedFilesList.querySelector('.opened-file-row') as HTMLDivElement).draggable).toBe(false);
   });
 
   it('renders path-aware opened file labels in the row and compatibility select', () => {
@@ -4919,6 +4927,8 @@ describe('opened files actions', () => {
     expect(input).toBeInstanceOf(HTMLInputElement);
     expect(document.activeElement).toBe(input);
     expect(input.value).toBe('image.exr');
+    expect(row.draggable).toBe(false);
+    expect(input.draggable).toBe(false);
 
     input.value = '  Hero Plate.exr  ';
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -5032,13 +5042,15 @@ describe('opened files actions', () => {
     firstRow.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
     const input = document.querySelector('#opened-files-list .opened-file-rename-input') as HTMLInputElement;
+    const dataTransfer = createMockDataTransfer();
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true, bubbles: true }));
     input.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientY: 10 }));
-    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientY: 35 }));
+    input.dispatchEvent(createOpenedFileDragEvent('dragstart', dataTransfer));
 
     expect(onOpenedImageSelected).not.toHaveBeenCalled();
     expect(onReorderOpenedImage).not.toHaveBeenCalled();
+    expect(document.querySelector('.opened-file-drag-image')).toBeNull();
     expect((document.getElementById('opened-images-select') as HTMLSelectElement).value).toBe('session-1');
   });
 
@@ -5080,10 +5092,11 @@ describe('opened files reordering', () => {
     const secondRow = rows[1] as HTMLDivElement;
     const thirdRow = rows[2] as HTMLDivElement;
     const openedImagesSelect = document.getElementById('opened-images-select') as HTMLSelectElement;
+    const dataTransfer = createMockDataTransfer();
 
-    thirdRow.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientY: 50 }));
-    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientY: 25 }));
-    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    thirdRow.dispatchEvent(createOpenedFileDragEvent('dragstart', dataTransfer));
+    secondRow.dispatchEvent(createOpenedFileDragEvent('dragover', dataTransfer, { clientX: 20, clientY: 25 }));
+    secondRow.dispatchEvent(createOpenedFileDragEvent('drop', dataTransfer, { clientX: 20, clientY: 25 }));
 
     expect(onReorderOpenedImage).toHaveBeenCalledTimes(1);
     expect(onReorderOpenedImage).toHaveBeenCalledWith('session-3', 'session-2', 'before');
@@ -5101,19 +5114,14 @@ describe('opened files reordering', () => {
     const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected, onReorderOpenedImage }));
     ui.setOpenedImageOptions([
       { id: 'session-1', label: 'first.exr' },
-      { id: 'session-2', label: 'second.exr' }
+      { id: 'session-2', label: 'second.exr', thumbnailDataUrl: 'data:image/png;base64,AAAA' }
     ], 'session-1');
 
     const rows = mockOpenedFilesListGeometry();
     const secondRow = rows[1] as HTMLDivElement;
     const openedImagesSelect = document.getElementById('opened-images-select') as HTMLSelectElement;
 
-    secondRow.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientY: 30 }));
-
-    expect(onOpenedImageSelected).not.toHaveBeenCalled();
-    expect(openedImagesSelect.value).toBe('session-1');
-
-    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    secondRow.click();
 
     expect(onReorderOpenedImage).not.toHaveBeenCalled();
     expect(onOpenedImageSelected).toHaveBeenCalledTimes(1);
@@ -5135,12 +5143,14 @@ describe('opened files reordering', () => {
     const rows = mockOpenedFilesListGeometry();
     const secondRow = rows[1] as HTMLDivElement;
     const thirdRow = rows[2] as HTMLDivElement;
+    const dataTransfer = createMockDataTransfer();
 
-    thirdRow.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientY: 50 }));
-    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientY: 25 }));
+    thirdRow.dispatchEvent(createOpenedFileDragEvent('dragstart', dataTransfer));
+    secondRow.dispatchEvent(createOpenedFileDragEvent('dragover', dataTransfer, { clientX: 20, clientY: 25 }));
 
     expect(onReorderOpenedImage).toHaveBeenCalledTimes(1);
     expect(onReorderOpenedImage).toHaveBeenCalledWith('session-3', 'session-2', 'before');
+    expect(dataTransfer.dropEffect).toBe('move');
     expect(thirdRow.classList.contains('opened-file-row--dragging')).toBe(true);
     expect(secondRow.classList.contains('opened-file-row--drop-before')).toBe(true);
   });
@@ -5159,14 +5169,197 @@ describe('opened files reordering', () => {
     const rows = mockOpenedFilesListGeometry();
     const firstRow = rows[0] as HTMLDivElement;
     const secondRow = rows[1] as HTMLDivElement;
+    const dataTransfer = createMockDataTransfer();
 
-    firstRow.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientY: 10 }));
-    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientY: 35 }));
-    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientY: 36 }));
+    firstRow.dispatchEvent(createOpenedFileDragEvent('dragstart', dataTransfer));
+    secondRow.dispatchEvent(createOpenedFileDragEvent('dragover', dataTransfer, { clientX: 20, clientY: 35 }));
+    secondRow.dispatchEvent(createOpenedFileDragEvent('dragover', dataTransfer, { clientX: 20, clientY: 36 }));
 
     expect(onReorderOpenedImage).toHaveBeenCalledTimes(1);
     expect(onReorderOpenedImage).toHaveBeenCalledWith('session-1', 'session-2', 'after');
     expect(secondRow.classList.contains('opened-file-row--drop-after')).toBe(true);
+  });
+
+  it('selects an open file when its row is dragged onto the image viewer', () => {
+    installUiFixture();
+
+    const onOpenedImageSelected = vi.fn();
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected, onReorderOpenedImage }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'first.exr' },
+      { id: 'session-2', label: 'second.exr', thumbnailDataUrl: 'data:image/png;base64,AAAA' }
+    ], 'session-1');
+
+    const rows = mockOpenedFilesListGeometry();
+    const secondRow = rows[1] as HTMLDivElement;
+    const openedImagesSelect = document.getElementById('opened-images-select') as HTMLSelectElement;
+    const dataTransfer = createMockDataTransfer();
+    mockDomRect(ui.viewerContainer, { top: 0, bottom: 120, height: 120, left: 300, width: 420 });
+
+    secondRow.dispatchEvent(createOpenedFileDragEvent('dragstart', dataTransfer));
+
+    const dragImage = document.querySelector('.opened-file-drag-image') as HTMLDivElement;
+    expect(dataTransfer.effectAllowed).toBe('copyMove');
+    expect(dataTransfer.getData('application/x-openexr-viewer-opened-file')).toBe('session-2');
+    expect(dataTransfer.getData('text/plain')).toBe('second.exr');
+    expect(dataTransfer.setDragImage).toHaveBeenCalledWith(dragImage, 16, 16);
+    expect(dragImage).toBeInstanceOf(HTMLDivElement);
+    expect(dragImage.dataset.sessionId).toBe('session-2');
+    expect(dragImage.textContent).toContain('second.exr');
+    expect(dragImage.querySelector('.opened-file-drag-image-thumbnail')).toBeInstanceOf(HTMLImageElement);
+
+    ui.viewerContainer.dispatchEvent(createOpenedFileDragEvent('dragover', dataTransfer, {
+      clientX: 360,
+      clientY: 60
+    }));
+
+    expect(dataTransfer.dropEffect).toBe('copy');
+    expect(ui.viewerContainer.classList.contains('is-opened-file-drop-target')).toBe(true);
+    expect(onReorderOpenedImage).not.toHaveBeenCalled();
+
+    ui.viewerContainer.dispatchEvent(createOpenedFileDragEvent('drop', dataTransfer, {
+      clientX: 360,
+      clientY: 60
+    }));
+
+    expect(ui.viewerContainer.classList.contains('is-opened-file-drop-target')).toBe(false);
+    expect(document.querySelector('.opened-file-drag-image')).toBeNull();
+    expect(onOpenedImageSelected).toHaveBeenCalledTimes(1);
+    expect(onOpenedImageSelected).toHaveBeenCalledWith('session-2');
+    expect(onReorderOpenedImage).not.toHaveBeenCalled();
+    expect(openedImagesSelect.value).toBe('session-2');
+  });
+
+  it('uses a file icon fallback for the open-file native drag image without a thumbnail', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'first.exr' },
+      { id: 'session-2', label: 'second.exr' }
+    ], 'session-1');
+
+    const rows = mockOpenedFilesListGeometry();
+    const secondRow = rows[1] as HTMLDivElement;
+    const dataTransfer = createMockDataTransfer();
+
+    secondRow.dispatchEvent(createOpenedFileDragEvent('dragstart', dataTransfer));
+
+    const dragImage = document.querySelector('.opened-file-drag-image') as HTMLDivElement;
+    expect(dragImage).toBeInstanceOf(HTMLDivElement);
+    expect(dragImage.textContent).toContain('second.exr');
+    expect(dragImage.querySelector('.file-row-icon')).toBeInstanceOf(HTMLSpanElement);
+    expect(dragImage.querySelector('.opened-file-drag-image-thumbnail')).toBeNull();
+    expect(dataTransfer.setDragImage).toHaveBeenCalledWith(dragImage, 16, 16);
+
+    secondRow.dispatchEvent(createOpenedFileDragEvent('dragend', dataTransfer));
+
+    expect(document.querySelector('.opened-file-drag-image')).toBeNull();
+  });
+
+  it('clears the open-file viewer drop target when the drag leaves the viewer', () => {
+    installUiFixture();
+
+    const onOpenedImageSelected = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'first.exr' },
+      { id: 'session-2', label: 'second.exr' }
+    ], 'session-1');
+
+    const rows = mockOpenedFilesListGeometry();
+    const secondRow = rows[1] as HTMLDivElement;
+    const openedImagesSelect = document.getElementById('opened-images-select') as HTMLSelectElement;
+    const dataTransfer = createMockDataTransfer();
+    mockDomRect(ui.viewerContainer, { top: 0, bottom: 120, height: 120, left: 300, width: 420 });
+
+    secondRow.dispatchEvent(createOpenedFileDragEvent('dragstart', dataTransfer));
+    ui.viewerContainer.dispatchEvent(createOpenedFileDragEvent('dragover', dataTransfer, {
+      clientX: 360,
+      clientY: 60
+    }));
+
+    expect(ui.viewerContainer.classList.contains('is-opened-file-drop-target')).toBe(true);
+
+    ui.viewerContainer.dispatchEvent(createOpenedFileDragEvent('dragleave', dataTransfer, {
+      relatedTarget: document.body
+    }));
+
+    expect(ui.viewerContainer.classList.contains('is-opened-file-drop-target')).toBe(false);
+
+    secondRow.dispatchEvent(createOpenedFileDragEvent('dragend', dataTransfer));
+
+    expect(onOpenedImageSelected).not.toHaveBeenCalled();
+    expect(document.querySelector('.opened-file-drag-image')).toBeNull();
+    expect(openedImagesSelect.value).toBe('session-1');
+  });
+
+  it('keeps an open-file drag inert outside the list and viewer', () => {
+    installUiFixture();
+
+    const onOpenedImageSelected = vi.fn();
+    const onReorderOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected, onReorderOpenedImage }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'first.exr' },
+      { id: 'session-2', label: 'second.exr' }
+    ], 'session-1');
+
+    const rows = mockOpenedFilesListGeometry();
+    const secondRow = rows[1] as HTMLDivElement;
+    const openedImagesSelect = document.getElementById('opened-images-select') as HTMLSelectElement;
+    const dataTransfer = createMockDataTransfer();
+    mockDomRect(ui.viewerContainer, { top: 0, bottom: 120, height: 120, left: 500, width: 420 });
+
+    secondRow.dispatchEvent(createOpenedFileDragEvent('dragstart', dataTransfer));
+    document.body.dispatchEvent(createOpenedFileDragEvent('dragover', dataTransfer, { clientX: 260, clientY: 30 }));
+
+    expect(secondRow.classList.contains('opened-file-row--dragging')).toBe(true);
+    expect(document.querySelector('.opened-file-drag-image')).toBeInstanceOf(HTMLDivElement);
+    expect(secondRow.classList.contains('opened-file-row--drop-before')).toBe(false);
+    expect(secondRow.classList.contains('opened-file-row--drop-after')).toBe(false);
+    expect(onReorderOpenedImage).not.toHaveBeenCalled();
+
+    secondRow.dispatchEvent(createOpenedFileDragEvent('dragend', dataTransfer));
+
+    expect(onOpenedImageSelected).not.toHaveBeenCalled();
+    expect(document.querySelector('.opened-file-drag-image')).toBeNull();
+    expect(onReorderOpenedImage).not.toHaveBeenCalled();
+    expect(openedImagesSelect.value).toBe('session-1');
+  });
+
+  it('clears the open-file native drag state on loading and window blur', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'first.exr' },
+      { id: 'session-2', label: 'second.exr' }
+    ], 'session-1');
+
+    let rows = mockOpenedFilesListGeometry();
+    let secondRow = rows[1] as HTMLDivElement;
+    let dataTransfer = createMockDataTransfer();
+    secondRow.dispatchEvent(createOpenedFileDragEvent('dragstart', dataTransfer));
+
+    expect(document.querySelector('.opened-file-drag-image')).toBeInstanceOf(HTMLDivElement);
+
+    ui.setLoading(true);
+
+    expect(document.querySelector('.opened-file-drag-image')).toBeNull();
+
+    ui.setLoading(false);
+    rows = mockOpenedFilesListGeometry();
+    secondRow = rows[1] as HTMLDivElement;
+    dataTransfer = createMockDataTransfer();
+    secondRow.dispatchEvent(createOpenedFileDragEvent('dragstart', dataTransfer));
+
+    expect(document.querySelector('.opened-file-drag-image')).toBeInstanceOf(HTMLDivElement);
+
+    window.dispatchEvent(new Event('blur'));
+
+    expect(document.querySelector('.opened-file-drag-image')).toBeNull();
   });
 
   it('does not start reordering from reload or close action buttons', () => {
@@ -5183,11 +5376,14 @@ describe('opened files reordering', () => {
     const reloadButton = document.querySelector(
       '#opened-files-list .opened-file-action-button--reload'
     ) as HTMLButtonElement;
+    const dataTransfer = createMockDataTransfer();
+    const dragStartEvent = createOpenedFileDragEvent('dragstart', dataTransfer);
 
-    reloadButton.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientY: 10 }));
-    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 1, clientY: 35 }));
+    reloadButton.dispatchEvent(dragStartEvent);
 
+    expect(dragStartEvent.defaultPrevented).toBe(true);
     expect(onReorderOpenedImage).not.toHaveBeenCalled();
+    expect(document.querySelector('.opened-file-drag-image')).toBeNull();
   });
 
   it('moves the active file before the previous row with Alt+ArrowUp from a focused row', () => {
@@ -6296,12 +6492,7 @@ describe('global panel arrow navigation', () => {
     channelRows[0]?.click();
 
     const openedFileRows = mockOpenedFilesListGeometry() as HTMLDivElement[];
-    openedFileRows[0]?.dispatchEvent(new MouseEvent('mousedown', {
-      bubbles: true,
-      button: 0,
-      clientY: 10
-    }));
-    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    openedFileRows[0]?.click();
     openedFileRows[0]?.blur();
     document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
 
@@ -6891,12 +7082,7 @@ describe('global panel arrow navigation', () => {
     })));
 
     const openedFileRows = mockOpenedFilesListGeometry() as HTMLDivElement[];
-    openedFileRows[0]?.dispatchEvent(new MouseEvent('mousedown', {
-      bubbles: true,
-      button: 0,
-      clientY: 10
-    }));
-    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    openedFileRows[0]?.click();
     onRgbGroupChange.mockClear();
 
     openedFileRows[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
@@ -7495,6 +7681,27 @@ function createChannelThumbnailDragEvent(
   return event;
 }
 
+function createOpenedFileDragEvent(
+  type: 'dragstart' | 'dragover' | 'dragleave' | 'drop' | 'dragend',
+  dataTransfer: DataTransfer,
+  options: { clientX?: number; clientY?: number; relatedTarget?: EventTarget | null } = {}
+): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', {
+    value: dataTransfer
+  });
+  Object.defineProperty(event, 'clientX', {
+    value: options.clientX ?? 0
+  });
+  Object.defineProperty(event, 'clientY', {
+    value: options.clientY ?? 0
+  });
+  Object.defineProperty(event, 'relatedTarget', {
+    value: options.relatedTarget ?? null
+  });
+  return event;
+}
+
 function createMockDataTransfer(): DataTransfer {
   const dragData = new Map<string, string>();
   const types: string[] = [];
@@ -7526,7 +7733,7 @@ function createMockDataTransfer(): DataTransfer {
         types.push(type);
       }
     },
-    setDragImage: () => {}
+    setDragImage: vi.fn()
   };
 
   return transfer as DataTransfer;
