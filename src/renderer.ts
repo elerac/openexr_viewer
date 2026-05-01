@@ -94,6 +94,14 @@ export class WebGlExrRenderer implements Disposable {
     this.imageRenderer.setColormapTexture(entryCount, rgba8);
   }
 
+  clearColormapTexture(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.imageRenderer.clearColormapTexture();
+  }
+
   discardSessionTextures(sessionId: string): void {
     if (this.disposed) {
       return;

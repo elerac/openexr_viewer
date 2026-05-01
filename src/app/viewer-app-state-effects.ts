@@ -8,6 +8,7 @@ import { ViewerInteractionCoordinator } from '../interaction-coordinator';
 import { ChannelThumbnailService } from '../services/channel-thumbnail-service';
 import { ThumbnailService } from '../services/thumbnail-service';
 import { RenderCacheService } from '../services/render-cache-service';
+import type { DisplayController } from '../controllers/display-controller';
 import { ViewerAppCore } from './viewer-app-core';
 import type { ViewerStateTransition } from './viewer-app-types';
 import { selectActiveSession } from './viewer-app-selectors';
@@ -109,6 +110,17 @@ export function applyChannelThumbnailEffects(
   }
 
   scheduleActiveChannelThumbnailGeneration(core, channelThumbnailService);
+}
+
+export function applyActiveColormapLutEffects(
+  transition: ViewerStateTransition,
+  displayController: Pick<DisplayController, 'ensureActiveColormapLutLoaded'>
+): void {
+  if (!shouldEnsureActiveColormapLut(transition)) {
+    return;
+  }
+
+  void displayController.ensureActiveColormapLutLoaded();
 }
 
 function scheduleThumbnailGeneration(
@@ -235,4 +247,26 @@ function shouldRefreshOpenedImageThumbnails(transition: ViewerStateTransition): 
     transition.intent.type === 'autoExposureSet' ||
     transition.intent.type === 'autoExposurePercentileSet'
   );
+}
+
+function shouldEnsureActiveColormapLut(transition: ViewerStateTransition): boolean {
+  if (!transition.state.activeSessionId) {
+    return false;
+  }
+
+  switch (transition.intent.type) {
+    case 'sessionLoaded':
+      return transition.state.activeSessionId === transition.intent.session.id;
+    case 'sessionReloaded':
+      return transition.state.activeSessionId === transition.intent.sessionId;
+    case 'activeSessionSwitched':
+      return transition.state.activeSessionId === transition.intent.sessionId;
+    case 'sessionClosed':
+      return transition.previousState.activeSessionId === transition.intent.sessionId;
+    case 'activeLayerSet':
+    case 'activeSessionReset':
+      return true;
+    default:
+      return false;
+  }
 }

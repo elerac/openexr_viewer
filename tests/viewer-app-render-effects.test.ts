@@ -44,6 +44,7 @@ function createUiMock(): ViewerUi {
 function createRendererMock() {
   return {
     setColormapTexture: vi.fn(),
+    clearColormapTexture: vi.fn(),
     clearImage: vi.fn(),
     setRulersVisible: vi.fn(),
     renderImage: vi.fn(),
@@ -78,6 +79,43 @@ function createRenderCacheMock() {
 }
 
 describe('viewer app render effects', () => {
+  it('clears the renderer colormap texture when the active lut becomes unavailable', () => {
+    const core = new ViewerAppCore();
+    const ui = createUiMock();
+    const renderer = createRendererMock();
+    const renderCache = createRenderCacheMock();
+    core.subscribeRender((transition) => {
+      applyRenderEffects(
+        core,
+        ui,
+        renderer as unknown as WebGlExrRenderer,
+        renderCache as unknown as RenderCacheService,
+        transition
+      );
+    });
+
+    core.dispatch({ type: 'sessionLoaded', session: createSession('session-1') });
+    core.dispatch({ type: 'activeColormapSet', colormapId: '1' });
+    core.dispatch({
+      type: 'colormapLoadResolved',
+      requestId: null as never,
+      colormapId: '1',
+      lut: {
+        id: '1',
+        label: 'HSV',
+        entryCount: 2,
+        rgba8: new Uint8Array([255, 0, 0, 255, 0, 255, 0, 255])
+      }
+    });
+    renderer.setColormapTexture.mockClear();
+    renderer.clearColormapTexture.mockClear();
+
+    core.dispatch({ type: 'activeColormapSet', colormapId: '0' });
+
+    expect(renderer.clearColormapTexture).toHaveBeenCalledTimes(1);
+    expect(renderer.setColormapTexture).not.toHaveBeenCalled();
+  });
+
   it('renders auto exposure preview after the stale triggering render pass', () => {
     const core = new ViewerAppCore();
     const ui = createUiMock();

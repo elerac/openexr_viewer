@@ -1,5 +1,6 @@
 import { applyRenderEffects } from '../viewer-app-render-effects';
 import {
+  applyActiveColormapLutEffects,
   applyChannelThumbnailEffects,
   applySessionResourceEffects,
   syncInteractionCoordinator
@@ -32,6 +33,7 @@ export function registerBootstrapEffects({
     syncInteractionCoordinator(services.interactionCoordinator, transition);
     applySessionResourceEffects(transition, core, services.renderCache, services.thumbnailService);
     applyChannelThumbnailEffects(transition, core, services.channelThumbnailService);
+    applyActiveColormapLutEffects(transition, services.displayController);
   }));
   unsubscribers.push(core.subscribeUi((transition) => {
     if (isDisposed()) {

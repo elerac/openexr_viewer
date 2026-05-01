@@ -18,8 +18,12 @@ export function applyRenderEffects(
   const activeSession = snapshot.activeSession;
   let deferredAutoExposureDispatch: (() => void) | null = null;
 
-  if ((invalidation & ViewerRenderInvalidationFlags.ColormapTexture) && snapshot.activeColormapLut) {
-    renderer.setColormapTexture(snapshot.activeColormapLut.entryCount, snapshot.activeColormapLut.rgba8);
+  if (invalidation & ViewerRenderInvalidationFlags.ColormapTexture) {
+    if (snapshot.activeColormapLut) {
+      renderer.setColormapTexture(snapshot.activeColormapLut.entryCount, snapshot.activeColormapLut.rgba8);
+    } else {
+      renderer.clearColormapTexture();
+    }
   }
 
   if (invalidation & ViewerRenderInvalidationFlags.ProbeReadout) {

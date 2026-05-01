@@ -28,6 +28,24 @@ export function createColormapTexture(gl: WebGL2RenderingContext): WebGLTexture 
   return colormapTexture;
 }
 
+export function clearColormapTexture(state: GlImageRendererState): void {
+  state.colormapTextureSize = { width: 1, height: 1 };
+  state.colormapEntryCount = 0;
+  state.gl.activeTexture(state.gl.TEXTURE0 + COLORMAP_TEXTURE_UNIT);
+  state.gl.bindTexture(state.gl.TEXTURE_2D, state.colormapTexture);
+  state.gl.texImage2D(
+    state.gl.TEXTURE_2D,
+    0,
+    state.gl.RGBA8,
+    1,
+    1,
+    0,
+    state.gl.RGBA,
+    state.gl.UNSIGNED_BYTE,
+    new Uint8Array([0, 0, 0, 255])
+  );
+}
+
 export function setColormapTexture(
   state: GlImageRendererState,
   entryCount: number,

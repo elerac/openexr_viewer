@@ -423,12 +423,23 @@ export class DisplayController implements Disposable {
     await this.setActiveColormap(colormapId);
   }
 
-  private async ensureActiveColormapLutLoaded(): Promise<void> {
+  async ensureActiveColormapLutLoaded(): Promise<void> {
     if (this.disposed) {
       return;
     }
 
     const state = this.core.getState();
+    if (!state.colormapRegistry) {
+      return;
+    }
+
+    if (
+      state.colormapLutResource.status === 'pending' &&
+      state.colormapLutResource.key === state.sessionState.activeColormapId
+    ) {
+      return;
+    }
+
     if (selectColormapLutById(state, state.sessionState.activeColormapId)) {
       return;
     }

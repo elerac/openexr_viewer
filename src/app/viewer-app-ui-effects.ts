@@ -71,7 +71,7 @@ export function applyUiEffects(ui: ViewerUi, transition: ViewerUiTransition): vo
     ui.setStokesDefaultSettingsOptions(snapshot.colormapOptions, snapshot.stokesColormapDefaults);
   }
 
-  if ((invalidation & ViewerUiInvalidationFlags.ColormapGradient) && snapshot.activeColormapLut) {
+  if (invalidation & ViewerUiInvalidationFlags.ColormapGradient) {
     ui.setColormapGradient(snapshot.activeColormapLut);
   }
 

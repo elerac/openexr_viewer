@@ -109,7 +109,7 @@ export function computeViewerRenderInvalidation(
 
   let flags = ViewerRenderInvalidationFlags.None;
 
-  if (previous.activeColormapLut !== next.activeColormapLut && next.activeColormapLut) {
+  if (previous.activeColormapLut !== next.activeColormapLut) {
     flags |= ViewerRenderInvalidationFlags.ColormapTexture;
   }
 

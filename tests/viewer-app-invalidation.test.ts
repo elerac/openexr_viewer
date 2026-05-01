@@ -451,6 +451,34 @@ describe('viewer app lanes', () => {
     expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(false);
   });
 
+  it('marks the stale active colormap texture and gradient dirty when the active lut is missing', () => {
+    const previous: ViewerAppState = {
+      ...createActiveState(),
+      sessionState: {
+        ...createActiveState().sessionState,
+        activeColormapId: '1'
+      },
+      colormapLutResource: successResource('1', {
+        id: '1',
+        label: 'HSV',
+        entryCount: 2,
+        rgba8: new Uint8Array([255, 0, 0, 255, 0, 255, 0, 255])
+      })
+    };
+    const next: ViewerAppState = {
+      ...previous,
+      sessionState: {
+        ...previous.sessionState,
+        activeColormapId: '0'
+      }
+    };
+
+    const uiFlags = createUiFlags(previous, next);
+    const renderFlags = createRenderFlags(previous, next);
+    expect(hasUiFlag(uiFlags, ViewerUiInvalidationFlags.ColormapGradient)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ColormapTexture)).toBe(true);
+  });
+
   it('marks auto-range resolution as colormap-range and image invalidation', () => {
     const previous = {
       ...createActiveState(),

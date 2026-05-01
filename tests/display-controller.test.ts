@@ -252,6 +252,30 @@ describe('display controller shim', () => {
     expect(getLoadedColormapId(core)).toBe('1');
   });
 
+  it('does not duplicate an in-flight active colormap load when ensuring the active lut', async () => {
+    const { controller, core } = createController();
+    await controller.initialize();
+
+    core.dispatch({
+      type: 'activeColormapSet',
+      colormapId: '1'
+    });
+    core.dispatch({
+      type: 'colormapLoadStarted',
+      requestId: 99,
+      colormapId: '1'
+    });
+    colormapMocks.loadColormapLut.mockClear();
+
+    await controller.ensureActiveColormapLutLoaded();
+
+    expect(colormapMocks.loadColormapLut).not.toHaveBeenCalled();
+    expect(core.getState().colormapLutResource).toMatchObject({
+      status: 'pending',
+      key: '1'
+    });
+  });
+
   it('applies stokes selection through the core and restores the previous non-stokes visualization state', async () => {
     const decoded = createDecodedImage(['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3']);
     const { controller, core } = createController(createSession(decoded));
@@ -269,6 +293,30 @@ describe('display controller shim', () => {
     expect(getLoadedColormapId(core)).toBe('0');
     expect(getLoadedColormapLut(core)).toEqual(luts['0']);
     expect(core.getState().sessionState.displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
+  });
+
+  it('loads the default lut after a new active RGB session restores the default colormap id', async () => {
+    const decoded = createDecodedImage(['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3']);
+    const { controller, core } = createController(createSession(decoded));
+
+    await controller.initialize();
+    await controller.applyDisplaySelection(createStokesSelection('aolp'));
+    expect(core.getState().sessionState.activeColormapId).toBe('1');
+    expect(getLoadedColormapId(core)).toBe('1');
+
+    core.dispatch({
+      type: 'sessionLoaded',
+      session: createSession(createDecodedImage(['R', 'G', 'B']), 'session-2')
+    });
+    expect(core.getState().sessionState.activeColormapId).toBe('0');
+    expect(getLoadedColormapId(core)).toBe('1');
+
+    colormapMocks.loadColormapLut.mockClear();
+    await controller.ensureActiveColormapLutLoaded();
+
+    expect(colormapMocks.loadColormapLut.mock.calls.map(([, id]) => id)).toEqual(['0']);
+    expect(getLoadedColormapId(core)).toBe('0');
+    expect(getLoadedColormapLut(core)).toEqual(luts['0']);
   });
 
   it('carries manual colormap state across Stokes degree selections', async () => {

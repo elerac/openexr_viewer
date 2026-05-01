@@ -4,7 +4,7 @@ import type { ExportImagePixels } from '../../export-image';
 import type { Disposable } from '../../lifecycle';
 import type { DecodedLayer, ViewerState, ViewportInfo } from '../../types';
 import { REQUIRED_TEXTURE_UNITS } from './constants';
-import { setColormapTexture } from './colormap-texture';
+import { clearColormapTexture, setColormapTexture } from './colormap-texture';
 import { deleteExportSurface, readExportPixels } from './export-surface';
 import { render } from './render-pass';
 import { createGlImageRendererState } from './shared-state';
@@ -90,6 +90,14 @@ export class GlImageRenderer implements Disposable {
     }
 
     setColormapTexture(this.state, entryCount, rgba8);
+  }
+
+  clearColormapTexture(): void {
+    if (this.state.disposed) {
+      return;
+    }
+
+    clearColormapTexture(this.state);
   }
 
   discardSessionTextures(sessionId: string): void {
