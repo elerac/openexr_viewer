@@ -3362,8 +3362,8 @@ describe('view menu', () => {
       alpha: null
     };
     ui.setOpenedImageOptions([
-      { id: 'session-1', label: 'beauty.exr' },
-      { id: 'session-2', label: 'depth.exr' }
+      { id: 'session-1', label: 'Hero Plate.exr' },
+      { id: 'session-2', label: 'Depth Pass.exr' }
     ], 'session-1');
     ui.setExportTarget({ filename: 'beauty.png' });
     ui.setExportBatchTarget({
@@ -3373,7 +3373,7 @@ describe('view menu', () => {
         {
           sessionId: 'session-1',
           filename: 'beauty.exr',
-          label: 'beauty.exr',
+          label: 'Hero Plate.exr',
           sourcePath: 'shots/beauty.exr',
           thumbnailDataUrl: null,
           activeLayer: 0,
@@ -3393,7 +3393,7 @@ describe('view menu', () => {
         {
           sessionId: 'session-2',
           filename: 'depth.exr',
-          label: 'depth.exr',
+          label: 'Depth Pass.exr',
           sourcePath: 'shots/aovs/depth.exr',
           thumbnailDataUrl: null,
           activeLayer: 0,
@@ -3425,6 +3425,9 @@ describe('view menu', () => {
     const widthInput = document.getElementById('export-batch-width-input') as HTMLInputElement;
     const heightInput = document.getElementById('export-batch-height-input') as HTMLInputElement;
     const archiveInput = document.getElementById('export-batch-archive-filename-input') as HTMLInputElement;
+    const useOpenFilesNamesCheckbox = document.getElementById(
+      'export-batch-use-open-files-names-checkbox'
+    ) as HTMLInputElement;
     const selectAllButton = document.getElementById('export-batch-select-all-button') as HTMLButtonElement;
     const submitButton = document.getElementById('export-batch-dialog-submit-button') as HTMLButtonElement;
 
@@ -3437,6 +3440,7 @@ describe('view menu', () => {
     expect(batchDialog.classList.contains('hidden')).toBe(false);
     expect(title.textContent).toBe('Export Screenshot Batch');
     expect(archiveInput.value).toBe('openexr-screenshot-export.zip');
+    expect(useOpenFilesNamesCheckbox.checked).toBe(true);
     expect(sizeField.classList.contains('hidden')).toBe(false);
     expect(widthInput.value).toBe('140');
     expect(heightInput.value).toBe('70');
@@ -3489,7 +3493,7 @@ describe('view menu', () => {
           sourceViewport: { width: 200, height: 100 },
           outputWidth: 280,
           outputHeight: 140,
-          outputFilename: 'shots/beauty-screenshot.RGB.png'
+          outputFilename: 'Hero Plate-screenshot.RGB.png'
         },
         {
           mode: 'screenshot',
@@ -3497,7 +3501,7 @@ describe('view menu', () => {
           sourceViewport: { width: 200, height: 100 },
           outputWidth: 280,
           outputHeight: 140,
-          outputFilename: 'shots/aovs/depth-screenshot.Z.png'
+          outputFilename: 'Depth Pass-screenshot.Z.png'
         }
       ]
     });
@@ -3842,6 +3846,9 @@ describe('view menu', () => {
     const batchButton = document.getElementById('export-image-batch-button') as HTMLButtonElement;
     const batchDialog = document.getElementById('export-batch-dialog-backdrop') as HTMLDivElement;
     const archiveInput = document.getElementById('export-batch-archive-filename-input') as HTMLInputElement;
+    const useOpenFilesNamesCheckbox = document.getElementById(
+      'export-batch-use-open-files-names-checkbox'
+    ) as HTMLInputElement;
     const selectAllButton = document.getElementById('export-batch-select-all-button') as HTMLButtonElement;
     const deselectAllButton = document.getElementById('export-batch-deselect-all-button') as HTMLButtonElement;
     const status = document.getElementById('export-batch-dialog-status') as HTMLElement;
@@ -3852,6 +3859,7 @@ describe('view menu', () => {
     expect(singleExportDialog.classList.contains('hidden')).toBe(true);
     expect(batchDialog.classList.contains('hidden')).toBe(false);
     expect(archiveInput.value).toBe('openexr-export.zip');
+    expect(useOpenFilesNamesCheckbox.checked).toBe(true);
     expect(document.querySelectorAll('.export-batch-cell-disabled')).toHaveLength(1);
     expect(document.querySelectorAll('.export-batch-cell-swatches')).toHaveLength(0);
     expect(document.querySelectorAll('.export-batch-cell-preview')).toHaveLength(3);
@@ -3915,11 +3923,71 @@ describe('view menu', () => {
       format: 'png-zip'
     });
     expect(request?.entries.map((entry) => entry.outputFilename)).toEqual([
-      'shots/beauty.RGB.png',
-      'shots/beauty.Z.png',
-      'shots/aovs/depth.Z.png'
+      'beauty.RGB.png',
+      'beauty.Z.png',
+      'depth.Z.png'
     ]);
     expect(batchDialog.classList.contains('hidden')).toBe(true);
+  });
+
+  it('can use source paths for batch export filenames when Open Files names are disabled', async () => {
+    installUiFixture();
+
+    const onExportImageBatch = vi.fn<(_: {
+      archiveFilename: string;
+      entries: Array<{ outputFilename: string }>;
+      format: 'png-zip';
+    }, _signal: AbortSignal) => Promise<void>>(async () => undefined);
+    const ui = new ViewerUi(createUiCallbacks({ onExportImageBatch }));
+    const rgbSelection = {
+      kind: 'channelRgb' as const,
+      r: 'R',
+      g: 'G',
+      b: 'B',
+      alpha: null
+    };
+
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'Hero Plate.exr' }], 'session-1');
+    ui.setExportBatchTarget({
+      archiveFilename: 'openexr-export.zip',
+      activeSessionId: 'session-1',
+      files: [{
+        sessionId: 'session-1',
+        filename: 'beauty.exr',
+        label: 'Hero Plate.exr',
+        sourcePath: 'shots/beauty.exr',
+        thumbnailDataUrl: null,
+        activeLayer: 0,
+        displaySelection: rgbSelection,
+        channels: [{
+          value: 'group:',
+          label: 'RGB',
+          selectionKey: 'channelRgb:R:G:B:',
+          selection: rgbSelection,
+          swatches: ['#ff6570', '#6bd66f', '#51aefe'],
+          mergedOrder: 0,
+          splitOrder: 0
+        }]
+      }]
+    });
+
+    (document.getElementById('export-image-batch-button') as HTMLButtonElement).click();
+    const useOpenFilesNamesCheckbox = document.getElementById(
+      'export-batch-use-open-files-names-checkbox'
+    ) as HTMLInputElement;
+    expect(useOpenFilesNamesCheckbox.checked).toBe(true);
+
+    useOpenFilesNamesCheckbox.checked = false;
+    (document.getElementById('export-batch-dialog-submit-button') as HTMLButtonElement).click();
+    await flushMicrotasks();
+
+    expect(onExportImageBatch).toHaveBeenCalledTimes(1);
+    expect(onExportImageBatch.mock.calls[0]?.[0].entries.map((entry) => entry.outputFilename)).toEqual([
+      'shots/beauty.RGB.png'
+    ]);
+
+    (document.getElementById('export-image-batch-button') as HTMLButtonElement).click();
+    expect(useOpenFilesNamesCheckbox.checked).toBe(true);
   });
 
   it('renders wide and tall batch export thumbnails inside fit-to-frame preview elements', async () => {

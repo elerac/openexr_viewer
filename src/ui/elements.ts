@@ -69,6 +69,7 @@ export interface Elements {
   exportBatchDialogTitle: HTMLElement;
   exportBatchDialogSubtitle: HTMLElement;
   exportBatchArchiveFilenameInput: HTMLInputElement;
+  exportBatchUseOpenFilesNamesCheckbox: HTMLInputElement;
   exportBatchSizeField: HTMLDivElement;
   exportBatchWidthInput: HTMLInputElement;
   exportBatchHeightInput: HTMLInputElement;
@@ -320,6 +321,7 @@ export type ExportImageBatchDialogElements = Pick<
   | 'exportBatchDialogTitle'
   | 'exportBatchDialogSubtitle'
   | 'exportBatchArchiveFilenameInput'
+  | 'exportBatchUseOpenFilesNamesCheckbox'
   | 'exportBatchSizeField'
   | 'exportBatchWidthInput'
   | 'exportBatchHeightInput'
@@ -522,6 +524,10 @@ export function resolveElements(): Elements {
     exportBatchDialogTitle: requireElement('export-batch-dialog-title', HTMLElement),
     exportBatchDialogSubtitle: requireElement('export-batch-dialog-subtitle', HTMLElement),
     exportBatchArchiveFilenameInput: requireElement('export-batch-archive-filename-input', HTMLInputElement),
+    exportBatchUseOpenFilesNamesCheckbox: requireElement(
+      'export-batch-use-open-files-names-checkbox',
+      HTMLInputElement
+    ),
     exportBatchSizeField: requireElement('export-batch-size-field', HTMLDivElement),
     exportBatchWidthInput: requireElement('export-batch-width-input', HTMLInputElement),
     exportBatchHeightInput: requireElement('export-batch-height-input', HTMLInputElement),

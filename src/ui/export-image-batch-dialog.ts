@@ -31,6 +31,7 @@ const DEFAULT_SCREENSHOT_BATCH_ARCHIVE_FILENAME = 'openexr-screenshot-export.zip
 const CELL_KEY_SEPARATOR = '\u001f';
 const BATCH_EXPORT_RESOURCE_KEY = 'export-batch';
 type ExportBatchDialogMode = 'image' | 'screenshot';
+export type ExportBatchFilenameSource = 'openFilesName' | 'sourcePath';
 
 interface ExportImageBatchDialogCallbacks {
   onExportImageBatch: (request: ExportImageBatchRequest, signal: AbortSignal) => Promise<void>;
@@ -207,6 +208,7 @@ export class ExportImageBatchDialogController implements Disposable {
       this.dialogMode = 'image';
     }
     this.includeSplitRgbChannels = false;
+    this.elements.exportBatchUseOpenFilesNamesCheckbox.checked = true;
     this.setBusy(false);
     this.open = true;
     this.abortPreviewWork({ clearCache: true });
@@ -277,6 +279,7 @@ export class ExportImageBatchDialogController implements Disposable {
     this.abortPreviewWork({ clearCache: true });
     this.applyDialogMode();
     this.elements.exportBatchArchiveFilenameInput.value = '';
+    this.elements.exportBatchUseOpenFilesNamesCheckbox.checked = true;
     this.elements.exportBatchWidthInput.value = '';
     this.elements.exportBatchHeightInput.value = '';
     this.elements.exportBatchMatrix.replaceChildren();
@@ -308,6 +311,7 @@ export class ExportImageBatchDialogController implements Disposable {
   private syncBusyControls(): void {
     const busy = this.busy;
     this.elements.exportBatchArchiveFilenameInput.disabled = busy;
+    this.elements.exportBatchUseOpenFilesNamesCheckbox.disabled = busy;
     this.elements.exportBatchWidthInput.disabled = busy;
     this.elements.exportBatchHeightInput.disabled = busy;
     this.updateSplitToggleState();
@@ -896,7 +900,13 @@ export class ExportImageBatchDialogController implements Disposable {
       return;
     }
 
-    const entries = buildExportBatchEntries(target, this.checkedCellKeys, this.includeSplitRgbChannels, screenshot);
+    const entries = buildExportBatchEntries(
+      target,
+      this.checkedCellKeys,
+      this.includeSplitRgbChannels,
+      screenshot,
+      this.getFilenameSource()
+    );
     if (entries.length === 0) {
       this.setError('Select at least one image.');
       return;
@@ -946,6 +956,10 @@ export class ExportImageBatchDialogController implements Disposable {
         this.updateStatus();
       }
     }
+  }
+
+  private getFilenameSource(): ExportBatchFilenameSource {
+    return this.elements.exportBatchUseOpenFilesNamesCheckbox.checked ? 'openFilesName' : 'sourcePath';
   }
 }
 
@@ -1025,7 +1039,8 @@ export function buildExportBatchEntries(
   target: ExportImageBatchTarget,
   checkedCellKeys: ReadonlySet<string>,
   includeSplitRgbChannels = false,
-  screenshot: ExportScreenshotRegion | null = null
+  screenshot: ExportScreenshotRegion | null = null,
+  filenameSource: ExportBatchFilenameSource = 'openFilesName'
 ): ExportImageBatchEntryRequest[] {
   const columns = buildExportBatchColumns(target.files, includeSplitRgbChannels);
   const entries: Array<{
@@ -1069,7 +1084,7 @@ export function buildExportBatchEntries(
       outputWidth: screenshot.outputWidth,
       outputHeight: screenshot.outputHeight,
       outputFilename: buildExportBatchScreenshotOutputFilename(
-        file.sourcePath || file.filename || file.label,
+        resolveExportBatchFilenameSource(file, filenameSource),
         entry.channelLabel,
         usedFilenames
       )
@@ -1079,11 +1094,20 @@ export function buildExportBatchEntries(
   return entries.map(({ file, ...entry }) => ({
     ...entry,
     outputFilename: buildExportBatchOutputFilename(
-      file.sourcePath || file.filename || file.label,
+      resolveExportBatchFilenameSource(file, filenameSource),
       entry.channelLabel,
       usedFilenames
     )
   }));
+}
+
+function resolveExportBatchFilenameSource(
+  file: ExportImageBatchTarget['files'][number],
+  filenameSource: ExportBatchFilenameSource
+): string {
+  return filenameSource === 'openFilesName'
+    ? file.label || file.sourcePath || file.filename
+    : file.sourcePath || file.filename || file.label;
 }
 
 export function normalizeExportBatchArchiveFilename(value: string): string {
