@@ -9,8 +9,19 @@ import {
   loadColormapRegistry,
   type ColormapLut
 } from '../colormaps';
-import { cloneDisplaySelection, isStokesSelection, type DisplaySelection } from '../display-model';
-import { createAbortError, isAbortError, throwIfAborted, type Disposable } from '../lifecycle';
+import {
+  cloneDisplaySelection,
+  isStokesSelection,
+  type DisplaySelection
+} from '../display-model';
+import {
+  AsyncOperationGate,
+  createAbortError,
+  isAbortError,
+  throwIfAborted,
+  type AsyncOperationGuard,
+  type Disposable
+} from '../lifecycle';
 import {
   cloneStokesColormapDefaultSetting,
   createDefaultStokesColormapDefaultSettings,
@@ -43,6 +54,8 @@ export interface DisplayControllerDependencies {
 export class DisplayController implements Disposable {
   private readonly core: ViewerAppCore;
   private readonly abortController = new AbortController();
+  private readonly selectionTransitionGate = new AsyncOperationGate();
+  private readonly colormapLoadGate = new AsyncOperationGate();
   private readonly manualColormapOverrideTransitionIds = new Set<number>();
   private disposed = false;
 
@@ -70,8 +83,10 @@ export class DisplayController implements Disposable {
         requestId,
         colormapId: registry.defaultId
       });
-      const lut = await loadColormapLut(registry, registry.defaultId, this.abortController.signal);
+      const guard = this.colormapLoadGate.begin();
+      const lut = await loadColormapLut(registry, registry.defaultId, guard.signal);
       this.throwIfStopped();
+      guard.throwIfStale();
       this.core.dispatch({
         type: 'colormapLoadResolved',
         requestId,
@@ -92,6 +107,7 @@ export class DisplayController implements Disposable {
 
     const activeSession = selectActiveSession(this.core.getState());
     if (!activeSession) {
+      this.selectionTransitionGate.invalidate('Display selection request was superseded.');
       this.core.dispatch({
         type: 'displaySelectionSet',
         displaySelection: cloneDisplaySelection(selection)
@@ -99,6 +115,7 @@ export class DisplayController implements Disposable {
       return;
     }
 
+    const transitionGuard = this.selectionTransitionGate.begin('Display selection request was superseded.');
     const initialState = this.core.getState();
     const stokesDefaults = getStokesDisplayColormapDefault(selection, initialState.stokesColormapDefaults);
     const restoreState = captureRestorableVisualizationState(initialState.sessionState);
@@ -112,15 +129,17 @@ export class DisplayController implements Disposable {
     }
 
     const transitionRequestId = this.core.issueRequestId();
+    const transitionContext = captureActiveDisplayContext(initialState);
     this.core.dispatch({
       type: 'displaySelectionTransitionStarted',
       requestId: transitionRequestId
     });
 
     try {
-      await waitForNextPaint(this.abortController.signal);
+      await waitForNextPaint(transitionGuard.signal);
       this.throwIfStopped();
-      if (this.core.getState().pendingSelectionTransitionRequestId !== transitionRequestId) {
+      transitionGuard.throwIfStale();
+      if (!this.isSelectionTransitionCurrent(transitionRequestId, transitionContext, transitionGuard)) {
         return;
       }
 
@@ -162,14 +181,17 @@ export class DisplayController implements Disposable {
         });
 
         const colormapRequestId = this.core.issueRequestId();
+        const colormapGuard = this.colormapLoadGate.begin();
         this.core.dispatch({
           type: 'colormapLoadStarted',
           requestId: colormapRequestId,
           colormapId
         });
-        const lut = await loadColormapLut(latestState.colormapRegistry, colormapId, this.abortController.signal);
+        const lut = await loadColormapLut(latestState.colormapRegistry, colormapId, colormapGuard.signal);
         this.throwIfStopped();
-        if (this.core.getState().pendingSelectionTransitionRequestId !== transitionRequestId) {
+        colormapGuard.throwIfStale();
+        transitionGuard.throwIfStale();
+        if (!this.isSelectionTransitionCurrent(transitionRequestId, transitionContext, transitionGuard)) {
           return;
         }
 
@@ -192,10 +214,12 @@ export class DisplayController implements Disposable {
       }
     } finally {
       this.manualColormapOverrideTransitionIds.delete(transitionRequestId);
-      this.core.dispatch({
-        type: 'displaySelectionTransitionFinished',
-        requestId: transitionRequestId
-      });
+      if (!this.disposed) {
+        this.core.dispatch({
+          type: 'displaySelectionTransitionFinished',
+          requestId: transitionRequestId
+        });
+      }
     }
   }
 
@@ -235,6 +259,7 @@ export class DisplayController implements Disposable {
     }
 
     const requestId = this.core.issueRequestId();
+    const guard = this.colormapLoadGate.begin();
     this.core.dispatch({
       type: 'colormapLoadStarted',
       requestId,
@@ -242,8 +267,12 @@ export class DisplayController implements Disposable {
     });
 
     try {
-      const lut = await loadColormapLut(state.colormapRegistry, colormapId, this.abortController.signal);
+      const lut = await loadColormapLut(state.colormapRegistry, colormapId, guard.signal);
       this.throwIfStopped();
+      guard.throwIfStale();
+      if (this.core.getState().sessionState.activeColormapId !== colormapId) {
+        return;
+      }
       this.core.dispatch({
         type: 'colormapLoadResolved',
         requestId,
@@ -251,7 +280,12 @@ export class DisplayController implements Disposable {
         lut
       });
     } catch (error) {
-      if (!isAbortError(error) && !this.disposed) {
+      if (
+        !isAbortError(error) &&
+        !this.disposed &&
+        guard.isCurrent() &&
+        this.core.getState().sessionState.activeColormapId === colormapId
+      ) {
         this.core.dispatch({
           type: 'colormapLoadFailed',
           requestId,
@@ -502,6 +536,8 @@ export class DisplayController implements Disposable {
 
     this.disposed = true;
     this.abortController.abort(createAbortError('Display controller has been disposed.'));
+    this.selectionTransitionGate.dispose();
+    this.colormapLoadGate.dispose();
   }
 
   private throwIfStopped(): void {
@@ -518,6 +554,29 @@ export class DisplayController implements Disposable {
       ? getStokesColormapDefaultGroup(selection.parameter)
       : null;
   }
+
+  private isSelectionTransitionCurrent(
+    requestId: number,
+    context: ActiveDisplayContext,
+    guard: AsyncOperationGuard
+  ): boolean {
+    if (!guard.isCurrent()) {
+      return false;
+    }
+
+    const state = this.core.getState();
+    const activeSession = selectActiveSession(state);
+    return (
+      state.pendingSelectionTransitionRequestId === requestId &&
+      activeSession?.id === context.sessionId &&
+      state.sessionState.activeLayer === context.activeLayer
+    );
+  }
+}
+
+interface ActiveDisplayContext {
+  sessionId: string | null;
+  activeLayer: number;
 }
 
 function isValidStokesDefaultSetting(setting: StokesColormapDefaultSetting): boolean {
@@ -579,5 +638,17 @@ function captureRestorableVisualizationState(state: {
     colormapRange: state.colormapRange ? { ...state.colormapRange } : null,
     colormapRangeMode: state.colormapRangeMode,
     colormapZeroCentered: state.colormapZeroCentered
+  };
+}
+
+function captureActiveDisplayContext(state: {
+  activeSessionId: string | null;
+  sessionState: {
+    activeLayer: number;
+  };
+}): ActiveDisplayContext {
+  return {
+    sessionId: state.activeSessionId,
+    activeLayer: state.sessionState.activeLayer
   };
 }

@@ -9,9 +9,12 @@ import {
   buildSelectedDisplayTexture,
   buildStokesDisplayTexture,
   computeDisplaySelectionAutoExposure,
+  computeDisplaySelectionAutoExposureAsync,
   computeDisplaySelectionImageStats,
+  computeDisplaySelectionImageStatsAsync,
   computeDisplaySelectionRoiStats,
   computeDisplaySelectionLuminanceRange,
+  computeDisplaySelectionLuminanceRangeAsync,
   readDisplaySelectionPixelValues,
   samplePixelValues,
   samplePixelValuesForDisplay
@@ -166,6 +169,58 @@ describe('display texture', () => {
 
     expect(autoExposure.scalar).toBe(1);
     expect(autoExposure.exposureEv).toBe(0);
+  });
+
+  it('aborts chunked luminance, stats, and auto exposure work before completion', async () => {
+    const layer = createLayerFromChannels({
+      R: [1, 2, 3, 4],
+      G: [0, 0, 0, 0],
+      B: [0, 0, 0, 0]
+    }, 'beauty');
+    const selection = createChannelRgbSelection('R', 'G', 'B');
+
+    async function expectAbort(
+      run: (options: {
+        signal: AbortSignal;
+        chunkSize: number;
+        yieldControl: () => Promise<void>;
+      }) => Promise<unknown>
+    ) {
+      const controller = new AbortController();
+      await expect(run({
+        signal: controller.signal,
+        chunkSize: 1,
+        yieldControl: async () => {
+          controller.abort();
+        }
+      })).rejects.toMatchObject({ name: 'AbortError' });
+    }
+
+    await expectAbort((options) => computeDisplaySelectionLuminanceRangeAsync(
+      layer,
+      4,
+      1,
+      selection,
+      'rgb',
+      options
+    ));
+    await expectAbort((options) => computeDisplaySelectionImageStatsAsync(
+      layer,
+      4,
+      1,
+      selection,
+      'rgb',
+      options
+    ));
+    await expectAbort((options) => computeDisplaySelectionAutoExposureAsync(
+      layer,
+      4,
+      1,
+      selection,
+      'rgb',
+      99.5,
+      options
+    ));
   });
 
   it('clamps computed auto exposure to the existing exposure range', () => {

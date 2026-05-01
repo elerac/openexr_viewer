@@ -28,8 +28,9 @@ import {
   buildDisplayTextureRevisionKey,
   serializeDisplaySelectionLuminanceKey,
   computeDisplaySelectionLuminanceRange,
-  computeDisplaySelectionImageStats,
-  computeDisplaySelectionAutoExposure
+  computeDisplaySelectionLuminanceRangeAsync,
+  computeDisplaySelectionImageStatsAsync,
+  computeDisplaySelectionAutoExposureAsync
 } from '../display-texture';
 import { cloneDisplaySelection, type DisplaySelection } from '../display-model';
 import { getFiniteChannelRange } from '../channel-storage';
@@ -153,6 +154,7 @@ interface PendingDisplayLuminanceRangeJob {
   width: number;
   height: number;
   layer: DecodedLayer;
+  controller: AbortController;
 }
 
 interface PendingImageStatsJob {
@@ -165,6 +167,7 @@ interface PendingImageStatsJob {
   width: number;
   height: number;
   layer: DecodedLayer;
+  controller: AbortController;
 }
 
 interface PendingAutoExposureJob {
@@ -178,10 +181,17 @@ interface PendingAutoExposureJob {
   width: number;
   height: number;
   layer: DecodedLayer;
+  controller: AbortController;
 }
+
+type PendingAnalysisJob =
+  | PendingDisplayLuminanceRangeJob
+  | PendingImageStatsJob
+  | PendingAutoExposureJob;
 
 const DISPLAY_LUMINANCE_RANGE_IDLE_TIMEOUT_MS = 250;
 const DISPLAY_LUMINANCE_RANGE_IDLE_FALLBACK_DELAY_MS = 64;
+const DEFAULT_ANALYSIS_COMPUTE_CHUNK_SIZE = 32_768;
 
 export interface RenderCacheServiceDependencies {
   ui: RenderCacheUi;
@@ -191,6 +201,7 @@ export interface RenderCacheServiceDependencies {
   onImageStatsResolved?: (event: ImageStatsResolvedEvent) => void;
   onAutoExposureResolved?: (event: AutoExposureResolvedEvent) => void;
   windowLike?: RenderCacheWindowLike | null;
+  analysisChunkSize?: number;
 }
 
 export class RenderCacheService implements Disposable {
@@ -201,6 +212,7 @@ export class RenderCacheService implements Disposable {
   private readonly onImageStatsResolved: (event: ImageStatsResolvedEvent) => void;
   private readonly onAutoExposureResolved: (event: AutoExposureResolvedEvent) => void;
   private readonly windowLike: RenderCacheWindowLike | null;
+  private readonly analysisChunkSize: number;
 
   private readonly entries = new Map<string, SessionResourceEntry>();
   private readonly pendingDisplayLuminanceRangeJobs = new Map<string, Map<string, PendingDisplayLuminanceRangeJob>>();
@@ -229,6 +241,7 @@ export class RenderCacheService implements Disposable {
     this.onImageStatsResolved = dependencies.onImageStatsResolved ?? (() => undefined);
     this.onAutoExposureResolved = dependencies.onAutoExposureResolved ?? (() => undefined);
     this.windowLike = dependencies.windowLike ?? resolveWindowLike();
+    this.analysisChunkSize = normalizeAnalysisChunkSize(dependencies.analysisChunkSize);
 
     this.ui.setDisplayCacheBudget(this.budgetMb);
     this.syncDisplayCacheUsageUi();
@@ -350,6 +363,7 @@ export class RenderCacheService implements Disposable {
       };
     }
 
+    this.cancelAnalysisJobsForInactiveSessions();
     const entry = this.getOrCreateEntry(session.id);
     const revisionKey = buildDisplayLuminanceRevisionKey(state);
     const cachedRange = entry.luminanceRangeByRevision.get(revisionKey);
@@ -360,6 +374,7 @@ export class RenderCacheService implements Disposable {
       };
     }
 
+    this.cancelSupersededDisplayLuminanceRangeJobs(session.id, revisionKey);
     const pendingJobs = this.getOrCreatePendingDisplayLuminanceRangeJobs(session.id);
     if (pendingJobs.has(revisionKey)) {
       const existingJob = pendingJobs.get(revisionKey);
@@ -385,7 +400,8 @@ export class RenderCacheService implements Disposable {
       displaySelection: cloneDisplaySelection(state.displaySelection),
       width: session.decoded.width,
       height: session.decoded.height,
-      layer
+      layer,
+      controller: new AbortController()
     };
     pendingJobs.set(revisionKey, job);
     entry.luminanceRangeByRevision.set(
@@ -421,6 +437,7 @@ export class RenderCacheService implements Disposable {
       };
     }
 
+    this.cancelAnalysisJobsForInactiveSessions();
     const entry = this.getOrCreateEntry(session.id);
     const revisionKey = buildDisplayImageStatsRevisionKey(state);
     const cachedStats = entry.imageStatsByRevision.get(revisionKey);
@@ -431,6 +448,7 @@ export class RenderCacheService implements Disposable {
       };
     }
 
+    this.cancelSupersededImageStatsJobs(session.id, revisionKey);
     const pendingJobs = this.getOrCreatePendingImageStatsJobs(session.id);
     if (pendingJobs.has(revisionKey)) {
       const existingJob = pendingJobs.get(revisionKey);
@@ -456,7 +474,8 @@ export class RenderCacheService implements Disposable {
       displaySelection: cloneDisplaySelection(state.displaySelection),
       width: session.decoded.width,
       height: session.decoded.height,
-      layer
+      layer,
+      controller: new AbortController()
     };
     pendingJobs.set(revisionKey, job);
     entry.imageStatsByRevision.set(
@@ -493,6 +512,7 @@ export class RenderCacheService implements Disposable {
       };
     }
 
+    this.cancelAnalysisJobsForInactiveSessions();
     const entry = this.getOrCreateEntry(session.id);
     const revisionKey = buildDisplayAutoExposureRevisionKey(state, percentile);
     const cachedAutoExposure = entry.autoExposureByRevision.get(revisionKey);
@@ -503,6 +523,7 @@ export class RenderCacheService implements Disposable {
       };
     }
 
+    this.cancelSupersededAutoExposureJobs(session.id, revisionKey);
     const pendingJobs = this.getOrCreatePendingAutoExposureJobs(session.id);
     if (pendingJobs.has(revisionKey)) {
       const existingJob = pendingJobs.get(revisionKey);
@@ -529,7 +550,8 @@ export class RenderCacheService implements Disposable {
       percentile,
       width: session.decoded.width,
       height: session.decoded.height,
-      layer
+      layer,
+      controller: new AbortController()
     };
     pendingJobs.set(revisionKey, job);
     entry.autoExposureByRevision.set(
@@ -656,12 +678,7 @@ export class RenderCacheService implements Disposable {
     for (const sessionId of this.entries.keys()) {
       this.renderer.discardSessionTextures(sessionId);
     }
-    this.pendingDisplayLuminanceRangeJobs.clear();
-    this.queuedDisplayLuminanceRangeJobs.length = 0;
-    this.pendingImageStatsJobs.clear();
-    this.queuedImageStatsJobs.length = 0;
-    this.pendingAutoExposureJobs.clear();
-    this.queuedAutoExposureJobs.length = 0;
+    this.cancelAllAnalysisJobs('Render cache was cleared.');
     this.entries.clear();
     this.boundSessionId = null;
     this.boundLayerIndex = null;
@@ -678,12 +695,7 @@ export class RenderCacheService implements Disposable {
 
     this.disposed = true;
     this.abortController.abort(createAbortError('Render cache service has been disposed.'));
-    this.pendingDisplayLuminanceRangeJobs.clear();
-    this.queuedDisplayLuminanceRangeJobs.length = 0;
-    this.pendingImageStatsJobs.clear();
-    this.queuedImageStatsJobs.length = 0;
-    this.pendingAutoExposureJobs.clear();
-    this.queuedAutoExposureJobs.length = 0;
+    this.cancelAllAnalysisJobs('Render cache service has been disposed.');
     for (const sessionId of this.entries.keys()) {
       this.renderer.discardSessionTextures(sessionId);
     }
@@ -735,27 +747,36 @@ export class RenderCacheService implements Disposable {
             continue;
           }
 
-          await this.waitForNextPaint();
-          throwIfAborted(this.abortController.signal, 'Render cache service has been disposed.');
-          await this.waitForIdleSlot(DISPLAY_LUMINANCE_RANGE_IDLE_TIMEOUT_MS);
-          throwIfAborted(this.abortController.signal, 'Render cache service has been disposed.');
-
-          if (!this.hasPendingDisplayLuminanceRangeJob(job)) {
+          if (!this.isDisplayLuminanceRangeJobCurrent(job)) {
+            this.cancelDisplayLuminanceRangeJob(job, 'Display luminance range request became stale.');
             continue;
           }
 
-          const range = this.getOrComputeDisplayLuminanceRange(
+          await this.waitForNextPaint(job.controller.signal);
+          this.throwIfAnalysisJobAborted(job);
+          await this.waitForIdleSlot(DISPLAY_LUMINANCE_RANGE_IDLE_TIMEOUT_MS, job.controller.signal);
+          this.throwIfAnalysisJobAborted(job);
+
+          if (!this.isDisplayLuminanceRangeJobCurrent(job)) {
+            this.cancelDisplayLuminanceRangeJob(job, 'Display luminance range request became stale.');
+            continue;
+          }
+
+          const range = await this.getOrComputeDisplayLuminanceRangeAsync(
             job.layer,
             job.width,
             job.height,
             job.displaySelection,
-            job.visualizationMode
+            job.visualizationMode,
+            job.controller.signal
           );
 
-          if (!this.hasPendingDisplayLuminanceRangeJob(job)) {
+          if (!this.isDisplayLuminanceRangeJobCurrent(job)) {
+            this.cancelDisplayLuminanceRangeJob(job, 'Display luminance range request became stale.');
             continue;
           }
 
+          this.cacheDisplayLuminanceRange(job, range);
           const entry = this.entries.get(job.sessionId);
           this.removePendingDisplayLuminanceRangeJob(job.sessionId, job.revisionKey);
           if (!entry) {
@@ -803,24 +824,32 @@ export class RenderCacheService implements Disposable {
             continue;
           }
 
-          await this.waitForNextPaint();
-          throwIfAborted(this.abortController.signal, 'Render cache service has been disposed.');
-          await this.waitForIdleSlot(DISPLAY_LUMINANCE_RANGE_IDLE_TIMEOUT_MS);
-          throwIfAborted(this.abortController.signal, 'Render cache service has been disposed.');
-
-          if (!this.hasPendingImageStatsJob(job)) {
+          if (!this.isImageStatsJobCurrent(job)) {
+            this.cancelImageStatsJob(job, 'Image stats request became stale.');
             continue;
           }
 
-          const imageStats = computeDisplaySelectionImageStats(
+          await this.waitForNextPaint(job.controller.signal);
+          this.throwIfAnalysisJobAborted(job);
+          await this.waitForIdleSlot(DISPLAY_LUMINANCE_RANGE_IDLE_TIMEOUT_MS, job.controller.signal);
+          this.throwIfAnalysisJobAborted(job);
+
+          if (!this.isImageStatsJobCurrent(job)) {
+            this.cancelImageStatsJob(job, 'Image stats request became stale.');
+            continue;
+          }
+
+          const imageStats = await computeDisplaySelectionImageStatsAsync(
             job.layer,
             job.width,
             job.height,
             job.displaySelection,
-            job.visualizationMode
+            job.visualizationMode,
+            this.createAnalysisComputeOptions(job.controller.signal)
           );
 
-          if (!this.hasPendingImageStatsJob(job)) {
+          if (!this.isImageStatsJobCurrent(job)) {
+            this.cancelImageStatsJob(job, 'Image stats request became stale.');
             continue;
           }
 
@@ -872,25 +901,33 @@ export class RenderCacheService implements Disposable {
             continue;
           }
 
-          await this.waitForNextPaint();
-          throwIfAborted(this.abortController.signal, 'Render cache service has been disposed.');
-          await this.waitForIdleSlot(DISPLAY_LUMINANCE_RANGE_IDLE_TIMEOUT_MS);
-          throwIfAborted(this.abortController.signal, 'Render cache service has been disposed.');
-
-          if (!this.hasPendingAutoExposureJob(job)) {
+          if (!this.isAutoExposureJobCurrent(job)) {
+            this.cancelAutoExposureJob(job, 'Auto exposure request became stale.');
             continue;
           }
 
-          const autoExposure = computeDisplaySelectionAutoExposure(
+          await this.waitForNextPaint(job.controller.signal);
+          this.throwIfAnalysisJobAborted(job);
+          await this.waitForIdleSlot(DISPLAY_LUMINANCE_RANGE_IDLE_TIMEOUT_MS, job.controller.signal);
+          this.throwIfAnalysisJobAborted(job);
+
+          if (!this.isAutoExposureJobCurrent(job)) {
+            this.cancelAutoExposureJob(job, 'Auto exposure request became stale.');
+            continue;
+          }
+
+          const autoExposure = await computeDisplaySelectionAutoExposureAsync(
             job.layer,
             job.width,
             job.height,
             job.displaySelection,
             job.visualizationMode,
-            job.percentile
+            job.percentile,
+            this.createAnalysisComputeOptions(job.controller.signal)
           );
 
-          if (!this.hasPendingAutoExposureJob(job)) {
+          if (!this.isAutoExposureJobCurrent(job)) {
+            this.cancelAutoExposureJob(job, 'Auto exposure request became stale.');
             continue;
           }
 
@@ -989,6 +1026,51 @@ export class RenderCacheService implements Disposable {
     return this.pendingAutoExposureJobs.get(job.sessionId)?.get(job.revisionKey) === job;
   }
 
+  private isDisplayLuminanceRangeJobCurrent(job: PendingDisplayLuminanceRangeJob): boolean {
+    return (
+      !this.disposed &&
+      !job.controller.signal.aborted &&
+      this.hasPendingDisplayLuminanceRangeJob(job) &&
+      this.isAnalysisJobSessionCurrent(job)
+    );
+  }
+
+  private isImageStatsJobCurrent(job: PendingImageStatsJob): boolean {
+    return (
+      !this.disposed &&
+      !job.controller.signal.aborted &&
+      this.hasPendingImageStatsJob(job) &&
+      this.isAnalysisJobSessionCurrent(job)
+    );
+  }
+
+  private isAutoExposureJobCurrent(job: PendingAutoExposureJob): boolean {
+    return (
+      !this.disposed &&
+      !job.controller.signal.aborted &&
+      this.hasPendingAutoExposureJob(job) &&
+      this.isAnalysisJobSessionCurrent(job)
+    );
+  }
+
+  private isAnalysisJobSessionCurrent(job: PendingAnalysisJob): boolean {
+    const activeSessionId = this.getActiveSessionId();
+    return !activeSessionId || activeSessionId === job.sessionId;
+  }
+
+  private throwIfAnalysisJobAborted(job: PendingAnalysisJob): void {
+    throwIfAborted(this.abortController.signal, 'Render cache service has been disposed.');
+    throwIfAborted(job.controller.signal, 'Render cache job was cancelled.');
+  }
+
+  private createAnalysisComputeOptions(signal: AbortSignal) {
+    return {
+      signal,
+      chunkSize: this.analysisChunkSize,
+      yieldControl: () => this.waitForIdleSlot(0, signal)
+    };
+  }
+
   private removePendingDisplayLuminanceRangeJob(sessionId: string, revisionKey: string): void {
     const pendingJobs = this.pendingDisplayLuminanceRangeJobs.get(sessionId);
     if (!pendingJobs) {
@@ -1026,23 +1108,147 @@ export class RenderCacheService implements Disposable {
   }
 
   private removePendingDisplayLuminanceRangeJobsForSession(sessionId: string): void {
-    this.pendingDisplayLuminanceRangeJobs.delete(sessionId);
-    for (let index = this.queuedDisplayLuminanceRangeJobs.length - 1; index >= 0; index -= 1) {
-      if (this.queuedDisplayLuminanceRangeJobs[index]?.sessionId === sessionId) {
-        this.queuedDisplayLuminanceRangeJobs.splice(index, 1);
+    this.cancelDisplayLuminanceRangeJobsWhere(
+      (job) => job.sessionId === sessionId,
+      'Render cache session was discarded.'
+    );
+    this.cancelImageStatsJobsWhere(
+      (job) => job.sessionId === sessionId,
+      'Render cache session was discarded.'
+    );
+    this.cancelAutoExposureJobsWhere(
+      (job) => job.sessionId === sessionId,
+      'Render cache session was discarded.'
+    );
+  }
+
+  private cancelAnalysisJobsForInactiveSessions(): void {
+    const activeSessionId = this.getActiveSessionId();
+    if (!activeSessionId) {
+      return;
+    }
+
+    this.cancelDisplayLuminanceRangeJobsWhere(
+      (job) => job.sessionId !== activeSessionId,
+      'Render cache job became inactive.'
+    );
+    this.cancelImageStatsJobsWhere(
+      (job) => job.sessionId !== activeSessionId,
+      'Render cache job became inactive.'
+    );
+    this.cancelAutoExposureJobsWhere(
+      (job) => job.sessionId !== activeSessionId,
+      'Render cache job became inactive.'
+    );
+  }
+
+  private cancelSupersededDisplayLuminanceRangeJobs(sessionId: string, revisionKey: string): void {
+    this.cancelDisplayLuminanceRangeJobsWhere(
+      (job) => job.sessionId === sessionId && job.revisionKey !== revisionKey,
+      'Display luminance range request was superseded.'
+    );
+  }
+
+  private cancelSupersededImageStatsJobs(sessionId: string, revisionKey: string): void {
+    this.cancelImageStatsJobsWhere(
+      (job) => job.sessionId === sessionId && job.revisionKey !== revisionKey,
+      'Image stats request was superseded.'
+    );
+  }
+
+  private cancelSupersededAutoExposureJobs(sessionId: string, revisionKey: string): void {
+    this.cancelAutoExposureJobsWhere(
+      (job) => job.sessionId === sessionId && job.revisionKey !== revisionKey,
+      'Auto exposure request was superseded.'
+    );
+  }
+
+  private cancelAllAnalysisJobs(message: string): void {
+    this.cancelDisplayLuminanceRangeJobsWhere(() => true, message);
+    this.cancelImageStatsJobsWhere(() => true, message);
+    this.cancelAutoExposureJobsWhere(() => true, message);
+  }
+
+  private cancelDisplayLuminanceRangeJob(job: PendingDisplayLuminanceRangeJob, message: string): void {
+    this.cancelDisplayLuminanceRangeJobsWhere((candidate) => candidate === job, message);
+  }
+
+  private cancelImageStatsJob(job: PendingImageStatsJob, message: string): void {
+    this.cancelImageStatsJobsWhere((candidate) => candidate === job, message);
+  }
+
+  private cancelAutoExposureJob(job: PendingAutoExposureJob, message: string): void {
+    this.cancelAutoExposureJobsWhere((candidate) => candidate === job, message);
+  }
+
+  private cancelDisplayLuminanceRangeJobsWhere(
+    predicate: (job: PendingDisplayLuminanceRangeJob) => boolean,
+    message: string
+  ): void {
+    this.cancelPendingAnalysisJobs(
+      this.pendingDisplayLuminanceRangeJobs,
+      this.queuedDisplayLuminanceRangeJobs,
+      predicate,
+      message
+    );
+  }
+
+  private cancelImageStatsJobsWhere(
+    predicate: (job: PendingImageStatsJob) => boolean,
+    message: string
+  ): void {
+    this.cancelPendingAnalysisJobs(
+      this.pendingImageStatsJobs,
+      this.queuedImageStatsJobs,
+      predicate,
+      message
+    );
+  }
+
+  private cancelAutoExposureJobsWhere(
+    predicate: (job: PendingAutoExposureJob) => boolean,
+    message: string
+  ): void {
+    this.cancelPendingAnalysisJobs(
+      this.pendingAutoExposureJobs,
+      this.queuedAutoExposureJobs,
+      predicate,
+      message
+    );
+  }
+
+  private cancelPendingAnalysisJobs<TJob extends PendingAnalysisJob>(
+    pendingJobsBySession: Map<string, Map<string, TJob>>,
+    queuedJobs: TJob[],
+    predicate: (job: TJob) => boolean,
+    message: string
+  ): void {
+    for (const [sessionId, pendingJobs] of [...pendingJobsBySession.entries()]) {
+      for (const [revisionKey, job] of [...pendingJobs.entries()]) {
+        if (!predicate(job)) {
+          continue;
+        }
+
+        this.abortAnalysisJob(job, message);
+        pendingJobs.delete(revisionKey);
+      }
+
+      if (pendingJobs.size === 0) {
+        pendingJobsBySession.delete(sessionId);
       }
     }
-    this.pendingImageStatsJobs.delete(sessionId);
-    for (let index = this.queuedImageStatsJobs.length - 1; index >= 0; index -= 1) {
-      if (this.queuedImageStatsJobs[index]?.sessionId === sessionId) {
-        this.queuedImageStatsJobs.splice(index, 1);
+
+    for (let index = queuedJobs.length - 1; index >= 0; index -= 1) {
+      const job = queuedJobs[index];
+      if (job && predicate(job)) {
+        queuedJobs.splice(index, 1);
       }
     }
-    this.pendingAutoExposureJobs.delete(sessionId);
-    for (let index = this.queuedAutoExposureJobs.length - 1; index >= 0; index -= 1) {
-      if (this.queuedAutoExposureJobs[index]?.sessionId === sessionId) {
-        this.queuedAutoExposureJobs.splice(index, 1);
-      }
+  }
+
+  private abortAnalysisJob(job: PendingAnalysisJob, message: string): void {
+    if (!job.controller.signal.aborted) {
+      job.controller.abort(createAbortError(message));
     }
   }
 
@@ -1241,8 +1447,58 @@ export class RenderCacheService implements Disposable {
     return range;
   }
 
-  private waitForNextPaint(): Promise<void> {
+  private async getOrComputeDisplayLuminanceRangeAsync(
+    layer: DecodedLayer,
+    width: number,
+    height: number,
+    selection: DisplaySelection | null,
+    visualizationMode: ViewerSessionState['visualizationMode'],
+    signal: AbortSignal
+  ): Promise<DisplayLuminanceRange | null> {
+    throwIfAborted(signal, 'Render cache job was cancelled.');
+    const selectionKey = serializeDisplaySelectionLuminanceKey(selection, visualizationMode);
+    if (Object.prototype.hasOwnProperty.call(layer.analysis.displayLuminanceRangeBySelectionKey, selectionKey)) {
+      return layer.analysis.displayLuminanceRangeBySelectionKey[selectionKey] ?? null;
+    }
+
+    if (
+      selection?.kind === 'channelMono' &&
+      Object.prototype.hasOwnProperty.call(layer.analysis.finiteRangeByChannel, selection.channel)
+    ) {
+      const range = layer.analysis.finiteRangeByChannel[selection.channel] ?? null;
+      throwIfAborted(signal, 'Render cache job was cancelled.');
+      layer.analysis.displayLuminanceRangeBySelectionKey[selectionKey] = range;
+      return range;
+    }
+
+    const range = await computeDisplaySelectionLuminanceRangeAsync(
+      layer,
+      width,
+      height,
+      selection,
+      visualizationMode,
+      this.createAnalysisComputeOptions(signal)
+    );
+
+    return range;
+  }
+
+  private cacheDisplayLuminanceRange(
+    job: PendingDisplayLuminanceRangeJob,
+    range: DisplayLuminanceRange | null
+  ): void {
+    const selectionKey = serializeDisplaySelectionLuminanceKey(job.displaySelection, job.visualizationMode);
+    if (job.displaySelection?.kind === 'channelMono') {
+      job.layer.analysis.finiteRangeByChannel[job.displaySelection.channel] = range;
+    }
+    job.layer.analysis.displayLuminanceRangeBySelectionKey[selectionKey] = range;
+  }
+
+  private waitForNextPaint(signal?: AbortSignal): Promise<void> {
     throwIfAborted(this.abortController.signal, 'Render cache service has been disposed.');
+    if (signal) {
+      throwIfAborted(signal, 'Render cache job was cancelled.');
+    }
 
     const windowLike = this.windowLike;
     if (!windowLike?.requestAnimationFrame) {
@@ -1261,7 +1517,7 @@ export class RenderCacheService implements Disposable {
         }
       }, () => {
         resolve();
-      });
+      }, signal);
 
       firstHandle = windowLike.requestAnimationFrame?.(() => {
         firstHandle = 0;
@@ -1274,8 +1530,11 @@ export class RenderCacheService implements Disposable {
     });
   }
 
-  private waitForIdleSlot(timeoutMs: number): Promise<void> {
+  private waitForIdleSlot(timeoutMs: number, signal?: AbortSignal): Promise<void> {
     throwIfAborted(this.abortController.signal, 'Render cache service has been disposed.');
+    if (signal) {
+      throwIfAborted(signal, 'Render cache job was cancelled.');
+    }
 
     const windowLike = this.windowLike;
     if (!windowLike) {
@@ -1295,7 +1554,7 @@ export class RenderCacheService implements Disposable {
           windowLike.clearTimeout?.(handle);
         }, () => {
           resolve();
-        });
+        }, signal);
         return;
       }
 
@@ -1307,21 +1566,37 @@ export class RenderCacheService implements Disposable {
         windowLike.cancelIdleCallback?.(handle);
       }, () => {
         resolve();
-      });
+      }, signal);
     });
   }
 
-  private bindAbortRejection(cancel: () => void, complete: () => void): () => void {
-    const signal = this.abortController.signal;
+  private bindAbortRejection(cancel: () => void, complete: () => void, jobSignal?: AbortSignal): () => void {
+    const signals = jobSignal ? [this.abortController.signal, jobSignal] : [this.abortController.signal];
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) {
+        return;
+      }
+
+      cleaned = true;
+      for (const signal of signals) {
+        signal.removeEventListener('abort', onAbort);
+      }
+    };
     const onAbort = () => {
+      if (cleaned) {
+        return;
+      }
+
       cancel();
       complete();
+      cleanup();
     };
 
-    signal.addEventListener('abort', onAbort, { once: true });
-    return () => {
-      signal.removeEventListener('abort', onAbort);
-    };
+    for (const signal of signals) {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+    return cleanup;
   }
 }
 
@@ -1348,6 +1623,12 @@ function resolveWindowLike(): RenderCacheWindowLike | null {
   }
 
   return window;
+}
+
+function normalizeAnalysisChunkSize(value: number | undefined): number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : DEFAULT_ANALYSIS_COMPUTE_CHUNK_SIZE;
 }
 
 function buildSessionResourceKey(sessionId: string, revisionKey: string): string {

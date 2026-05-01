@@ -40,14 +40,14 @@ function createDecodedImage(channelNames: string[] = ['R', 'G', 'B']): DecodedEx
   };
 }
 
-function createSession(decoded: DecodedExrImage): OpenedImageSession {
+function createSession(decoded: DecodedExrImage, id = 'session-1'): OpenedImageSession {
   const state = buildViewerStateForLayer(createInitialState(), decoded, 0);
   return {
-    id: 'session-1',
-    filename: 'image.exr',
-    displayName: 'image.exr',
+    id,
+    filename: `${id}.exr`,
+    displayName: `${id}.exr`,
     fileSizeBytes: 16,
-    source: { kind: 'url', url: '/image.exr' },
+    source: { kind: 'url', url: `/${id}.exr` },
     decoded,
     state
   };
@@ -555,6 +555,75 @@ describe('display controller shim', () => {
     });
     expect(core.getState().pendingSelectionTransitionRequestId).toBeNull();
     expect(colormapMocks.loadColormapLut.mock.calls.map(([, id]) => id)).toEqual(['2']);
+  });
+
+  it('silently drops stale Stokes selection transitions after the active layer changes', async () => {
+    const decoded: DecodedExrImage = {
+      width: 2,
+      height: 1,
+      layers: [
+        createLayerFromChannels({
+          R: [1, 1],
+          G: [0, 0],
+          B: [0, 0],
+          S0: [1, 1],
+          S1: [0.5, 0.5],
+          S2: [0.25, 0.25],
+          S3: [0, 0]
+        }, 'stokes'),
+        createLayerFromChannels({
+          R: [0, 0],
+          G: [1, 1],
+          B: [0, 0]
+        }, 'rgb')
+      ]
+    };
+    const { controller, core } = createController(createSession(decoded));
+
+    await controller.initialize();
+    colormapMocks.loadColormapLut.mockClear();
+    const queuedWindow = stubWindow({ queueAnimationFrames: true });
+
+    const pendingSelection = controller.applyDisplaySelection(createStokesSelection('aolp'));
+    expect(core.getState().pendingSelectionTransitionRequestId).not.toBeNull();
+
+    controller.setActiveLayer(1);
+    queuedWindow.flushAnimationFrames();
+    await pendingSelection;
+
+    expect(core.getState().sessionState).toMatchObject({
+      activeLayer: 1,
+      visualizationMode: 'rgb',
+      activeColormapId: '0',
+      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+    });
+    expect(core.getState().pendingSelectionTransitionRequestId).toBeNull();
+    expect(getLoadedColormapId(core)).toBe('0');
+    expect(colormapMocks.loadColormapLut).not.toHaveBeenCalled();
+  });
+
+  it('keeps a newer non-Stokes selection when it supersedes a pending Stokes transition', async () => {
+    const decoded = createDecodedImage(['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3']);
+    const { controller, core } = createController(createSession(decoded));
+
+    await controller.initialize();
+    colormapMocks.loadColormapLut.mockClear();
+    const queuedWindow = stubWindow({ queueAnimationFrames: true });
+
+    const pendingStokesSelection = controller.applyDisplaySelection(createStokesSelection('aolp'));
+    expect(core.getState().pendingSelectionTransitionRequestId).not.toBeNull();
+
+    await controller.applyDisplaySelection(createChannelRgbSelection('R', 'G', 'B'));
+    queuedWindow.flushAnimationFrames();
+    await pendingStokesSelection;
+
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'rgb',
+      activeColormapId: '0',
+      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+    });
+    expect(core.getState().pendingSelectionTransitionRequestId).toBeNull();
+    expect(colormapMocks.loadColormapLut).not.toHaveBeenCalled();
   });
 
   it('suppresses late colormap loads after dispose', async () => {

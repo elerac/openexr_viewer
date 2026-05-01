@@ -1031,6 +1031,71 @@ describe('bootstrap app lifecycle', () => {
     app.dispose();
   });
 
+  it('aborts image previews when the active source closes during GPU preparation', async () => {
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
+      observe(): void {}
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    const session = {
+      id: 'session-1',
+      filename: 'image.exr',
+      displayName: 'image.exr',
+      fileSizeBytes: 3,
+      source: {
+        kind: 'url',
+        url: '/image.exr'
+      },
+      decoded: {
+        width: 1024,
+        height: 512,
+        layers: []
+      },
+      state: mocks.coreState.sessionState
+    };
+    const mutableCoreState = mocks.coreState as unknown as {
+      activeSessionId: string | null;
+      sessions: unknown[];
+    };
+    mutableCoreState.activeSessionId = 'session-1';
+    mutableCoreState.sessions = [session];
+    mocks.renderCachePrepareActiveSession.mockImplementationOnce(() => {
+      mutableCoreState.activeSessionId = null;
+      mutableCoreState.sessions = [];
+      return {
+        textureRevisionKey: '',
+        textureDirty: false
+      };
+    });
+
+    const { bootstrapApp } = await import('../src/app/bootstrap');
+    const app = await bootstrapApp();
+    const callbacks = mocks.getUiCallbacks() as {
+      onResolveExportImagePreview: (request: unknown, signal: AbortSignal) => Promise<unknown>;
+    };
+
+    await expect(callbacks.onResolveExportImagePreview(
+      { mode: 'image' },
+      new AbortController().signal
+    )).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(mocks.rendererReadExportPixels).not.toHaveBeenCalled();
+    expect(mocks.createPngBlobFromPixels).not.toHaveBeenCalled();
+    expect(anchorClick).not.toHaveBeenCalled();
+    expect(mocks.coreDispatch.mock.calls.filter(([intent]) => {
+      return (intent as { type?: string }).type === 'errorSet';
+    })).toHaveLength(0);
+
+    app.dispose();
+  });
+
   it('resolves batch export preview pixels as a bounded full-image thumbnail', async () => {
     class ResizeObserverMock {
       constructor(callback: ResizeObserverCallback) {
@@ -1491,6 +1556,106 @@ describe('bootstrap app lifecycle', () => {
 
     vi.advanceTimersByTime(1000);
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:batch');
+
+    app.dispose();
+  });
+
+  it('aborts batch exports when a source session closes before PNG bytes are committed', async () => {
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
+      observe(): void {}
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+    const createObjectURL = vi.fn<(_: Blob) => string>(() => 'blob:batch');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', {
+      createObjectURL,
+      revokeObjectURL
+    });
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    const rgbSelection = {
+      kind: 'channelRgb',
+      r: 'R',
+      g: 'G',
+      b: 'B',
+      alpha: null
+    };
+    const layer = {
+      name: null,
+      channelNames: ['R', 'G', 'B'],
+      channelStorage: {},
+      analysis: {
+        displayLuminanceRangeBySelectionKey: {},
+        finiteRangeByChannel: {}
+      }
+    };
+    const session = {
+      id: 'session-1',
+      filename: 'beauty.exr',
+      displayName: 'beauty.exr',
+      fileSizeBytes: 3,
+      source: { kind: 'url', url: '/beauty.exr' },
+      decoded: {
+        width: 2,
+        height: 1,
+        layers: [layer]
+      },
+      state: mocks.coreState.sessionState
+    };
+    const mutableCoreState = mocks.coreState as unknown as {
+      activeSessionId: string | null;
+      sessions: unknown[];
+      sessionState: { displaySelection: unknown };
+    };
+    mutableCoreState.activeSessionId = 'session-1';
+    mutableCoreState.sessions = [session];
+    mutableCoreState.sessionState.displaySelection = rgbSelection;
+    mocks.createPngBlobFromPixels.mockImplementation(async () => {
+      mutableCoreState.activeSessionId = null;
+      mutableCoreState.sessions = [];
+      return new Blob([new Uint8Array([0x89, 0x50])], { type: 'image/png' });
+    });
+
+    const { bootstrapApp } = await import('../src/app/bootstrap');
+    const app = await bootstrapApp();
+    const callbacks = mocks.getUiCallbacks() as {
+      onExportImageBatch: (request: {
+        archiveFilename: string;
+        entries: Array<{
+          sessionId: string;
+          activeLayer: number;
+          displaySelection: typeof rgbSelection;
+          channelLabel: string;
+          outputFilename: string;
+        }>;
+        format: 'png-zip';
+      }, signal: AbortSignal) => Promise<void>;
+    };
+
+    await expect(callbacks.onExportImageBatch({
+      archiveFilename: 'openexr-export.zip',
+      format: 'png-zip',
+      entries: [{
+        sessionId: 'session-1',
+        activeLayer: 0,
+        displaySelection: rgbSelection,
+        channelLabel: 'RGB',
+        outputFilename: 'beauty.RGB.png'
+      }]
+    }, new AbortController().signal)).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(mocks.createPngBlobFromPixels).toHaveBeenCalledTimes(1);
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(anchorClick).not.toHaveBeenCalled();
+    expect(mocks.coreDispatch.mock.calls.filter(([intent]) => {
+      return (intent as { type?: string }).type === 'errorSet';
+    })).toHaveLength(0);
 
     app.dispose();
   });

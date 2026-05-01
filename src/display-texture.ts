@@ -5,6 +5,7 @@ import {
   type AutoExposureResult
 } from './auto-exposure';
 import { computeRec709Luminance } from './color';
+import { throwIfAborted } from './lifecycle';
 import {
   readPixelChannelValue,
   getChannelReadView,
@@ -69,6 +70,12 @@ export interface DisplayPixelValues {
   g: number;
   b: number;
   a: number;
+}
+
+export interface CooperativeComputeOptions {
+  signal?: AbortSignal;
+  chunkSize?: number;
+  yieldControl?: () => Promise<void>;
 }
 
 interface ResolvedScalarStokesChannels {
@@ -384,6 +391,48 @@ export function computeDisplaySelectionLuminanceRange(
   return { min, max };
 }
 
+export async function computeDisplaySelectionLuminanceRangeAsync(
+  layer: DecodedLayer,
+  width: number,
+  height: number,
+  selection: DisplaySelection | null,
+  visualizationMode: VisualizationMode = 'rgb',
+  options: CooperativeComputeOptions = {}
+): Promise<DisplayLuminanceRange | null> {
+  throwIfCooperativeComputeAborted(options);
+  const pixelCount = width * height;
+  const evaluator = resolveDisplaySelectionEvaluator(layer, selection, visualizationMode);
+  const values = createDisplayPixelValues();
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  let finiteCount = 0;
+
+  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
+    readDisplaySelectionPixelValuesAtIndex(evaluator, pixelIndex, values);
+    const luminance = computeRec709Luminance(values.r, values.g, values.b);
+    if (Number.isFinite(luminance)) {
+      finiteCount += 1;
+      if (luminance < min) {
+        min = luminance;
+      }
+      if (luminance > max) {
+        max = luminance;
+      }
+    }
+
+    const yieldPromise = maybeYieldCooperativeCompute(pixelIndex + 1, pixelCount, options);
+    if (yieldPromise) {
+      await yieldPromise;
+    }
+  }
+
+  if (finiteCount === 0) {
+    return null;
+  }
+
+  return { min, max };
+}
+
 export function computeDisplaySelectionAutoExposure(
   layer: DecodedLayer,
   width: number,
@@ -420,8 +469,56 @@ export function computeDisplaySelectionAutoExposure(
   const percentile01 = Math.min(1, Math.max(0, percentile / 100));
   const percentileIndex = Math.floor((scalarCount - 1) * percentile01);
   const sortedScalars = scalars.subarray(0, scalarCount);
-  sortedScalars.sort();
-  return createAutoExposureResult(sortedScalars[percentileIndex] ?? 1, percentile);
+  return createAutoExposureResult(selectKthFloat32(sortedScalars, scalarCount, percentileIndex), percentile);
+}
+
+export async function computeDisplaySelectionAutoExposureAsync(
+  layer: DecodedLayer,
+  width: number,
+  height: number,
+  selection: DisplaySelection | null,
+  visualizationMode: VisualizationMode = 'rgb',
+  percentile = AUTO_EXPOSURE_PERCENTILE,
+  options: CooperativeComputeOptions = {}
+): Promise<AutoExposureResult> {
+  throwIfCooperativeComputeAborted(options);
+  const pixelCount = Math.max(0, width * height);
+  if (pixelCount === 0) {
+    return createAutoExposureResult(1, percentile);
+  }
+
+  const evaluator = resolveDisplaySelectionEvaluator(layer, selection, visualizationMode);
+  const values = createDisplayPixelValues();
+  const scalars = new Float32Array(pixelCount);
+  let scalarCount = 0;
+
+  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
+    readDisplaySelectionPixelValuesAtIndex(evaluator, pixelIndex, values);
+    const scalar = Math.max(values.r, values.g, values.b);
+    if (Number.isFinite(scalar) && scalar > 0) {
+      scalars[scalarCount] = scalar;
+      scalarCount += 1;
+    }
+
+    const yieldPromise = maybeYieldCooperativeCompute(pixelIndex + 1, pixelCount, options);
+    if (yieldPromise) {
+      await yieldPromise;
+    }
+  }
+
+  if (scalarCount === 0) {
+    return createAutoExposureResult(1, percentile);
+  }
+
+  const percentile01 = Math.min(1, Math.max(0, percentile / 100));
+  const percentileIndex = Math.floor((scalarCount - 1) * percentile01);
+  const selectedScalar = await selectKthFloat32Async(
+    scalars.subarray(0, scalarCount),
+    scalarCount,
+    percentileIndex,
+    options
+  );
+  return createAutoExposureResult(selectedScalar, percentile);
 }
 
 export function computeDisplaySelectionRoiStats(
@@ -478,6 +575,42 @@ export function computeDisplaySelectionImageStats(
   for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
     for (const accumulator of accumulators) {
       accumulateStatsValue(accumulator, accumulator.read(pixelIndex));
+    }
+  }
+
+  return {
+    width,
+    height,
+    pixelCount,
+    channels: accumulators.map(toStatsChannelSummary)
+  };
+}
+
+export async function computeDisplaySelectionImageStatsAsync(
+  layer: DecodedLayer,
+  width: number,
+  height: number,
+  selection: DisplaySelection | null,
+  visualizationMode: VisualizationMode = 'rgb',
+  options: CooperativeComputeOptions = {}
+): Promise<ImageStats | null> {
+  throwIfCooperativeComputeAborted(options);
+  const pixelCount = Math.max(0, width * height);
+  if (pixelCount === 0) {
+    return null;
+  }
+
+  const evaluator = resolveDisplaySelectionEvaluator(layer, selection, visualizationMode);
+  const accumulators = createDisplaySelectionStatsAccumulators(evaluator, selection);
+
+  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
+    for (const accumulator of accumulators) {
+      accumulateStatsValue(accumulator, accumulator.read(pixelIndex));
+    }
+
+    const yieldPromise = maybeYieldCooperativeCompute(pixelIndex + 1, pixelCount, options);
+    if (yieldPromise) {
+      await yieldPromise;
     }
   }
 
@@ -822,6 +955,160 @@ function fillDisplayTextureFromEvaluator(
   }
 
   return output;
+}
+
+const DEFAULT_COOPERATIVE_COMPUTE_CHUNK_SIZE = 32_768;
+
+function maybeYieldCooperativeCompute(
+  processedCount: number,
+  totalCount: number,
+  options: CooperativeComputeOptions
+): Promise<void> | null {
+  throwIfCooperativeComputeAborted(options);
+
+  const chunkSize = normalizeComputeChunkSize(options.chunkSize);
+  if (processedCount >= totalCount || processedCount % chunkSize !== 0) {
+    return null;
+  }
+
+  return (async () => {
+    await (options.yieldControl ?? yieldToEventLoop)();
+    throwIfCooperativeComputeAborted(options);
+  })();
+}
+
+function throwIfCooperativeComputeAborted(options: CooperativeComputeOptions): void {
+  if (options.signal) {
+    throwIfAborted(options.signal, 'Display computation was aborted.');
+  }
+}
+
+function normalizeComputeChunkSize(value: number | undefined): number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : DEFAULT_COOPERATIVE_COMPUTE_CHUNK_SIZE;
+}
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(resolve, 0);
+  });
+}
+
+function selectKthFloat32(values: Float32Array, count: number, kth: number): number {
+  if (count <= 0) {
+    return 1;
+  }
+
+  let left = 0;
+  let right = count - 1;
+  const target = Math.min(right, Math.max(0, kth));
+
+  while (left < right) {
+    const pivotIndex = partitionFloat32(values, left, right, Math.floor((left + right) / 2));
+    if (target === pivotIndex) {
+      return values[pivotIndex] ?? 1;
+    }
+    if (target < pivotIndex) {
+      right = pivotIndex - 1;
+    } else {
+      left = pivotIndex + 1;
+    }
+  }
+
+  return values[left] ?? 1;
+}
+
+async function selectKthFloat32Async(
+  values: Float32Array,
+  count: number,
+  kth: number,
+  options: CooperativeComputeOptions
+): Promise<number> {
+  if (count <= 0) {
+    return 1;
+  }
+
+  let left = 0;
+  let right = count - 1;
+  const target = Math.min(right, Math.max(0, kth));
+
+  while (left < right) {
+    throwIfCooperativeComputeAborted(options);
+
+    const pivotIndex = await partitionFloat32Async(
+      values,
+      left,
+      right,
+      Math.floor((left + right) / 2),
+      options
+    );
+    if (target === pivotIndex) {
+      return values[pivotIndex] ?? 1;
+    }
+    if (target < pivotIndex) {
+      right = pivotIndex - 1;
+    } else {
+      left = pivotIndex + 1;
+    }
+  }
+
+  throwIfCooperativeComputeAborted(options);
+  return values[left] ?? 1;
+}
+
+function partitionFloat32(values: Float32Array, left: number, right: number, pivotIndex: number): number {
+  const pivotValue = values[pivotIndex] ?? 0;
+  swapFloat32(values, pivotIndex, right);
+  let storeIndex = left;
+
+  for (let index = left; index < right; index += 1) {
+    if ((values[index] ?? 0) < pivotValue) {
+      swapFloat32(values, storeIndex, index);
+      storeIndex += 1;
+    }
+  }
+
+  swapFloat32(values, right, storeIndex);
+  return storeIndex;
+}
+
+async function partitionFloat32Async(
+  values: Float32Array,
+  left: number,
+  right: number,
+  pivotIndex: number,
+  options: CooperativeComputeOptions
+): Promise<number> {
+  const pivotValue = values[pivotIndex] ?? 0;
+  swapFloat32(values, pivotIndex, right);
+  let storeIndex = left;
+  const totalCount = right - left;
+
+  for (let index = left; index < right; index += 1) {
+    if ((values[index] ?? 0) < pivotValue) {
+      swapFloat32(values, storeIndex, index);
+      storeIndex += 1;
+    }
+
+    const yieldPromise = maybeYieldCooperativeCompute(index - left + 1, totalCount, options);
+    if (yieldPromise) {
+      await yieldPromise;
+    }
+  }
+
+  swapFloat32(values, right, storeIndex);
+  return storeIndex;
+}
+
+function swapFloat32(values: Float32Array, a: number, b: number): void {
+  if (a === b) {
+    return;
+  }
+
+  const tmp = values[a] ?? 0;
+  values[a] = values[b] ?? 0;
+  values[b] = tmp;
 }
 
 function createDisplayPixelValues(): DisplayPixelValues {

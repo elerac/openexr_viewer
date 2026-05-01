@@ -79,7 +79,10 @@ export function createAbortError(message = 'Operation aborted.'): Error {
 }
 
 export function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError';
+  return (
+    error instanceof Error ||
+    (typeof DOMException !== 'undefined' && error instanceof DOMException)
+  ) && error.name === 'AbortError';
 }
 
 export function throwIfAborted(signal: AbortSignal, message?: string): void {
@@ -88,4 +91,58 @@ export function throwIfAborted(signal: AbortSignal, message?: string): void {
   }
 
   throw signal.reason instanceof Error ? signal.reason : createAbortError(message);
+}
+
+export interface AsyncOperationGuard {
+  readonly signal: AbortSignal;
+  readonly generation: number;
+  isCurrent(): boolean;
+  throwIfStale(message?: string): void;
+}
+
+export class AsyncOperationGate implements Disposable {
+  private generation = 0;
+  private controller = new AbortController();
+  private disposed = false;
+
+  begin(message = 'Operation was superseded.'): AsyncOperationGuard {
+    this.invalidate(message);
+    const generation = this.generation;
+    const signal = this.controller.signal;
+
+    return {
+      signal,
+      generation,
+      isCurrent: () => !this.disposed && !signal.aborted && this.generation === generation,
+      throwIfStale: (staleMessage = 'Operation became stale.') => {
+        throwIfAborted(signal, staleMessage);
+        if (this.disposed || this.generation !== generation) {
+          throw createAbortError(staleMessage);
+        }
+      }
+    };
+  }
+
+  invalidate(message = 'Operation was superseded.'): void {
+    if (!this.controller.signal.aborted) {
+      this.controller.abort(createAbortError(message));
+    }
+    this.controller = new AbortController();
+    this.generation += 1;
+  }
+
+  dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.disposed = true;
+    if (!this.controller.signal.aborted) {
+      this.controller.abort(createAbortError('Operation gate has been disposed.'));
+    }
+  }
+}
+
+export function isAbortSignalAborted(signal: AbortSignal | null | undefined): boolean {
+  return Boolean(signal?.aborted);
 }

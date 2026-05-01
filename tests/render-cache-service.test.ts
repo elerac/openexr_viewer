@@ -424,6 +424,103 @@ describe('render cache service', () => {
     });
   });
 
+  it('cancels superseded queued analysis jobs before writing caches or invoking callbacks', async () => {
+    const session = createSession('session-1', createDecodedImage(3, 1, { R: 1, G: 4, B: 0 }));
+    const firstState = {
+      ...session.state,
+      displaySelection: createChannelMonoSelection('R')
+    };
+    const secondState = {
+      ...session.state,
+      displaySelection: createChannelMonoSelection('G')
+    };
+    const ui = createUiMock();
+    const renderer = createRendererMock();
+    const { windowLike, flush } = createRenderCacheWindowLike();
+    const onDisplayLuminanceRangeResolved = vi.fn();
+    const onImageStatsResolved = vi.fn();
+    const onAutoExposureResolved = vi.fn();
+    const service = new RenderCacheService({
+      ui,
+      renderer,
+      windowLike,
+      onDisplayLuminanceRangeResolved,
+      onImageStatsResolved,
+      onAutoExposureResolved,
+      analysisChunkSize: 1
+    });
+
+    expect(service.requestDisplayLuminanceRange(session, firstState, 1).pending).toBe(true);
+    expect(service.requestDisplayLuminanceRange(session, secondState, 2).pending).toBe(true);
+    expect(service.requestImageStats(session, firstState, 3).pending).toBe(true);
+    expect(service.requestImageStats(session, secondState, 4).pending).toBe(true);
+    expect(service.requestAutoExposure(session, firstState, 5).pending).toBe(true);
+    expect(service.requestAutoExposure(session, secondState, 6).pending).toBe(true);
+
+    await flush();
+    await flush();
+
+    expect(service.getCachedLuminanceRange(session.id, firstState)).toBeNull();
+    expect(service.getCachedLuminanceRange(session.id, secondState)).toEqual({ min: 4, max: 4 });
+    expect(service.getCachedImageStats(session.id, firstState)).toBeNull();
+    expect(service.getCachedImageStats(session.id, secondState)?.channels[0]).toMatchObject({
+      label: 'Mono',
+      min: 4,
+      max: 4
+    });
+    expect(onDisplayLuminanceRangeResolved).toHaveBeenCalledTimes(1);
+    expect(onDisplayLuminanceRangeResolved).toHaveBeenCalledWith(expect.objectContaining({
+      requestId: 2,
+      displaySelection: secondState.displaySelection
+    }));
+    expect(onImageStatsResolved).toHaveBeenCalledTimes(1);
+    expect(onImageStatsResolved).toHaveBeenCalledWith(expect.objectContaining({
+      requestId: 4,
+      displaySelection: secondState.displaySelection
+    }));
+    expect(onAutoExposureResolved).toHaveBeenCalledTimes(1);
+    expect(onAutoExposureResolved).toHaveBeenCalledWith(expect.objectContaining({
+      requestId: 6,
+      displaySelection: secondState.displaySelection,
+      autoExposure: expect.objectContaining({ scalar: 4 })
+    }));
+  });
+
+  it('drops pending analysis callbacks when the active target changes', async () => {
+    const first = createSession('session-1', createDecodedImage(3, 1, { R: 1, G: 0, B: 0 }));
+    const second = createSession('session-2', createDecodedImage(3, 1, { R: 2, G: 0, B: 0 }));
+    const ui = createUiMock();
+    const renderer = createRendererMock();
+    const { windowLike, flush } = createRenderCacheWindowLike();
+    const onDisplayLuminanceRangeResolved = vi.fn();
+    const onImageStatsResolved = vi.fn();
+    const onAutoExposureResolved = vi.fn();
+    let activeSessionId: string | null = first.id;
+    const service = new RenderCacheService({
+      ui,
+      renderer,
+      windowLike,
+      getActiveSessionId: () => activeSessionId,
+      onDisplayLuminanceRangeResolved,
+      onImageStatsResolved,
+      onAutoExposureResolved,
+      analysisChunkSize: 1
+    });
+
+    expect(service.requestDisplayLuminanceRange(first, first.state, 1).pending).toBe(true);
+    expect(service.requestImageStats(first, first.state, 2).pending).toBe(true);
+    expect(service.requestAutoExposure(first, first.state, 3).pending).toBe(true);
+
+    activeSessionId = second.id;
+    await flush();
+
+    expect(service.getCachedLuminanceRange(first.id, first.state)).toBeNull();
+    expect(service.getCachedImageStats(first.id, first.state)).toBeNull();
+    expect(onDisplayLuminanceRangeResolved).not.toHaveBeenCalled();
+    expect(onImageStatsResolved).not.toHaveBeenCalled();
+    expect(onAutoExposureResolved).not.toHaveBeenCalled();
+  });
+
   it('reuses finite mono ranges across alpha-only selection changes', async () => {
     const decoded = createDecodedImage(2, 1, { R: 1, G: 0.5, B: 0, A: 0.25 });
     const session = createSession('session-1', decoded);

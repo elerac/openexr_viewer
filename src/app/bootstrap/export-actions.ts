@@ -3,7 +3,7 @@ import { findColormapIdByLabel, getColormapAsset, loadColormapLut, type Colormap
 import { cloneDisplayLuminanceRange, resolveColormapAutoRange } from '../../colormap-range';
 import { cloneDisplaySelection, isStokesSelection } from '../../display-model';
 import { buildColormapExportPixels, createPngBlobFromPixels, type ExportImagePixels } from '../../export-image';
-import { createAbortError, throwIfAborted } from '../../lifecycle';
+import { createAbortError, isAbortError, throwIfAborted } from '../../lifecycle';
 import { RenderCacheService } from '../../services/render-cache-service';
 import { getStokesDisplayColormapDefault, isStokesDegreeModulationParameter } from '../../stokes';
 import { buildDisplaySelectionThumbnailPixels } from '../../thumbnail';
@@ -76,6 +76,8 @@ interface ExportImageBatchPreviewActionDependencies {
   isDisposed: () => boolean;
   previewMaxLongestEdge: number;
 }
+
+type ViewerStateProvider = () => ViewerAppState;
 
 interface ExportColormapActionDependencies {
   core: ViewerAppCore;
@@ -170,10 +172,12 @@ export function createImageExportPixelsResolver({
       throw new Error('The active colormap is not ready for export.');
     }
 
+    assertActiveSessionCurrent(core.getState(), activeSession, options.signal);
     getRenderCache().prepareActiveSession(activeSession, state.sessionState);
     if (options.signal) {
       throwIfAborted(options.signal);
     }
+    assertActiveSessionCurrent(core.getState(), activeSession, options.signal);
 
     if (isDisposed()) {
       throw createAbortError('Viewer application has been disposed.');
@@ -219,8 +223,15 @@ export async function handleExportImage(
   }
 
   try {
+    const sourceSession = selectActiveSession(core.getState());
     const pixels = await resolveImageExportPixels(request);
+    if (sourceSession) {
+      assertActiveSessionCurrent(core.getState(), sourceSession);
+    }
     const blob = await createPngBlobFromPixels(pixels);
+    if (sourceSession) {
+      assertActiveSessionCurrent(core.getState(), sourceSession);
+    }
     if (isDisposed()) {
       throw createAbortError('Viewer application has been disposed.');
     }
@@ -228,6 +239,10 @@ export async function handleExportImage(
   } catch (error) {
     if (isDisposed()) {
       throw error instanceof Error ? error : createAbortError('Viewer application has been disposed.');
+    }
+
+    if (isAbortError(error)) {
+      throw error;
     }
 
     const message = error instanceof Error ? error.message : 'Export failed.';
@@ -279,6 +294,7 @@ export async function handleExportImageBatch(
         entry,
         session,
         appState: stateSnapshot,
+        getCurrentState: () => core.getState(),
         renderCache,
         renderer,
         lutCache,
@@ -287,7 +303,10 @@ export async function handleExportImageBatch(
       });
       const blob = await createPngBlobFromPixels(pixels);
       throwIfAborted(signal, 'Batch export cancelled.');
+      assertSessionCurrent(core.getState(), session, signal);
       files[entry.outputFilename] = new Uint8Array(await blob.arrayBuffer());
+      throwIfAborted(signal, 'Batch export cancelled.');
+      assertSessionCurrent(core.getState(), session, signal);
     }
 
     const zipBytes = zipSync(files);
@@ -302,7 +321,7 @@ export async function handleExportImageBatch(
       throw error instanceof Error ? error : createAbortError('Viewer application has been disposed.');
     }
 
-    if (signal.aborted) {
+    if (signal.aborted || isAbortError(error)) {
       throw error instanceof Error ? error : createAbortError('Batch export cancelled.');
     }
 
@@ -310,7 +329,9 @@ export async function handleExportImageBatch(
     core.dispatch({ type: 'errorSet', message });
     throw new Error(message);
   } finally {
-    restoreActiveRendererBinding(core, renderCache, renderer);
+    if (!isDisposed()) {
+      restoreActiveRendererBinding(core, renderCache, renderer);
+    }
   }
 }
 
@@ -348,6 +369,7 @@ export async function resolveExportImageBatchPreviewPixels(
       entry: request,
       session,
       appState: stateSnapshot,
+      getCurrentState: () => core.getState(),
       renderCache,
       renderer: getRenderer(),
       lutCache,
@@ -371,7 +393,7 @@ export async function resolveExportImageBatchPreviewPixels(
 
     throw error instanceof Error ? error : new Error('Batch export preview failed.');
   } finally {
-    if (request.mode === 'screenshot') {
+    if (request.mode === 'screenshot' && !isDisposed()) {
       restoreActiveRendererBinding(core, renderCache, getRenderer());
     }
   }
@@ -412,6 +434,7 @@ async function resolveBatchEntryExportPixels({
   entry,
   session,
   appState,
+  getCurrentState,
   renderCache,
   renderer,
   lutCache,
@@ -422,6 +445,7 @@ async function resolveBatchEntryExportPixels({
   entry: ExportImageBatchPreviewRequest;
   session: OpenedImageSession;
   appState: ViewerAppState;
+  getCurrentState: ViewerStateProvider;
   renderCache: RenderCacheService;
   renderer: WebGlExrRenderer;
   lutCache: Map<string, ColormapLut>;
@@ -437,12 +461,15 @@ async function resolveBatchEntryExportPixels({
     lutCache,
     signal
   });
+  assertSessionCurrent(getCurrentState(), session, signal);
   if (exportState.lut) {
     renderer.setColormapTexture(exportState.lut.entryCount, exportState.lut.rgba8);
   }
 
+  assertSessionCurrent(getCurrentState(), session, signal);
   renderCache.prepareActiveSession(session, exportState.state);
   throwIfAborted(signal, abortMessage);
+  assertSessionCurrent(getCurrentState(), session, signal);
 
   const screenshotRegion = entry.mode === 'screenshot' ? entry : null;
   const requestedWidth = screenshotRegion?.outputWidth ?? session.decoded.width;
@@ -476,6 +503,7 @@ async function resolveBatchEntryExportPixels({
     } : {})
   });
   throwIfAborted(signal, abortMessage);
+  assertSessionCurrent(getCurrentState(), session, signal);
   return pixels;
 }
 
@@ -483,6 +511,7 @@ async function resolveBatchEntryPreviewPixels({
   entry,
   session,
   appState,
+  getCurrentState,
   renderCache,
   renderer,
   lutCache,
@@ -493,6 +522,7 @@ async function resolveBatchEntryPreviewPixels({
   entry: ExportImageBatchPreviewRequest;
   session: OpenedImageSession;
   appState: ViewerAppState;
+  getCurrentState: ViewerStateProvider;
   renderCache: RenderCacheService;
   renderer: WebGlExrRenderer;
   lutCache: Map<string, ColormapLut>;
@@ -505,6 +535,7 @@ async function resolveBatchEntryPreviewPixels({
       entry,
       session,
       appState,
+      getCurrentState,
       renderCache,
       renderer,
       lutCache,
@@ -523,6 +554,7 @@ async function resolveBatchEntryPreviewPixels({
     signal
   });
   throwIfAborted(signal, abortMessage);
+  assertSessionCurrent(getCurrentState(), session, signal);
 
   const layer = session.decoded.layers[exportState.state.activeLayer] ?? null;
   if (!layer) {
@@ -545,6 +577,7 @@ async function resolveBatchEntryPreviewPixels({
     }
   );
   throwIfAborted(signal, abortMessage);
+  assertSessionCurrent(getCurrentState(), session, signal);
   return pixels;
 }
 
@@ -713,6 +746,36 @@ function restoreActiveRendererBinding(
   }
   renderCache.prepareActiveSession(activeSession, state.sessionState);
   renderer.renderImage(mergeRenderState(state.sessionState, state.interactionState));
+}
+
+function assertActiveSessionCurrent(
+  state: ViewerAppState,
+  session: OpenedImageSession,
+  signal?: AbortSignal
+): void {
+  if (signal) {
+    throwIfAborted(signal, 'Image export cancelled.');
+  }
+
+  const activeSession = selectActiveSession(state);
+  if (!activeSession || activeSession.id !== session.id || activeSession.decoded !== session.decoded) {
+    throw createAbortError('Active image changed before export finished.');
+  }
+}
+
+function assertSessionCurrent(
+  state: ViewerAppState,
+  session: OpenedImageSession,
+  signal?: AbortSignal
+): void {
+  if (signal) {
+    throwIfAborted(signal, 'Export cancelled.');
+  }
+
+  const currentSession = state.sessions.find((item) => item.id === session.id) ?? null;
+  if (!currentSession || currentSession.decoded !== session.decoded) {
+    throw createAbortError('Image changed before export finished.');
+  }
 }
 
 export function triggerBrowserDownload(blob: Blob, filename: string): void {

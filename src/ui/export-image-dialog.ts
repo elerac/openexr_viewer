@@ -245,6 +245,11 @@ export class ExportImageDialogController implements Disposable {
       }
       this.close(true);
     } catch (error) {
+      if (isAbortError(error)) {
+        this.close(true);
+        return;
+      }
+
       if (!isPendingMatch(this.exportResource, 'export-image', exportRequestId)) {
         return;
       }
