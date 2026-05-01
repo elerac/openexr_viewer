@@ -803,7 +803,7 @@ describe('viewer app core', () => {
       panX: 12.25,
       panY: -4.5,
       panoramaYawDeg: -170,
-      panoramaPitchDeg: -89,
+      panoramaPitchDeg: -90,
       panoramaHfovDeg: 1,
       exposureEv: 2,
       displaySelection: createChannelMonoSelection('R'),
@@ -814,7 +814,7 @@ describe('viewer app core', () => {
       panX: 12.25,
       panY: -4.5,
       panoramaYawDeg: -170,
-      panoramaPitchDeg: -89,
+      panoramaPitchDeg: -90,
       panoramaHfovDeg: 1
     });
     expect(core.getState().interactionState.hoveredPixel).toBeNull();

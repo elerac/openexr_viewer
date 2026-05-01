@@ -833,13 +833,13 @@ describe('viewer interaction panorama keyboard orbit', () => {
     });
 
     harness.interaction.handlePanoramaKeyboardOrbit('up');
-    expect(harness.getState().panoramaPitchDeg).toBe(89);
+    expect(harness.getState().panoramaPitchDeg).toBe(90);
 
     harness.interaction.handlePanoramaKeyboardOrbit('up');
-    expect(harness.getState().panoramaPitchDeg).toBe(89);
+    expect(harness.getState().panoramaPitchDeg).toBe(90);
 
     harness.interaction.handlePanoramaKeyboardOrbit('down');
-    expect(harness.getState().panoramaPitchDeg).toBe(84);
+    expect(harness.getState().panoramaPitchDeg).toBe(85);
   });
 
   it('refreshes panorama hover from the last pointer position after keyboard orbiting', () => {

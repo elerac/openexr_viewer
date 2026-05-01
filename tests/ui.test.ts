@@ -964,11 +964,11 @@ describe('viewer state inspector', () => {
     hfovInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
 
     expect(yawInput.value).toBe('-170');
-    expect(pitchInput.value).toBe('89');
+    expect(pitchInput.value).toBe('90');
     expect(hfovInput.value).toBe('1');
     expect(onViewerViewStateChange.mock.calls).toEqual([
       [{ panoramaYawDeg: -170 }],
-      [{ panoramaPitchDeg: 89 }],
+      [{ panoramaPitchDeg: 90 }],
       [{ panoramaHfovDeg: 1 }]
     ]);
   });

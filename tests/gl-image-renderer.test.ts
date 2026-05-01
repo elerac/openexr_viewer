@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { __debugGetMaterializedChannel, __debugGetMaterializedChannelCount } from '../src/channel-storage';
 import { buildDisplaySourceBinding } from '../src/display-texture';
+import { clampPanoramaProjectionPitch } from '../src/interaction/panorama-geometry';
 import { GlImageRenderer } from '../src/rendering/gl-image-renderer';
 import { createEmptyRoiInteractionState } from '../src/view-state';
 import { createInitialState } from '../src/viewer-store';
@@ -507,7 +508,7 @@ describe('gl image renderer', () => {
       ...createInitialState(),
       viewerMode: 'panorama' as const,
       panoramaYawDeg: 17,
-      panoramaPitchDeg: 4,
+      panoramaPitchDeg: 90,
       panoramaHfovDeg: 90,
       displaySelection: createChannelRgbSelection('R', 'G', 'B'),
       hoveredPixel: null,
@@ -539,7 +540,7 @@ describe('gl image renderer', () => {
     expect(lastUniform2fValue(gl, 'uViewport')).toEqual([200, 100]);
     expect(lastUniform2fValue(gl, 'uScreenOrigin')).toEqual([20, 10]);
     expect(lastUniform1fValue(gl, 'uPanoramaYawDeg')).toBe(17);
-    expect(lastUniform1fValue(gl, 'uPanoramaPitchDeg')).toBe(4);
+    expect(lastUniform1fValue(gl, 'uPanoramaPitchDeg')).toBeCloseTo(clampPanoramaProjectionPitch(90), 7);
     expect(lastUniform1fValue(gl, 'uPanoramaHfovDeg')).toBe(90);
   });
 

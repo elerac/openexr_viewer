@@ -473,8 +473,8 @@ describe('interaction math', () => {
       -100
     );
 
-    expect(next.panoramaPitchDeg).toBe(89);
-    expect(clampPanoramaPitch(999)).toBe(89);
+    expect(next.panoramaPitchDeg).toBe(90);
+    expect(clampPanoramaPitch(999)).toBe(90);
   });
 
   it('clamps panorama hfov while zooming', () => {

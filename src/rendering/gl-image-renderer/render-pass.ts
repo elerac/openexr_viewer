@@ -1,5 +1,6 @@
 import { isStokesDegreeModulationEnabled, resolveStokesDegreeModulationMode } from '../../stokes';
 import type { DisplaySourceBinding, DisplaySourceMode } from '../../display-texture';
+import { clampPanoramaProjectionPitch } from '../../interaction/panorama-geometry';
 import type { ViewerState } from '../../types';
 import {
   ALPHA_OUTPUT_OPAQUE,
@@ -56,7 +57,10 @@ export function renderPanoramaPass(
 
   setCommonUniforms(state, program.uniforms, viewerState, options);
   gl.uniform1f(program.uniforms.panoramaYawDeg, viewerState.panoramaYawDeg);
-  gl.uniform1f(program.uniforms.panoramaPitchDeg, viewerState.panoramaPitchDeg);
+  gl.uniform1f(
+    program.uniforms.panoramaPitchDeg,
+    clampPanoramaProjectionPitch(viewerState.panoramaPitchDeg)
+  );
   gl.uniform1f(program.uniforms.panoramaHfovDeg, viewerState.panoramaHfovDeg);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }

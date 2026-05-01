@@ -3,7 +3,8 @@ import type { ImagePixel, ViewerState, ViewportInfo } from '../types';
 export const MIN_PANORAMA_HFOV_DEG = 1;
 export const MAX_PANORAMA_HFOV_DEG = 180;
 export const DEFAULT_PANORAMA_HFOV_DEG = 100;
-export const MAX_PANORAMA_PITCH_DEG = 89;
+export const MAX_PANORAMA_PITCH_DEG = 90;
+export const PANORAMA_PROJECTION_PITCH_EPSILON_DEG = 1e-4;
 
 const PANORAMA_PERSPECTIVE_HFOV_LIMIT_DEG = 120;
 const PANORAMA_MAX_PROJECTED_ASPECT_RATIO = 4;
@@ -31,6 +32,11 @@ export function clampPanoramaHfov(hfovDeg: number): number {
 
 export function clampPanoramaPitch(pitchDeg: number): number {
   return Math.min(MAX_PANORAMA_PITCH_DEG, Math.max(-MAX_PANORAMA_PITCH_DEG, pitchDeg));
+}
+
+export function clampPanoramaProjectionPitch(pitchDeg: number): number {
+  const maxProjectionPitchDeg = MAX_PANORAMA_PITCH_DEG - PANORAMA_PROJECTION_PITCH_EPSILON_DEG;
+  return Math.min(maxProjectionPitchDeg, Math.max(-maxProjectionPitchDeg, pitchDeg));
 }
 
 export function normalizePanoramaYaw(yawDeg: number): number {
@@ -211,7 +217,10 @@ function screenToPanoramaDirection(
         y: (radialY / radius) * sinTheta,
         z: cosTheta
       };
-  const pitched = rotatePitch(ray, state.panoramaPitchDeg * RADIANS_PER_DEGREE);
+  const pitched = rotatePitch(
+    ray,
+    clampPanoramaProjectionPitch(state.panoramaPitchDeg) * RADIANS_PER_DEGREE
+  );
   return rotateYaw(pitched, state.panoramaYawDeg * RADIANS_PER_DEGREE);
 }
 
@@ -244,7 +253,7 @@ function projectPanoramaDirectionToScreen(
   }
 
   const yawRad = state.panoramaYawDeg * RADIANS_PER_DEGREE;
-  const pitchRad = state.panoramaPitchDeg * RADIANS_PER_DEGREE;
+  const pitchRad = clampPanoramaProjectionPitch(state.panoramaPitchDeg) * RADIANS_PER_DEGREE;
   const cameraDirection = rotatePitch(rotateYaw(direction, -yawRad), -pitchRad);
   if (cameraDirection.z < -Number.EPSILON) {
     return null;
