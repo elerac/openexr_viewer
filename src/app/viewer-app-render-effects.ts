@@ -16,6 +16,7 @@ export function applyRenderEffects(
 ): void {
   const { snapshot, invalidation, state } = transition;
   const activeSession = snapshot.activeSession;
+  let deferredAutoExposureDispatch: (() => void) | null = null;
 
   if ((invalidation & ViewerRenderInvalidationFlags.ColormapTexture) && snapshot.activeColormapLut) {
     renderer.setColormapTexture(snapshot.activeColormapLut.entryCount, snapshot.activeColormapLut.rgba8);
@@ -113,30 +114,47 @@ export function applyRenderEffects(
     activeSession &&
     snapshot.autoExposureRequest
   ) {
+    const autoExposureRequest = snapshot.autoExposureRequest;
     const requestId = core.issueRequestId();
     const result = renderCache.requestAutoExposure(
       activeSession,
-      snapshot.autoExposureRequest,
+      autoExposureRequest,
       requestId,
-      snapshot.autoExposureRequest.percentile
+      autoExposureRequest.percentile
     );
     if (result.pending) {
       core.dispatch({
         type: 'autoExposureRequestStarted',
         requestId,
-        requestKey: snapshot.autoExposureRequest.requestKey
+        requestKey: autoExposureRequest.requestKey
       });
+      if (result.previewAutoExposure) {
+        deferredAutoExposureDispatch = () => {
+          core.dispatch({
+            type: 'autoExposurePreviewResolved',
+            requestId,
+            requestKey: autoExposureRequest.requestKey,
+            sessionId: activeSession.id,
+            activeLayer: state.sessionState.activeLayer,
+            visualizationMode: state.sessionState.visualizationMode,
+            displaySelection: state.sessionState.displaySelection,
+            autoExposure: result.previewAutoExposure ?? null
+          });
+        };
+      }
     } else {
-      core.dispatch({
-        type: 'autoExposureResolved',
-        requestId: null,
-        requestKey: snapshot.autoExposureRequest.requestKey,
-        sessionId: activeSession.id,
-        activeLayer: state.sessionState.activeLayer,
-        visualizationMode: state.sessionState.visualizationMode,
-        displaySelection: state.sessionState.displaySelection,
-        autoExposure: result.autoExposure
-      });
+      deferredAutoExposureDispatch = () => {
+        core.dispatch({
+          type: 'autoExposureResolved',
+          requestId: null,
+          requestKey: autoExposureRequest.requestKey,
+          sessionId: activeSession.id,
+          activeLayer: state.sessionState.activeLayer,
+          visualizationMode: state.sessionState.visualizationMode,
+          displaySelection: state.sessionState.displaySelection,
+          autoExposure: result.autoExposure
+        });
+      };
     }
   }
 
@@ -144,6 +162,7 @@ export function applyRenderEffects(
     if (invalidation & ViewerRenderInvalidationFlags.RenderRulerOverlay) {
       renderer.renderRulerOverlay(snapshot.renderState);
     }
+    deferredAutoExposureDispatch?.();
     return;
   }
 
@@ -162,6 +181,8 @@ export function applyRenderEffects(
   if (invalidation & ViewerRenderInvalidationFlags.RenderRulerOverlay) {
     renderer.renderRulerOverlay(snapshot.renderState);
   }
+
+  deferredAutoExposureDispatch?.();
 }
 
 function synchronizeCachedDisplayRange(

@@ -49,6 +49,7 @@ import {
 } from './types';
 
 export const DISPLAY_SOURCE_SLOT_COUNT = 12;
+export const AUTO_EXPOSURE_PREVIEW_MAX_EDGE = 256;
 
 export type DisplaySourceMode =
   | 'empty'
@@ -452,8 +453,7 @@ export function computeDisplaySelectionAutoExposure(
   let scalarCount = 0;
 
   for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
-    readDisplaySelectionPixelValuesAtIndex(evaluator, pixelIndex, values);
-    const scalar = Math.max(values.r, values.g, values.b);
+    const scalar = readAutoExposureScalar(evaluator, pixelIndex, values);
     if (!Number.isFinite(scalar) || scalar <= 0) {
       continue;
     }
@@ -466,8 +466,51 @@ export function computeDisplaySelectionAutoExposure(
     return createAutoExposureResult(1, percentile);
   }
 
-  const percentile01 = Math.min(1, Math.max(0, percentile / 100));
-  const percentileIndex = Math.floor((scalarCount - 1) * percentile01);
+  const percentileIndex = resolveAutoExposurePercentileIndex(scalarCount, percentile);
+  const sortedScalars = scalars.subarray(0, scalarCount);
+  return createAutoExposureResult(selectKthFloat32(sortedScalars, scalarCount, percentileIndex), percentile);
+}
+
+export function computeDisplaySelectionAutoExposurePreview(
+  layer: DecodedLayer,
+  width: number,
+  height: number,
+  selection: DisplaySelection | null,
+  visualizationMode: VisualizationMode = 'rgb',
+  percentile = AUTO_EXPOSURE_PERCENTILE
+): AutoExposureResult {
+  const sampleWidth = resolveAutoExposurePreviewSampleSize(width);
+  const sampleHeight = resolveAutoExposurePreviewSampleSize(height);
+  const sampleCount = sampleWidth * sampleHeight;
+  if (sampleCount === 0) {
+    return createAutoExposureResult(1, percentile);
+  }
+
+  const evaluator = resolveDisplaySelectionEvaluator(layer, selection, visualizationMode);
+  const values = createDisplayPixelValues();
+  const scalars = new Float32Array(sampleCount);
+  let scalarCount = 0;
+
+  for (let sampleY = 0; sampleY < sampleHeight; sampleY += 1) {
+    const sourceY = resolveAutoExposurePreviewSourceCoordinate(sampleY, sampleHeight, height);
+    const sourceRowOffset = sourceY * width;
+    for (let sampleX = 0; sampleX < sampleWidth; sampleX += 1) {
+      const sourceX = resolveAutoExposurePreviewSourceCoordinate(sampleX, sampleWidth, width);
+      const scalar = readAutoExposureScalar(evaluator, sourceRowOffset + sourceX, values);
+      if (!Number.isFinite(scalar) || scalar <= 0) {
+        continue;
+      }
+
+      scalars[scalarCount] = scalar;
+      scalarCount += 1;
+    }
+  }
+
+  if (scalarCount === 0) {
+    return createAutoExposureResult(1, percentile);
+  }
+
+  const percentileIndex = resolveAutoExposurePercentileIndex(scalarCount, percentile);
   const sortedScalars = scalars.subarray(0, scalarCount);
   return createAutoExposureResult(selectKthFloat32(sortedScalars, scalarCount, percentileIndex), percentile);
 }
@@ -493,8 +536,7 @@ export async function computeDisplaySelectionAutoExposureAsync(
   let scalarCount = 0;
 
   for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
-    readDisplaySelectionPixelValuesAtIndex(evaluator, pixelIndex, values);
-    const scalar = Math.max(values.r, values.g, values.b);
+    const scalar = readAutoExposureScalar(evaluator, pixelIndex, values);
     if (Number.isFinite(scalar) && scalar > 0) {
       scalars[scalarCount] = scalar;
       scalarCount += 1;
@@ -510,8 +552,7 @@ export async function computeDisplaySelectionAutoExposureAsync(
     return createAutoExposureResult(1, percentile);
   }
 
-  const percentile01 = Math.min(1, Math.max(0, percentile / 100));
-  const percentileIndex = Math.floor((scalarCount - 1) * percentile01);
+  const percentileIndex = resolveAutoExposurePercentileIndex(scalarCount, percentile);
   const selectedScalar = await selectKthFloat32Async(
     scalars.subarray(0, scalarCount),
     scalarCount,
@@ -519,6 +560,37 @@ export async function computeDisplaySelectionAutoExposureAsync(
     options
   );
   return createAutoExposureResult(selectedScalar, percentile);
+}
+
+function readAutoExposureScalar(
+  evaluator: DisplaySelectionEvaluator,
+  pixelIndex: number,
+  values: DisplayPixelValues
+): number {
+  readDisplaySelectionPixelValuesAtIndex(evaluator, pixelIndex, values);
+  return Math.max(values.r, values.g, values.b);
+}
+
+function resolveAutoExposurePercentileIndex(count: number, percentile: number): number {
+  const percentile01 = Math.min(1, Math.max(0, percentile / 100));
+  return Math.floor((Math.max(1, count) - 1) * percentile01);
+}
+
+function resolveAutoExposurePreviewSampleSize(size: number): number {
+  if (!Number.isFinite(size) || size <= 0) {
+    return 0;
+  }
+
+  return Math.min(AUTO_EXPOSURE_PREVIEW_MAX_EDGE, Math.floor(size));
+}
+
+function resolveAutoExposurePreviewSourceCoordinate(
+  sampleIndex: number,
+  sampleCount: number,
+  sourceSize: number
+): number {
+  const maxIndex = Math.max(0, Math.floor(sourceSize) - 1);
+  return Math.min(maxIndex, Math.floor(((sampleIndex + 0.5) * sourceSize) / sampleCount));
 }
 
 export function computeDisplaySelectionRoiStats(

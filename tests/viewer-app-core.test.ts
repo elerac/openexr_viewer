@@ -156,6 +156,112 @@ describe('viewer app core', () => {
     expect(core.getState().autoExposureResource.status).toBe('idle');
   });
 
+  it('applies preview auto exposure while keeping the exact request pending', () => {
+    const core = new ViewerAppCore();
+    const session = createSession('session-1');
+    core.dispatch({ type: 'sessionLoaded', session });
+    core.dispatch({ type: 'autoExposureSet', enabled: true });
+
+    const displaySelection = core.getState().sessionState.displaySelection;
+    core.dispatch({ type: 'autoExposureRequestStarted', requestId: 3, requestKey: 'session-1:auto' });
+    core.dispatch({
+      type: 'autoExposurePreviewResolved',
+      requestId: 3,
+      requestKey: 'session-1:auto',
+      sessionId: session.id,
+      activeLayer: 0,
+      visualizationMode: 'rgb',
+      displaySelection,
+      autoExposure: {
+        scalar: 4,
+        exposureEv: -2,
+        percentile: 99.5,
+        source: 'rgbMax'
+      }
+    });
+
+    expect(core.getState().sessionState.exposureEv).toBe(-2);
+    expect(core.getState().autoExposureResource).toMatchObject({
+      status: 'pending',
+      key: 'session-1:auto',
+      requestId: 3
+    });
+
+    core.dispatch({
+      type: 'autoExposureResolved',
+      requestId: 3,
+      requestKey: 'session-1:auto',
+      sessionId: session.id,
+      activeLayer: 0,
+      visualizationMode: 'rgb',
+      displaySelection,
+      autoExposure: {
+        scalar: 8,
+        exposureEv: -3,
+        percentile: 99.5,
+        source: 'rgbMax'
+      }
+    });
+
+    expect(core.getState().sessionState.exposureEv).toBe(-3);
+    expect(core.getState().autoExposureResource).toMatchObject({
+      status: 'success',
+      key: 'session-1:auto'
+    });
+    expect(getSuccessValue(core.getState().autoExposureResource)).toMatchObject({
+      scalar: 8,
+      exposureEv: -3
+    });
+  });
+
+  it('ignores stale preview auto exposure results', () => {
+    const core = new ViewerAppCore();
+    const session = createSession('session-1');
+    core.dispatch({ type: 'sessionLoaded', session });
+    core.dispatch({ type: 'autoExposureSet', enabled: true });
+
+    const displaySelection = core.getState().sessionState.displaySelection;
+    core.dispatch({ type: 'autoExposureRequestStarted', requestId: 3, requestKey: 'session-1:auto' });
+    core.dispatch({
+      type: 'autoExposurePreviewResolved',
+      requestId: 4,
+      requestKey: 'session-1:auto',
+      sessionId: session.id,
+      activeLayer: 0,
+      visualizationMode: 'rgb',
+      displaySelection,
+      autoExposure: {
+        scalar: 4,
+        exposureEv: -2,
+        percentile: 99.5,
+        source: 'rgbMax'
+      }
+    });
+
+    expect(core.getState().sessionState.exposureEv).toBe(0);
+    expect(core.getState().autoExposureResource.status).toBe('pending');
+
+    core.dispatch({ type: 'displaySelectionSet', displaySelection: createChannelMonoSelection('R') });
+    core.dispatch({
+      type: 'autoExposurePreviewResolved',
+      requestId: 3,
+      requestKey: 'session-1:auto',
+      sessionId: session.id,
+      activeLayer: 0,
+      visualizationMode: 'rgb',
+      displaySelection,
+      autoExposure: {
+        scalar: 8,
+        exposureEv: -3,
+        percentile: 99.5,
+        source: 'rgbMax'
+      }
+    });
+
+    expect(core.getState().sessionState.exposureEv).toBe(0);
+    expect(core.getState().autoExposureResource.status).toBe('idle');
+  });
+
   it('applies matching image stats results and ignores stale stats callbacks', () => {
     const core = new ViewerAppCore();
     const session = createSession('session-1');

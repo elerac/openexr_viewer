@@ -1,7 +1,10 @@
 import { cloneDisplayLuminanceRange } from '../colormap-range';
 import { cloneDisplaySelection } from '../display-model';
 import { createAbortError, isAbortError, throwIfAborted, type Disposable } from '../lifecycle';
-import { createOpenedImageThumbnailDataUrl } from '../thumbnail';
+import {
+  createOpenedImageThumbnailDataUrl,
+  type OpenedImageThumbnailOptions
+} from '../thumbnail';
 import { DecodedLayer, OpenedImageSession, ViewerSessionState } from '../types';
 
 const THUMBNAIL_IDLE_TIMEOUT_MS = 250;
@@ -11,11 +14,13 @@ interface ThumbnailJob {
   sessionId: string;
   token: number;
   stateSnapshot: ViewerSessionState;
+  thumbnailOptions: OpenedImageThumbnailOptions;
 }
 
 interface ThumbnailSessionState {
   token: number;
   stateSnapshot: ViewerSessionState;
+  thumbnailOptions: OpenedImageThumbnailOptions;
 }
 
 interface IdleDeadlineLike {
@@ -42,6 +47,7 @@ export interface ThumbnailServiceDependencies {
     session: OpenedImageSession;
     layer: DecodedLayer;
     stateSnapshot: ViewerSessionState;
+    thumbnailOptions: OpenedImageThumbnailOptions;
   }) => string | null;
 }
 
@@ -64,7 +70,12 @@ export class ThumbnailService implements Disposable {
       dependencies.createThumbnailDataUrl ?? defaultCreateThumbnailDataUrl;
   }
 
-  enqueue(sessionId: string, stateSnapshot: ViewerSessionState, token: number): Promise<void> {
+  enqueue(
+    sessionId: string,
+    stateSnapshot: ViewerSessionState,
+    token: number,
+    thumbnailOptions: OpenedImageThumbnailOptions = {}
+  ): Promise<void> {
     if (this.abortController.signal.aborted) {
       return Promise.reject(this.abortController.signal.reason ?? createAbortError('Thumbnail service has been disposed.'));
     }
@@ -77,10 +88,12 @@ export class ThumbnailService implements Disposable {
     const entry = this.getOrCreateSessionState(sessionId, stateSnapshot);
     entry.token = token;
     entry.stateSnapshot = cloneViewerState(stateSnapshot);
+    entry.thumbnailOptions = cloneThumbnailOptions(thumbnailOptions);
     this.jobs.push({
       sessionId,
       token,
-      stateSnapshot: cloneViewerState(stateSnapshot)
+      stateSnapshot: cloneViewerState(stateSnapshot),
+      thumbnailOptions: cloneThumbnailOptions(thumbnailOptions)
     });
 
     return this.processJobs();
@@ -185,7 +198,8 @@ export class ThumbnailService implements Disposable {
       return this.createThumbnailDataUrl({
         session,
         layer,
-        stateSnapshot
+        stateSnapshot,
+        thumbnailOptions: job.thumbnailOptions
       });
     } catch {
       return null;
@@ -278,7 +292,8 @@ export class ThumbnailService implements Disposable {
 
     const entry: ThumbnailSessionState = {
       token: 0,
-      stateSnapshot: cloneViewerState(stateSnapshot)
+      stateSnapshot: cloneViewerState(stateSnapshot),
+      thumbnailOptions: {}
     };
     this.sessionState.set(sessionId, entry);
     return entry;
@@ -300,13 +315,15 @@ export class ThumbnailService implements Disposable {
 
 function defaultCreateThumbnailDataUrl({
   session,
-  stateSnapshot
+  stateSnapshot,
+  thumbnailOptions
 }: {
   session: OpenedImageSession;
   layer: DecodedLayer;
   stateSnapshot: ViewerSessionState;
+  thumbnailOptions: OpenedImageThumbnailOptions;
 }): string | null {
-  return createOpenedImageThumbnailDataUrl(session.decoded, stateSnapshot);
+  return createOpenedImageThumbnailDataUrl(session.decoded, stateSnapshot, thumbnailOptions);
 }
 
 function resolveWindowLike(): ThumbnailWindowLike | null {
@@ -329,4 +346,15 @@ function cloneViewerState(state: ViewerSessionState): ViewerSessionState {
     stokesDegreeModulation: { ...state.stokesDegreeModulation },
     lockedPixel: state.lockedPixel ? { ...state.lockedPixel } : null
   };
+}
+
+function cloneThumbnailOptions(options: OpenedImageThumbnailOptions): OpenedImageThumbnailOptions {
+  const cloned: OpenedImageThumbnailOptions = {};
+  if (options.autoExposureEnabled !== undefined) {
+    cloned.autoExposureEnabled = options.autoExposureEnabled === true;
+  }
+  if (Number.isFinite(options.autoExposurePercentile)) {
+    cloned.autoExposurePercentile = options.autoExposurePercentile;
+  }
+  return cloned;
 }

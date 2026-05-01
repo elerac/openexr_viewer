@@ -10,6 +10,7 @@ import {
   buildStokesDisplayTexture,
   computeDisplaySelectionAutoExposure,
   computeDisplaySelectionAutoExposureAsync,
+  computeDisplaySelectionAutoExposurePreview,
   computeDisplaySelectionImageStats,
   computeDisplaySelectionImageStatsAsync,
   computeDisplaySelectionRoiStats,
@@ -135,6 +136,108 @@ describe('display texture', () => {
     expect(autoExposure.exposureEv).toBe(-3);
     expect(autoExposure.percentile).toBe(99.5);
     expect(autoExposure.source).toBe('rgbMax');
+  });
+
+  it('computes preview auto exposure from a bounded low-resolution sample grid', () => {
+    const width = 512;
+    const values = Array.from({ length: width }, (_, index) => index % 2 === 0 ? 100 : 1);
+    const layer = createLayerFromChannels({
+      R: values,
+      G: new Array(width).fill(0),
+      B: new Array(width).fill(0)
+    }, 'beauty');
+
+    const preview = computeDisplaySelectionAutoExposurePreview(
+      layer,
+      width,
+      1,
+      createChannelRgbSelection('R', 'G', 'B'),
+      'rgb',
+      100
+    );
+    const exact = computeDisplaySelectionAutoExposure(
+      layer,
+      width,
+      1,
+      createChannelRgbSelection('R', 'G', 'B'),
+      'rgb',
+      100
+    );
+
+    expect(preview.scalar).toBe(1);
+    expect(preview.exposureEv).toBe(0);
+    expect(exact.scalar).toBe(100);
+  });
+
+  it('filters invalid and non-positive scalars in preview auto exposure', () => {
+    const layer = createLayerFromChannels({
+      R: [Number.NaN, -1, 0, 4],
+      G: [0, 0, 0, 0],
+      B: [0, 0, 0, 0]
+    }, 'beauty');
+
+    const preview = computeDisplaySelectionAutoExposurePreview(
+      layer,
+      4,
+      1,
+      createChannelRgbSelection('R', 'G', 'B')
+    );
+
+    expect(preview.scalar).toBe(4);
+    expect(preview.exposureEv).toBe(-2);
+  });
+
+  it('uses the active percentile for preview auto exposure', () => {
+    const layer = createLayerFromChannels({
+      R: [1, 2, 4, 8, 1000],
+      G: [0, 0, 0, 0, 0],
+      B: [0, 0, 0, 0, 0]
+    }, 'beauty');
+
+    const preview = computeDisplaySelectionAutoExposurePreview(
+      layer,
+      5,
+      1,
+      createChannelRgbSelection('R', 'G', 'B'),
+      'rgb',
+      50
+    );
+
+    expect(preview.scalar).toBe(4);
+    expect(preview.exposureEv).toBe(-2);
+    expect(preview.percentile).toBe(50);
+  });
+
+  it('falls back to neutral preview auto exposure when no positive scalars are available', () => {
+    const layer = createLayerFromChannels({
+      R: [0, -1],
+      G: [0, -2],
+      B: [0, -3]
+    }, 'beauty');
+
+    const preview = computeDisplaySelectionAutoExposurePreview(
+      layer,
+      2,
+      1,
+      createChannelRgbSelection('R', 'G', 'B')
+    );
+
+    expect(preview.scalar).toBe(1);
+    expect(preview.exposureEv).toBe(0);
+  });
+
+  it('matches exact auto exposure on small images', () => {
+    const layer = createLayerFromChannels({
+      R: [1, 2, 4, 8, 16, 32, 64, 128],
+      G: [0, 0, 0, 0, 0, 0, 0, 0],
+      B: [0, 0, 0, 0, 0, 0, 0, 0]
+    }, 'beauty');
+    const selection = createChannelRgbSelection('R', 'G', 'B');
+
+    const exact = computeDisplaySelectionAutoExposure(layer, 4, 2, selection, 'rgb', 75);
+    const preview = computeDisplaySelectionAutoExposurePreview(layer, 4, 2, selection, 'rgb', 75);
+
+    expect(preview).toEqual(exact);
   });
 
   it('computes auto exposure for mono selections while ignoring invalid and non-positive scalars', () => {

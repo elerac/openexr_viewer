@@ -11,6 +11,7 @@ import { RenderCacheService } from '../services/render-cache-service';
 import { ViewerAppCore } from './viewer-app-core';
 import type { ViewerStateTransition } from './viewer-app-types';
 import { selectActiveSession } from './viewer-app-selectors';
+import type { ViewerSessionState } from '../types';
 
 export function applySessionResourceEffects(
   transition: ViewerStateTransition,
@@ -42,8 +43,14 @@ export function applySessionResourceEffects(
       return;
     }
     default:
-      return;
+      break;
   }
+
+  if (!shouldRefreshOpenedImageThumbnails(transition)) {
+    return;
+  }
+
+  scheduleAllOpenedThumbnailGeneration(core, thumbnailService);
 }
 
 export function syncInteractionCoordinator(
@@ -111,12 +118,45 @@ function scheduleThumbnailGeneration(
   stateSnapshot: ViewerStateTransition['state']['sessionState']
 ): void {
   const token = core.issueRequestId();
+  const state = core.getState();
   core.dispatch({
     type: 'thumbnailRequested',
     sessionId,
     token
   });
-  void thumbnailService.enqueue(sessionId, stateSnapshot, token).catch(() => undefined);
+  void thumbnailService.enqueue(
+    sessionId,
+    stateSnapshot,
+    token,
+    {
+      autoExposureEnabled: state.autoExposureEnabled,
+      autoExposurePercentile: state.autoExposurePercentile
+    }
+  ).catch(() => undefined);
+}
+
+function scheduleAllOpenedThumbnailGeneration(
+  core: ViewerAppCore,
+  thumbnailService: ThumbnailService
+): void {
+  const state = core.getState();
+  for (const session of state.sessions) {
+    scheduleThumbnailGeneration(
+      core,
+      thumbnailService,
+      session.id,
+      resolveSessionStateSnapshot(state.activeSessionId, state.sessionState, session.id, session.state)
+    );
+  }
+}
+
+function resolveSessionStateSnapshot(
+  activeSessionId: string | null,
+  activeState: ViewerSessionState,
+  sessionId: string,
+  storedState: ViewerSessionState
+): ViewerSessionState {
+  return activeSessionId === sessionId ? activeState : storedState;
 }
 
 function scheduleActiveChannelThumbnailGeneration(
@@ -183,5 +223,16 @@ function shouldRefreshActiveChannelThumbnails(transition: ViewerStateTransition)
     transition.previousState.sessionState.stokesDegreeModulation.cop !== transition.state.sessionState.stokesDegreeModulation.cop ||
     transition.previousState.sessionState.stokesDegreeModulation.top !== transition.state.sessionState.stokesDegreeModulation.top ||
     transition.previousState.sessionState.stokesAolpDegreeModulationMode !== transition.state.sessionState.stokesAolpDegreeModulationMode
+  );
+}
+
+function shouldRefreshOpenedImageThumbnails(transition: ViewerStateTransition): boolean {
+  if (transition.state.sessions.length === 0) {
+    return false;
+  }
+
+  return (
+    transition.intent.type === 'autoExposureSet' ||
+    transition.intent.type === 'autoExposurePercentileSet'
   );
 }

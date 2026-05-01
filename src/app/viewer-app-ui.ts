@@ -68,6 +68,7 @@ export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => Vie
     const activeColormapLut = selectActiveColormapLut(state);
     const activeDisplayLuminanceRange = selectActiveDisplayLuminanceRange(state);
     const colormapIsLoading = state.colormapLutResource.status === 'pending';
+    const autoExposureIsLoading = state.autoExposureResource.status === 'pending';
 
     const nextSnapshot: ViewerUiSnapshot = {
       errorMessage: state.errorMessage,
@@ -75,7 +76,8 @@ export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => Vie
       isDisplayBusy: Boolean(
         state.pendingSelectionTransitionRequestId ||
         colormapIsLoading ||
-        state.pendingColormapActivation
+        state.pendingColormapActivation ||
+        autoExposureIsLoading
       ),
       isDisplayOverlayLoading: Boolean(
         colormapIsLoading ||

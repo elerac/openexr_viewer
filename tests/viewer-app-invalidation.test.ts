@@ -182,6 +182,29 @@ describe('viewer app lanes', () => {
     expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ResourceRequestAutoExposure)).toBe(true);
   });
 
+  it('renders preview auto exposure changes without re-requesting auto exposure', () => {
+    const state: ViewerAppState = {
+      ...createActiveState(),
+      autoExposureEnabled: true,
+      autoExposureResource: pendingResource('session-1:auto', 3)
+    };
+    const nextState: ViewerAppState = {
+      ...state,
+      sessionState: {
+        ...state.sessionState,
+        exposureEv: -2
+      }
+    };
+    const selectRenderSnapshot = createViewerRenderSnapshotSelector();
+    const previousSnapshot = selectRenderSnapshot(state);
+    const nextSnapshot = selectRenderSnapshot(nextState);
+    const renderFlags = computeViewerRenderInvalidation(previousSnapshot, nextSnapshot);
+
+    expect(previousSnapshot.autoExposureRequest).toEqual(nextSnapshot.autoExposureRequest);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.ResourceRequestAutoExposure)).toBe(false);
+  });
+
   it('keeps display selection transitions busy without requesting the full loading overlay', () => {
     const state = createActiveState();
     const selectUiSnapshot = createViewerUiSnapshotSelector();
@@ -199,6 +222,13 @@ describe('viewer app lanes', () => {
     });
     expect(pendingColormap.isDisplayBusy).toBe(true);
     expect(pendingColormap.isDisplayOverlayLoading).toBe(true);
+
+    const pendingAutoExposure = selectUiSnapshot({
+      ...state,
+      autoExposureResource: pendingResource('auto', 3)
+    });
+    expect(pendingAutoExposure.isDisplayBusy).toBe(true);
+    expect(pendingAutoExposure.isDisplayOverlayLoading).toBe(false);
   });
 
   it('treats hover-only changes as render-lane probe work', () => {

@@ -99,6 +99,26 @@ describe('thumbnail rendering', () => {
     ]);
   });
 
+  it('applies sampled auto exposure to opened rgb thumbnails without using the outlier max', () => {
+    const layer = createLayerFromChannels({
+      R: [1, 2, 4, 8, 1000],
+      G: [0, 0, 0, 0, 0],
+      B: [0, 0, 0, 0, 0]
+    }, 'beauty');
+    const state = createThumbnailState({
+      displaySelection: createChannelRgbSelection('R', 'G', 'B')
+    });
+
+    const manualThumbnail = buildOpenedImageThumbnailPixels(layer, 5, 1, state);
+    const autoThumbnail = buildOpenedImageThumbnailPixels(layer, 5, 1, state, {
+      autoExposureEnabled: true,
+      autoExposurePercentile: 99.5
+    });
+
+    expect(readPixel(manualThumbnail.data, manualThumbnail.width, 28, 4)[0]).toBeLessThan(40);
+    expect(readPixel(autoThumbnail.data, autoThumbnail.width, 28, 4)).toEqual([255, 0, 0, 255]);
+  });
+
   it('preserves source alpha in rgb thumbnails', () => {
     const layer = createLayerFromChannels({
       R: [1],

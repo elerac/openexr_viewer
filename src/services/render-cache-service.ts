@@ -30,7 +30,8 @@ import {
   computeDisplaySelectionLuminanceRange,
   computeDisplaySelectionLuminanceRangeAsync,
   computeDisplaySelectionImageStatsAsync,
-  computeDisplaySelectionAutoExposureAsync
+  computeDisplaySelectionAutoExposureAsync,
+  computeDisplaySelectionAutoExposurePreview
 } from '../display-texture';
 import { cloneDisplaySelection, type DisplaySelection } from '../display-model';
 import { getFiniteChannelRange } from '../channel-storage';
@@ -55,6 +56,7 @@ export interface RequestDisplayLuminanceRangeResult {
 
 export interface RequestAutoExposureResult {
   autoExposure: AutoExposureResult | null;
+  previewAutoExposure?: AutoExposureResult | null;
   pending: boolean;
 }
 
@@ -523,6 +525,15 @@ export class RenderCacheService implements Disposable {
       };
     }
 
+    const previewAutoExposure = computeDisplaySelectionAutoExposurePreview(
+      layer,
+      session.decoded.width,
+      session.decoded.height,
+      state.displaySelection,
+      state.visualizationMode,
+      percentile
+    );
+
     this.cancelSupersededAutoExposureJobs(session.id, revisionKey);
     const pendingJobs = this.getOrCreatePendingAutoExposureJobs(session.id);
     if (pendingJobs.has(revisionKey)) {
@@ -536,6 +547,7 @@ export class RenderCacheService implements Disposable {
       }
       return {
         autoExposure: null,
+        previewAutoExposure,
         pending: true
       };
     }
@@ -563,6 +575,7 @@ export class RenderCacheService implements Disposable {
 
     return {
       autoExposure: null,
+      previewAutoExposure,
       pending: true
     };
   }

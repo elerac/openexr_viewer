@@ -223,6 +223,16 @@ export type ViewerIntent =
       imageStats: ImageStats | null;
     }
   | {
+      type: 'autoExposurePreviewResolved';
+      requestId: number;
+      requestKey: string;
+      sessionId: string;
+      activeLayer: number;
+      visualizationMode: ViewerSessionState['visualizationMode'];
+      displaySelection: ViewerSessionState['displaySelection'];
+      autoExposure: AutoExposureResult | null;
+    }
+  | {
       type: 'autoExposureResolved';
       requestId: number | null;
       requestKey: string;

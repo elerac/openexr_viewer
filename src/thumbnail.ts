@@ -1,3 +1,9 @@
+import {
+  AUTO_EXPOSURE_PERCENTILE,
+  createAutoExposureResult,
+  normalizeAutoExposurePercentile,
+  type AutoExposureResult
+} from './auto-exposure';
 import { computeRec709Luminance, linearToSrgbByte } from './color';
 import {
   mapValueToColormapRgbBytes,
@@ -37,6 +43,11 @@ export interface OpenedImageThumbnailPixels {
   data: Uint8ClampedArray;
 }
 
+export interface OpenedImageThumbnailOptions {
+  autoExposureEnabled?: boolean;
+  autoExposurePercentile?: number;
+}
+
 export interface ThumbnailPreviewOptions {
   visualizationMode: VisualizationMode;
   colormapRange: DisplayLuminanceRange | null;
@@ -47,7 +58,8 @@ export interface ThumbnailPreviewOptions {
 
 export function createOpenedImageThumbnailDataUrl(
   decoded: DecodedExrImage,
-  state: ViewerSessionState
+  state: ViewerSessionState,
+  options: OpenedImageThumbnailOptions = {}
 ): string | null {
   if (typeof document === 'undefined') {
     return null;
@@ -64,7 +76,10 @@ export function createOpenedImageThumbnailDataUrl(
       decoded.width,
       decoded.height,
       state,
-      state.displaySelection
+      state.displaySelection,
+      OPENED_IMAGE_THUMBNAIL_SIZE,
+      null,
+      options
     );
 
     return createOpenedImageThumbnailDataUrlFromPixels(pixels);
@@ -77,9 +92,19 @@ export function buildOpenedImageThumbnailPixels(
   layer: DecodedLayer,
   width: number,
   height: number,
-  state: ViewerSessionState
+  state: ViewerSessionState,
+  options: OpenedImageThumbnailOptions = {}
 ): OpenedImageThumbnailPixels {
-  return buildDisplaySelectionThumbnailPixels(layer, width, height, state, state.displaySelection);
+  return buildDisplaySelectionThumbnailPixels(
+    layer,
+    width,
+    height,
+    state,
+    state.displaySelection,
+    OPENED_IMAGE_THUMBNAIL_SIZE,
+    null,
+    options
+  );
 }
 
 export function createChannelViewThumbnailDataUrl(
@@ -120,7 +145,8 @@ export function buildDisplaySelectionThumbnailPixels(
   state: ViewerSessionState,
   selection: DisplaySelection | null,
   maxEdge = OPENED_IMAGE_THUMBNAIL_SIZE,
-  preview: ThumbnailPreviewOptions | null = null
+  preview: ThumbnailPreviewOptions | null = null,
+  options: OpenedImageThumbnailOptions = {}
 ): OpenedImageThumbnailPixels {
   const { width: thumbnailWidth, height: thumbnailHeight } = resolveThumbnailDimensions(
     width,
@@ -146,7 +172,17 @@ export function buildDisplaySelectionThumbnailPixels(
   const stats = useColormapPreview
     ? null
     : computeThumbnailStats(evaluator, width, height, scalarThumbnail, sample);
-  const exposureScale = Math.pow(2, state.exposureEv);
+  const sampledAutoExposure = !scalarThumbnail && !useColormapPreview && options.autoExposureEnabled
+    ? computeSampledThumbnailAutoExposure(
+        evaluator,
+        width,
+        height,
+        options.autoExposurePercentile ?? AUTO_EXPOSURE_PERCENTILE
+      )
+    : null;
+  const exposureScale = sampledAutoExposure
+    ? Math.pow(2, sampledAutoExposure.exposureEv)
+    : Math.pow(2, state.exposureEv);
   const useImageAlpha = selectionUsesImageAlpha(effectiveSelection);
   const useStokesDegreeModulation = useColormapPreview &&
     isStokesDegreeModulationEnabled(effectiveSelection, colormapPreview!.stokesDegreeModulation);
@@ -199,7 +235,9 @@ export function buildDisplaySelectionThumbnailPixels(
           g = value;
           b = value;
         } else if (stats) {
-          const scale = (stats.rgbMax > 1 ? 1 / stats.rgbMax : 1) * exposureScale;
+          const scale = sampledAutoExposure
+            ? exposureScale
+            : (stats.rgbMax > 1 ? 1 / stats.rgbMax : 1) * exposureScale;
           r *= scale;
           g *= scale;
           b *= scale;
@@ -252,7 +290,7 @@ function computeThumbnailStats(
   sample: DisplayPixelValues
 ): { scalarMin: number; scalarMax: number; rgbMax: number } {
   const pixelCount = width * height;
-  const sampleStep = Math.max(1, Math.floor(pixelCount / THUMBNAIL_STATS_MAX_SAMPLES));
+  const sampleStep = resolveThumbnailSampleStep(pixelCount);
   let scalarMin = Number.POSITIVE_INFINITY;
   let scalarMax = Number.NEGATIVE_INFINITY;
   let rgbMax = 0;
@@ -284,6 +322,43 @@ function computeThumbnailStats(
     scalarMax: Number.isFinite(scalarMax) ? scalarMax : 0,
     rgbMax: Math.max(rgbMax, 1e-6)
   };
+}
+
+function computeSampledThumbnailAutoExposure(
+  evaluator: ReturnType<typeof resolveDisplaySelectionEvaluator>,
+  width: number,
+  height: number,
+  percentile: number
+): AutoExposureResult {
+  const pixelCount = Math.max(0, width * height);
+  const normalizedPercentile = normalizeAutoExposurePercentile(percentile);
+  if (pixelCount === 0) {
+    return createAutoExposureResult(1, normalizedPercentile);
+  }
+
+  const sampleStep = resolveThumbnailSampleStep(pixelCount);
+  const sample = createThumbnailSample();
+  const scalars: number[] = [];
+  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += sampleStep) {
+    readDisplaySelectionPixelValuesAtIndex(evaluator, pixelIndex, sample);
+    const scalar = Math.max(sample.r, sample.g, sample.b);
+    if (Number.isFinite(scalar) && scalar > 0) {
+      scalars.push(scalar);
+    }
+  }
+
+  if (scalars.length === 0) {
+    return createAutoExposureResult(1, normalizedPercentile);
+  }
+
+  scalars.sort((left, right) => left - right);
+  const percentile01 = Math.min(1, Math.max(0, normalizedPercentile / 100));
+  const percentileIndex = Math.floor((scalars.length - 1) * percentile01);
+  return createAutoExposureResult(scalars[percentileIndex] ?? 1, normalizedPercentile);
+}
+
+function resolveThumbnailSampleStep(pixelCount: number): number {
+  return Math.max(1, Math.ceil(pixelCount / THUMBNAIL_STATS_MAX_SAMPLES));
 }
 
 function resolveThumbnailDimensions(

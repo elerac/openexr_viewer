@@ -124,7 +124,34 @@ describe('thumbnail service', () => {
     expect(createThumbnailDataUrl).toHaveBeenCalledWith({
       session,
       layer: session.decoded.layers[0],
-      stateSnapshot: session.state
+      stateSnapshot: session.state,
+      thumbnailOptions: {}
+    });
+  });
+
+  it('passes thumbnail auto exposure options to the renderer', async () => {
+    const session = createSession();
+    const createThumbnailDataUrl = vi.fn(() => 'thumb');
+    const service = new ThumbnailService({
+      getSession: () => session,
+      onThumbnailReady: () => undefined,
+      windowLike: null,
+      createThumbnailDataUrl
+    });
+
+    await service.enqueue(session.id, session.state, 1, {
+      autoExposureEnabled: true,
+      autoExposurePercentile: 98.2
+    });
+
+    expect(createThumbnailDataUrl).toHaveBeenCalledWith({
+      session,
+      layer: session.decoded.layers[0],
+      stateSnapshot: session.state,
+      thumbnailOptions: {
+        autoExposureEnabled: true,
+        autoExposurePercentile: 98.2
+      }
     });
   });
 

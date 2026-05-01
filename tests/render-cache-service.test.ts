@@ -366,10 +366,22 @@ describe('render cache service', () => {
 
     expect(first).toEqual({
       autoExposure: null,
+      previewAutoExposure: {
+        scalar: 8,
+        exposureEv: -3,
+        percentile: 99.5,
+        source: 'rgbMax'
+      },
       pending: true
     });
     expect(second).toEqual({
       autoExposure: null,
+      previewAutoExposure: {
+        scalar: 8,
+        exposureEv: -3,
+        percentile: 99.5,
+        source: 'rgbMax'
+      },
       pending: true
     });
 
@@ -402,6 +414,12 @@ describe('render cache service', () => {
 
     expect(service.requestAutoExposure(session, session.state, null, 50)).toEqual({
       autoExposure: null,
+      previewAutoExposure: {
+        scalar: 4,
+        exposureEv: -2,
+        percentile: 50,
+        source: 'rgbMax'
+      },
       pending: true
     });
 
@@ -419,6 +437,62 @@ describe('render cache service', () => {
         scalar: 4,
         exposureEv: -2,
         percentile: 50,
+        source: 'rgbMax'
+      }
+    });
+  });
+
+  it('returns a preview auto exposure immediately while resolving exact exposure later', async () => {
+    const width = 512;
+    const decoded: DecodedExrImage = {
+      width,
+      height: 1,
+      layers: [createLayerFromChannels({
+        R: Array.from({ length: width }, (_, index) => index % 2 === 0 ? 100 + index : index),
+        G: new Array(width).fill(0),
+        B: new Array(width).fill(0)
+      }, 'beauty')]
+    };
+    const session = createSession('session-1', decoded);
+    const ui = createUiMock();
+    const renderer = createRendererMock();
+    const { windowLike, flush } = createRenderCacheWindowLike();
+    const onAutoExposureResolved = vi.fn();
+    const service = new RenderCacheService({
+      ui,
+      renderer,
+      windowLike,
+      onAutoExposureResolved
+    });
+
+    const result = service.requestAutoExposure(session, session.state, 12, 100);
+
+    expect(result).toEqual({
+      autoExposure: null,
+      previewAutoExposure: {
+        scalar: 511,
+        exposureEv: -Math.log2(511),
+        percentile: 100,
+        source: 'rgbMax'
+      },
+      pending: true
+    });
+    expect(onAutoExposureResolved).not.toHaveBeenCalled();
+
+    await flush();
+    await flush();
+
+    expect(onAutoExposureResolved).toHaveBeenCalledWith({
+      requestId: 12,
+      requestKey: `${session.id}:${buildDisplayAutoExposureRevisionKey(session.state, 100)}`,
+      sessionId: session.id,
+      activeLayer: 0,
+      visualizationMode: 'rgb',
+      displaySelection: session.state.displaySelection,
+      autoExposure: {
+        scalar: 610,
+        exposureEv: -Math.log2(610),
+        percentile: 100,
         source: 'rgbMax'
       }
     });

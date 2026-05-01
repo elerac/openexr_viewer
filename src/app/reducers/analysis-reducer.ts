@@ -65,6 +65,8 @@ export function analysisReducer(
       return reduceDisplayLuminanceRangeResolved(state, intent);
     case 'imageStatsResolved':
       return reduceImageStatsResolved(state, intent);
+    case 'autoExposurePreviewResolved':
+      return reduceAutoExposurePreviewResolved(state, intent);
     case 'autoExposureResolved':
       return reduceAutoExposureResolved(state, intent);
     default:
@@ -196,6 +198,32 @@ function reduceAutoExposureResolved(
     ...nextState,
     autoExposureResource: successResource(intent.requestKey, intent.autoExposure)
   }, {
+    exposureEv: intent.autoExposure?.exposureEv ?? 0
+  });
+}
+
+function reduceAutoExposurePreviewResolved(
+  state: ViewerAppState,
+  intent: Extract<ViewerIntent, { type: 'autoExposurePreviewResolved' }>
+): ViewerAppState {
+  if (!isPendingMatch(state.autoExposureResource, intent.requestKey, intent.requestId)) {
+    return state;
+  }
+
+  const activeSession = selectActiveSession(state);
+  if (
+    !state.autoExposureEnabled ||
+    !activeSession ||
+    activeSession.id !== intent.sessionId ||
+    state.sessionState.activeLayer !== intent.activeLayer ||
+    state.sessionState.visualizationMode !== 'rgb' ||
+    intent.visualizationMode !== 'rgb' ||
+    !sameDisplaySelection(state.sessionState.displaySelection, intent.displaySelection)
+  ) {
+    return state;
+  }
+
+  return patchSessionState(state, {
     exposureEv: intent.autoExposure?.exposureEv ?? 0
   });
 }
