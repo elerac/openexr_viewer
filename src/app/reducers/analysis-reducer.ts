@@ -32,6 +32,9 @@ export function analysisReducer(
 ): ViewerAppState {
   switch (intent.type) {
     case 'sessionLoaded':
+      return shouldActivateLoadedSession(context.initialState, intent.activate)
+        ? clearAnalysisContext(state)
+        : state;
     case 'allSessionsClosed':
       return clearAnalysisContext(state);
     case 'sessionReloaded':
@@ -72,6 +75,10 @@ export function analysisReducer(
     default:
       return state;
   }
+}
+
+function shouldActivateLoadedSession(state: ViewerAppState, activate: boolean | undefined): boolean {
+  return activate !== false || !selectActiveSession(state);
 }
 
 function reduceDisplayLuminanceRangeResolved(

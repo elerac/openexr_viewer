@@ -213,6 +213,7 @@ export class ViewerUi implements Disposable {
   private readonly themeController: ThemeController;
   private readonly viewerBackgroundController: ViewerBackgroundController;
   private isLoading = false;
+  private isViewerLoadBlocked = false;
   private isDisplayBusy = false;
   private isDisplayOverlayLoading = false;
   private openedImageCount = 0;
@@ -575,32 +576,34 @@ export class ViewerUi implements Disposable {
     this.elements.errorBanner.textContent = message;
   }
 
-  setLoading(loading: boolean): void {
+  setLoading(loading: boolean, viewerBlocked = loading): void {
     if (this.disposed) {
       return;
     }
-    if (this.isLoading === loading) {
+    if (this.isLoading === loading && this.isViewerLoadBlocked === viewerBlocked) {
       return;
     }
 
+    const wasLoading = this.isLoading;
     this.isLoading = loading;
-    if (loading) {
+    this.isViewerLoadBlocked = viewerBlocked;
+    if (viewerBlocked) {
       this.clearViewerKeyboardNavigationInput();
       this.hideScreenshotSelection();
     }
     this.elements.openFileButton.disabled = loading;
     this.elements.openFolderButton.disabled = loading;
     this.elements.galleryCboxRgbButton.disabled = loading;
-    this.elements.resetViewButton.disabled = loading;
-    this.openedImagesPanel.setLoading(loading);
-    this.layerPanel.setLoading(loading);
-    this.channelPanel.setLoading(loading);
-    this.channelThumbnailStrip.setLoading(loading);
-    this.colormapPanel.setLoading(loading);
+    this.elements.resetViewButton.disabled = viewerBlocked;
+    this.openedImagesPanel.setLoading(loading, viewerBlocked);
+    this.layerPanel.setLoading(viewerBlocked);
+    this.channelPanel.setLoading(viewerBlocked);
+    this.channelThumbnailStrip.setLoading(viewerBlocked);
+    this.colormapPanel.setLoading(viewerBlocked);
     this.updateFileMenuItemsDisabled();
     this.updateViewerModeMenuItemsDisabled();
     this.updateLoadingOverlayVisibility();
-    if (loading) {
+    if (loading && !wasLoading) {
       this.exportImageDialog.close(false);
       this.exportImageBatchDialog.close(false);
       this.exportColormapDialog.close(false);
@@ -1227,7 +1230,7 @@ export class ViewerUi implements Disposable {
       return;
     }
 
-    this.loadingOverlayDisclosure.setLoading(this.isLoading || this.isDisplayOverlayLoading);
+    this.loadingOverlayDisclosure.setLoading(this.isViewerLoadBlocked || this.isDisplayOverlayLoading);
   }
 
   private renderLoadingOverlayPhase(phase: LoadingOverlayPhase): void {
@@ -1249,7 +1252,7 @@ export class ViewerUi implements Disposable {
   }
 
   private startScreenshotSelection(): void {
-    if (this.disposed || this.openedImageCount === 0 || this.isLoading || this.isDisplayBusy) {
+    if (this.disposed || this.openedImageCount === 0 || this.isViewerLoadBlocked || this.isDisplayBusy) {
       return;
     }
 
@@ -1529,7 +1532,7 @@ export class ViewerUi implements Disposable {
       return;
     }
 
-    const disabled = this.isLoading || this.openedImageCount === 0;
+    const disabled = this.isViewerLoadBlocked || this.openedImageCount === 0;
     this.elements.imageViewerMenuItem.disabled = disabled;
     this.elements.panoramaViewerMenuItem.disabled = disabled;
   }

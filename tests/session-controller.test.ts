@@ -88,6 +88,21 @@ function createController(options: {
   return { controller, core };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+  return { promise, resolve, reject };
+}
+
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe('session controller shim', () => {
   it('applies decoded images as new active sessions', async () => {
     const decodeBytes = vi.fn(async () => createDecodedImage(8, 4));
@@ -100,6 +115,70 @@ describe('session controller shim', () => {
     expect(session?.filename).toBe('beauty.exr');
     expect(core.getState().sessionState.activeColormapId).toBe(core.getState().defaultColormapId);
     expect(core.getState().sessionState.displaySelection).toEqual(createChannelRgbSelection('R', 'G', 'B'));
+  });
+
+  it('activates the first decoded image while the rest of a multi-file open continues loading', async () => {
+    const firstDecode = createDeferred<DecodedExrImage>();
+    const secondDecode = createDeferred<DecodedExrImage>();
+    const decodeBytes = vi
+      .fn<(bytes: Uint8Array, options?: DecodeBytesOptions) => Promise<DecodedExrImage>>()
+      .mockReturnValueOnce(firstDecode.promise)
+      .mockReturnValueOnce(secondDecode.promise);
+    const { controller, core } = createController({ decodeBytes });
+
+    const pending = controller.enqueueFiles([
+      createFile('first.exr', [1]),
+      createFile('second.exr', [2])
+    ]);
+    for (let index = 0; index < 6 && decodeBytes.mock.calls.length < 1; index += 1) {
+      await flushMicrotasks();
+    }
+
+    expect(core.getState().isLoading).toBe(true);
+    firstDecode.resolve(createDecodedImage(4, 4));
+    for (let index = 0; index < 6 && controller.getSessions().length < 1; index += 1) {
+      await flushMicrotasks();
+    }
+
+    expect(controller.getSessions().map((session) => session.filename)).toEqual(['first.exr']);
+    expect(controller.getActiveSession()?.filename).toBe('first.exr');
+    expect(core.getState().isLoading).toBe(true);
+
+    secondDecode.resolve(createDecodedImage(8, 4));
+    await pending;
+
+    expect(controller.getSessions().map((session) => session.filename)).toEqual(['first.exr', 'second.exr']);
+    expect(controller.getActiveSession()?.filename).toBe('first.exr');
+    expect(core.getState().isLoading).toBe(false);
+  });
+
+  it('activates the first successful decode when earlier files in a multi-file open fail', async () => {
+    const firstDecode = createDeferred<DecodedExrImage>();
+    const secondDecode = createDeferred<DecodedExrImage>();
+    const decodeBytes = vi
+      .fn<(bytes: Uint8Array, options?: DecodeBytesOptions) => Promise<DecodedExrImage>>()
+      .mockReturnValueOnce(firstDecode.promise)
+      .mockReturnValueOnce(secondDecode.promise);
+    const { controller } = createController({ decodeBytes });
+
+    const pending = controller.enqueueFiles([
+      createFile('broken.exr', [1]),
+      createFile('second.exr', [2])
+    ]);
+    for (let index = 0; index < 6 && decodeBytes.mock.calls.length < 1; index += 1) {
+      await flushMicrotasks();
+    }
+
+    firstDecode.reject(new Error('decode failed'));
+    for (let index = 0; index < 6 && decodeBytes.mock.calls.length < 2; index += 1) {
+      await flushMicrotasks();
+    }
+
+    secondDecode.resolve(createDecodedImage(8, 4));
+    await pending;
+
+    expect(controller.getSessions().map((session) => session.filename)).toEqual(['second.exr']);
+    expect(controller.getActiveSession()?.filename).toBe('second.exr');
   });
 
   it('uses current fit insets when applying the first decoded image', async () => {

@@ -2511,6 +2511,41 @@ describe('view menu', () => {
     expect(loadingOverlay.classList.contains('loading-overlay--message')).toBe(false);
   });
 
+  it('keeps loaded image rows and image controls usable while more files are loading', () => {
+    vi.useFakeTimers();
+    installUiFixture();
+
+    const onOpenedImageSelected = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({ onOpenedImageSelected }));
+    ui.setOpenedImageOptions([
+      { id: 'session-1', label: 'first.exr' },
+      { id: 'session-2', label: 'second.exr' }
+    ], 'session-1');
+
+    ui.setLoading(true, false);
+    vi.advanceTimersByTime(2000);
+
+    const loadingOverlay = document.getElementById('loading-overlay') as HTMLDivElement;
+    expect(loadingOverlay.classList.contains('hidden')).toBe(true);
+    expect((document.getElementById('open-file-button') as HTMLButtonElement).disabled).toBe(true);
+    expect((document.getElementById('open-folder-button') as HTMLButtonElement).disabled).toBe(true);
+    expect((document.querySelector('[data-gallery-id="cbox-rgb"]') as HTMLButtonElement).disabled).toBe(true);
+    expect((document.getElementById('reset-view-button') as HTMLButtonElement).disabled).toBe(false);
+    expect((document.getElementById('image-viewer-menu-item') as HTMLButtonElement).disabled).toBe(false);
+    expect((document.getElementById('reload-all-opened-images-button') as HTMLButtonElement).disabled).toBe(true);
+    expect((document.getElementById('close-all-opened-images-button') as HTMLButtonElement).disabled).toBe(true);
+
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('.opened-file-row'));
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.getAttribute('aria-disabled')).toBe('false');
+    expect(rows[1]?.getAttribute('aria-disabled')).toBe('false');
+    expect(Array.from(rows[0]?.querySelectorAll('button') ?? []).every((button) => button.disabled)).toBe(true);
+
+    rows[1]?.click();
+
+    expect(onOpenedImageSelected).toHaveBeenCalledWith('session-2');
+  });
+
   it('keeps colormap export disabled until colormaps are available and allows it without an active image', () => {
     installUiFixture();
 

@@ -66,6 +66,7 @@ const OPENED_FILE_DRAG_IMAGE_OFFSET_Y = 16;
 export class OpenedImagesPanel implements Disposable {
   private readonly disposables = new DisposableBag();
   private isLoading = false;
+  private isViewerBlocked = false;
   private openedImageCount = 0;
   private openedImagesActiveId: string | null = null;
   private openedImageItems: OpenedImageOptionItem[] = [];
@@ -266,6 +267,7 @@ export class OpenedImagesPanel implements Disposable {
     if (
       this.disposed ||
       !this.elements.openedFilesList.isConnected ||
+      this.isLoading ||
       this.elements.openedImagesSelect.disabled ||
       this.elements.openedFilesList.hidden ||
       this.openedImageItems.length === 0
@@ -323,7 +325,7 @@ export class OpenedImagesPanel implements Disposable {
     return true;
   }
 
-  setLoading(loading: boolean): void {
+  setLoading(loading: boolean, viewerBlocked = loading): void {
     if (this.disposed) {
       return;
     }
@@ -335,10 +337,11 @@ export class OpenedImagesPanel implements Disposable {
     }
 
     this.isLoading = loading;
+    this.isViewerBlocked = viewerBlocked;
     this.updateControlState();
     this.renderOpenedFileRows();
 
-    if (!loading) {
+    if (!viewerBlocked) {
       if (this.restoreOpenedFilesFocusAfterLoading) {
         focusSelectedImageBrowserRow(this.elements.openedFilesList);
       }
@@ -406,17 +409,18 @@ export class OpenedImagesPanel implements Disposable {
   }
 
   private updateControlState(): void {
-    this.elements.openedImagesSelect.disabled = this.isLoading || this.openedImageCount === 0;
+    this.elements.openedImagesSelect.disabled = this.isViewerBlocked || this.openedImageCount === 0;
     this.elements.displayCacheBudgetInput.disabled = this.isLoading;
     this.elements.reloadAllOpenedImagesButton.disabled = this.isLoading || this.openedImageCount === 0;
     this.elements.closeAllOpenedImagesButton.disabled = this.isLoading || this.openedImageCount === 0;
   }
 
   private renderOpenedFileRows(): void {
-    const disabled = this.isLoading || this.openedImageCount === 0;
-    const shouldRestoreFocus = !disabled && isFocusWithinElement(this.elements.openedFilesList);
+    const selectionDisabled = this.isViewerBlocked || this.openedImageCount === 0;
+    const actionDisabled = this.isLoading || selectionDisabled;
+    const shouldRestoreFocus = !selectionDisabled && isFocusWithinElement(this.elements.openedFilesList);
     this.elements.openedFilesCount.textContent = String(this.openedImageItems.length);
-    this.elements.openedFilesList.classList.toggle('is-disabled', disabled);
+    this.elements.openedFilesList.classList.toggle('is-disabled', selectionDisabled);
 
     if (this.openedImageItems.length === 0) {
       this.openedFileRenameState = null;
@@ -437,7 +441,8 @@ export class OpenedImagesPanel implements Disposable {
         updateOpenedFileRow(row, item, {
           sizeText: formatFileSizeMb(item.sizeBytes ?? null),
           selected: item.id === this.openedImagesActiveId,
-          disabled,
+          selectionDisabled,
+          actionDisabled,
           editing: this.openedFileRenameState?.sessionId === item.id,
           dragging: this.openedImageDragState?.isDragging === true && this.openedImageDragState.sessionId === item.id,
           dropPlacement:
@@ -476,7 +481,7 @@ export class OpenedImagesPanel implements Disposable {
   }
 
   private startOpenedFileRename(sessionId: string): void {
-    if (this.disposed || !sessionId || this.elements.openedImagesSelect.disabled) {
+    if (this.disposed || !sessionId || this.isLoading || this.elements.openedImagesSelect.disabled) {
       return;
     }
 
@@ -563,6 +568,7 @@ export class OpenedImagesPanel implements Disposable {
       !row ||
       row.getAttribute('aria-disabled') === 'true' ||
       isNestedInteractiveListControl(event.target, row) ||
+      this.isLoading ||
       this.elements.openedImagesSelect.disabled
     ) {
       event.preventDefault();
@@ -922,7 +928,8 @@ function updateOpenedFileRow(
   options: {
     sizeText: string;
     selected: boolean;
-    disabled: boolean;
+    selectionDisabled: boolean;
+    actionDisabled: boolean;
     editing: boolean;
     dragging: boolean;
     dropPlacement: OpenedImageDropPlacement | null;
@@ -936,14 +943,14 @@ function updateOpenedFileRow(
   row.dataset.sessionId = item.id;
   row.setAttribute('role', 'option');
   row.setAttribute('aria-selected', options.selected ? 'true' : 'false');
-  row.setAttribute('aria-disabled', options.disabled ? 'true' : 'false');
-  row.tabIndex = options.disabled ? -1 : 0;
-  row.draggable = !options.disabled && !options.editing;
+  row.setAttribute('aria-disabled', options.selectionDisabled ? 'true' : 'false');
+  row.tabIndex = options.selectionDisabled ? -1 : 0;
+  row.draggable = !options.actionDisabled && !options.editing;
   row.classList.toggle('opened-file-row--dragging', options.dragging);
   row.classList.toggle('opened-file-row--drop-before', options.dropPlacement === 'before');
   row.classList.toggle('opened-file-row--drop-after', options.dropPlacement === 'after');
 
-  updateOpenedFileLabel(refs, item, options.editing, options.disabled);
+  updateOpenedFileLabel(refs, item, options.editing, options.actionDisabled);
   refs.label.title = `Path: ${item.sourceDetail ?? item.label}\nSize: ${options.sizeText}`;
 
   const nextThumbnail = createOpenedFileThumbnail(item.thumbnailDataUrl ?? null);
@@ -955,12 +962,12 @@ function updateOpenedFileRow(
   updateOpenedFileActionButton(refs.reloadButton, {
     iconName: 'reload',
     label: `Reload ${item.label}`,
-    disabled: options.disabled
+    disabled: options.actionDisabled
   });
   updateOpenedFileActionButton(refs.closeButton, {
     iconName: 'close',
     label: `Close ${item.label}`,
-    disabled: options.disabled
+    disabled: options.actionDisabled
   });
 }
 

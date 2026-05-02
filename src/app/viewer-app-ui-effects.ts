@@ -10,7 +10,7 @@ export function applyUiEffects(ui: ViewerUi, transition: ViewerUiTransition): vo
   }
 
   if (invalidation & ViewerUiInvalidationFlags.Loading) {
-    ui.setLoading(snapshot.isLoading);
+    ui.setLoading(snapshot.isLoading, snapshot.isViewerLoadBlocked);
     ui.setRgbViewLoading(snapshot.isDisplayBusy, snapshot.isDisplayOverlayLoading);
   }
 

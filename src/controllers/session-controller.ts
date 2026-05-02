@@ -87,8 +87,14 @@ export class SessionController implements Disposable {
     this.cancelBackgroundLoads('Foreground load superseded background work.');
     return this.enqueueLoadTask(async (signal) => {
       this.throwIfStopped(signal);
+      let activatedLoadedFile = false;
       for (const file of files) {
-        await this.loadFile(file, signal);
+        const loaded = await this.loadFile(file, signal, {
+          activate: !activatedLoadedFile
+        });
+        if (loaded) {
+          activatedLoadedFile = true;
+        }
       }
     }, {
       priority: 'foreground',
@@ -122,8 +128,14 @@ export class SessionController implements Disposable {
     const groupId = this.takeLoadGroupId('folder');
     return this.enqueueLoadTask(async (signal) => {
       this.throwIfStopped(signal);
+      let activatedLoadedFile = false;
       for (const file of exrFiles) {
-        await this.loadFile(file, signal);
+        const loaded = await this.loadFile(file, signal, {
+          activate: !activatedLoadedFile
+        });
+        if (loaded) {
+          activatedLoadedFile = true;
+        }
       }
     }, {
       priority: 'background',
@@ -444,7 +456,11 @@ export class SessionController implements Disposable {
     }
   }
 
-  private async loadFile(file: File, signal: AbortSignal): Promise<void> {
+  private async loadFile(
+    file: File,
+    signal: AbortSignal,
+    options: { activate?: boolean } = {}
+  ): Promise<boolean> {
     this.throwIfStopped(signal);
 
     try {
@@ -458,7 +474,8 @@ export class SessionController implements Disposable {
       this.applyDecodedImage(decoded, file.name, file.size, {
         kind: 'file',
         file
-      });
+      }, options.activate);
+      return true;
     } catch (error) {
       if (!isAbortError(error) && !this.disposed) {
         this.core.dispatch({
@@ -466,6 +483,7 @@ export class SessionController implements Disposable {
           message: error instanceof Error ? `Load failed: ${error.message}` : 'Load failed.'
         });
       }
+      return false;
     }
   }
 
@@ -473,7 +491,8 @@ export class SessionController implements Disposable {
     decoded: DecodedExrImage,
     filename: string,
     fileSizeBytes: number | null,
-    source: SessionSource
+    source: SessionSource,
+    activate = true
   ): void {
     const currentState = this.core.getState();
     const activeSession = selectActiveSession(currentState);
@@ -495,7 +514,8 @@ export class SessionController implements Disposable {
 
     this.core.dispatch({
       type: 'sessionLoaded',
-      session
+      session,
+      activate
     });
   }
 

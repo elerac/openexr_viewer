@@ -39,6 +39,9 @@ export function displayReducer(
 ): ViewerAppState {
   switch (intent.type) {
     case 'sessionLoaded':
+      return shouldActivateLoadedSession(context.initialState, intent.activate)
+        ? clearPendingColormapActivation(state)
+        : state;
     case 'allSessionsClosed':
       return clearPendingColormapActivation(state);
     case 'sessionReloaded':
@@ -266,6 +269,10 @@ export function displayReducer(
     default:
       return state;
   }
+}
+
+function shouldActivateLoadedSession(state: ViewerAppState, activate: boolean | undefined): boolean {
+  return activate !== false || !selectActiveSession(state);
 }
 
 function clearPendingColormapActivation(state: ViewerAppState): ViewerAppState {

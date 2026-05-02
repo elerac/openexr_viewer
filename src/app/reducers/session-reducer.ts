@@ -15,7 +15,15 @@ export function sessionReducer(
   _context: ViewerReducerContext
 ): ViewerAppState {
   switch (intent.type) {
-    case 'sessionLoaded':
+    case 'sessionLoaded': {
+      const shouldActivate = intent.activate !== false || !selectActiveSession(state);
+      if (!shouldActivate) {
+        return {
+          ...state,
+          sessions: [...state.sessions, intent.session]
+        };
+      }
+
       return {
         ...state,
         sessions: [...state.sessions, intent.session],
@@ -23,6 +31,7 @@ export function sessionReducer(
         sessionState: cloneViewerSessionState(intent.session.state),
         interactionState: createInteractionState(intent.session.state)
       };
+    }
     case 'sessionReloaded': {
       const exists = state.sessions.find((session) => session.id === intent.sessionId);
       if (!exists) {

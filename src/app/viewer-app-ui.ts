@@ -73,6 +73,7 @@ export function createViewerUiSnapshotSelector(): (state: ViewerAppState) => Vie
     const nextSnapshot: ViewerUiSnapshot = {
       errorMessage: state.errorMessage,
       isLoading: state.isLoading,
+      isViewerLoadBlocked: state.isLoading && !activeSession,
       isDisplayBusy: Boolean(
         state.pendingSelectionTransitionRequestId ||
         colormapIsLoading ||
@@ -137,6 +138,7 @@ export function computeViewerUiInvalidation(
 
   if (
     previous.isLoading !== next.isLoading ||
+    previous.isViewerLoadBlocked !== next.isViewerLoadBlocked ||
     previous.isDisplayBusy !== next.isDisplayBusy ||
     previous.isDisplayOverlayLoading !== next.isDisplayOverlayLoading
   ) {
@@ -408,6 +410,7 @@ function sameViewerUiSnapshot(a: ViewerUiSnapshot, b: ViewerUiSnapshot): boolean
   return (
     a.errorMessage === b.errorMessage &&
     a.isLoading === b.isLoading &&
+    a.isViewerLoadBlocked === b.isViewerLoadBlocked &&
     a.isDisplayBusy === b.isDisplayBusy &&
     a.isDisplayOverlayLoading === b.isDisplayOverlayLoading &&
     a.autoFitImageOnSelect === b.autoFitImageOnSelect &&

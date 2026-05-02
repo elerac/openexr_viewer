@@ -426,6 +426,31 @@ describe('viewer app core', () => {
     });
   });
 
+  it('appends inactive loaded sessions without switching the active image', () => {
+    const core = new ViewerAppCore();
+    const first = createSession('first');
+    const second = createSession('second');
+    core.dispatch({ type: 'sessionLoaded', session: first });
+    core.dispatch({ type: 'viewStateCommitted', view: {
+      zoom: 3,
+      panX: 4,
+      panY: 5,
+      panoramaYawDeg: 0,
+      panoramaPitchDeg: 0,
+      panoramaHfovDeg: 100
+    } });
+
+    core.dispatch({ type: 'sessionLoaded', session: second, activate: false });
+
+    expect(core.getState().sessions.map((session) => session.id)).toEqual([first.id, second.id]);
+    expect(core.getState().activeSessionId).toBe(first.id);
+    expect(core.getState().sessionState).toMatchObject({
+      zoom: 3,
+      panX: 4,
+      panY: 5
+    });
+  });
+
   it('fits the selected image on active session switches when auto-fit is enabled and a viewport is supplied', () => {
     const core = new ViewerAppCore();
     const first = createSession('first');

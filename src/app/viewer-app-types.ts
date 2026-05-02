@@ -175,7 +175,7 @@ export type ViewerIntent =
   | { type: 'viewerStateEdited'; patch: Partial<ViewerViewState> }
   | { type: 'interactionStatePublished'; interactionState: ViewerInteractionState }
   | { type: 'viewStateCommitted'; view: ViewerInteractionState['view'] }
-  | { type: 'sessionLoaded'; session: OpenedImageSession }
+  | { type: 'sessionLoaded'; session: OpenedImageSession; activate?: boolean }
   | { type: 'sessionReloaded'; sessionId: string; session: OpenedImageSession }
   | { type: 'sessionDisplayNameChanged'; sessionId: string; displayName: string }
   | { type: 'activeSessionSwitched'; sessionId: string; viewport?: ViewportInfo; fitInsets?: ViewportInsets }
@@ -252,6 +252,7 @@ export interface ViewerStateTransition {
 export interface ViewerUiSnapshot {
   errorMessage: string | null;
   isLoading: boolean;
+  isViewerLoadBlocked: boolean;
   isDisplayBusy: boolean;
   isDisplayOverlayLoading: boolean;
   autoFitImageOnSelect: boolean;
