@@ -12,16 +12,21 @@ import {
   type AsyncResource
 } from '../async-resource';
 import { cloneDisplaySelection, sameDisplaySelection } from '../display-model';
-import { createPngDataUrlFromPixels, type ExportImagePixels } from '../export-image';
+import {
+  createPngDataUrlFromPixels,
+  parsePngCompressionLevel,
+  type ExportImagePixels
+} from '../export-image';
 import { createAbortError, DisposableBag, isAbortError, type Disposable } from '../lifecycle';
-import type {
-  DisplaySelection,
-  ExportImageBatchChannelTarget,
-  ExportImageBatchEntryRequest,
-  ExportImageBatchPreviewRequest,
-  ExportImageBatchRequest,
-  ExportImageBatchTarget,
-  ExportScreenshotRegion
+import {
+  DEFAULT_PNG_COMPRESSION_LEVEL,
+  type DisplaySelection,
+  type ExportImageBatchChannelTarget,
+  type ExportImageBatchEntryRequest,
+  type ExportImageBatchPreviewRequest,
+  type ExportImageBatchRequest,
+  type ExportImageBatchTarget,
+  type ExportScreenshotRegion
 } from '../types';
 import { bindDialogBackdropDismiss } from './dialog-backdrop';
 import type { ExportImageBatchDialogElements } from './elements';
@@ -30,6 +35,7 @@ const DEFAULT_BATCH_ARCHIVE_FILENAME = 'openexr-export.zip';
 const DEFAULT_SCREENSHOT_BATCH_ARCHIVE_FILENAME = 'openexr-screenshot-export.zip';
 const CELL_KEY_SEPARATOR = '\u001f';
 const BATCH_EXPORT_RESOURCE_KEY = 'export-batch';
+const PNG_COMPRESSION_VALIDATION_MESSAGE = 'PNG compression must be an integer from 0 to 9.';
 type ExportBatchDialogMode = 'image' | 'screenshot';
 export type ExportBatchFilenameSource = 'openFilesName' | 'sourcePath';
 
@@ -260,6 +266,7 @@ export class ExportImageBatchDialogController implements Disposable {
     this.elements.exportBatchArchiveFilenameInput.value = this.dialogMode === 'screenshot'
       ? DEFAULT_SCREENSHOT_BATCH_ARCHIVE_FILENAME
       : target.archiveFilename || DEFAULT_BATCH_ARCHIVE_FILENAME;
+    this.elements.exportBatchCompressionInput.value = String(DEFAULT_PNG_COMPRESSION_LEVEL);
     if (this.dialogMode === 'screenshot' && this.screenshotRegion) {
       this.elements.exportBatchWidthInput.value = String(this.screenshotRegion.outputWidth);
       this.elements.exportBatchHeightInput.value = String(this.screenshotRegion.outputHeight);
@@ -280,6 +287,7 @@ export class ExportImageBatchDialogController implements Disposable {
     this.applyDialogMode();
     this.elements.exportBatchArchiveFilenameInput.value = '';
     this.elements.exportBatchUseOpenFilesNamesCheckbox.checked = true;
+    this.elements.exportBatchCompressionInput.value = String(DEFAULT_PNG_COMPRESSION_LEVEL);
     this.elements.exportBatchWidthInput.value = '';
     this.elements.exportBatchHeightInput.value = '';
     this.elements.exportBatchMatrix.replaceChildren();
@@ -312,6 +320,7 @@ export class ExportImageBatchDialogController implements Disposable {
     const busy = this.busy;
     this.elements.exportBatchArchiveFilenameInput.disabled = busy;
     this.elements.exportBatchUseOpenFilesNamesCheckbox.disabled = busy;
+    this.elements.exportBatchCompressionInput.disabled = busy;
     this.elements.exportBatchWidthInput.disabled = busy;
     this.elements.exportBatchHeightInput.disabled = busy;
     this.updateSplitToggleState();
@@ -893,6 +902,13 @@ export class ExportImageBatchDialogController implements Disposable {
       return;
     }
 
+    const pngCompressionLevel = parsePngCompressionLevel(this.elements.exportBatchCompressionInput.value);
+    if (pngCompressionLevel === null) {
+      this.setError(PNG_COMPRESSION_VALIDATION_MESSAGE);
+      this.elements.exportBatchCompressionInput.focus();
+      return;
+    }
+
     const screenshot = this.getScreenshotRegionForRequest();
     if (this.dialogMode === 'screenshot' && !screenshot) {
       this.setError('Enter a positive width and height.');
@@ -926,7 +942,8 @@ export class ExportImageBatchDialogController implements Disposable {
       await this.callbacks.onExportImageBatch({
         archiveFilename,
         entries,
-        format: 'png-zip'
+        format: 'png-zip',
+        pngCompressionLevel
       }, abortController.signal);
       if (this.abortController === abortController) {
         this.abortController = null;

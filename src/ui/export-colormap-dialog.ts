@@ -6,12 +6,18 @@ import {
   successResource,
   type AsyncResource
 } from '../async-resource';
-import { renderPixelsToCanvas, type ExportImagePixels } from '../export-image';
+import {
+  parsePngCompressionLevel,
+  renderPixelsToCanvas,
+  type ExportImagePixels
+} from '../export-image';
 import { DisposableBag, isAbortError, type Disposable } from '../lifecycle';
-import type {
-  ExportColormapOrientation,
-  ExportColormapPreviewRequest,
-  ExportColormapRequest
+import {
+  DEFAULT_PNG_COMPRESSION_LEVEL,
+  type ExportColormapOrientation,
+  type ExportColormapPreviewRequest,
+  type ExportColormapRequest,
+  type PngCompressionLevel
 } from '../types';
 import { bindDialogBackdropDismiss } from './dialog-backdrop';
 import type { ExportColormapDialogElements } from './elements';
@@ -23,6 +29,7 @@ const DEFAULT_COLORMAP_EXPORT_HEIGHT = 16;
 const DEFAULT_COLORMAP_EXPORT_ORIENTATION: ExportColormapOrientation = 'horizontal';
 const COLORMAP_EXPORT_PREVIEW_LOADING_MESSAGE = 'Loading preview...';
 const COLORMAP_EXPORT_PREVIEW_INVALID_MESSAGE = 'Enter a valid width and height to preview.';
+const PNG_COMPRESSION_VALIDATION_MESSAGE = 'PNG compression must be an integer from 0 to 9.';
 
 interface ExportColormapDialogCallbacks {
   onExportColormap: (request: ExportColormapRequest) => Promise<void>;
@@ -163,6 +170,7 @@ export class ExportColormapDialogController implements Disposable {
     this.elements.exportColormapWidthInput.value = String(DEFAULT_COLORMAP_EXPORT_WIDTH);
     this.elements.exportColormapHeightInput.value = String(DEFAULT_COLORMAP_EXPORT_HEIGHT);
     this.elements.exportColormapOrientationSelect.value = DEFAULT_COLORMAP_EXPORT_ORIENTATION;
+    this.elements.exportColormapCompressionInput.value = String(DEFAULT_PNG_COMPRESSION_LEVEL);
     this.syncFilenameForSelection(false);
     this.setError(null);
     this.setBusy(false);
@@ -250,6 +258,7 @@ export class ExportColormapDialogController implements Disposable {
     this.elements.exportColormapWidthInput.value = String(DEFAULT_COLORMAP_EXPORT_WIDTH);
     this.elements.exportColormapHeightInput.value = String(DEFAULT_COLORMAP_EXPORT_HEIGHT);
     this.elements.exportColormapOrientationSelect.value = DEFAULT_COLORMAP_EXPORT_ORIENTATION;
+    this.elements.exportColormapCompressionInput.value = String(DEFAULT_PNG_COMPRESSION_LEVEL);
     this.elements.exportColormapFilenameInput.value = '';
     this.exportColormapAutoFilename = '';
     this.resetPreview();
@@ -305,13 +314,21 @@ export class ExportColormapDialogController implements Disposable {
       return;
     }
 
+    const pngCompressionLevel = parsePngCompressionLevel(this.elements.exportColormapCompressionInput.value);
+    if (pngCompressionLevel === null) {
+      this.setError(PNG_COMPRESSION_VALIDATION_MESSAGE);
+      this.elements.exportColormapCompressionInput.focus();
+      return;
+    }
+
     const request = parseExportColormapRequest({
       colormapId: this.elements.exportColormapSelect.value,
       width,
       height,
       orientation: this.elements.exportColormapOrientationSelect.value,
       filename,
-      format: 'png'
+      format: 'png',
+      pngCompressionLevel
     });
     if (!request) {
       this.setError('Export failed.');
@@ -465,6 +482,7 @@ export class ExportColormapDialogController implements Disposable {
     this.elements.exportColormapWidthInput.disabled = busy;
     this.elements.exportColormapHeightInput.disabled = busy;
     this.elements.exportColormapOrientationSelect.disabled = busy;
+    this.elements.exportColormapCompressionInput.disabled = busy;
     this.elements.exportColormapFilenameInput.disabled = busy;
     this.elements.exportColormapDialogCancelButton.disabled = busy;
     this.elements.exportColormapDialogSubmitButton.disabled = busy;
@@ -499,6 +517,7 @@ function parseExportColormapRequest(args: {
   orientation: string;
   filename: string;
   format: string;
+  pngCompressionLevel: PngCompressionLevel;
 }): ExportColormapRequest | null {
   const previewRequest = parseExportColormapPreviewRequest(args);
   if (!previewRequest || args.format !== 'png') {
@@ -508,7 +527,8 @@ function parseExportColormapRequest(args: {
   return {
     ...previewRequest,
     filename: args.filename,
-    format: 'png'
+    format: 'png',
+    pngCompressionLevel: args.pngCompressionLevel
   };
 }
 

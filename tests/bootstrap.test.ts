@@ -870,6 +870,7 @@ describe('bootstrap app lifecycle', () => {
         orientation: 'horizontal' | 'vertical';
         filename: string;
         format: 'png';
+        pngCompressionLevel?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
       }) => Promise<void>;
     };
 
@@ -879,7 +880,8 @@ describe('bootstrap app lifecycle', () => {
       height: 2,
       orientation: 'horizontal',
       filename: 'viridis.png',
-      format: 'png'
+      format: 'png',
+      pngCompressionLevel: 4
     })).resolves.toBeUndefined();
 
     expect(mocks.loadColormapLut).toHaveBeenCalledWith(registry, '0', undefined);
@@ -889,7 +891,9 @@ describe('bootstrap app lifecycle', () => {
       height: 2,
       orientation: 'horizontal'
     });
-    expect(mocks.createPngBlobFromPixels).toHaveBeenCalledWith(pixels);
+    expect(mocks.createPngBlobFromPixels).toHaveBeenCalledWith(pixels, {
+      compressionLevel: 4
+    });
     expect(createObjectURL).toHaveBeenCalledWith(blob);
     expect(anchorClick).toHaveBeenCalledTimes(1);
     const anchor = appendSpy.mock.calls[0]?.[0] as HTMLAnchorElement | undefined;
@@ -1512,12 +1516,14 @@ describe('bootstrap app lifecycle', () => {
           outputFilename: string;
         }>;
         format: 'png-zip';
+        pngCompressionLevel?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
       }, signal: AbortSignal) => Promise<void>;
     };
 
     await expect(callbacks.onExportImageBatch({
       archiveFilename: 'openexr-export.zip',
       format: 'png-zip',
+      pngCompressionLevel: 7,
       entries: [
         {
           sessionId: 'session-1',
@@ -1546,6 +1552,12 @@ describe('bootstrap app lifecycle', () => {
     );
     expect(mocks.rendererReadExportPixels).toHaveBeenCalledTimes(2);
     expect(mocks.createPngBlobFromPixels).toHaveBeenCalledTimes(2);
+    expect(mocks.createPngBlobFromPixels).toHaveBeenNthCalledWith(1, expect.any(Object), {
+      compressionLevel: 7
+    });
+    expect(mocks.createPngBlobFromPixels).toHaveBeenNthCalledWith(2, expect.any(Object), {
+      compressionLevel: 7
+    });
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(anchorClick).toHaveBeenCalledTimes(1);
     const anchor = appendSpy.mock.calls[0]?.[0] as HTMLAnchorElement | undefined;

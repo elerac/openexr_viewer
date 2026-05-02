@@ -436,6 +436,7 @@
           role="dialog"
           aria-modal="true"
           aria-labelledby="export-dialog-title"
+          novalidate
         >
           <div class="app-dialog-header">
             <h2 id="export-dialog-title" class="app-dialog-title">Export Image</h2>
@@ -451,6 +452,10 @@
               <select id="export-format-select" disabled>
                 <option value="png">PNG</option>
               </select>
+            </label>
+            <label class="app-dialog-field" for="export-compression-input">
+              <span class="app-dialog-field-label">PNG compression</span>
+              <input id="export-compression-input" type="number" min="0" max="9" step="1" inputmode="numeric" value="9" />
             </label>
             <div id="export-size-field" class="app-dialog-field hidden">
               <span class="app-dialog-field-label">Size</span>
@@ -496,6 +501,7 @@
           role="dialog"
           aria-modal="true"
           aria-labelledby="export-batch-dialog-title"
+          novalidate
         >
           <div class="app-dialog-header">
             <h2 id="export-batch-dialog-title" class="app-dialog-title">Export Batch</h2>
@@ -509,6 +515,10 @@
             <label class="app-dialog-checkbox" for="export-batch-use-open-files-names-checkbox">
               <input id="export-batch-use-open-files-names-checkbox" type="checkbox" checked />
               <span>Use Open Files names</span>
+            </label>
+            <label class="app-dialog-field" for="export-batch-compression-input">
+              <span class="app-dialog-field-label">PNG compression</span>
+              <input id="export-batch-compression-input" type="number" min="0" max="9" step="1" inputmode="numeric" value="9" />
             </label>
             <div id="export-batch-size-field" class="app-dialog-field hidden">
               <span class="app-dialog-field-label">Size</span>
@@ -598,6 +608,7 @@
           role="dialog"
           aria-modal="true"
           aria-labelledby="export-colormap-dialog-title"
+          novalidate
         >
           <div class="app-dialog-header">
             <h2 id="export-colormap-dialog-title" class="app-dialog-title">Export Colormap</h2>
@@ -624,6 +635,10 @@
                 <option value="horizontal">Horizontal</option>
                 <option value="vertical">Vertical</option>
               </select>
+            </label>
+            <label class="app-dialog-field" for="export-colormap-compression-input">
+              <span class="app-dialog-field-label">PNG compression</span>
+              <input id="export-colormap-compression-input" type="number" min="0" max="9" step="1" inputmode="numeric" value="9" />
             </label>
             <div class="app-dialog-field">
               <span class="app-dialog-field-label">Preview</span>

@@ -2662,20 +2662,32 @@ describe('view menu', () => {
     const exportButton = document.getElementById('export-image-button') as HTMLButtonElement;
     const dialogBackdrop = document.getElementById('export-dialog-backdrop') as HTMLDivElement;
     const filenameInput = document.getElementById('export-filename-input') as HTMLInputElement;
+    const compressionInput = document.getElementById('export-compression-input') as HTMLInputElement;
+    const error = document.getElementById('export-dialog-error') as HTMLElement;
     const submitButton = document.getElementById('export-dialog-submit-button') as HTMLButtonElement;
 
     exportButton.click();
 
     expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
     expect(filenameInput.value).toBe('image.png');
+    expect(compressionInput.value).toBe('9');
 
     filenameInput.value = 'graded-output';
+    compressionInput.value = '10';
+    submitButton.click();
+    await flushMicrotasks();
+
+    expect(error.textContent).toBe('PNG compression must be an integer from 0 to 9.');
+    expect(onExportImage).not.toHaveBeenCalled();
+
+    compressionInput.value = '5';
     submitButton.click();
     await flushMicrotasks();
 
     expect(onExportImage).toHaveBeenCalledWith({
       filename: 'graded-output.png',
-      format: 'png'
+      format: 'png',
+      pngCompressionLevel: 5
     });
     expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
   });
@@ -2991,6 +3003,7 @@ describe('view menu', () => {
     expect(onExportImage).toHaveBeenCalledWith({
       filename: 'image-screenshot.png',
       format: 'png',
+      pngCompressionLevel: 9,
       mode: 'screenshot',
       rect: { x: 30, y: 15, width: 140, height: 70 },
       sourceViewport: { width: 200, height: 100 },
@@ -3428,6 +3441,7 @@ describe('view menu', () => {
     const useOpenFilesNamesCheckbox = document.getElementById(
       'export-batch-use-open-files-names-checkbox'
     ) as HTMLInputElement;
+    const compressionInput = document.getElementById('export-batch-compression-input') as HTMLInputElement;
     const selectAllButton = document.getElementById('export-batch-select-all-button') as HTMLButtonElement;
     const submitButton = document.getElementById('export-batch-dialog-submit-button') as HTMLButtonElement;
 
@@ -3441,6 +3455,7 @@ describe('view menu', () => {
     expect(title.textContent).toBe('Export Screenshot Batch');
     expect(archiveInput.value).toBe('openexr-screenshot-export.zip');
     expect(useOpenFilesNamesCheckbox.checked).toBe(true);
+    expect(compressionInput.value).toBe('9');
     expect(sizeField.classList.contains('hidden')).toBe(false);
     expect(widthInput.value).toBe('140');
     expect(heightInput.value).toBe('70');
@@ -3486,6 +3501,7 @@ describe('view menu', () => {
     expect(onExportImageBatch.mock.calls[0]?.[0]).toMatchObject({
       archiveFilename: 'openexr-screenshot-export.zip',
       format: 'png-zip',
+      pngCompressionLevel: 9,
       entries: [
         {
           mode: 'screenshot',
@@ -3849,9 +3865,11 @@ describe('view menu', () => {
     const useOpenFilesNamesCheckbox = document.getElementById(
       'export-batch-use-open-files-names-checkbox'
     ) as HTMLInputElement;
+    const compressionInput = document.getElementById('export-batch-compression-input') as HTMLInputElement;
     const selectAllButton = document.getElementById('export-batch-select-all-button') as HTMLButtonElement;
     const deselectAllButton = document.getElementById('export-batch-deselect-all-button') as HTMLButtonElement;
     const status = document.getElementById('export-batch-dialog-status') as HTMLElement;
+    const error = document.getElementById('export-batch-dialog-error') as HTMLElement;
     const submitButton = document.getElementById('export-batch-dialog-submit-button') as HTMLButtonElement;
 
     batchButton.click();
@@ -3860,6 +3878,7 @@ describe('view menu', () => {
     expect(batchDialog.classList.contains('hidden')).toBe(false);
     expect(archiveInput.value).toBe('openexr-export.zip');
     expect(useOpenFilesNamesCheckbox.checked).toBe(true);
+    expect(compressionInput.value).toBe('9');
     expect(document.querySelectorAll('.export-batch-cell-disabled')).toHaveLength(1);
     expect(document.querySelectorAll('.export-batch-cell-swatches')).toHaveLength(0);
     expect(document.querySelectorAll('.export-batch-cell-preview')).toHaveLength(3);
@@ -3912,6 +3931,14 @@ describe('view menu', () => {
     selectAllButton.click();
 
     archiveInput.value = 'selected-frames';
+    compressionInput.value = '10';
+    submitButton.click();
+    await flushMicrotasks();
+
+    expect(error.textContent).toBe('PNG compression must be an integer from 0 to 9.');
+    expect(onExportImageBatch).not.toHaveBeenCalled();
+
+    compressionInput.value = '3';
     submitButton.click();
     await flushMicrotasks();
 
@@ -3920,7 +3947,8 @@ describe('view menu', () => {
     expect(signal).toBeInstanceOf(AbortSignal);
     expect(request).toMatchObject({
       archiveFilename: 'selected-frames.zip',
-      format: 'png-zip'
+      format: 'png-zip',
+      pngCompressionLevel: 3
     });
     expect(request?.entries.map((entry) => entry.outputFilename)).toEqual([
       'beauty.RGB.png',
@@ -4558,6 +4586,7 @@ describe('view menu', () => {
     const widthInput = document.getElementById('export-colormap-width-input') as HTMLInputElement;
     const heightInput = document.getElementById('export-colormap-height-input') as HTMLInputElement;
     const orientationSelect = document.getElementById('export-colormap-orientation-select') as HTMLSelectElement;
+    const compressionInput = document.getElementById('export-colormap-compression-input') as HTMLInputElement;
     const filenameInput = document.getElementById('export-colormap-filename-input') as HTMLInputElement;
     const submitButton = document.getElementById('export-colormap-dialog-submit-button') as HTMLButtonElement;
 
@@ -4568,9 +4597,11 @@ describe('view menu', () => {
     expect(widthInput.value).toBe('256');
     expect(heightInput.value).toBe('16');
     expect(orientationSelect.value).toBe('horizontal');
+    expect(compressionInput.value).toBe('9');
     expect(filenameInput.value).toBe('Red-Black-Green.png');
 
     filenameInput.value = 'paper-ready';
+    compressionInput.value = '4';
     submitButton.click();
     await flushMicrotasks();
 
@@ -4580,7 +4611,8 @@ describe('view menu', () => {
       height: 16,
       orientation: 'horizontal',
       filename: 'paper-ready.png',
-      format: 'png'
+      format: 'png',
+      pngCompressionLevel: 4
     });
     expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
   });
@@ -4595,6 +4627,7 @@ describe('view menu', () => {
     const exportButton = document.getElementById('export-colormap-button') as HTMLButtonElement;
     const widthInput = document.getElementById('export-colormap-width-input') as HTMLInputElement;
     const heightInput = document.getElementById('export-colormap-height-input') as HTMLInputElement;
+    const compressionInput = document.getElementById('export-colormap-compression-input') as HTMLInputElement;
     const submitButton = document.getElementById('export-colormap-dialog-submit-button') as HTMLButtonElement;
     const error = document.getElementById('export-colormap-dialog-error') as HTMLElement;
 
@@ -4615,6 +4648,12 @@ describe('view menu', () => {
     submitButton.click();
     await flushMicrotasks();
     expect(error.textContent).toBe('Height must be a positive integer.');
+
+    Object.defineProperty(heightInput, 'value', { configurable: true, writable: true, value: '16' });
+    Object.defineProperty(compressionInput, 'value', { configurable: true, writable: true, value: '1.5' });
+    submitButton.click();
+    await flushMicrotasks();
+    expect(error.textContent).toBe('PNG compression must be an integer from 0 to 9.');
 
     expect(onExportColormap).not.toHaveBeenCalled();
   });

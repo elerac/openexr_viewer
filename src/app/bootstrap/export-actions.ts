@@ -229,7 +229,9 @@ export async function handleExportImage(
     if (sourceSession) {
       assertActiveSessionCurrent(core.getState(), sourceSession);
     }
-    const blob = await createPngBlobFromPixels(pixels);
+    const blob = await createPngBlobFromPixels(pixels, {
+      compressionLevel: request.pngCompressionLevel
+    });
     if (sourceSession) {
       assertActiveSessionCurrent(core.getState(), sourceSession);
     }
@@ -302,7 +304,9 @@ export async function handleExportImageBatch(
         signal,
         abortMessage: 'Batch export cancelled.'
       });
-      const blob = await createPngBlobFromPixels(pixels);
+      const blob = await createPngBlobFromPixels(pixels, {
+        compressionLevel: request.pngCompressionLevel
+      });
       throwIfAborted(signal, 'Batch export cancelled.');
       assertSessionCurrent(core.getState(), session, signal);
       files[entry.outputFilename] = new Uint8Array(await blob.arrayBuffer());
@@ -414,7 +418,9 @@ export async function handleExportColormap(
 
   try {
     const pixels = await resolveColormapExportPixels(request);
-    const blob = await createPngBlobFromPixels(pixels);
+    const blob = await createPngBlobFromPixels(pixels, {
+      compressionLevel: request.pngCompressionLevel
+    });
     if (isDisposed()) {
       throw createAbortError('Viewer application has been disposed.');
     }

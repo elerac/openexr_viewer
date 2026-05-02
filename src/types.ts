@@ -228,6 +228,12 @@ export interface ViewportRect {
 export type ExportImageFormat = 'png';
 export type ExportColormapFormat = 'png';
 export type ExportColormapOrientation = 'horizontal' | 'vertical';
+export type PngCompressionLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+export const DEFAULT_PNG_COMPRESSION_LEVEL: PngCompressionLevel = 9;
+
+export interface PngExportOptions {
+  pngCompressionLevel?: PngCompressionLevel;
+}
 
 export interface ExportScreenshotRegion {
   rect: ViewportRect;
@@ -236,13 +242,13 @@ export interface ExportScreenshotRegion {
   outputHeight: number;
 }
 
-export interface ExportFullImageRequest {
+export interface ExportFullImageRequest extends PngExportOptions {
   filename: string;
   format: ExportImageFormat;
   mode?: 'image';
 }
 
-export interface ExportScreenshotRequest extends ExportScreenshotRegion {
+export interface ExportScreenshotRequest extends ExportScreenshotRegion, PngExportOptions {
   filename: string;
   format: ExportImageFormat;
   mode: 'screenshot';
@@ -276,9 +282,10 @@ export interface ExportImageBatchRequest {
   archiveFilename: string;
   entries: ExportImageBatchEntryRequest[];
   format: 'png-zip';
+  pngCompressionLevel?: PngCompressionLevel;
 }
 
-export interface ExportColormapRequest {
+export interface ExportColormapRequest extends PngExportOptions {
   colormapId: string;
   width: number;
   height: number;

@@ -6,13 +6,23 @@ import {
   successResource,
   type AsyncResource
 } from '../async-resource';
-import { renderPixelsToCanvas, type ExportImagePixels } from '../export-image';
+import {
+  parsePngCompressionLevel,
+  renderPixelsToCanvas,
+  type ExportImagePixels
+} from '../export-image';
 import { DisposableBag, isAbortError, type Disposable } from '../lifecycle';
-import type { ExportImagePreviewRequest, ExportImageRequest, ExportImageTarget } from '../types';
+import {
+  DEFAULT_PNG_COMPRESSION_LEVEL,
+  type ExportImagePreviewRequest,
+  type ExportImageRequest,
+  type ExportImageTarget
+} from '../types';
 import { bindDialogBackdropDismiss } from './dialog-backdrop';
 import type { ExportImageDialogElements } from './elements';
 
 const EXPORT_IMAGE_PREVIEW_LOADING_MESSAGE = 'Loading preview...';
+const PNG_COMPRESSION_VALIDATION_MESSAGE = 'PNG compression must be an integer from 0 to 9.';
 
 interface ExportImageDialogCallbacks {
   onExportImage: (request: ExportImageRequest) => Promise<void>;
@@ -160,6 +170,7 @@ export class ExportImageDialogController implements Disposable {
 
   private applyTarget(target: ExportImageTarget): void {
     this.elements.exportFilenameInput.value = target.filename;
+    this.elements.exportCompressionInput.value = String(DEFAULT_PNG_COMPRESSION_LEVEL);
     if (isScreenshotTarget(target)) {
       const size = buildDefaultScreenshotOutputSize(target);
       this.elements.exportSizeField.classList.remove('hidden');
@@ -174,6 +185,7 @@ export class ExportImageDialogController implements Disposable {
 
   private resetInputs(): void {
     this.elements.exportFilenameInput.value = '';
+    this.elements.exportCompressionInput.value = String(DEFAULT_PNG_COMPRESSION_LEVEL);
     this.elements.exportSizeField.classList.add('hidden');
     this.elements.exportWidthInput.value = '';
     this.elements.exportHeightInput.value = '';
@@ -221,11 +233,19 @@ export class ExportImageDialogController implements Disposable {
       return;
     }
 
+    const pngCompressionLevel = parsePngCompressionLevel(this.elements.exportCompressionInput.value);
+    if (pngCompressionLevel === null) {
+      this.setError(PNG_COMPRESSION_VALIDATION_MESSAGE);
+      this.elements.exportCompressionInput.focus();
+      return;
+    }
+
     const request = parseExportImageRequest(target, {
       filename,
       format: this.elements.exportFormatSelect.value,
       width: this.elements.exportWidthInput.value,
-      height: this.elements.exportHeightInput.value
+      height: this.elements.exportHeightInput.value,
+      pngCompressionLevel
     });
     if (!request) {
       this.setError(isScreenshotTarget(target) ? 'Enter a positive width and height.' : 'Export failed.');
@@ -406,6 +426,7 @@ export class ExportImageDialogController implements Disposable {
   private syncBusyControls(): void {
     const busy = this.isExportPending();
     this.elements.exportFilenameInput.disabled = busy;
+    this.elements.exportCompressionInput.disabled = busy;
     this.elements.exportWidthInput.disabled = busy;
     this.elements.exportHeightInput.disabled = busy;
     this.elements.exportDialogCancelButton.disabled = busy;
@@ -448,7 +469,13 @@ export function normalizeExportFilename(value: string): string {
 
 function parseExportImageRequest(
   target: ExportImageTarget,
-  args: { filename: string; format: string; width: string; height: string }
+  args: {
+    filename: string;
+    format: string;
+    width: string;
+    height: string;
+    pngCompressionLevel: ExportImageRequest['pngCompressionLevel'];
+  }
 ): ExportImageRequest | null {
   if (args.format !== 'png') {
     return null;
@@ -468,13 +495,15 @@ function parseExportImageRequest(
       rect: { ...target.rect },
       sourceViewport: { ...target.sourceViewport },
       outputWidth,
-      outputHeight
+      outputHeight,
+      pngCompressionLevel: args.pngCompressionLevel
     };
   }
 
   return {
     filename: args.filename,
-    format: 'png'
+    format: 'png',
+    pngCompressionLevel: args.pngCompressionLevel
   };
 }
 

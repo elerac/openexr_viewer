@@ -55,6 +55,7 @@ export interface Elements {
   exportDialogForm: HTMLFormElement;
   exportFilenameInput: HTMLInputElement;
   exportFormatSelect: HTMLSelectElement;
+  exportCompressionInput: HTMLInputElement;
   exportSizeField: HTMLDivElement;
   exportWidthInput: HTMLInputElement;
   exportHeightInput: HTMLInputElement;
@@ -70,6 +71,7 @@ export interface Elements {
   exportBatchDialogSubtitle: HTMLElement;
   exportBatchArchiveFilenameInput: HTMLInputElement;
   exportBatchUseOpenFilesNamesCheckbox: HTMLInputElement;
+  exportBatchCompressionInput: HTMLInputElement;
   exportBatchSizeField: HTMLDivElement;
   exportBatchWidthInput: HTMLInputElement;
   exportBatchHeightInput: HTMLInputElement;
@@ -94,6 +96,7 @@ export interface Elements {
   exportColormapWidthInput: HTMLInputElement;
   exportColormapHeightInput: HTMLInputElement;
   exportColormapOrientationSelect: HTMLSelectElement;
+  exportColormapCompressionInput: HTMLInputElement;
   exportColormapPreviewStage: HTMLDivElement;
   exportColormapPreviewCanvas: HTMLCanvasElement;
   exportColormapPreviewStatus: HTMLElement;
@@ -302,6 +305,7 @@ export type ExportImageDialogElements = Pick<
   | 'exportDialogForm'
   | 'exportFilenameInput'
   | 'exportFormatSelect'
+  | 'exportCompressionInput'
   | 'exportSizeField'
   | 'exportWidthInput'
   | 'exportHeightInput'
@@ -322,6 +326,7 @@ export type ExportImageBatchDialogElements = Pick<
   | 'exportBatchDialogSubtitle'
   | 'exportBatchArchiveFilenameInput'
   | 'exportBatchUseOpenFilesNamesCheckbox'
+  | 'exportBatchCompressionInput'
   | 'exportBatchSizeField'
   | 'exportBatchWidthInput'
   | 'exportBatchHeightInput'
@@ -345,6 +350,7 @@ export type ExportColormapDialogElements = Pick<
   | 'exportColormapWidthInput'
   | 'exportColormapHeightInput'
   | 'exportColormapOrientationSelect'
+  | 'exportColormapCompressionInput'
   | 'exportColormapPreviewCanvas'
   | 'exportColormapPreviewStatus'
   | 'exportColormapFilenameInput'
@@ -510,6 +516,7 @@ export function resolveElements(): Elements {
     exportDialogForm: requireElement('export-dialog-form', HTMLFormElement),
     exportFilenameInput: requireElement('export-filename-input', HTMLInputElement),
     exportFormatSelect: requireElement('export-format-select', HTMLSelectElement),
+    exportCompressionInput: requireElement('export-compression-input', HTMLInputElement),
     exportSizeField: requireElement('export-size-field', HTMLDivElement),
     exportWidthInput: requireElement('export-width-input', HTMLInputElement),
     exportHeightInput: requireElement('export-height-input', HTMLInputElement),
@@ -528,6 +535,7 @@ export function resolveElements(): Elements {
       'export-batch-use-open-files-names-checkbox',
       HTMLInputElement
     ),
+    exportBatchCompressionInput: requireElement('export-batch-compression-input', HTMLInputElement),
     exportBatchSizeField: requireElement('export-batch-size-field', HTMLDivElement),
     exportBatchWidthInput: requireElement('export-batch-width-input', HTMLInputElement),
     exportBatchHeightInput: requireElement('export-batch-height-input', HTMLInputElement),
@@ -552,6 +560,7 @@ export function resolveElements(): Elements {
     exportColormapWidthInput: requireElement('export-colormap-width-input', HTMLInputElement),
     exportColormapHeightInput: requireElement('export-colormap-height-input', HTMLInputElement),
     exportColormapOrientationSelect: requireElement('export-colormap-orientation-select', HTMLSelectElement),
+    exportColormapCompressionInput: requireElement('export-colormap-compression-input', HTMLInputElement),
     exportColormapPreviewStage: requireElement('export-colormap-preview-stage', HTMLDivElement),
     exportColormapPreviewCanvas: requireElement('export-colormap-preview-canvas', HTMLCanvasElement),
     exportColormapPreviewStatus: requireElement('export-colormap-preview-status', HTMLElement),
