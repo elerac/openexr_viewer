@@ -828,6 +828,62 @@ test('exports an adjusted image-viewer screenshot region as a png download', asy
   expectPngSignature(await readDownloadBytes(download));
 });
 
+test('exports image-viewer screenshot reproduction metadata as a zip download', async ({ page }) => {
+  await gotoViewerApp(page);
+  await openGalleryCbox(page);
+
+  const fileMenuButton = page.getByRole('button', { name: 'File', exact: true });
+  const exportScreenshotMenuItem = page.locator('#export-screenshot-button');
+  const selectionOverlay = page.locator('#screenshot-selection-overlay');
+  const overlayExportButton = page.locator('#screenshot-selection-export-button');
+  const exportDialog = page.locator('#export-dialog-form');
+  const exportSubmitButton = page.locator('#export-dialog-submit-button');
+  const reproductionMetadataCheckbox = page.locator('#export-reproduction-metadata-checkbox');
+
+  await fileMenuButton.click();
+  await exportScreenshotMenuItem.click();
+
+  await expect(selectionOverlay).toBeVisible();
+  await overlayExportButton.click();
+
+  await expect(exportDialog).toBeVisible();
+  await expect(reproductionMetadataCheckbox).toBeVisible();
+  await expect(reproductionMetadataCheckbox).not.toBeChecked();
+  await reproductionMetadataCheckbox.check();
+
+  const downloadPromise = page.waitForEvent('download');
+  await exportSubmitButton.click();
+  const download = await downloadPromise;
+
+  await expect(exportDialog).toBeHidden();
+  await expect(selectionOverlay).toBeHidden();
+  expect(download.suggestedFilename()).toBe('cbox_rgb-screenshot.zip');
+
+  const zipEntries = unzipSync(await readDownloadBytes(download));
+  expect(Object.keys(zipEntries).sort()).toEqual([
+    'cbox_rgb-screenshot.json',
+    'cbox_rgb-screenshot.png'
+  ]);
+  expectPngSignature(zipEntries['cbox_rgb-screenshot.png']);
+
+  const metadataBytes = zipEntries['cbox_rgb-screenshot.json'];
+  expect(metadataBytes).toBeDefined();
+  const metadata = JSON.parse(Buffer.from(metadataBytes).toString('utf8')) as {
+    schemaVersion: number;
+    export: { pngFilename: string; jsonFilename: string };
+    screenshot: { outputWidth: number; outputHeight: number };
+    viewer: { viewerMode: string };
+  };
+  expect(metadata.schemaVersion).toBe(1);
+  expect(metadata.export).toMatchObject({
+    pngFilename: 'cbox_rgb-screenshot.png',
+    jsonFilename: 'cbox_rgb-screenshot.json'
+  });
+  expect(metadata.screenshot.outputWidth).toBeGreaterThan(0);
+  expect(metadata.screenshot.outputHeight).toBeGreaterThan(0);
+  expect(metadata.viewer.viewerMode).toBe('image');
+});
+
 test('marks non-viewer chrome inactive while screenshot selection is active', async ({ page }) => {
   await gotoViewerApp(page);
   await openGalleryCbox(page);

@@ -59,6 +59,8 @@ export interface Elements {
   exportSizeField: HTMLDivElement;
   exportWidthInput: HTMLInputElement;
   exportHeightInput: HTMLInputElement;
+  exportReproductionMetadataField: HTMLElement;
+  exportReproductionMetadataCheckbox: HTMLInputElement;
   exportPreviewStage: HTMLDivElement;
   exportPreviewCanvas: HTMLCanvasElement;
   exportPreviewStatus: HTMLElement;
@@ -75,6 +77,8 @@ export interface Elements {
   exportBatchSizeField: HTMLDivElement;
   exportBatchWidthInput: HTMLInputElement;
   exportBatchHeightInput: HTMLInputElement;
+  exportBatchReproductionMetadataField: HTMLElement;
+  exportBatchReproductionMetadataCheckbox: HTMLInputElement;
   exportBatchSelectAllButton: HTMLButtonElement;
   exportBatchDeselectAllButton: HTMLButtonElement;
   exportBatchSplitToggleButton: HTMLButtonElement;
@@ -309,6 +313,8 @@ export type ExportImageDialogElements = Pick<
   | 'exportSizeField'
   | 'exportWidthInput'
   | 'exportHeightInput'
+  | 'exportReproductionMetadataField'
+  | 'exportReproductionMetadataCheckbox'
   | 'exportPreviewCanvas'
   | 'exportPreviewStatus'
   | 'exportDialogError'
@@ -330,6 +336,8 @@ export type ExportImageBatchDialogElements = Pick<
   | 'exportBatchSizeField'
   | 'exportBatchWidthInput'
   | 'exportBatchHeightInput'
+  | 'exportBatchReproductionMetadataField'
+  | 'exportBatchReproductionMetadataCheckbox'
   | 'exportBatchSelectAllButton'
   | 'exportBatchDeselectAllButton'
   | 'exportBatchSplitToggleButton'
@@ -520,6 +528,8 @@ export function resolveElements(): Elements {
     exportSizeField: requireElement('export-size-field', HTMLDivElement),
     exportWidthInput: requireElement('export-width-input', HTMLInputElement),
     exportHeightInput: requireElement('export-height-input', HTMLInputElement),
+    exportReproductionMetadataField: requireElement('export-reproduction-metadata-field', HTMLElement),
+    exportReproductionMetadataCheckbox: requireElement('export-reproduction-metadata-checkbox', HTMLInputElement),
     exportPreviewStage: requireElement('export-preview-stage', HTMLDivElement),
     exportPreviewCanvas: requireElement('export-preview-canvas', HTMLCanvasElement),
     exportPreviewStatus: requireElement('export-preview-status', HTMLElement),
@@ -539,6 +549,11 @@ export function resolveElements(): Elements {
     exportBatchSizeField: requireElement('export-batch-size-field', HTMLDivElement),
     exportBatchWidthInput: requireElement('export-batch-width-input', HTMLInputElement),
     exportBatchHeightInput: requireElement('export-batch-height-input', HTMLInputElement),
+    exportBatchReproductionMetadataField: requireElement('export-batch-reproduction-metadata-field', HTMLElement),
+    exportBatchReproductionMetadataCheckbox: requireElement(
+      'export-batch-reproduction-metadata-checkbox',
+      HTMLInputElement
+    ),
     exportBatchSelectAllButton: requireElement('export-batch-select-all-button', HTMLButtonElement),
     exportBatchDeselectAllButton: requireElement('export-batch-deselect-all-button', HTMLButtonElement),
     exportBatchSplitToggleButton: requireElement('export-batch-split-toggle-button', HTMLButtonElement),

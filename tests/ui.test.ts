@@ -2698,6 +2698,7 @@ describe('view menu', () => {
     const dialogBackdrop = document.getElementById('export-dialog-backdrop') as HTMLDivElement;
     const filenameInput = document.getElementById('export-filename-input') as HTMLInputElement;
     const compressionInput = document.getElementById('export-compression-input') as HTMLInputElement;
+    const metadataField = document.getElementById('export-reproduction-metadata-field') as HTMLElement;
     const error = document.getElementById('export-dialog-error') as HTMLElement;
     const submitButton = document.getElementById('export-dialog-submit-button') as HTMLButtonElement;
 
@@ -2706,6 +2707,7 @@ describe('view menu', () => {
     expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
     expect(filenameInput.value).toBe('image.png');
     expect(compressionInput.value).toBe('9');
+    expect(metadataField.classList.contains('hidden')).toBe(true);
 
     filenameInput.value = 'graded-output';
     compressionInput.value = '10';
@@ -2989,6 +2991,8 @@ describe('view menu', () => {
     const sizeField = document.getElementById('export-size-field') as HTMLDivElement;
     const widthInput = document.getElementById('export-width-input') as HTMLInputElement;
     const heightInput = document.getElementById('export-height-input') as HTMLInputElement;
+    const metadataField = document.getElementById('export-reproduction-metadata-field') as HTMLElement;
+    const metadataCheckbox = document.getElementById('export-reproduction-metadata-checkbox') as HTMLInputElement;
     const dialogCancelButton = document.getElementById('export-dialog-cancel-button') as HTMLButtonElement;
     const submitButton = document.getElementById('export-dialog-submit-button') as HTMLButtonElement;
 
@@ -3018,6 +3022,8 @@ describe('view menu', () => {
     expect(dialogBackdrop.classList.contains('hidden')).toBe(false);
     expect(filenameInput.value).toBe('image-screenshot.png');
     expect(sizeField.classList.contains('hidden')).toBe(false);
+    expect(metadataField.classList.contains('hidden')).toBe(false);
+    expect(metadataCheckbox.checked).toBe(false);
     expect(widthInput.value).toBe('140');
     expect(heightInput.value).toBe('70');
     expect(onResolveExportImagePreview).toHaveBeenCalledWith({
@@ -3031,6 +3037,7 @@ describe('view menu', () => {
     widthInput.value = '280';
     widthInput.dispatchEvent(new Event('input', { bubbles: true }));
     expect(heightInput.value).toBe('140');
+    metadataCheckbox.checked = true;
 
     submitButton.click();
     await flushMicrotasks();
@@ -3043,7 +3050,8 @@ describe('view menu', () => {
       rect: { x: 30, y: 15, width: 140, height: 70 },
       sourceViewport: { width: 200, height: 100 },
       outputWidth: 280,
-      outputHeight: 140
+      outputHeight: 140,
+      includeReproductionMetadata: true
     });
     expect(overlay.classList.contains('hidden')).toBe(true);
     expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
@@ -3384,6 +3392,8 @@ describe('view menu', () => {
         outputFilename: string;
       }>;
       format: 'png-zip';
+      pngCompressionLevel?: number;
+      includeReproductionMetadata?: boolean;
     }, _signal: AbortSignal) => Promise<void>>(async () => undefined);
     const onResolveExportImageBatchPreview = vi.fn<(_request: {
       sessionId: string;
@@ -3473,6 +3483,8 @@ describe('view menu', () => {
     const sizeField = document.getElementById('export-batch-size-field') as HTMLDivElement;
     const widthInput = document.getElementById('export-batch-width-input') as HTMLInputElement;
     const heightInput = document.getElementById('export-batch-height-input') as HTMLInputElement;
+    const metadataField = document.getElementById('export-batch-reproduction-metadata-field') as HTMLElement;
+    const metadataCheckbox = document.getElementById('export-batch-reproduction-metadata-checkbox') as HTMLInputElement;
     const archiveInput = document.getElementById('export-batch-archive-filename-input') as HTMLInputElement;
     const useOpenFilesNamesCheckbox = document.getElementById(
       'export-batch-use-open-files-names-checkbox'
@@ -3493,6 +3505,8 @@ describe('view menu', () => {
     expect(useOpenFilesNamesCheckbox.checked).toBe(true);
     expect(compressionInput.value).toBe('9');
     expect(sizeField.classList.contains('hidden')).toBe(false);
+    expect(metadataField.classList.contains('hidden')).toBe(false);
+    expect(metadataCheckbox.checked).toBe(false);
     expect(widthInput.value).toBe('140');
     expect(heightInput.value).toBe('70');
 
@@ -3529,6 +3543,7 @@ describe('view menu', () => {
     expect(getCheckedExportBatchCellColumnKeys()).toEqual(['RGB']);
     selectAllButton.click();
     expect(getCheckedExportBatchCellColumnKeys()).toEqual(['RGB', 'Z']);
+    metadataCheckbox.checked = true;
 
     submitButton.click();
     await flushMicrotasks();
@@ -3538,6 +3553,7 @@ describe('view menu', () => {
       archiveFilename: 'openexr-screenshot-export.zip',
       format: 'png-zip',
       pngCompressionLevel: 9,
+      includeReproductionMetadata: true,
       entries: [
         {
           mode: 'screenshot',

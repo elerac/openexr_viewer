@@ -174,10 +174,14 @@ export class ExportImageDialogController implements Disposable {
     if (isScreenshotTarget(target)) {
       const size = buildDefaultScreenshotOutputSize(target);
       this.elements.exportSizeField.classList.remove('hidden');
+      this.elements.exportReproductionMetadataField.classList.remove('hidden');
+      this.elements.exportReproductionMetadataCheckbox.checked = false;
       this.elements.exportWidthInput.value = String(size.width);
       this.elements.exportHeightInput.value = String(size.height);
     } else {
       this.elements.exportSizeField.classList.add('hidden');
+      this.elements.exportReproductionMetadataField.classList.add('hidden');
+      this.elements.exportReproductionMetadataCheckbox.checked = false;
       this.elements.exportWidthInput.value = '';
       this.elements.exportHeightInput.value = '';
     }
@@ -187,6 +191,8 @@ export class ExportImageDialogController implements Disposable {
     this.elements.exportFilenameInput.value = '';
     this.elements.exportCompressionInput.value = String(DEFAULT_PNG_COMPRESSION_LEVEL);
     this.elements.exportSizeField.classList.add('hidden');
+    this.elements.exportReproductionMetadataField.classList.add('hidden');
+    this.elements.exportReproductionMetadataCheckbox.checked = false;
     this.elements.exportWidthInput.value = '';
     this.elements.exportHeightInput.value = '';
     this.resetPreview();
@@ -245,7 +251,8 @@ export class ExportImageDialogController implements Disposable {
       format: this.elements.exportFormatSelect.value,
       width: this.elements.exportWidthInput.value,
       height: this.elements.exportHeightInput.value,
-      pngCompressionLevel
+      pngCompressionLevel,
+      includeReproductionMetadata: this.elements.exportReproductionMetadataCheckbox.checked
     });
     if (!request) {
       this.setError(isScreenshotTarget(target) ? 'Enter a positive width and height.' : 'Export failed.');
@@ -429,6 +436,7 @@ export class ExportImageDialogController implements Disposable {
     this.elements.exportCompressionInput.disabled = busy;
     this.elements.exportWidthInput.disabled = busy;
     this.elements.exportHeightInput.disabled = busy;
+    this.elements.exportReproductionMetadataCheckbox.disabled = busy;
     this.elements.exportDialogCancelButton.disabled = busy;
     this.elements.exportDialogSubmitButton.disabled = busy;
     this.elements.exportDialogSubmitButton.textContent = busy ? 'Exporting...' : 'Export';
@@ -475,6 +483,7 @@ function parseExportImageRequest(
     width: string;
     height: string;
     pngCompressionLevel: ExportImageRequest['pngCompressionLevel'];
+    includeReproductionMetadata: boolean;
   }
 ): ExportImageRequest | null {
   if (args.format !== 'png') {
@@ -496,7 +505,8 @@ function parseExportImageRequest(
       sourceViewport: { ...target.sourceViewport },
       outputWidth,
       outputHeight,
-      pngCompressionLevel: args.pngCompressionLevel
+      pngCompressionLevel: args.pngCompressionLevel,
+      ...(args.includeReproductionMetadata ? { includeReproductionMetadata: true } : {})
     };
   }
 

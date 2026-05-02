@@ -4,6 +4,12 @@ import { cloneDisplayLuminanceRange, resolveColormapAutoRange } from '../../colo
 import { cloneDisplaySelection, isStokesSelection } from '../../display-model';
 import { createPngBlobFromPixels } from '../../export-image';
 import { buildColormapExportPixels, type ExportImagePixels } from '../../export/export-pixels';
+import {
+  buildReproductionMetadataFilename,
+  buildScreenshotReproductionMetadata,
+  serializeScreenshotReproductionMetadata,
+  type ScreenshotReproductionMetadataV1
+} from '../../export/screenshot-reproduction-metadata';
 import { createAbortError, isAbortError, throwIfAborted } from '../../lifecycle';
 import { RenderCacheService } from '../../services/render-cache-service';
 import { getStokesDisplayColormapDefault, isStokesDegreeModulationParameter } from '../../stokes';
@@ -25,6 +31,7 @@ import type {
   ExportImagePreviewRequest,
   ExportImageRequest,
   OpenedImageSession,
+  ViewerState,
   ViewerSessionState
 } from '../../types';
 import type { WebGlExrRenderer } from '../../renderer';
@@ -224,7 +231,8 @@ export async function handleExportImage(
   }
 
   try {
-    const sourceSession = selectActiveSession(core.getState());
+    const stateSnapshot = core.getState();
+    const sourceSession = selectActiveSession(stateSnapshot);
     const pixels = await resolveImageExportPixels(request);
     if (sourceSession) {
       assertActiveSessionCurrent(core.getState(), sourceSession);
@@ -238,7 +246,24 @@ export async function handleExportImage(
     if (isDisposed()) {
       throw createAbortError('Viewer application has been disposed.');
     }
-    triggerBrowserDownload(blob, request.filename);
+    if (sourceSession && request.mode === 'screenshot' && request.includeReproductionMetadata) {
+      const jsonFilename = buildReproductionMetadataFilename(request.filename);
+      const metadata = buildScreenshotReproductionMetadata({
+        pngFilename: request.filename,
+        jsonFilename,
+        pngCompressionLevel: request.pngCompressionLevel,
+        region: request,
+        session: sourceSession,
+        renderState: mergeRenderState(stateSnapshot.sessionState, stateSnapshot.interactionState)
+      });
+      const zipBlob = createZipBlob({
+        [request.filename]: new Uint8Array(await blob.arrayBuffer()),
+        [jsonFilename]: new Uint8Array(await createJsonBlob(metadata).arrayBuffer())
+      });
+      triggerBrowserDownload(zipBlob, buildScreenshotMetadataBundleFilename(request.filename));
+    } else {
+      triggerBrowserDownload(blob, request.filename);
+    }
   } catch (error) {
     if (isDisposed()) {
       throw error instanceof Error ? error : createAbortError('Viewer application has been disposed.');
@@ -293,7 +318,7 @@ export async function handleExportImageBatch(
         throw new Error(`Image is no longer open: ${entry.sessionId}`);
       }
 
-      const pixels = await resolveBatchEntryExportPixels({
+      const result = await resolveBatchEntryExportResult({
         entry,
         session,
         appState: stateSnapshot,
@@ -304,19 +329,35 @@ export async function handleExportImageBatch(
         signal,
         abortMessage: 'Batch export cancelled.'
       });
-      const blob = await createPngBlobFromPixels(pixels, {
+      const blob = await createPngBlobFromPixels(result.pixels, {
         compressionLevel: request.pngCompressionLevel
       });
       throwIfAborted(signal, 'Batch export cancelled.');
       assertSessionCurrent(core.getState(), session, signal);
       files[entry.outputFilename] = new Uint8Array(await blob.arrayBuffer());
+      if (request.includeReproductionMetadata && entry.mode === 'screenshot') {
+        const jsonFilename = buildReproductionMetadataFilename(entry.outputFilename);
+        const metadata = buildScreenshotReproductionMetadata({
+          pngFilename: entry.outputFilename,
+          jsonFilename,
+          pngCompressionLevel: request.pngCompressionLevel,
+          region: entry,
+          session,
+          renderState: result.renderState,
+          batch: {
+            archiveFilename: request.archiveFilename,
+            sessionId: entry.sessionId,
+            channelLabel: entry.channelLabel,
+            outputFilename: entry.outputFilename
+          }
+        });
+        files[jsonFilename] = new Uint8Array(await createJsonBlob(metadata).arrayBuffer());
+      }
       throwIfAborted(signal, 'Batch export cancelled.');
       assertSessionCurrent(core.getState(), session, signal);
     }
 
-    const zipBytes = zipSync(files);
-    const zipBuffer = zipBytes.buffer.slice(zipBytes.byteOffset, zipBytes.byteOffset + zipBytes.byteLength) as ArrayBuffer;
-    const zipBlob = new Blob([zipBuffer], { type: 'application/zip' });
+    const zipBlob = createZipBlob(files);
     if (isDisposed()) {
       throw createAbortError('Viewer application has been disposed.');
     }
@@ -437,7 +478,7 @@ export async function handleExportColormap(
   }
 }
 
-async function resolveBatchEntryExportPixels({
+async function resolveBatchEntryExportResult({
   entry,
   session,
   appState,
@@ -459,7 +500,7 @@ async function resolveBatchEntryExportPixels({
   signal: AbortSignal;
   previewMaxLongestEdge?: number;
   abortMessage: string;
-}): Promise<ExportImagePixels> {
+}): Promise<{ pixels: ExportImagePixels; renderState: ViewerState }> {
   const exportState = await resolveBatchEntryExportState({
     entry,
     session,
@@ -511,7 +552,7 @@ async function resolveBatchEntryExportPixels({
   });
   throwIfAborted(signal, abortMessage);
   assertSessionCurrent(getCurrentState(), session, signal);
-  return pixels;
+  return { pixels, renderState };
 }
 
 async function resolveBatchEntryPreviewPixels({
@@ -538,7 +579,7 @@ async function resolveBatchEntryPreviewPixels({
   abortMessage: string;
 }): Promise<ExportImagePixels> {
   if (entry.mode === 'screenshot') {
-    return resolveBatchEntryExportPixels({
+    const result = await resolveBatchEntryExportResult({
       entry,
       session,
       appState,
@@ -550,6 +591,7 @@ async function resolveBatchEntryPreviewPixels({
       previewMaxLongestEdge,
       abortMessage
     });
+    return result.pixels;
   }
 
   const exportState = await resolveBatchEntryExportState({
@@ -797,6 +839,24 @@ export function triggerBrowserDownload(blob: Blob, filename: string): void {
   setTimeout(() => {
     URL.revokeObjectURL(objectUrl);
   }, 1000);
+}
+
+function createJsonBlob(metadata: ScreenshotReproductionMetadataV1): Blob {
+  return new Blob([serializeScreenshotReproductionMetadata(metadata)], {
+    type: 'application/json'
+  });
+}
+
+function createZipBlob(files: Record<string, Uint8Array>): Blob {
+  const zipBytes = zipSync(files);
+  const zipBuffer = zipBytes.buffer.slice(zipBytes.byteOffset, zipBytes.byteOffset + zipBytes.byteLength) as ArrayBuffer;
+  return new Blob([zipBuffer], { type: 'application/zip' });
+}
+
+function buildScreenshotMetadataBundleFilename(pngFilename: string): string {
+  return /\.png$/i.test(pngFilename)
+    ? pngFilename.replace(/\.png$/i, '.zip')
+    : `${pngFilename}.zip`;
 }
 
 export function resolveBoundedColormapExportSize(

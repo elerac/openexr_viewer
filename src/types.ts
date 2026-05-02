@@ -243,6 +243,10 @@ export interface PngExportOptions {
   pngCompressionLevel?: PngCompressionLevel;
 }
 
+export interface ScreenshotReproductionMetadataExportOptions {
+  includeReproductionMetadata?: boolean;
+}
+
 export interface ExportScreenshotRegion {
   rect: ViewportRect;
   sourceViewport: ViewportInfo;
@@ -256,7 +260,10 @@ export interface ExportFullImageRequest extends PngExportOptions {
   mode?: 'image';
 }
 
-export interface ExportScreenshotRequest extends ExportScreenshotRegion, PngExportOptions {
+export interface ExportScreenshotRequest
+  extends ExportScreenshotRegion,
+    PngExportOptions,
+    ScreenshotReproductionMetadataExportOptions {
   filename: string;
   format: ExportImageFormat;
   mode: 'screenshot';
@@ -291,6 +298,7 @@ export interface ExportImageBatchRequest {
   entries: ExportImageBatchEntryRequest[];
   format: 'png-zip';
   pngCompressionLevel?: PngCompressionLevel;
+  includeReproductionMetadata?: boolean;
 }
 
 export interface ExportColormapRequest extends PngExportOptions {

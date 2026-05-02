@@ -1039,6 +1039,174 @@ describe('bootstrap app lifecycle', () => {
     app.dispose();
   });
 
+  it('exports screenshot reproduction metadata in a ZIP bundle when requested', async () => {
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
+      observe(): void {}
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+    const createObjectURL = vi.fn<(_: Blob) => string>().mockReturnValueOnce('blob:screenshot-zip');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', {
+      createObjectURL,
+      revokeObjectURL
+    });
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const appendSpy = vi.spyOn(document.body, 'append');
+
+    const rgbSelection = {
+      kind: 'channelRgb',
+      r: 'R',
+      g: 'G',
+      b: 'B',
+      alpha: null
+    };
+    const session = {
+      id: 'session-1',
+      filename: 'image.exr',
+      displayName: 'Hero Plate.exr',
+      fileSizeBytes: 12,
+      source: {
+        kind: 'url',
+        url: '/shots/image.exr'
+      },
+      decoded: {
+        width: 192,
+        height: 48,
+        layers: [{
+          name: 'beauty',
+          channelNames: ['R', 'G', 'B'],
+          channelStorage: {},
+          analysis: {
+            displayLuminanceRangeBySelectionKey: {},
+            finiteRangeByChannel: {}
+          }
+        }]
+      },
+      state: mocks.coreState.sessionState
+    };
+    const mutableCoreState = mocks.coreState as unknown as {
+      activeSessionId: string | null;
+      sessions: unknown[];
+      sessionState: Record<string, unknown>;
+      interactionState: { view: Record<string, unknown> };
+    };
+    mutableCoreState.activeSessionId = 'session-1';
+    mutableCoreState.sessions = [session];
+    Object.assign(mutableCoreState.sessionState, {
+      activeLayer: 0,
+      displaySelection: rgbSelection,
+      exposureEv: 1.5,
+      viewerMode: 'panorama',
+      visualizationMode: 'rgb'
+    });
+    Object.assign(mutableCoreState.interactionState.view, {
+      zoom: 3,
+      panX: 12,
+      panY: 6,
+      panoramaYawDeg: 21,
+      panoramaPitchDeg: -3,
+      panoramaHfovDeg: 80
+    });
+    mocks.createPngBlobFromPixels.mockResolvedValue(new Blob([new Uint8Array([0x89, 0x50])], { type: 'image/png' }));
+
+    const { bootstrapApp } = await import('../src/app/bootstrap');
+    const app = await bootstrapApp();
+    const callbacks = mocks.getUiCallbacks() as {
+      onExportImage: (request: {
+        filename: string;
+        format: 'png';
+        mode: 'screenshot';
+        rect: { x: number; y: number; width: number; height: number };
+        sourceViewport: { width: number; height: number };
+        outputWidth: number;
+        outputHeight: number;
+        pngCompressionLevel?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+        includeReproductionMetadata?: boolean;
+      }) => Promise<void>;
+    };
+
+    await expect(callbacks.onExportImage({
+      filename: 'image-screenshot.png',
+      format: 'png',
+      mode: 'screenshot',
+      rect: { x: 8, y: 4, width: 120, height: 60 },
+      sourceViewport: { width: 240, height: 120 },
+      outputWidth: 240,
+      outputHeight: 120,
+      pngCompressionLevel: 6,
+      includeReproductionMetadata: true
+    })).resolves.toBeUndefined();
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(anchorClick).toHaveBeenCalledTimes(1);
+    expect((appendSpy.mock.calls[0]?.[0] as HTMLAnchorElement | undefined)?.download).toBe('image-screenshot.zip');
+
+    const zipBlob = createObjectURL.mock.calls[0]?.[0] as Blob;
+    expect(zipBlob.type).toBe('application/zip');
+    const zipEntries = unzipSync(new Uint8Array(await zipBlob.arrayBuffer()));
+    expect(Object.keys(zipEntries).sort()).toEqual([
+      'image-screenshot.json',
+      'image-screenshot.png'
+    ]);
+    expect(Array.from(zipEntries['image-screenshot.png'] ?? [])).toEqual([0x89, 0x50]);
+
+    const metadata = JSON.parse(new TextDecoder().decode(zipEntries['image-screenshot.json'])) as {
+      schemaVersion: number;
+      export: { pngFilename: string; jsonFilename: string; pngCompressionLevel: number };
+      screenshot: {
+        rect: { x: number; y: number; width: number; height: number };
+        sourceViewport: { width: number; height: number };
+        outputWidth: number;
+        outputHeight: number;
+        outputScale: { x: number; y: number };
+      };
+      viewer: { viewerMode: string; panX: number; panY: number; panoramaHfovDeg: number };
+      sourceImage: { filename: string; displayName: string; source: { detail: string }; width: number; height: number };
+      display: { activeLayer: number; layerName: string; displaySelection: typeof rgbSelection; exposureEv: number };
+    };
+
+    expect(metadata.schemaVersion).toBe(1);
+    expect(metadata.export).toMatchObject({
+      pngFilename: 'image-screenshot.png',
+      jsonFilename: 'image-screenshot.json',
+      pngCompressionLevel: 6
+    });
+    expect(metadata.screenshot).toMatchObject({
+      rect: { x: 8, y: 4, width: 120, height: 60 },
+      sourceViewport: { width: 240, height: 120 },
+      outputWidth: 240,
+      outputHeight: 120,
+      outputScale: { x: 2, y: 2 }
+    });
+    expect(metadata.viewer).toMatchObject({
+      viewerMode: 'panorama',
+      panX: 12,
+      panY: 6,
+      panoramaHfovDeg: 80
+    });
+    expect(metadata.sourceImage).toMatchObject({
+      filename: 'image.exr',
+      displayName: 'Hero Plate.exr',
+      source: { detail: '/shots/image.exr' },
+      width: 192,
+      height: 48
+    });
+    expect(metadata.display).toMatchObject({
+      activeLayer: 0,
+      layerName: 'beauty',
+      displaySelection: rgbSelection,
+      exposureEv: 1.5
+    });
+
+    app.dispose();
+  });
+
   it('aborts image previews when the active source closes during GPU preparation', async () => {
     class ResizeObserverMock {
       constructor(callback: ResizeObserverCallback) {
@@ -1873,6 +2041,167 @@ describe('bootstrap app lifecycle', () => {
 
     vi.advanceTimersByTime(1000);
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:screenshot-batch');
+
+    app.dispose();
+  });
+
+  it('adds screenshot reproduction metadata sidecars to screenshot batch ZIPs when requested', async () => {
+    vi.useFakeTimers();
+
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
+      observe(): void {}
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+    const createObjectURL = vi.fn<(_: Blob) => string>(() => 'blob:screenshot-batch-json');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', {
+      createObjectURL,
+      revokeObjectURL
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    vi.spyOn(document.body, 'append');
+
+    const rgbSelection = {
+      kind: 'channelRgb',
+      r: 'R',
+      g: 'G',
+      b: 'B',
+      alpha: null
+    };
+    const layer = {
+      name: 'beauty',
+      channelNames: ['R', 'G', 'B'],
+      channelStorage: {},
+      analysis: {
+        displayLuminanceRangeBySelectionKey: {},
+        finiteRangeByChannel: {}
+      }
+    };
+    const session = {
+      id: 'session-1',
+      filename: 'beauty.exr',
+      displayName: 'beauty.exr',
+      fileSizeBytes: 3,
+      source: { kind: 'url', url: '/beauty.exr' },
+      decoded: {
+        width: 2,
+        height: 1,
+        layers: [layer]
+      },
+      state: mocks.coreState.sessionState
+    };
+    const mutableCoreState = mocks.coreState as unknown as {
+      activeSessionId: string | null;
+      sessions: unknown[];
+      sessionState: Record<string, unknown>;
+      interactionState: { view: Record<string, unknown> };
+    };
+    mutableCoreState.activeSessionId = 'session-1';
+    mutableCoreState.sessions = [session];
+    Object.assign(mutableCoreState.sessionState, {
+      displaySelection: rgbSelection,
+      viewerMode: 'panorama'
+    });
+    Object.assign(mutableCoreState.interactionState.view, {
+      zoom: 5,
+      panX: 7,
+      panY: 9,
+      panoramaYawDeg: 21,
+      panoramaPitchDeg: -3,
+      panoramaHfovDeg: 80
+    });
+
+    const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    mocks.createPngBlobFromPixels.mockResolvedValue(new Blob([pngBytes], { type: 'image/png' }));
+
+    const { bootstrapApp } = await import('../src/app/bootstrap');
+    const app = await bootstrapApp();
+    const callbacks = mocks.getUiCallbacks() as {
+      onExportImageBatch: (request: {
+        archiveFilename: string;
+        entries: Array<{
+          sessionId: string;
+          activeLayer: number;
+          displaySelection: typeof rgbSelection;
+          channelLabel: string;
+          mode: 'screenshot';
+          rect: { x: number; y: number; width: number; height: number };
+          sourceViewport: { width: number; height: number };
+          outputWidth: number;
+          outputHeight: number;
+          outputFilename: string;
+        }>;
+        format: 'png-zip';
+        pngCompressionLevel?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+        includeReproductionMetadata?: boolean;
+      }, signal: AbortSignal) => Promise<void>;
+    };
+
+    await expect(callbacks.onExportImageBatch({
+      archiveFilename: 'openexr-screenshot-export.zip',
+      format: 'png-zip',
+      pngCompressionLevel: 7,
+      includeReproductionMetadata: true,
+      entries: [{
+        sessionId: 'session-1',
+        activeLayer: 0,
+        displaySelection: rgbSelection,
+        channelLabel: 'RGB',
+        mode: 'screenshot',
+        rect: { x: 10, y: 5, width: 40, height: 20 },
+        sourceViewport: { width: 100, height: 50 },
+        outputWidth: 80,
+        outputHeight: 40,
+        outputFilename: 'beauty-screenshot.RGB.png'
+      }]
+    }, new AbortController().signal)).resolves.toBeUndefined();
+
+    const zipBlob = createObjectURL.mock.calls[0]?.[0] as Blob;
+    const entries = unzipSync(new Uint8Array(await zipBlob.arrayBuffer()));
+    expect(Object.keys(entries).sort()).toEqual(['beauty-screenshot.RGB.json', 'beauty-screenshot.RGB.png']);
+    expect(entries['beauty-screenshot.RGB.png']?.subarray(0, 4)).toEqual(pngBytes);
+    const metadataBytes = entries['beauty-screenshot.RGB.json'];
+    expect(metadataBytes).toBeDefined();
+    const metadata = JSON.parse(new TextDecoder().decode(metadataBytes)) as {
+      export: {
+        pngFilename: string;
+        jsonFilename: string;
+        pngCompressionLevel: number;
+        batch: { archiveFilename: string; sessionId: string; channelLabel: string; outputFilename: string };
+      };
+      viewer: { viewerMode: string; panX: number; panY: number; panoramaHfovDeg: number };
+      display: { layerName: string; displaySelection: typeof rgbSelection };
+    };
+    expect(metadata.export).toMatchObject({
+      pngFilename: 'beauty-screenshot.RGB.png',
+      jsonFilename: 'beauty-screenshot.RGB.json',
+      pngCompressionLevel: 7,
+      batch: {
+        archiveFilename: 'openexr-screenshot-export.zip',
+        sessionId: 'session-1',
+        channelLabel: 'RGB',
+        outputFilename: 'beauty-screenshot.RGB.png'
+      }
+    });
+    expect(metadata.viewer).toMatchObject({
+      viewerMode: 'panorama',
+      panX: 7,
+      panY: 9,
+      panoramaHfovDeg: 80
+    });
+    expect(metadata.display).toMatchObject({
+      layerName: 'beauty',
+      displaySelection: rgbSelection
+    });
+
+    vi.advanceTimersByTime(1000);
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:screenshot-batch-json');
 
     app.dispose();
   });

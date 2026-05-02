@@ -257,6 +257,7 @@ export class ExportImageBatchDialogController implements Disposable {
     }
     this.includeSplitRgbChannels = false;
     this.elements.exportBatchUseOpenFilesNamesCheckbox.checked = true;
+    this.elements.exportBatchReproductionMetadataCheckbox.checked = false;
     this.setBusy(false);
     this.open = true;
     this.abortPreviewWork({ clearCache: true });
@@ -312,9 +313,11 @@ export class ExportImageBatchDialogController implements Disposable {
     if (this.dialogMode === 'screenshot' && this.screenshotRegion) {
       this.elements.exportBatchWidthInput.value = String(this.screenshotRegion.outputWidth);
       this.elements.exportBatchHeightInput.value = String(this.screenshotRegion.outputHeight);
+      this.elements.exportBatchReproductionMetadataCheckbox.checked = false;
     } else {
       this.elements.exportBatchWidthInput.value = '';
       this.elements.exportBatchHeightInput.value = '';
+      this.elements.exportBatchReproductionMetadataCheckbox.checked = false;
     }
     if (!targetHasSplitChannelViews(target)) {
       this.includeSplitRgbChannels = false;
@@ -332,6 +335,7 @@ export class ExportImageBatchDialogController implements Disposable {
     this.elements.exportBatchCompressionInput.value = String(DEFAULT_PNG_COMPRESSION_LEVEL);
     this.elements.exportBatchWidthInput.value = '';
     this.elements.exportBatchHeightInput.value = '';
+    this.elements.exportBatchReproductionMetadataCheckbox.checked = false;
     this.elements.exportBatchMatrix.replaceChildren();
     this.includeSplitRgbChannels = false;
     this.checkedCellKeys.clear();
@@ -347,6 +351,10 @@ export class ExportImageBatchDialogController implements Disposable {
       ? 'Export selected file and channel screenshots as a ZIP of PNG images.'
       : 'Export selected file and channel combinations as a ZIP of PNG images.';
     this.elements.exportBatchSizeField.classList.toggle('hidden', !screenshot);
+    this.elements.exportBatchReproductionMetadataField.classList.toggle('hidden', !screenshot);
+    if (!screenshot) {
+      this.elements.exportBatchReproductionMetadataCheckbox.checked = false;
+    }
   }
 
   private setBusy(busy: boolean): void {
@@ -365,6 +373,7 @@ export class ExportImageBatchDialogController implements Disposable {
     this.elements.exportBatchCompressionInput.disabled = busy;
     this.elements.exportBatchWidthInput.disabled = busy;
     this.elements.exportBatchHeightInput.disabled = busy;
+    this.elements.exportBatchReproductionMetadataCheckbox.disabled = busy;
     this.updateSplitToggleState();
     this.updateSelectionActionState();
     this.elements.exportBatchDialogSubmitButton.disabled =
@@ -1279,7 +1288,10 @@ export class ExportImageBatchDialogController implements Disposable {
         archiveFilename,
         entries,
         format: 'png-zip',
-        pngCompressionLevel
+        pngCompressionLevel,
+        ...(this.dialogMode === 'screenshot' && this.elements.exportBatchReproductionMetadataCheckbox.checked
+          ? { includeReproductionMetadata: true }
+          : {})
       }, abortController.signal);
       if (this.abortController === abortController) {
         this.abortController = null;
