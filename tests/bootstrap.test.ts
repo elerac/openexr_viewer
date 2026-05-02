@@ -1039,6 +1039,86 @@ describe('bootstrap app lifecycle', () => {
     app.dispose();
   });
 
+  it('emits coarse progress updates while exporting a single image', async () => {
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) {
+        mocks.setResizeObserverCallback(callback);
+      }
+
+      observe(): void {}
+      disconnect(): void {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock);
+    const createObjectURL = vi.fn<(_: Blob) => string>().mockReturnValueOnce('blob:image');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', {
+      createObjectURL,
+      revokeObjectURL
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    const session = {
+      id: 'session-1',
+      filename: 'image.exr',
+      displayName: 'image.exr',
+      fileSizeBytes: 3,
+      source: { kind: 'url', url: '/image.exr' },
+      decoded: {
+        width: 2,
+        height: 1,
+        layers: []
+      },
+      state: mocks.coreState.sessionState
+    };
+    const mutableCoreState = mocks.coreState as unknown as {
+      activeSessionId: string | null;
+      sessions: unknown[];
+    };
+    mutableCoreState.activeSessionId = 'session-1';
+    mutableCoreState.sessions = [session];
+    mocks.createPngBlobFromPixels.mockResolvedValue(new Blob([new Uint8Array([0x89, 0x50])], { type: 'image/png' }));
+
+    const { bootstrapApp } = await import('../src/app/bootstrap');
+    const app = await bootstrapApp();
+    const callbacks = mocks.getUiCallbacks() as {
+      onExportImage: (request: {
+        filename: string;
+        format: 'png';
+      }, onProgress?: (update: {
+        completed: number;
+        total: number;
+        stage: 'preparing' | 'rendering' | 'encoding' | 'packaging';
+        currentFilename?: string;
+        indeterminate?: boolean;
+      }) => void) => Promise<void>;
+    };
+    const progressUpdates: Array<{
+      completed: number;
+      total: number;
+      stage: 'preparing' | 'rendering' | 'encoding' | 'packaging';
+      currentFilename?: string;
+      indeterminate?: boolean;
+    }> = [];
+
+    await expect(callbacks.onExportImage({
+      filename: 'image.png',
+      format: 'png'
+    }, (update) => {
+      progressUpdates.push({ ...update });
+    })).resolves.toBeUndefined();
+
+    expect(progressUpdates).toEqual([
+      { completed: 0, total: 1, stage: 'preparing', currentFilename: 'image.png', indeterminate: true },
+      { completed: 0, total: 1, stage: 'rendering', currentFilename: 'image.png', indeterminate: true },
+      { completed: 0, total: 1, stage: 'encoding', currentFilename: 'image.png', indeterminate: true },
+      { completed: 1, total: 1, stage: 'packaging', currentFilename: 'image.png', indeterminate: true }
+    ]);
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+
+    app.dispose();
+  });
+
   it('exports screenshot reproduction metadata in a ZIP bundle when requested', async () => {
     class ResizeObserverMock {
       constructor(callback: ResizeObserverCallback) {
@@ -1683,11 +1763,22 @@ describe('bootstrap app lifecycle', () => {
           displaySelection: typeof rgbSelection | typeof depthSelection;
           channelLabel: string;
           outputFilename: string;
-        }>;
-        format: 'png-zip';
-        pngCompressionLevel?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
-      }, signal: AbortSignal) => Promise<void>;
+      }>;
+      format: 'png-zip';
+      pngCompressionLevel?: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+      }, signal: AbortSignal, onProgress?: (update: {
+        completed: number;
+        total: number;
+        stage: 'preparing' | 'rendering' | 'encoding' | 'packaging';
+        currentFilename?: string;
+      }) => void) => Promise<void>;
     };
+    const progressUpdates: Array<{
+      completed: number;
+      total: number;
+      stage: 'preparing' | 'rendering' | 'encoding' | 'packaging';
+      currentFilename?: string;
+    }> = [];
 
     await expect(callbacks.onExportImageBatch({
       archiveFilename: 'openexr-export.zip',
@@ -1709,7 +1800,20 @@ describe('bootstrap app lifecycle', () => {
           outputFilename: 'depth.Z.png'
         }
       ]
-    }, new AbortController().signal)).resolves.toBeUndefined();
+    }, new AbortController().signal, (update) => {
+      progressUpdates.push({ ...update });
+    })).resolves.toBeUndefined();
+
+    expect(progressUpdates).toEqual([
+      { completed: 0, total: 2, stage: 'preparing' },
+      { completed: 0, total: 2, stage: 'rendering', currentFilename: 'beauty.RGB.png' },
+      { completed: 0, total: 2, stage: 'encoding', currentFilename: 'beauty.RGB.png' },
+      { completed: 1, total: 2, stage: 'encoding' },
+      { completed: 1, total: 2, stage: 'rendering', currentFilename: 'depth.Z.png' },
+      { completed: 1, total: 2, stage: 'encoding', currentFilename: 'depth.Z.png' },
+      { completed: 2, total: 2, stage: 'encoding' },
+      { completed: 2, total: 2, stage: 'packaging' }
+    ]);
 
     expect(mocks.renderCachePrepareActiveSession).toHaveBeenCalledWith(
       session1,

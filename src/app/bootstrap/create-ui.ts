@@ -21,6 +21,7 @@ import type {
   ExportImageBatchRequest,
   ExportImagePreviewRequest,
   ExportImageRequest,
+  ExportProgressUpdate,
   OpenedImageDropPlacement,
   ViewerKeyboardNavigationInput,
   ViewerKeyboardZoomInput,
@@ -75,12 +76,15 @@ export function createViewerUi({
       const input = document.getElementById('folder-input') as HTMLInputElement;
       input.click();
     },
-    onExportImage: async (request: ExportImageRequest) => {
+    onExportImage: async (
+      request: ExportImageRequest,
+      onProgress?: (update: ExportProgressUpdate) => void
+    ) => {
       await handleExportImage(request, {
         core,
         resolveImageExportPixels,
         isDisposed
-      });
+      }, onProgress);
     },
     onResolveExportImagePreview: async (request, signal) => {
       return await resolveImageExportPixels(request, {
@@ -88,13 +92,17 @@ export function createViewerUi({
         previewMaxLongestEdge: 256
       });
     },
-    onExportImageBatch: async (request: ExportImageBatchRequest, signal: AbortSignal) => {
+    onExportImageBatch: async (
+      request: ExportImageBatchRequest,
+      signal: AbortSignal,
+      onProgress?: (update: ExportProgressUpdate) => void
+    ) => {
       await handleExportImageBatch(request, signal, {
         core,
         getRenderCache,
         getRenderer,
         isDisposed
-      });
+      }, onProgress);
     },
     onResolveExportImageBatchPreview: async (request: ExportImageBatchPreviewRequest, signal: AbortSignal) => {
       return await resolveExportImageBatchPreviewPixels(request, signal, {

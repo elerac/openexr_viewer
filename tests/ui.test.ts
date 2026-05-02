@@ -2721,11 +2721,14 @@ describe('view menu', () => {
     submitButton.click();
     await flushMicrotasks();
 
-    expect(onExportImage).toHaveBeenCalledWith({
-      filename: 'graded-output.png',
-      format: 'png',
-      pngCompressionLevel: 5
-    });
+    expect(onExportImage).toHaveBeenCalledWith(
+      {
+        filename: 'graded-output.png',
+        format: 'png',
+        pngCompressionLevel: 5
+      },
+      expect.any(Function)
+    );
     expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
   });
 
@@ -2969,6 +2972,64 @@ describe('view menu', () => {
     expect(cancelButton.disabled).toBe(false);
   });
 
+  it('shows delayed indeterminate progress for pending single image exports without flashing for quick exports', async () => {
+    vi.useFakeTimers();
+    installUiFixture();
+
+    const pendingExport = createDeferred<void>();
+    const onExportImage = vi
+      .fn<(_: unknown, onProgress?: (update: {
+        completed: number;
+        total: number;
+        stage: 'preparing' | 'rendering' | 'encoding' | 'packaging';
+        indeterminate?: boolean;
+      }) => void) => Promise<void>>()
+      .mockResolvedValueOnce(undefined)
+      .mockImplementationOnce((_request, onProgress) => {
+        onProgress?.({
+          completed: 0,
+          total: 1,
+          stage: 'rendering',
+          indeterminate: true
+        });
+        return pendingExport.promise;
+      });
+    const ui = new ViewerUi(createUiCallbacks({ onExportImage }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const exportButton = document.getElementById('export-image-button') as HTMLButtonElement;
+    const submitButton = document.getElementById('export-dialog-submit-button') as HTMLButtonElement;
+    const progress = document.getElementById('export-progress') as HTMLDivElement;
+    const progressBar = document.getElementById('export-progress-bar') as HTMLProgressElement;
+    const progressLabel = document.getElementById('export-progress-label') as HTMLElement;
+
+    exportButton.click();
+    submitButton.click();
+    await flushMicrotasks();
+    vi.advanceTimersByTime(300);
+    await flushMicrotasks();
+
+    expect(progress.classList.contains('hidden')).toBe(true);
+
+    exportButton.click();
+    submitButton.click();
+    await flushMicrotasks();
+
+    vi.advanceTimersByTime(299);
+    expect(progress.classList.contains('hidden')).toBe(true);
+
+    vi.advanceTimersByTime(1);
+    expect(progress.classList.contains('hidden')).toBe(false);
+    expect(progressBar.hasAttribute('value')).toBe(false);
+    expect(progressLabel.textContent).toBe('Rendering image...');
+
+    pendingExport.resolve();
+    await flushMicrotasks();
+
+    expect(progress.classList.contains('hidden')).toBe(true);
+  });
+
   it('exports an aspect-locked screenshot selection from the viewer overlay', async () => {
     installUiFixture();
 
@@ -3042,17 +3103,20 @@ describe('view menu', () => {
     submitButton.click();
     await flushMicrotasks();
 
-    expect(onExportImage).toHaveBeenCalledWith({
-      filename: 'image-screenshot.png',
-      format: 'png',
-      pngCompressionLevel: 9,
-      mode: 'screenshot',
-      rect: { x: 30, y: 15, width: 140, height: 70 },
-      sourceViewport: { width: 200, height: 100 },
-      outputWidth: 280,
-      outputHeight: 140,
-      includeReproductionMetadata: true
-    });
+    expect(onExportImage).toHaveBeenCalledWith(
+      {
+        filename: 'image-screenshot.png',
+        format: 'png',
+        pngCompressionLevel: 9,
+        mode: 'screenshot',
+        rect: { x: 30, y: 15, width: 140, height: 70 },
+        sourceViewport: { width: 200, height: 100 },
+        outputWidth: 280,
+        outputHeight: 140,
+        includeReproductionMetadata: true
+      },
+      expect.any(Function)
+    );
     expect(overlay.classList.contains('hidden')).toBe(true);
     expect(dialogBackdrop.classList.contains('hidden')).toBe(true);
 
@@ -4008,6 +4072,77 @@ describe('view menu', () => {
       'depth.Z.png'
     ]);
     expect(batchDialog.classList.contains('hidden')).toBe(true);
+  });
+
+  it('shows delayed determinate batch export progress and hides it when cancelled', async () => {
+    vi.useFakeTimers();
+    installUiFixture();
+
+    let rejectExport!: (reason?: unknown) => void;
+    let reportProgress: ((update: {
+      completed: number;
+      total: number;
+      stage: 'preparing' | 'rendering' | 'encoding' | 'packaging';
+      currentFilename?: string;
+    }) => void) | undefined;
+    const onExportImageBatch = vi.fn((
+      _request: unknown,
+      signal: AbortSignal,
+      onProgress?: typeof reportProgress
+    ) => {
+      reportProgress = onProgress;
+      onProgress?.({
+        completed: 0,
+        total: 3,
+        stage: 'rendering',
+        currentFilename: 'image-1.RGB.png'
+      });
+      signal.addEventListener('abort', () => {
+        rejectExport(signal.reason);
+      }, { once: true });
+      return new Promise<void>((_resolve, reject) => {
+        rejectExport = reject;
+      });
+    });
+    const ui = new ViewerUi(createUiCallbacks({ onExportImageBatch }));
+    applyBatchTarget(ui, createRgbExportBatchTarget(3, ['R', 'G', 'B']));
+
+    (document.getElementById('export-image-batch-button') as HTMLButtonElement).click();
+    (document.getElementById('export-batch-select-all-button') as HTMLButtonElement).click();
+    (document.getElementById('export-batch-dialog-submit-button') as HTMLButtonElement).click();
+    await flushMicrotasks();
+
+    const progress = document.getElementById('export-batch-progress') as HTMLDivElement;
+    const progressBar = document.getElementById('export-batch-progress-bar') as HTMLProgressElement;
+    const progressLabel = document.getElementById('export-batch-progress-label') as HTMLElement;
+    const status = document.getElementById('export-batch-dialog-status') as HTMLElement;
+
+    vi.advanceTimersByTime(299);
+    expect(progress.classList.contains('hidden')).toBe(true);
+
+    vi.advanceTimersByTime(1);
+    expect(progress.classList.contains('hidden')).toBe(false);
+    expect(progressBar.max).toBe(3);
+    expect(progressBar.value).toBe(0);
+    expect(progressLabel.textContent).toBe('Exporting 1 of 3: image-1.RGB.png');
+    expect(status.textContent).toBe('Exporting 1 of 3: image-1.RGB.png');
+
+    reportProgress?.({
+      completed: 2,
+      total: 3,
+      stage: 'rendering',
+      currentFilename: 'image-3.RGB.png'
+    });
+
+    expect(progressBar.value).toBe(2);
+    expect(progressLabel.textContent).toBe('Exporting 3 of 3: image-3.RGB.png');
+    expect(status.textContent).toBe('Exporting 3 of 3: image-3.RGB.png');
+
+    (document.getElementById('export-batch-dialog-cancel-button') as HTMLButtonElement).click();
+    await flushMicrotasks();
+
+    expect(progress.classList.contains('hidden')).toBe(true);
+    expect((document.getElementById('export-batch-dialog-backdrop') as HTMLDivElement).classList.contains('hidden')).toBe(true);
   });
 
   it('defers large batch preview rendering after opening the dialog', async () => {

@@ -695,6 +695,23 @@ input[type='range'] {
   text-align: center;
 }
 
+.export-progress {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.export-progress-bar {
+  width: 100%;
+  height: 0.55rem;
+  accent-color: var(--accent);
+}
+
+.export-progress-label {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .app-dialog-checkbox {
   display: inline-flex;
   align-items: center;

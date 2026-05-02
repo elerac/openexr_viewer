@@ -15,6 +15,7 @@ import { DisposableBag, isAbortError, type Disposable } from '../lifecycle';
 import {
   DEFAULT_PNG_COMPRESSION_LEVEL,
   type ExportImagePreviewRequest,
+  type ExportProgressUpdate,
   type ExportImageRequest,
   type ExportImageTarget
 } from '../types';
@@ -23,9 +24,10 @@ import type { ExportImageDialogElements } from './elements';
 
 const EXPORT_IMAGE_PREVIEW_LOADING_MESSAGE = 'Loading preview...';
 const PNG_COMPRESSION_VALIDATION_MESSAGE = 'PNG compression must be an integer from 0 to 9.';
+const EXPORT_PROGRESS_REVEAL_DELAY_MS = 300;
 
 interface ExportImageDialogCallbacks {
-  onExportImage: (request: ExportImageRequest) => Promise<void>;
+  onExportImage: (request: ExportImageRequest, onProgress?: (update: ExportProgressUpdate) => void) => Promise<void>;
   onCancel?: (target: ExportImageTarget | null) => void;
   onScreenshotOutputSizeChange?: (size: { width: number; height: number }) => void;
   onResolveExportImagePreview: (
@@ -43,6 +45,9 @@ export class ExportImageDialogController implements Disposable {
   private previewResource: AsyncResource<ExportImagePixels> = idleResource();
   private restoreFocusTarget: HTMLElement | null = null;
   private exportImagePreviewAbortController: AbortController | null = null;
+  private exportProgressRevealTimeoutHandle: number | null = null;
+  private exportProgressVisible = false;
+  private exportProgressUpdate: ExportProgressUpdate | null = null;
   private nextRequestId = 1;
   private syncingScreenshotSize = false;
   private disposed = false;
@@ -85,6 +90,7 @@ export class ExportImageDialogController implements Disposable {
 
     this.disposed = true;
     this.cancelPreview();
+    this.resetExportProgress();
     this.disposables.dispose();
   }
 
@@ -148,6 +154,7 @@ export class ExportImageDialogController implements Disposable {
     this.open = false;
     this.dialogTarget = null;
     this.resetPreview();
+    this.resetExportProgress();
     this.setBusy(false);
     this.setError(null);
     this.elements.exportDialogBackdrop.classList.add('hidden');
@@ -264,9 +271,10 @@ export class ExportImageDialogController implements Disposable {
     const exportRequestId = this.takeRequestId();
     this.exportResource = pendingResource('export-image', exportRequestId);
     this.syncBusyControls();
+    const reportProgress = this.startExportProgress();
 
     try {
-      await this.callbacks.onExportImage(request);
+      await this.callbacks.onExportImage(request, reportProgress);
       if (!isPendingMatch(this.exportResource, 'export-image', exportRequestId)) {
         return;
       }
@@ -287,6 +295,7 @@ export class ExportImageDialogController implements Disposable {
         if (isPendingMatch(this.exportResource, 'export-image', exportRequestId)) {
           this.exportResource = idleResource();
         }
+        this.resetExportProgress();
         this.syncBusyControls();
       }
     }
@@ -443,11 +452,91 @@ export class ExportImageDialogController implements Disposable {
     this.elements.exportFormatSelect.disabled = true;
   }
 
+  private startExportProgress(): (update: ExportProgressUpdate) => void {
+    this.resetExportProgress();
+    this.exportProgressRevealTimeoutHandle = window.setTimeout(() => {
+      this.exportProgressRevealTimeoutHandle = null;
+      if (this.disposed || !this.open || !this.isExportPending()) {
+        return;
+      }
+
+      this.exportProgressVisible = true;
+      this.elements.exportProgress.classList.remove('hidden');
+      this.renderExportProgress();
+    }, EXPORT_PROGRESS_REVEAL_DELAY_MS);
+
+    return (update) => {
+      this.handleExportProgress(update);
+    };
+  }
+
+  private handleExportProgress(update: ExportProgressUpdate): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.exportProgressUpdate = { ...update };
+    if (this.exportProgressVisible) {
+      this.renderExportProgress();
+    }
+  }
+
+  private renderExportProgress(): void {
+    const update = this.exportProgressUpdate ?? {
+      completed: 0,
+      total: 1,
+      stage: 'preparing',
+      indeterminate: true
+    } satisfies ExportProgressUpdate;
+    this.elements.exportProgressBar.max = Math.max(1, update.total);
+    if (update.indeterminate) {
+      this.elements.exportProgressBar.removeAttribute('value');
+    } else {
+      this.elements.exportProgressBar.value = clampProgressValue(update.completed, update.total);
+    }
+    this.elements.exportProgressLabel.textContent = formatSingleExportProgress(update);
+  }
+
+  private resetExportProgress(): void {
+    if (this.exportProgressRevealTimeoutHandle !== null) {
+      window.clearTimeout(this.exportProgressRevealTimeoutHandle);
+      this.exportProgressRevealTimeoutHandle = null;
+    }
+
+    this.exportProgressVisible = false;
+    this.exportProgressUpdate = null;
+    this.elements.exportProgress.classList.add('hidden');
+    this.elements.exportProgressBar.max = 1;
+    this.elements.exportProgressBar.removeAttribute('value');
+    this.elements.exportProgressLabel.textContent = '';
+  }
+
   private takeRequestId(): number {
     const requestId = this.nextRequestId;
     this.nextRequestId += 1;
     return requestId;
   }
+}
+
+function formatSingleExportProgress(update: ExportProgressUpdate): string {
+  switch (update.stage) {
+    case 'rendering':
+      return 'Rendering image...';
+    case 'encoding':
+      return 'Encoding PNG...';
+    case 'packaging':
+      return 'Finishing export...';
+    default:
+      return 'Preparing export...';
+  }
+}
+
+function clampProgressValue(value: number, total: number): number {
+  if (!Number.isFinite(value) || !Number.isFinite(total) || total <= 0) {
+    return 0;
+  }
+
+  return Math.min(Math.max(value, 0), total);
 }
 
 export function buildDefaultExportFilename(displayName: string): string {

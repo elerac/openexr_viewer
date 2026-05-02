@@ -26,6 +26,7 @@ import {
   type ExportImageBatchPreviewRequest,
   type ExportImageBatchRequest,
   type ExportImageBatchTarget,
+  type ExportProgressUpdate,
   type ExportScreenshotRegion
 } from '../types';
 import { bindDialogBackdropDismiss } from './dialog-backdrop';
@@ -39,6 +40,7 @@ const PNG_COMPRESSION_VALIDATION_MESSAGE = 'PNG compression must be an integer f
 const BATCH_PREVIEW_IDLE_TIMEOUT_MS = 250;
 const BATCH_PREVIEW_IDLE_FALLBACK_DELAY_MS = 64;
 const SCREENSHOT_BATCH_PREVIEW_DEBOUNCE_MS = 250;
+const EXPORT_PROGRESS_REVEAL_DELAY_MS = 300;
 type ExportBatchDialogMode = 'image' | 'screenshot';
 export type ExportBatchFilenameSource = 'openFilesName' | 'sourcePath';
 
@@ -55,7 +57,11 @@ interface BatchPreviewWindowLike {
 }
 
 interface ExportImageBatchDialogCallbacks {
-  onExportImageBatch: (request: ExportImageBatchRequest, signal: AbortSignal) => Promise<void>;
+  onExportImageBatch: (
+    request: ExportImageBatchRequest,
+    signal: AbortSignal,
+    onProgress?: (update: ExportProgressUpdate) => void
+  ) => Promise<void>;
   onResolveExportImageBatchPreview: (
     request: ExportImageBatchPreviewRequest,
     signal: AbortSignal
@@ -100,6 +106,9 @@ export class ExportImageBatchDialogController implements Disposable {
   private previewProcessing = false;
   private previewScrollRafHandle: number | null = null;
   private screenshotPreviewDebounceHandle: number | null = null;
+  private exportProgressRevealTimeoutHandle: number | null = null;
+  private exportProgressVisible = false;
+  private exportProgressUpdate: ExportProgressUpdate | null = null;
   private previewJobSequence = 0;
   private readonly previewJobsByKey = new Map<string, BatchPreviewJob>();
   private readonly previewResourcesByKey = new Map<string, AsyncResource<string | null>>();
@@ -119,6 +128,7 @@ export class ExportImageBatchDialogController implements Disposable {
     this.disposables.addEventListener(this.elements.exportBatchDialogCancelButton, 'click', () => {
       if (this.busy) {
         this.callbacks.onCancel?.(this.dialogMode);
+        this.resetExportProgress();
         this.abortController?.abort(createAbortError('Batch export cancelled.'));
         this.setStatus('Canceling export...');
         return;
@@ -170,6 +180,7 @@ export class ExportImageBatchDialogController implements Disposable {
     this.abortController?.abort(createAbortError('Batch export dialog has been disposed.'));
     this.abortController = null;
     this.abortPreviewWork({ clearCache: true });
+    this.resetExportProgress();
     this.disposables.dispose();
   }
 
@@ -281,6 +292,7 @@ export class ExportImageBatchDialogController implements Disposable {
     this.abortController?.abort(createAbortError('Batch export cancelled.'));
     this.abortController = null;
     this.abortPreviewWork({ clearCache: true });
+    this.resetExportProgress();
     this.setBusy(false);
     this.setError(null);
     this.elements.exportBatchDialogBackdrop.classList.add('hidden');
@@ -1280,6 +1292,7 @@ export class ExportImageBatchDialogController implements Disposable {
     const requestId = this.takeRequestId();
     this.exportResource = pendingResource(BATCH_EXPORT_RESOURCE_KEY, requestId);
     this.syncBusyControls();
+    const reportProgress = this.startExportProgress();
 
     const abortController = new AbortController();
     this.abortController = abortController;
@@ -1292,7 +1305,7 @@ export class ExportImageBatchDialogController implements Disposable {
         ...(this.dialogMode === 'screenshot' && this.elements.exportBatchReproductionMetadataCheckbox.checked
           ? { includeReproductionMetadata: true }
           : {})
-      }, abortController.signal);
+      }, abortController.signal, reportProgress);
       if (this.abortController === abortController) {
         this.abortController = null;
       }
@@ -1317,6 +1330,7 @@ export class ExportImageBatchDialogController implements Disposable {
         if (isPendingMatch(this.exportResource, BATCH_EXPORT_RESOURCE_KEY, requestId)) {
           this.exportResource = idleResource();
         }
+        this.resetExportProgress();
         this.syncBusyControls();
         this.updateStatus();
       }
@@ -1326,6 +1340,94 @@ export class ExportImageBatchDialogController implements Disposable {
   private getFilenameSource(): ExportBatchFilenameSource {
     return this.elements.exportBatchUseOpenFilesNamesCheckbox.checked ? 'openFilesName' : 'sourcePath';
   }
+
+  private startExportProgress(): (update: ExportProgressUpdate) => void {
+    this.resetExportProgress();
+    this.exportProgressRevealTimeoutHandle = window.setTimeout(() => {
+      this.exportProgressRevealTimeoutHandle = null;
+      if (this.disposed || !this.open || !this.busy) {
+        return;
+      }
+
+      this.exportProgressVisible = true;
+      this.elements.exportBatchProgress.classList.remove('hidden');
+      this.renderExportProgress();
+    }, EXPORT_PROGRESS_REVEAL_DELAY_MS);
+
+    return (update) => {
+      this.handleExportProgress(update);
+    };
+  }
+
+  private handleExportProgress(update: ExportProgressUpdate): void {
+    if (this.disposed) {
+      return;
+    }
+
+    this.exportProgressUpdate = { ...update };
+    if (this.busy) {
+      this.setStatus(formatBatchExportProgress(update));
+    }
+    if (this.exportProgressVisible) {
+      this.renderExportProgress();
+    }
+  }
+
+  private renderExportProgress(): void {
+    const update = this.exportProgressUpdate ?? {
+      completed: 0,
+      total: 1,
+      stage: 'preparing'
+    } satisfies ExportProgressUpdate;
+    this.elements.exportBatchProgressBar.max = Math.max(1, update.total);
+    if (update.indeterminate) {
+      this.elements.exportBatchProgressBar.removeAttribute('value');
+    } else {
+      this.elements.exportBatchProgressBar.value = clampProgressValue(update.completed, update.total);
+    }
+    this.elements.exportBatchProgressLabel.textContent = formatBatchExportProgress(update);
+  }
+
+  private resetExportProgress(): void {
+    if (this.exportProgressRevealTimeoutHandle !== null) {
+      window.clearTimeout(this.exportProgressRevealTimeoutHandle);
+      this.exportProgressRevealTimeoutHandle = null;
+    }
+
+    this.exportProgressVisible = false;
+    this.exportProgressUpdate = null;
+    this.elements.exportBatchProgress.classList.add('hidden');
+    this.elements.exportBatchProgressBar.max = 1;
+    this.elements.exportBatchProgressBar.removeAttribute('value');
+    this.elements.exportBatchProgressLabel.textContent = '';
+  }
+}
+
+function formatBatchExportProgress(update: ExportProgressUpdate): string {
+  const total = Math.max(1, update.total);
+  const completed = clampProgressValue(update.completed, total);
+  if (update.stage === 'packaging') {
+    return `Packaging ${total === 1 ? '1 image' : `${total} images`}...`;
+  }
+
+  if (update.currentFilename) {
+    const activeIndex = Math.min(completed + 1, total);
+    return `Exporting ${activeIndex} of ${total}: ${update.currentFilename}`;
+  }
+
+  if (completed > 0) {
+    return `${completed} of ${total} ${total === 1 ? 'image' : 'images'} exported.`;
+  }
+
+  return 'Preparing batch export...';
+}
+
+function clampProgressValue(value: number, total: number): number {
+  if (!Number.isFinite(value) || !Number.isFinite(total) || total <= 0) {
+    return 0;
+  }
+
+  return Math.min(Math.max(value, 0), total);
 }
 
 export function buildExportBatchColumns(

@@ -52,6 +52,7 @@ import type {
   ExportImagePreviewRequest,
   ExportImageRequest,
   ExportImageTarget,
+  ExportProgressUpdate,
   ExportScreenshotRegion,
   ImageRoi,
   OpenedImageDropPlacement,
@@ -117,12 +118,16 @@ const RULERS_VISIBLE_STORAGE_KEY = 'openexr-viewer:rulers-visible:v1';
 export interface UiCallbacks {
   onOpenFileClick: () => void;
   onOpenFolderClick: () => void;
-  onExportImage: (request: ExportImageRequest) => Promise<void>;
+  onExportImage: (request: ExportImageRequest, onProgress?: (update: ExportProgressUpdate) => void) => Promise<void>;
   onResolveExportImagePreview: (
     request: ExportImagePreviewRequest,
     signal: AbortSignal
   ) => Promise<ExportImagePixels>;
-  onExportImageBatch: (request: ExportImageBatchRequest, signal: AbortSignal) => Promise<void>;
+  onExportImageBatch: (
+    request: ExportImageBatchRequest,
+    signal: AbortSignal,
+    onProgress?: (update: ExportProgressUpdate) => void
+  ) => Promise<void>;
   onResolveExportImageBatchPreview: (
     request: ExportImageBatchPreviewRequest,
     signal: AbortSignal
@@ -403,8 +408,8 @@ export class ViewerUi implements Disposable {
     });
     this.windowPreviewController = new WindowPreviewController(this.elements);
     this.exportImageDialog = new ExportImageDialogController(this.elements, {
-      onExportImage: async (request) => {
-        await this.callbacks.onExportImage(request);
+      onExportImage: async (request, onProgress) => {
+        await this.callbacks.onExportImage(request, onProgress);
         if (request.mode === 'screenshot') {
           this.hideScreenshotSelection();
         }
@@ -422,8 +427,8 @@ export class ViewerUi implements Disposable {
       }
     });
     this.exportImageBatchDialog = new ExportImageBatchDialogController(this.elements, {
-      onExportImageBatch: async (request, signal) => {
-        await this.callbacks.onExportImageBatch(request, signal);
+      onExportImageBatch: async (request, signal, onProgress) => {
+        await this.callbacks.onExportImageBatch(request, signal, onProgress);
         if (request.entries.some((entry) => entry.mode === 'screenshot')) {
           this.hideScreenshotSelection();
         }

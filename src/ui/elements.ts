@@ -64,6 +64,9 @@ export interface Elements {
   exportPreviewStage: HTMLDivElement;
   exportPreviewCanvas: HTMLCanvasElement;
   exportPreviewStatus: HTMLElement;
+  exportProgress: HTMLDivElement;
+  exportProgressBar: HTMLProgressElement;
+  exportProgressLabel: HTMLElement;
   exportDialogError: HTMLElement;
   exportDialogCancelButton: HTMLButtonElement;
   exportDialogSubmitButton: HTMLButtonElement;
@@ -84,6 +87,9 @@ export interface Elements {
   exportBatchSplitToggleButton: HTMLButtonElement;
   exportBatchMatrix: HTMLElement;
   exportBatchDialogStatus: HTMLElement;
+  exportBatchProgress: HTMLDivElement;
+  exportBatchProgressBar: HTMLProgressElement;
+  exportBatchProgressLabel: HTMLElement;
   exportBatchDialogError: HTMLElement;
   exportBatchDialogCancelButton: HTMLButtonElement;
   exportBatchDialogSubmitButton: HTMLButtonElement;
@@ -317,6 +323,9 @@ export type ExportImageDialogElements = Pick<
   | 'exportReproductionMetadataCheckbox'
   | 'exportPreviewCanvas'
   | 'exportPreviewStatus'
+  | 'exportProgress'
+  | 'exportProgressBar'
+  | 'exportProgressLabel'
   | 'exportDialogError'
   | 'exportDialogCancelButton'
   | 'exportDialogSubmitButton'
@@ -343,6 +352,9 @@ export type ExportImageBatchDialogElements = Pick<
   | 'exportBatchSplitToggleButton'
   | 'exportBatchMatrix'
   | 'exportBatchDialogStatus'
+  | 'exportBatchProgress'
+  | 'exportBatchProgressBar'
+  | 'exportBatchProgressLabel'
   | 'exportBatchDialogError'
   | 'exportBatchDialogCancelButton'
   | 'exportBatchDialogSubmitButton'
@@ -533,6 +545,9 @@ export function resolveElements(): Elements {
     exportPreviewStage: requireElement('export-preview-stage', HTMLDivElement),
     exportPreviewCanvas: requireElement('export-preview-canvas', HTMLCanvasElement),
     exportPreviewStatus: requireElement('export-preview-status', HTMLElement),
+    exportProgress: requireElement('export-progress', HTMLDivElement),
+    exportProgressBar: requireElement('export-progress-bar', HTMLProgressElement),
+    exportProgressLabel: requireElement('export-progress-label', HTMLElement),
     exportDialogError: requireElement('export-dialog-error', HTMLElement),
     exportDialogCancelButton: requireElement('export-dialog-cancel-button', HTMLButtonElement),
     exportDialogSubmitButton: requireElement('export-dialog-submit-button', HTMLButtonElement),
@@ -559,6 +574,9 @@ export function resolveElements(): Elements {
     exportBatchSplitToggleButton: requireElement('export-batch-split-toggle-button', HTMLButtonElement),
     exportBatchMatrix: requireElement('export-batch-matrix', HTMLElement),
     exportBatchDialogStatus: requireElement('export-batch-dialog-status', HTMLElement),
+    exportBatchProgress: requireElement('export-batch-progress', HTMLDivElement),
+    exportBatchProgressBar: requireElement('export-batch-progress-bar', HTMLProgressElement),
+    exportBatchProgressLabel: requireElement('export-batch-progress-label', HTMLElement),
     exportBatchDialogError: requireElement('export-batch-dialog-error', HTMLElement),
     exportBatchDialogCancelButton: requireElement('export-batch-dialog-cancel-button', HTMLButtonElement),
     exportBatchDialogSubmitButton: requireElement('export-batch-dialog-submit-button', HTMLButtonElement),

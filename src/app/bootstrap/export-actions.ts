@@ -30,6 +30,7 @@ import type {
   ExportImageBatchRequest,
   ExportImagePreviewRequest,
   ExportImageRequest,
+  ExportProgressUpdate,
   OpenedImageSession,
   ViewerState,
   ViewerSessionState
@@ -86,6 +87,7 @@ interface ExportImageBatchPreviewActionDependencies {
 }
 
 type ViewerStateProvider = () => ViewerAppState;
+type ExportProgressReporter = (update: ExportProgressUpdate) => void;
 
 interface ExportColormapActionDependencies {
   core: ViewerAppCore;
@@ -224,19 +226,23 @@ export async function handleExportImage(
     core,
     resolveImageExportPixels,
     isDisposed
-  }: ExportImageActionDependencies
+  }: ExportImageActionDependencies,
+  onProgress?: ExportProgressReporter
 ): Promise<void> {
   if (isDisposed()) {
     throw createAbortError('Viewer application has been disposed.');
   }
 
   try {
+    emitSingleExportProgress(onProgress, request, 'preparing');
     const stateSnapshot = core.getState();
     const sourceSession = selectActiveSession(stateSnapshot);
+    emitSingleExportProgress(onProgress, request, 'rendering');
     const pixels = await resolveImageExportPixels(request);
     if (sourceSession) {
       assertActiveSessionCurrent(core.getState(), sourceSession);
     }
+    emitSingleExportProgress(onProgress, request, 'encoding');
     const blob = await createPngBlobFromPixels(pixels, {
       compressionLevel: request.pngCompressionLevel
     });
@@ -246,6 +252,7 @@ export async function handleExportImage(
     if (isDisposed()) {
       throw createAbortError('Viewer application has been disposed.');
     }
+    emitSingleExportProgress(onProgress, request, 'packaging', 1);
     if (sourceSession && request.mode === 'screenshot' && request.includeReproductionMetadata) {
       const jsonFilename = buildReproductionMetadataFilename(request.filename);
       const metadata = buildScreenshotReproductionMetadata({
@@ -287,7 +294,8 @@ export async function handleExportImageBatch(
     getRenderCache,
     getRenderer,
     isDisposed
-  }: ExportImageBatchActionDependencies
+  }: ExportImageBatchActionDependencies,
+  onProgress?: ExportProgressReporter
 ): Promise<void> {
   if (isDisposed()) {
     throw createAbortError('Viewer application has been disposed.');
@@ -307,7 +315,13 @@ export async function handleExportImageBatch(
     }
 
     const files: Record<string, Uint8Array> = {};
-    for (const entry of request.entries) {
+    onProgress?.({
+      completed: 0,
+      total: request.entries.length,
+      stage: 'preparing'
+    });
+
+    for (const [entryIndex, entry] of request.entries.entries()) {
       throwIfAborted(signal, 'Batch export cancelled.');
       if (isDisposed()) {
         throw createAbortError('Viewer application has been disposed.');
@@ -318,6 +332,12 @@ export async function handleExportImageBatch(
         throw new Error(`Image is no longer open: ${entry.sessionId}`);
       }
 
+      onProgress?.({
+        completed: entryIndex,
+        total: request.entries.length,
+        stage: 'rendering',
+        currentFilename: entry.outputFilename
+      });
       const result = await resolveBatchEntryExportResult({
         entry,
         session,
@@ -329,12 +349,23 @@ export async function handleExportImageBatch(
         signal,
         abortMessage: 'Batch export cancelled.'
       });
+      onProgress?.({
+        completed: entryIndex,
+        total: request.entries.length,
+        stage: 'encoding',
+        currentFilename: entry.outputFilename
+      });
       const blob = await createPngBlobFromPixels(result.pixels, {
         compressionLevel: request.pngCompressionLevel
       });
       throwIfAborted(signal, 'Batch export cancelled.');
       assertSessionCurrent(core.getState(), session, signal);
       files[entry.outputFilename] = new Uint8Array(await blob.arrayBuffer());
+      onProgress?.({
+        completed: entryIndex + 1,
+        total: request.entries.length,
+        stage: 'encoding'
+      });
       if (request.includeReproductionMetadata && entry.mode === 'screenshot') {
         const jsonFilename = buildReproductionMetadataFilename(entry.outputFilename);
         const metadata = buildScreenshotReproductionMetadata({
@@ -357,6 +388,11 @@ export async function handleExportImageBatch(
       assertSessionCurrent(core.getState(), session, signal);
     }
 
+    onProgress?.({
+      completed: request.entries.length,
+      total: request.entries.length,
+      stage: 'packaging'
+    });
     const zipBlob = createZipBlob(files);
     if (isDisposed()) {
       throw createAbortError('Viewer application has been disposed.');
@@ -851,6 +887,21 @@ function createZipBlob(files: Record<string, Uint8Array>): Blob {
   const zipBytes = zipSync(files);
   const zipBuffer = zipBytes.buffer.slice(zipBytes.byteOffset, zipBytes.byteOffset + zipBytes.byteLength) as ArrayBuffer;
   return new Blob([zipBuffer], { type: 'application/zip' });
+}
+
+function emitSingleExportProgress(
+  onProgress: ExportProgressReporter | undefined,
+  request: ExportImageRequest,
+  stage: ExportProgressUpdate['stage'],
+  completed = 0
+): void {
+  onProgress?.({
+    completed,
+    total: 1,
+    stage,
+    currentFilename: request.filename,
+    indeterminate: true
+  });
 }
 
 function buildScreenshotMetadataBundleFilename(pngFilename: string): string {

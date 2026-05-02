@@ -301,6 +301,16 @@ export interface ExportImageBatchRequest {
   includeReproductionMetadata?: boolean;
 }
 
+export type ExportProgressStage = 'preparing' | 'rendering' | 'encoding' | 'packaging';
+
+export interface ExportProgressUpdate {
+  completed: number;
+  total: number;
+  stage: ExportProgressStage;
+  currentFilename?: string;
+  indeterminate?: boolean;
+}
+
 export interface ExportColormapRequest extends PngExportOptions {
   colormapId: string;
   width: number;

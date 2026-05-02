@@ -494,6 +494,15 @@
                 ></p>
               </div>
             </div>
+            <div
+              id="export-progress"
+              class="export-progress hidden"
+              role="status"
+              aria-live="polite"
+            >
+              <progress id="export-progress-bar" class="export-progress-bar" max="1"></progress>
+              <span id="export-progress-label" class="export-progress-label"></span>
+            </div>
             <p id="export-dialog-error" class="app-dialog-error hidden" role="alert"></p>
           </div>
           <div class="app-dialog-actions">
@@ -587,6 +596,15 @@
               role="status"
               aria-live="polite"
             ></p>
+            <div
+              id="export-batch-progress"
+              class="export-progress export-batch-progress hidden"
+              role="status"
+              aria-live="polite"
+            >
+              <progress id="export-batch-progress-bar" class="export-progress-bar" max="1"></progress>
+              <span id="export-batch-progress-label" class="export-progress-label"></span>
+            </div>
             <p id="export-batch-dialog-error" class="app-dialog-error hidden" role="alert"></p>
           </div>
           <div class="app-dialog-actions">
