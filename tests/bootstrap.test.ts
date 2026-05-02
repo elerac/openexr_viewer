@@ -422,8 +422,11 @@ vi.mock('../src/colormaps', () => ({
 }));
 
 vi.mock('../src/export-image', () => ({
-  buildColormapExportPixels: mocks.buildColormapExportPixels,
   createPngBlobFromPixels: mocks.createPngBlobFromPixels
+}));
+
+vi.mock('../src/export/export-pixels', () => ({
+  buildColormapExportPixels: mocks.buildColormapExportPixels
 }));
 
 afterEach(() => {

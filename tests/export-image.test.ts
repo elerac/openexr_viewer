@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { linearToSrgbByte } from '../src/color';
 import {
   buildColormapExportPixels,
-  buildExportImagePixels,
+  buildExportImagePixels
+} from '../src/export/export-pixels';
+import {
   createPngDataUrlFromPixels,
   createPngBlobFromPixels,
   renderPixelsToCanvas

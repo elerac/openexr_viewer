@@ -1,4 +1,4 @@
-import { samplePixelValuesForDisplay } from '../display-texture';
+import { samplePixelValuesForDisplay } from '../sampling/probe';
 import {
   buildProbeColorPreview,
   resolveActiveProbePixel,

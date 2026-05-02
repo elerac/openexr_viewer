@@ -1,4 +1,4 @@
-import { normalizeAutoExposurePercentile } from '../../auto-exposure';
+import { normalizeAutoExposurePercentile } from '../../analysis/auto-exposure';
 import { idleResource } from '../../async-resource';
 import type { ViewerAppState, ViewerIntent } from '../viewer-app-types';
 import type { ViewerReducerContext } from './shared';

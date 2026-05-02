@@ -1,4 +1,4 @@
-import { createEmptyDisplaySourceBinding } from '../../display-texture';
+import { createEmptyDisplaySourceBinding } from '../../display/bindings';
 import { REQUIRED_TEXTURE_UNITS } from './constants';
 import { createColormapTexture } from './colormap-texture';
 import { createImageProgram } from './image-program';

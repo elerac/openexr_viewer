@@ -1,6 +1,6 @@
-import { createEmptyDisplaySourceBinding, type DisplaySourceBinding } from '../../display-texture';
+import { createEmptyDisplaySourceBinding, type DisplaySourceBinding } from '../../display/bindings';
 import type { ResidentChannelUpload } from '../../display-cache';
-import type { ExportImagePixels } from '../../export-image';
+import type { ExportImagePixels } from '../../export/export-pixels';
 import type { Disposable } from '../../lifecycle';
 import type { DecodedLayer, ViewerState, ViewportInfo } from '../../types';
 import { REQUIRED_TEXTURE_UNITS } from './constants';

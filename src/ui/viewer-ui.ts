@@ -38,7 +38,7 @@ import {
 import { OpenedImagesPanel } from './opened-images-panel';
 import { DisposableBag, type Disposable } from '../lifecycle';
 import type { ColormapLut } from '../colormaps';
-import type { ExportImagePixels } from '../export-image';
+import type { ExportImagePixels } from '../export/export-pixels';
 import type { ImageStatsReadoutModel, ViewerStateReadoutModel } from '../app/viewer-app-types';
 import type {
   DisplaySelection,
@@ -107,7 +107,7 @@ import {
   AUTO_EXPOSURE_PERCENTILE_STEP,
   formatAutoExposurePercentile,
   parseAutoExposurePercentile
-} from '../auto-exposure';
+} from '../analysis/auto-exposure';
 
 const AUTO_FIT_IMAGE_ON_SELECT_STORAGE_KEY = 'openexr-viewer:auto-fit-image-on-select:v1';
 const AUTO_EXPOSURE_STORAGE_KEY = 'openexr-viewer:auto-exposure:v1';

@@ -1,6 +1,6 @@
 import { WebGlExrRenderer } from '../renderer';
 import { RenderCacheService } from '../services/render-cache-service';
-import { buildDisplayLuminanceRevisionKey } from '../display-texture';
+import { buildDisplayLuminanceRevisionKey } from '../display/revision-keys';
 import { ViewerUi } from '../ui/viewer-ui';
 import { ViewerAppCore } from './viewer-app-core';
 import { ViewerRenderInvalidationFlags } from './viewer-app-render';

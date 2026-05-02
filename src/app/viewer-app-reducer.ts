@@ -1,4 +1,4 @@
-import { AUTO_EXPOSURE_PERCENTILE } from '../auto-exposure';
+import { AUTO_EXPOSURE_PERCENTILE } from '../analysis/auto-exposure';
 import { idleResource } from '../async-resource';
 import { DEFAULT_COLORMAP_ID } from '../colormaps';
 import { createDefaultStokesColormapDefaultSettings } from '../stokes';

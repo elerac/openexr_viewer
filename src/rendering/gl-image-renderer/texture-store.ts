@@ -2,7 +2,7 @@ import { discardMaterializedChannel, getChannelDenseArray } from '../../channel-
 import {
   DISPLAY_SOURCE_SLOT_COUNT,
   type DisplaySourceBinding
-} from '../../display-texture';
+} from '../../display/bindings';
 import type { ResidentChannelUpload } from '../../display-cache';
 import type { DecodedLayer } from '../../types';
 import type { GlImageRendererState, LayerSourceTextures } from './types';

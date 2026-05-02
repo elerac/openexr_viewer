@@ -1,9 +1,9 @@
-import { AUTO_EXPOSURE_SOURCE } from '../auto-exposure';
+import { AUTO_EXPOSURE_SOURCE } from '../analysis/auto-exposure';
 import {
   buildDisplayAutoExposureRevisionKey,
   buildDisplayImageStatsRevisionKey,
   buildDisplayLuminanceRevisionKey
-} from '../display-texture';
+} from '../display/revision-keys';
 import { sameDisplayLuminanceRange } from '../colormap-range';
 import { sameDisplaySelection } from '../display-model';
 import {

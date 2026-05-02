@@ -1,5 +1,5 @@
-import type { DisplaySourceBinding } from '../../display-texture';
-import type { ExportImagePixels } from '../../export-image';
+import type { DisplaySourceBinding } from '../../display/bindings';
+import type { ExportImagePixels } from '../../export/export-pixels';
 import type { DecodedLayer, ViewerState, ViewportInfo, ViewportRect } from '../../types';
 
 export interface CommonUniforms {

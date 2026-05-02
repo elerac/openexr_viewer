@@ -1,0 +1,138 @@
+import { describe, expect, it } from 'vitest';
+import { __debugGetMaterializedChannelCount } from '../src/channel-storage';
+import { computeRec709Luminance } from '../src/color';
+import {
+  buildDisplayTexture,
+  buildSelectedDisplayTexture,
+  buildStokesDisplayTexture
+} from '../src/display/materialize-cpu';
+import { samplePixelValuesForDisplay } from '../src/sampling/probe';
+import {
+  createChannelMonoSelection,
+  createChannelRgbSelection,
+  createLayer,
+  createLayerFromChannels,
+  createStokesSelection
+} from './helpers/state-fixtures';
+
+describe('display CPU materialization', () => {
+  it('builds RGBA display texture from selected channels', () => {
+    const layer = createLayer();
+    const texture = buildDisplayTexture(layer, 2, 2, 'R', 'G', 'B');
+
+    expect(texture.length).toBe(16);
+    expect(Array.from(texture.slice(0, 4))).toEqual([0, 10, 20, 1]);
+    expect(Array.from(texture.slice(12, 16))).toEqual([3, 13, 23, 1]);
+  });
+
+  it('writes selected display alpha into RGBA display textures', () => {
+    const layer = createLayerFromChannels({
+      R: [1, 1, 1, 1],
+      G: [0, 0, 0, 0],
+      B: [0, 0, 0, 0],
+      A: [0.25, 2, -1, Number.NaN]
+    }, 'rgba');
+
+    const texture = buildDisplayTexture(layer, 2, 2, 'R', 'G', 'B', 'A');
+    expect(Array.from(texture.filter((_, index) => index % 4 === 3))).toEqual([0.25, 1, 0, 0]);
+  });
+
+  it('builds grayscale display textures for mono selections', () => {
+    const layer = createLayerFromChannels({
+      Y: [0.25, 0.5, 0.75, 1]
+    }, 'gray');
+
+    const texture = buildSelectedDisplayTexture(layer, 2, 2, createChannelMonoSelection('Y'));
+    expect(Array.from(texture.slice(0, 4))).toEqual([0.25, 0.25, 0.25, 1]);
+    expect(Array.from(texture.slice(12, 16))).toEqual([1, 1, 1, 1]);
+  });
+
+  it('builds scalar Stokes AoLP display textures with values duplicated across RGB', () => {
+    const layer = createLayerFromChannels({
+      S0: [1, 1, 1, 1],
+      S1: [1, 0, -1, 0],
+      S2: [0, 1, 0, -1],
+      S3: [0, 0, 0, 0]
+    }, 'stokes');
+
+    const texture = buildStokesDisplayTexture(layer, 2, 2, createStokesSelection('aolp'));
+
+    expect(Array.from(texture.slice(0, 4))).toEqual([0, 0, 0, 1]);
+    expect(texture[4]).toBeCloseTo(Math.PI / 4, 6);
+    expect(texture[5]).toBeCloseTo(Math.PI / 4, 6);
+    expect(texture[8]).toBeCloseTo(Math.PI / 2, 6);
+    expect(texture[12]).toBeCloseTo((3 * Math.PI) / 4, 6);
+  });
+
+  it('builds scalar Stokes DoLP display textures and stabilizes invalid samples', () => {
+    const layer = createLayerFromChannels({
+      S0: [1, 2, 0, 1],
+      S1: [1, 1, 1, Number.NaN],
+      S2: [0, Math.sqrt(3), 1, 0],
+      S3: [0, 0, 0, 0]
+    }, 'stokes');
+
+    const texture = buildSelectedDisplayTexture(layer, 2, 2, createStokesSelection('dolp'));
+    expect(texture[0]).toBeCloseTo(1, 6);
+    expect(texture[4]).toBeCloseTo(1, 6);
+    expect(texture[8]).toBe(0);
+    expect(texture[12]).toBe(0);
+  });
+
+  it('builds grouped RGB Stokes display textures for None and Colormap, plus split RGB textures', () => {
+    const layer = createLayerFromChannels({
+      'S0.R': [1],
+      'S0.G': [2],
+      'S0.B': [4],
+      'S1.R': [1],
+      'S1.G': [1],
+      'S1.B': [2],
+      'S2.R': [0],
+      'S2.G': [Math.sqrt(3)],
+      'S2.B': [0],
+      'S3.R': [0],
+      'S3.G': [0],
+      'S3.B': [0]
+    }, 'stokes-rgb');
+
+    const grouped = buildSelectedDisplayTexture(layer, 1, 1, createStokesSelection('dolp', 'stokesRgb'));
+    const groupedColormap = buildSelectedDisplayTexture(
+      layer,
+      1,
+      1,
+      createStokesSelection('dolp', 'stokesRgb'),
+      'colormap'
+    );
+    const split = buildSelectedDisplayTexture(layer, 1, 1, createStokesSelection('aolp', 'stokesRgb', 'G'));
+
+    expect(grouped[0]).toBeCloseTo(1, 6);
+    expect(grouped[1]).toBeCloseTo(1, 6);
+    expect(grouped[2]).toBeCloseTo(0.5, 6);
+    expect(groupedColormap[0]).toBeCloseTo(
+      Math.sqrt(
+        computeRec709Luminance(1, 1, 2) ** 2 +
+        computeRec709Luminance(0, Math.sqrt(3), 0) ** 2
+      ) / computeRec709Luminance(1, 2, 4),
+      6
+    );
+    expect(split[0]).toBeCloseTo(Math.PI / 6, 6);
+    expect(split[1]).toBeCloseTo(Math.PI / 6, 6);
+    expect(split[2]).toBeCloseTo(Math.PI / 6, 6);
+  });
+
+  it('handles null display selections by returning black textures', () => {
+    const layer = createLayer();
+    const texture = buildSelectedDisplayTexture(layer, 2, 2, null);
+    expect(Array.from(texture)).toEqual(new Array(16).fill(0).map((value, index) => index % 4 === 3 ? 1 : 0));
+  });
+
+  it('does not trigger planar materialization during normal display reads', () => {
+    const layer = createLayer();
+
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
+    buildSelectedDisplayTexture(layer, 2, 2, createChannelRgbSelection('R', 'G', 'B'));
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
+    samplePixelValuesForDisplay(layer, 2, 2, { ix: 0, iy: 0 }, createChannelRgbSelection('R', 'G', 'B'));
+    expect(__debugGetMaterializedChannelCount(layer)).toBe(0);
+  });
+});

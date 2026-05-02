@@ -1,6 +1,6 @@
 import type { ChannelViewThumbnailItem } from '../channel-view-items';
 import type { AsyncResource, ViewerError } from '../async-resource';
-import type { AutoExposureResult } from '../auto-exposure';
+import type { AutoExposureResult } from '../analysis/auto-exposure';
 import type { ColormapLut, ColormapRegistry } from '../colormaps';
 import type { ProbeColorPreview } from '../probe';
 import type {

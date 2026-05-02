@@ -3,7 +3,7 @@ import {
   createAutoExposureResult,
   normalizeAutoExposurePercentile,
   type AutoExposureResult
-} from './auto-exposure';
+} from './analysis/auto-exposure';
 import { computeRec709Luminance, linearToSrgbByte } from './color';
 import {
   mapValueToColormapRgbBytes,
@@ -23,7 +23,7 @@ import {
   readDisplaySelectionSnapshotPixelValuesAtIndex,
   resolveDisplaySelectionEvaluator,
   type DisplayPixelValues
-} from './display-texture';
+} from './display/evaluator';
 import { isStokesDegreeModulationEnabled, resolveStokesDegreeModulationMode } from './stokes';
 import {
   DecodedExrImage,

@@ -7,7 +7,8 @@ import {
   shouldPreserveStokesColormapState,
   shouldRefreshDisplayLuminanceRange
 } from '../src/colormap-range';
-import { buildDisplayTexture, computeDisplaySelectionLuminanceRange } from '../src/display-texture';
+import { computeDisplaySelectionLuminanceRange } from '../src/analysis/image-stats';
+import { buildDisplayTexture } from '../src/display/materialize-cpu';
 import { DisplaySelection } from '../src/types';
 import {
   createChannelRgbSelection,

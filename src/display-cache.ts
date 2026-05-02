@@ -1,4 +1,4 @@
-import type { AutoExposureResult } from './auto-exposure';
+import type { AutoExposureResult } from './analysis/auto-exposure';
 import type { AsyncResource } from './async-resource';
 import type { DecodedExrImage, DisplayLuminanceRange, ImageStats } from './types';
 

@@ -2,7 +2,9 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { __debugGetMaterializedChannel, __debugGetMaterializedChannelCount } from '../src/channel-storage';
-import { buildDisplaySourceBinding } from '../src/display-texture';
+import { buildDisplaySourceBinding, getDisplaySourceBindingChannelNames } from '../src/display/bindings';
+import { resolveDisplaySourceModeUniformValue } from '../src/display/gpu-bindings';
+import { buildSelectedDisplayTexture } from '../src/display/materialize-cpu';
 import { clampPanoramaProjectionPitch } from '../src/interaction/panorama-geometry';
 import { GlImageRenderer } from '../src/rendering/gl-image-renderer';
 import { createEmptyRoiInteractionState } from '../src/view-state';
@@ -10,6 +12,7 @@ import { createInitialState } from '../src/viewer-store';
 import {
   createChannelMonoSelection,
   createChannelRgbSelection,
+  createStokesSelection,
   createLayerFromChannels,
   createInterleavedLayerFromChannels
 } from './helpers/state-fixtures';
@@ -585,6 +588,102 @@ describe('gl image renderer', () => {
     });
 
     expect(lastUniform2fValue(gl, 'uViewportOrigin')).toEqual([0, 0]);
+  });
+
+  it('keeps CPU materialization and shader-facing bindings aligned for display modes', () => {
+    const { renderer, gl } = createHarness();
+    const cases = [
+      {
+        label: 'rgb',
+        layer: createLayerFromChannels({ R: [0.25], G: [0.5], B: [1] }),
+        selection: createChannelRgbSelection('R', 'G', 'B'),
+        visualizationMode: 'rgb' as const,
+        expectedPixel: [0.25, 0.5, 1, 1]
+      },
+      {
+        label: 'mono alpha',
+        layer: createLayerFromChannels({ Y: [0.75], A: [0.5] }),
+        selection: createChannelMonoSelection('Y', 'A'),
+        visualizationMode: 'rgb' as const,
+        expectedPixel: [0.75, 0.75, 0.75, 0.5]
+      },
+      {
+        label: 'scalar stokes',
+        layer: createLayerFromChannels({ S0: [1], S1: [0], S2: [1], S3: [0] }),
+        selection: createStokesSelection('aolp'),
+        visualizationMode: 'rgb' as const,
+        expectedPixel: [Math.PI / 4, Math.PI / 4, Math.PI / 4, 1]
+      },
+      {
+        label: 'grouped rgb stokes',
+        layer: createLayerFromChannels({
+          'S0.R': [1], 'S0.G': [2], 'S0.B': [4],
+          'S1.R': [1], 'S1.G': [1], 'S1.B': [2],
+          'S2.R': [0], 'S2.G': [Math.sqrt(3)], 'S2.B': [0],
+          'S3.R': [0], 'S3.G': [0], 'S3.B': [0]
+        }),
+        selection: createStokesSelection('dolp', 'stokesRgb'),
+        visualizationMode: 'rgb' as const,
+        expectedPixel: [1, 1, 0.5, 1]
+      },
+      {
+        label: 'grouped rgb stokes colormap',
+        layer: createLayerFromChannels({
+          'S0.R': [1], 'S0.G': [2], 'S0.B': [4],
+          'S1.R': [1], 'S1.G': [1], 'S1.B': [2],
+          'S2.R': [0], 'S2.G': [Math.sqrt(3)], 'S2.B': [0],
+          'S3.R': [0], 'S3.G': [0], 'S3.B': [0]
+        }),
+        selection: createStokesSelection('dolp', 'stokesRgb'),
+        visualizationMode: 'colormap' as const,
+        expectedPixel: [
+          0.8480879693007776,
+          0.8480879693007776,
+          0.8480879693007776,
+          1
+        ]
+      }
+    ];
+
+    for (let index = 0; index < cases.length; index += 1) {
+      const item = cases[index];
+      const binding = buildDisplaySourceBinding(item.layer, item.selection, item.visualizationMode);
+      const cpuTexture = buildSelectedDisplayTexture(item.layer, 1, 1, item.selection, item.visualizationMode);
+      const state = {
+        ...createInitialState(),
+        visualizationMode: item.visualizationMode,
+        displaySelection: item.selection,
+        hoveredPixel: null,
+        draftRoi: null,
+        roiInteraction: createEmptyRoiInteractionState()
+      };
+
+      renderer.ensureLayerChannelsResident(
+        `session-${index}`,
+        0,
+        1,
+        1,
+        item.layer,
+        getDisplaySourceBindingChannelNames(binding)
+      );
+      renderer.setDisplaySelectionBindings(`session-${index}`, 0, 1, 1, binding);
+      gl.readPixels.mockImplementationOnce((_x, _y, _width, _height, _format, _type, data: Uint8ClampedArray) => {
+        data.set([index, index + 1, index + 2, 255]);
+      });
+
+      const pixels = renderer.readExportPixels({
+        state,
+        sourceWidth: 1,
+        sourceHeight: 1
+      });
+
+      expect(item.label).toBeTruthy();
+      expect(lastUniform1iValue(gl, 'uDisplayMode')).toBe(resolveDisplaySourceModeUniformValue(binding.mode));
+      expect(pixels.data).toEqual(new Uint8ClampedArray([index, index + 1, index + 2, 255]));
+      for (let channel = 0; channel < item.expectedPixel.length; channel += 1) {
+        expect(cpuTexture[channel]).toBeCloseTo(item.expectedPixel[channel], 6);
+      }
+    }
   });
 });
 

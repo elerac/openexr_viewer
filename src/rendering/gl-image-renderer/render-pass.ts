@@ -1,16 +1,16 @@
 import { isStokesDegreeModulationEnabled, resolveStokesDegreeModulationMode } from '../../stokes';
-import type { DisplaySourceBinding, DisplaySourceMode } from '../../display-texture';
+import {
+  resolveAlphaOutputModeUniformValue,
+  resolveDisplaySourceModeUniformValue,
+  resolveStokesParameterUniformValue
+} from '../../display/gpu-bindings';
 import { clampPanoramaProjectionPitch } from '../../interaction/panorama-geometry';
 import type { ViewerState } from '../../types';
 import {
-  ALPHA_OUTPUT_OPAQUE,
-  ALPHA_OUTPUT_PREMULTIPLIED,
-  ALPHA_OUTPUT_STRAIGHT,
   COLORMAP_TEXTURE_UNIT,
   DEFAULT_RENDER_PASS_OPTIONS
 } from './constants';
 import type {
-  AlphaOutputMode,
   CommonUniforms,
   GlImageRendererState,
   RenderPassOptions
@@ -122,57 +122,4 @@ function setCommonUniforms(
   gl.uniform1i(uniforms.useImageAlpha, state.activeBinding.usesImageAlpha ? 1 : 0);
   gl.uniform1i(uniforms.compositeCheckerboard, options.compositeCheckerboard ? 1 : 0);
   gl.uniform1i(uniforms.alphaOutputMode, resolveAlphaOutputModeUniformValue(options.alphaOutputMode));
-}
-
-function resolveDisplaySourceModeUniformValue(mode: DisplaySourceMode): number {
-  switch (mode) {
-    case 'empty':
-      return 0;
-    case 'channelRgb':
-      return 1;
-    case 'channelMono':
-      return 2;
-    case 'stokesDirect':
-      return 3;
-    case 'stokesRgb':
-      return 4;
-    case 'stokesRgbLuminance':
-      return 5;
-  }
-}
-
-function resolveStokesParameterUniformValue(parameter: DisplaySourceBinding['stokesParameter']): number {
-  switch (parameter) {
-    case 'aolp':
-      return 0;
-    case 'dolp':
-      return 1;
-    case 'dop':
-      return 2;
-    case 'docp':
-      return 3;
-    case 'cop':
-      return 4;
-    case 'top':
-      return 5;
-    case 's1_over_s0':
-      return 6;
-    case 's2_over_s0':
-      return 7;
-    case 's3_over_s0':
-      return 8;
-    case null:
-      return -1;
-  }
-}
-
-function resolveAlphaOutputModeUniformValue(mode: AlphaOutputMode): number {
-  switch (mode) {
-    case 'opaque':
-      return ALPHA_OUTPUT_OPAQUE;
-    case 'straight':
-      return ALPHA_OUTPUT_STRAIGHT;
-    case 'premultiplied':
-      return ALPHA_OUTPUT_PREMULTIPLIED;
-  }
 }

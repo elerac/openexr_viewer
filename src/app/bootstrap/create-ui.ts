@@ -8,7 +8,7 @@ import {
   handleExportImageBatch,
   resolveExportImageBatchPreviewPixels
 } from './export-actions';
-import type { ExportImagePixels } from '../../export-image';
+import type { ExportImagePixels } from '../../export/export-pixels';
 import { mergeRenderState } from '../../view-state';
 import { selectActiveSession } from '../viewer-app-selectors';
 import { ViewerAppCore } from '../viewer-app-core';

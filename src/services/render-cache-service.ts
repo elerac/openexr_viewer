@@ -14,25 +14,31 @@ import {
 import {
   AUTO_EXPOSURE_PERCENTILE,
   type AutoExposureResult
-} from '../auto-exposure';
+} from '../analysis/auto-exposure';
 import {
   pendingResource,
   successResource
 } from '../async-resource';
 import {
+  buildDisplaySourceBinding,
+  getDisplaySourceBindingChannelNames
+} from '../display/bindings';
+import {
   buildDisplayAutoExposureRevisionKey,
   buildDisplayImageStatsRevisionKey,
   buildDisplayLuminanceRevisionKey,
-  buildDisplaySourceBinding,
-  getDisplaySourceBindingChannelNames,
   buildDisplayTextureRevisionKey,
-  serializeDisplaySelectionLuminanceKey,
+  serializeDisplaySelectionLuminanceKey
+} from '../display/revision-keys';
+import {
   computeDisplaySelectionLuminanceRange,
   computeDisplaySelectionLuminanceRangeAsync,
-  computeDisplaySelectionImageStatsAsync,
+  computeDisplaySelectionImageStatsAsync
+} from '../analysis/image-stats';
+import {
   computeDisplaySelectionAutoExposureAsync,
   computeDisplaySelectionAutoExposurePreview
-} from '../display-texture';
+} from '../analysis/auto-exposure';
 import { cloneDisplaySelection, type DisplaySelection } from '../display-model';
 import { getFiniteChannelRange } from '../channel-storage';
 import type {

@@ -2,7 +2,7 @@ import {
   readDisplaySelectionPixelValuesAtIndex,
   resolveDisplaySelectionEvaluator,
   type DisplaySelectionEvaluator
-} from '../display-texture';
+} from '../display/evaluator';
 import type { Disposable } from '../lifecycle';
 import type { DecodedLayer, ViewerState, ViewportInfo } from '../types';
 import { buildOverlayValueLines } from './overlay-value-lines';

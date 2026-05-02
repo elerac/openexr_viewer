@@ -1,4 +1,4 @@
-import { DISPLAY_SOURCE_SLOT_COUNT } from '../../display-texture';
+import { DISPLAY_SOURCE_SLOT_COUNT } from '../../display/bindings';
 import { COLORMAP_TEXTURE_UNIT } from './constants';
 import type { CommonUniforms } from './types';
 

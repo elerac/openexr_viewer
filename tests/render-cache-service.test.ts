@@ -5,7 +5,7 @@ import {
   buildDisplayAutoExposureRevisionKey,
   buildDisplayImageStatsRevisionKey,
   buildDisplayLuminanceRevisionKey
-} from '../src/display-texture';
+} from '../src/display/revision-keys';
 import type { DecodedExrImage, DecodedLayer, DisplayLuminanceRange, ImageStats, OpenedImageSession } from '../src/types';
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
 import {

@@ -1,4 +1,4 @@
-import { computeDisplaySelectionRoiStats } from '../display-texture';
+import { computeDisplaySelectionRoiStats } from '../analysis/roi-stats';
 import type { RoiReadoutModel } from './viewer-app-types';
 import type {
   DecodedLayer,
