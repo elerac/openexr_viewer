@@ -9,8 +9,9 @@ import {
 import { ViewerAppCore } from '../app/viewer-app-core';
 import { buildLoadedSession, buildReloadedSession } from '../app/session-resource';
 import { selectActiveSession } from '../app/viewer-app-selectors';
-import { LoadQueueService, type LoadQueueOptions } from '../services/load-queue';
+import { LoadQueueService, type LoadQueueOptions, type LoadQueuePriority } from '../services/load-queue';
 import type { DecodeBytesOptions } from '../exr-decode-context';
+import { buildSessionDisplayName } from '../session-state';
 import {
   DEFAULT_FOLDER_LOAD_LIMITS,
   createFolderLoadAdmission,
@@ -22,6 +23,7 @@ import type {
   DecodedExrImage,
   OpenedImageDropPlacement,
   OpenedImageSession,
+  PendingOpenedImageReservation,
   SessionSource,
   ViewportInfo,
   ViewportInsets
@@ -46,6 +48,17 @@ interface PendingLoadResource {
   requestId: number;
 }
 
+interface ReservedFileLoad {
+  file: File;
+  reservation: PendingOpenedImageReservation;
+}
+
+interface PendingOpenedImageReservationGroup {
+  priority: LoadQueuePriority;
+  category: string;
+  sessionIds: string[];
+}
+
 export interface FolderLoadOptions {
   overrideLimits?: boolean;
 }
@@ -67,8 +80,10 @@ export class SessionController implements Disposable {
 
   private readonly abortController = new AbortController();
   private readonly loadResourcesByKey = new Map<string, AsyncResource<void>>();
+  private readonly pendingOpenedImageReservationGroups = new Map<string, PendingOpenedImageReservationGroup>();
   private nextLoadRequestId = 1;
   private nextLoadGroupId = 1;
+  private nextPendingReservationGroupId = 1;
   private disposed = false;
 
   constructor(dependencies: SessionControllerDependencies) {
@@ -85,11 +100,17 @@ export class SessionController implements Disposable {
     }
 
     this.cancelBackgroundLoads('Foreground load superseded background work.');
+    const reservedLoads = this.reservePendingFileLoads(files, {
+      priority: 'foreground',
+      category: LOAD_CATEGORY_OPEN_FILES
+    });
     return this.enqueueLoadTask(async (signal) => {
       this.throwIfStopped(signal);
       let activatedLoadedFile = false;
-      for (const file of files) {
+      for (const { file, reservation } of reservedLoads) {
         const loaded = await this.loadFile(file, signal, {
+          sessionId: reservation.id,
+          displayName: reservation.displayName,
           activate: !activatedLoadedFile
         });
         if (loaded) {
@@ -99,6 +120,8 @@ export class SessionController implements Disposable {
     }, {
       priority: 'foreground',
       category: LOAD_CATEGORY_OPEN_FILES
+    }).finally(() => {
+      this.clearPendingOpenedImageReservations(reservedLoads.map((load) => load.reservation.id));
     });
   }
 
@@ -126,11 +149,17 @@ export class SessionController implements Disposable {
     }
 
     const groupId = this.takeLoadGroupId('folder');
+    const reservedLoads = this.reservePendingFileLoads(exrFiles, {
+      priority: 'background',
+      category: LOAD_CATEGORY_FOLDER
+    });
     return this.enqueueLoadTask(async (signal) => {
       this.throwIfStopped(signal);
       let activatedLoadedFile = false;
-      for (const file of exrFiles) {
+      for (const { file, reservation } of reservedLoads) {
         const loaded = await this.loadFile(file, signal, {
+          sessionId: reservation.id,
+          displayName: reservation.displayName,
           activate: !activatedLoadedFile
         });
         if (loaded) {
@@ -141,6 +170,8 @@ export class SessionController implements Disposable {
       priority: 'background',
       category: LOAD_CATEGORY_FOLDER,
       groupId
+    }).finally(() => {
+      this.clearPendingOpenedImageReservations(reservedLoads.map((load) => load.reservation.id));
     });
   }
 
@@ -292,9 +323,10 @@ export class SessionController implements Disposable {
     }
 
     this.loadQueue.cancelAll('All session loads were cancelled.');
-    if (this.getSessions().length === 0) {
+    if (this.getSessions().length === 0 && this.core.getState().pendingOpenedImages.length === 0) {
       return;
     }
+    this.clearAllPendingOpenedImageReservations();
     this.core.dispatch({
       type: 'allSessionsClosed'
     });
@@ -344,6 +376,7 @@ export class SessionController implements Disposable {
     this.disposed = true;
     this.abortController.abort(createAbortError('Session controller has been disposed.'));
     this.loadQueue.cancelAll('Session controller has been disposed.');
+    this.clearAllPendingOpenedImageReservations();
   }
 
   private enqueueLoadTask(
@@ -410,12 +443,125 @@ export class SessionController implements Disposable {
 
   private cancelBackgroundLoads(message: string): void {
     this.loadQueue.cancelWhere((entry) => entry.priority === 'background', message);
+    this.clearPendingOpenedImageReservationGroupsWhere((group) => group.priority === 'background');
   }
 
   private takeLoadGroupId(prefix: string): string {
     const id = `${prefix}-${this.nextLoadGroupId}`;
     this.nextLoadGroupId += 1;
     return id;
+  }
+
+  private reservePendingFileLoads(
+    files: File[],
+    options: { priority: LoadQueuePriority; category: string }
+  ): ReservedFileLoad[] {
+    if (files.length === 0) {
+      return [];
+    }
+
+    const currentState = this.core.getState();
+    const existingFilenames = [
+      ...currentState.sessions.map((session) => session.filename),
+      ...currentState.pendingOpenedImages.map((reservation) => reservation.filename)
+    ];
+    const reservedLoads = files.map((file) => {
+      const filename = file.name;
+      const reservation: PendingOpenedImageReservation = {
+        id: this.core.issueSessionId(),
+        filename,
+        displayName: buildSessionDisplayName(filename, existingFilenames),
+        fileSizeBytes: file.size,
+        source: {
+          kind: 'file',
+          file
+        }
+      };
+      existingFilenames.push(filename);
+      return {
+        file,
+        reservation
+      };
+    });
+
+    const sessionIds = reservedLoads.map((load) => load.reservation.id);
+    const groupId = this.takePendingReservationGroupId(options.category);
+    this.pendingOpenedImageReservationGroups.set(groupId, {
+      priority: options.priority,
+      category: options.category,
+      sessionIds
+    });
+    this.core.dispatch({
+      type: 'pendingOpenedImagesReserved',
+      reservations: reservedLoads.map((load) => load.reservation)
+    });
+
+    return reservedLoads;
+  }
+
+  private takePendingReservationGroupId(prefix: string): string {
+    const id = `pending-${prefix}-${this.nextPendingReservationGroupId}`;
+    this.nextPendingReservationGroupId += 1;
+    return id;
+  }
+
+  private clearPendingOpenedImageReservations(sessionIds: string[]): void {
+    if (sessionIds.length === 0) {
+      return;
+    }
+
+    const removeIds = new Set(sessionIds);
+    for (const [groupId, group] of Array.from(this.pendingOpenedImageReservationGroups.entries())) {
+      const remainingSessionIds = group.sessionIds.filter((sessionId) => !removeIds.has(sessionId));
+      if (remainingSessionIds.length === group.sessionIds.length) {
+        continue;
+      }
+      if (remainingSessionIds.length === 0) {
+        this.pendingOpenedImageReservationGroups.delete(groupId);
+        continue;
+      }
+      this.pendingOpenedImageReservationGroups.set(groupId, {
+        ...group,
+        sessionIds: remainingSessionIds
+      });
+    }
+
+    this.core.dispatch({
+      type: 'pendingOpenedImagesCleared',
+      sessionIds
+    });
+  }
+
+  private clearPendingOpenedImageReservationGroupsWhere(
+    predicate: (group: PendingOpenedImageReservationGroup) => boolean
+  ): void {
+    const sessionIds: string[] = [];
+    for (const [groupId, group] of Array.from(this.pendingOpenedImageReservationGroups.entries())) {
+      if (!predicate(group)) {
+        continue;
+      }
+
+      sessionIds.push(...group.sessionIds);
+      this.pendingOpenedImageReservationGroups.delete(groupId);
+    }
+
+    if (sessionIds.length > 0) {
+      this.core.dispatch({
+        type: 'pendingOpenedImagesCleared',
+        sessionIds
+      });
+    }
+  }
+
+  private clearAllPendingOpenedImageReservations(): void {
+    if (this.pendingOpenedImageReservationGroups.size === 0 && this.core.getState().pendingOpenedImages.length === 0) {
+      return;
+    }
+
+    this.pendingOpenedImageReservationGroups.clear();
+    this.core.dispatch({
+      type: 'pendingOpenedImagesCleared'
+    });
   }
 
   private async loadGalleryImage(galleryId: string, signal: AbortSignal): Promise<void> {
@@ -459,7 +605,7 @@ export class SessionController implements Disposable {
   private async loadFile(
     file: File,
     signal: AbortSignal,
-    options: { activate?: boolean } = {}
+    options: { activate?: boolean; sessionId?: string; displayName?: string } = {}
   ): Promise<boolean> {
     this.throwIfStopped(signal);
 
@@ -474,10 +620,17 @@ export class SessionController implements Disposable {
       this.applyDecodedImage(decoded, file.name, file.size, {
         kind: 'file',
         file
-      }, options.activate);
+      }, {
+        activate: options.activate,
+        sessionId: options.sessionId,
+        displayName: options.displayName
+      });
       return true;
     } catch (error) {
       if (!isAbortError(error) && !this.disposed) {
+        if (options.sessionId) {
+          this.clearPendingOpenedImageReservations([options.sessionId]);
+        }
         this.core.dispatch({
           type: 'errorSet',
           message: error instanceof Error ? `Load failed: ${error.message}` : 'Load failed.'
@@ -492,14 +645,15 @@ export class SessionController implements Disposable {
     filename: string,
     fileSizeBytes: number | null,
     source: SessionSource,
-    activate = true
+    options: { activate?: boolean; sessionId?: string; displayName?: string } = {}
   ): void {
     const currentState = this.core.getState();
     const activeSession = selectActiveSession(currentState);
     const session = buildLoadedSession({
-      sessionId: this.core.issueSessionId(),
+      sessionId: options.sessionId ?? this.core.issueSessionId(),
       decoded,
       filename,
+      displayName: options.displayName,
       fileSizeBytes,
       source,
       existingSessions: currentState.sessions,
@@ -515,7 +669,7 @@ export class SessionController implements Disposable {
     this.core.dispatch({
       type: 'sessionLoaded',
       session,
-      activate
+      activate: options.activate
     });
   }
 

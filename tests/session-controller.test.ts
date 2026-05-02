@@ -135,6 +135,16 @@ describe('session controller shim', () => {
     }
 
     expect(core.getState().isLoading).toBe(true);
+    expect(controller.getSessions()).toHaveLength(0);
+    expect(buildOpenedImageOptions(core.getState()).map((option) => ({
+      label: option.label,
+      selectable: option.selectable,
+      thumbnailDataUrl: option.thumbnailDataUrl
+    }))).toEqual([
+      { label: 'first.exr', selectable: false, thumbnailDataUrl: null },
+      { label: 'second.exr', selectable: false, thumbnailDataUrl: null }
+    ]);
+
     firstDecode.resolve(createDecodedImage(4, 4));
     for (let index = 0; index < 6 && controller.getSessions().length < 1; index += 1) {
       await flushMicrotasks();
@@ -142,6 +152,13 @@ describe('session controller shim', () => {
 
     expect(controller.getSessions().map((session) => session.filename)).toEqual(['first.exr']);
     expect(controller.getActiveSession()?.filename).toBe('first.exr');
+    expect(buildOpenedImageOptions(core.getState()).map((option) => ({
+      label: option.label,
+      selectable: option.selectable
+    }))).toEqual([
+      { label: 'first.exr', selectable: true },
+      { label: 'second.exr', selectable: false }
+    ]);
     expect(core.getState().isLoading).toBe(true);
 
     secondDecode.resolve(createDecodedImage(8, 4));
@@ -159,7 +176,7 @@ describe('session controller shim', () => {
       .fn<(bytes: Uint8Array, options?: DecodeBytesOptions) => Promise<DecodedExrImage>>()
       .mockReturnValueOnce(firstDecode.promise)
       .mockReturnValueOnce(secondDecode.promise);
-    const { controller } = createController({ decodeBytes });
+    const { controller, core } = createController({ decodeBytes });
 
     const pending = controller.enqueueFiles([
       createFile('broken.exr', [1]),
@@ -173,6 +190,13 @@ describe('session controller shim', () => {
     for (let index = 0; index < 6 && decodeBytes.mock.calls.length < 2; index += 1) {
       await flushMicrotasks();
     }
+
+    expect(buildOpenedImageOptions(core.getState()).map((option) => ({
+      label: option.label,
+      selectable: option.selectable
+    }))).toEqual([
+      { label: 'second.exr', selectable: false }
+    ]);
 
     secondDecode.resolve(createDecodedImage(8, 4));
     await pending;
@@ -787,7 +811,7 @@ describe('session controller shim', () => {
           resolveDecode = resolve;
         })
     );
-    const { controller } = createController({ decodeBytes });
+    const { controller, core } = createController({ decodeBytes });
 
     const pending = controller.enqueueFiles([createFile('dispose.exr')]);
     for (let index = 0; index < 6 && !resolveDecode; index += 1) {
@@ -799,5 +823,6 @@ describe('session controller shim', () => {
 
     await expect(pending).resolves.toBeUndefined();
     expect(controller.getActiveSession()).toBeNull();
+    expect(buildOpenedImageOptions(core.getState())).toEqual([]);
   });
 });

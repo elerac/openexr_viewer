@@ -206,6 +206,14 @@ export interface OpenedImageSession {
   state: ViewerSessionState;
 }
 
+export interface PendingOpenedImageReservation {
+  id: string;
+  filename: string;
+  displayName: string;
+  fileSizeBytes: number | null;
+  source: SessionSource;
+}
+
 export interface ViewportInfo {
   width: number;
   height: number;

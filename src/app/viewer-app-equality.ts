@@ -51,7 +51,8 @@ export function sameOpenedImageOptions(a: ViewerOpenedImageOption[], b: ViewerOp
       && item.sizeBytes === other.sizeBytes
       && item.sourceDetail === other.sourceDetail
       && item.thumbnailDataUrl === other.thumbnailDataUrl
-      && item.thumbnailAspectRatio === other.thumbnailAspectRatio;
+      && item.thumbnailAspectRatio === other.thumbnailAspectRatio
+      && item.selectable === other.selectable;
   });
 }
 

@@ -30,6 +30,7 @@ export interface BuildLoadedSessionArgs {
   sessionId: string;
   decoded: DecodedExrImage;
   filename: string;
+  displayName?: string;
   fileSizeBytes: number | null;
   source: SessionSource;
   existingSessions: OpenedImageSession[];
@@ -66,7 +67,7 @@ export function buildLoadedSession(args: BuildLoadedSessionArgs): OpenedImageSes
   const baseSession: OpenedImageSession = {
     id: args.sessionId,
     filename: args.filename,
-    displayName,
+    displayName: args.displayName ?? displayName,
     fileSizeBytes: args.fileSizeBytes,
     source: args.source,
     decoded: args.decoded,

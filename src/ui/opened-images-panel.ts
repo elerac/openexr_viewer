@@ -275,11 +275,16 @@ export class OpenedImagesPanel implements Disposable {
       return false;
     }
 
+    const selectableItems = getSelectableOpenedImageItems(this.openedImageItems);
+    if (selectableItems.length === 0) {
+      return false;
+    }
+
     const currentId = this.openedImagesActiveId ?? this.elements.openedImagesSelect.value;
-    const currentIndex = this.openedImageItems.findIndex((item) => item.id === currentId);
+    const currentIndex = selectableItems.findIndex((item) => item.id === currentId);
     const anchorIndex = currentIndex >= 0 ? currentIndex : 0;
-    const nextIndex = Math.max(0, Math.min(this.openedImageItems.length - 1, anchorIndex + delta));
-    const nextSessionId = this.openedImageItems[nextIndex]?.id ?? null;
+    const nextIndex = Math.max(0, Math.min(selectableItems.length - 1, anchorIndex + delta));
+    const nextSessionId = selectableItems[nextIndex]?.id ?? null;
     if (!nextSessionId) {
       return false;
     }
@@ -302,18 +307,19 @@ export class OpenedImagesPanel implements Disposable {
       return false;
     }
 
+    const selectableItems = getSelectableOpenedImageItems(this.openedImageItems);
     const currentId = this.openedImagesActiveId ?? this.elements.openedImagesSelect.value;
-    const currentIndex = this.openedImageItems.findIndex((item) => item.id === currentId);
+    const currentIndex = selectableItems.findIndex((item) => item.id === currentId);
     if (currentIndex < 0) {
       return false;
     }
 
     const targetIndex = currentIndex + delta;
-    if (targetIndex < 0 || targetIndex >= this.openedImageItems.length) {
+    if (targetIndex < 0 || targetIndex >= selectableItems.length) {
       return true;
     }
 
-    const targetSessionId = this.openedImageItems[targetIndex]?.id ?? null;
+    const targetSessionId = selectableItems[targetIndex]?.id ?? null;
     if (!targetSessionId) {
       return false;
     }
@@ -391,17 +397,21 @@ export class OpenedImagesPanel implements Disposable {
       this.elements.openedImagesSelect,
       items.map((item) => ({
         value: item.id,
-        label: item.label
+        label: item.label,
+        disabled: item.selectable === false
       }))
     );
     this.openedImagesActiveId = null;
 
-    if (activeId && items.some((item) => item.id === activeId)) {
+    const firstSelectableItem = items.find((item) => item.selectable !== false) ?? null;
+    if (activeId && items.some((item) => item.id === activeId && item.selectable !== false)) {
       this.elements.openedImagesSelect.value = activeId;
       this.openedImagesActiveId = activeId;
-    } else if (items.length > 0) {
-      this.elements.openedImagesSelect.value = items[0].id;
-      this.openedImagesActiveId = items[0].id;
+    } else if (firstSelectableItem) {
+      this.elements.openedImagesSelect.value = firstSelectableItem.id;
+      this.openedImagesActiveId = firstSelectableItem.id;
+    } else {
+      this.elements.openedImagesSelect.selectedIndex = -1;
     }
 
     this.updateControlState();
@@ -441,8 +451,8 @@ export class OpenedImagesPanel implements Disposable {
         updateOpenedFileRow(row, item, {
           sizeText: formatFileSizeMb(item.sizeBytes ?? null),
           selected: item.id === this.openedImagesActiveId,
-          selectionDisabled,
-          actionDisabled,
+          selectionDisabled: selectionDisabled || item.selectable === false,
+          actionDisabled: actionDisabled || item.selectable === false,
           editing: this.openedFileRenameState?.sessionId === item.id,
           dragging: this.openedImageDragState?.isDragging === true && this.openedImageDragState.sessionId === item.id,
           dropPlacement:
@@ -467,6 +477,10 @@ export class OpenedImagesPanel implements Disposable {
     }
 
     if (!sessionId || this.elements.openedImagesSelect.disabled) {
+      return;
+    }
+
+    if (this.openedImageItems.some((item) => item.id === sessionId && item.selectable === false)) {
       return;
     }
 
@@ -920,6 +934,10 @@ function createOpenedFileDragImage(item: OpenedImageOptionItem): HTMLDivElement 
 
   dragImage.append(visual, label);
   return dragImage;
+}
+
+function getSelectableOpenedImageItems(items: OpenedImageOptionItem[]): OpenedImageOptionItem[] {
+  return items.filter((item) => item.selectable !== false);
 }
 
 function updateOpenedFileRow(

@@ -33,6 +33,7 @@ export function createInitialViewerAppState(): ViewerAppState {
     sessionState,
     interactionState: createInteractionState(sessionState),
     sessions: [],
+    pendingOpenedImages: [],
     activeSessionId: null,
     errorMessage: null,
     isLoading: false,

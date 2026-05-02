@@ -12,6 +12,7 @@ import type {
   ImageRoi,
   OpenedImageDropPlacement,
   OpenedImageSession,
+  PendingOpenedImageReservation,
   PixelSample,
   RoiStats,
   StokesAolpDegreeModulationMode,
@@ -73,6 +74,7 @@ export interface ViewerOpenedImageOption {
   sourceDetail: string;
   thumbnailDataUrl: string | null;
   thumbnailAspectRatio: number | null;
+  selectable: boolean;
 }
 
 export type ViewerChannelThumbnailItem = ChannelViewThumbnailItem;
@@ -116,6 +118,7 @@ export interface ViewerAppState {
   sessionState: ViewerSessionState;
   interactionState: ViewerInteractionState;
   sessions: OpenedImageSession[];
+  pendingOpenedImages: PendingOpenedImageReservation[];
   activeSessionId: string | null;
   errorMessage: string | null;
   isLoading: boolean;
@@ -175,6 +178,8 @@ export type ViewerIntent =
   | { type: 'viewerStateEdited'; patch: Partial<ViewerViewState> }
   | { type: 'interactionStatePublished'; interactionState: ViewerInteractionState }
   | { type: 'viewStateCommitted'; view: ViewerInteractionState['view'] }
+  | { type: 'pendingOpenedImagesReserved'; reservations: PendingOpenedImageReservation[] }
+  | { type: 'pendingOpenedImagesCleared'; sessionIds?: string[] }
   | { type: 'sessionLoaded'; session: OpenedImageSession; activate?: boolean }
   | { type: 'sessionReloaded'; sessionId: string; session: OpenedImageSession }
   | { type: 'sessionDisplayNameChanged'; sessionId: string; displayName: string }

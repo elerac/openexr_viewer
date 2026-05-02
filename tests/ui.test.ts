@@ -5184,6 +5184,56 @@ describe('opened files actions', () => {
     expect((openedFilesList.querySelector('.opened-file-row') as HTMLDivElement).draggable).toBe(false);
   });
 
+  it('renders pending opened-file rows with filename and disabled actions but no thumbnail', () => {
+    installUiFixture();
+
+    const onOpenedImageSelected = vi.fn();
+    const onReloadSelectedOpenedImage = vi.fn();
+    const onCloseSelectedOpenedImage = vi.fn();
+    const ui = new ViewerUi(createUiCallbacks({
+      onOpenedImageSelected,
+      onReloadSelectedOpenedImage,
+      onCloseSelectedOpenedImage
+    }));
+    ui.setOpenedImageOptions([{
+      id: 'session-1',
+      label: 'queued.exr',
+      sourceDetail: 'shots/queued.exr',
+      sizeBytes: 3,
+      thumbnailDataUrl: null,
+      thumbnailAspectRatio: null,
+      selectable: false
+    }], null);
+
+    const openedFilesList = document.getElementById('opened-files-list') as HTMLDivElement;
+    const row = openedFilesList.querySelector('.opened-file-row') as HTMLDivElement;
+    const [reloadButton, closeButton] = Array.from(
+      openedFilesList.querySelectorAll<HTMLButtonElement>('.opened-file-action-button')
+    );
+    const option = (document.getElementById('opened-images-select') as HTMLSelectElement).options[0]!;
+
+    expect(row.textContent).toContain('queued.exr');
+    expect(row.getAttribute('aria-disabled')).toBe('true');
+    expect(row.getAttribute('aria-selected')).toBe('false');
+    expect(row.draggable).toBe(false);
+    expect(openedFilesList.querySelector('.file-row-icon')).toBeInstanceOf(HTMLSpanElement);
+    expect(openedFilesList.querySelector('.opened-file-thumbnail')).toBeNull();
+    expect(reloadButton?.disabled).toBe(true);
+    expect(closeButton?.disabled).toBe(true);
+    expect(reloadButton?.getAttribute('aria-label')).toBe('Reload queued.exr');
+    expect(closeButton?.getAttribute('aria-label')).toBe('Close queued.exr');
+    expect(option.disabled).toBe(true);
+    expect(option.selected).toBe(false);
+
+    row.click();
+    reloadButton?.click();
+    closeButton?.click();
+
+    expect(onOpenedImageSelected).not.toHaveBeenCalled();
+    expect(onReloadSelectedOpenedImage).not.toHaveBeenCalled();
+    expect(onCloseSelectedOpenedImage).not.toHaveBeenCalled();
+  });
+
   it('renders path-aware opened file labels in the row and compatibility select', () => {
     installUiFixture();
 

@@ -15,6 +15,7 @@ import type {
   ExportImageBatchTarget,
   ImageStats,
   OpenedImageSession,
+  PendingOpenedImageReservation,
   ViewerSessionState
 } from '../types';
 import type {
@@ -52,37 +53,76 @@ export function selectActiveImageStats(state: ViewerAppState): ImageStats | null
 }
 
 export function buildOpenedImageOptions(state: ViewerAppState): ViewerOpenedImageOption[] {
-  const sources = state.sessions.map((session) => ({
-    fallbackLabel: session.displayName,
-    sourceDetail: getSessionSourceDetail(session)
-  }));
-  const labels = buildOpenedImageOptionLabels(state, sources);
+  const entries = [
+    ...state.sessions.map((session) => buildLoadedOpenedImageEntry(state, session)),
+    ...state.pendingOpenedImages.map(buildPendingOpenedImageEntry)
+  ];
+  const labels = buildOpenedImageOptionLabels(entries);
 
-  return state.sessions.map((session, index) => ({
-    id: session.id,
-    label: labels[index] ?? session.displayName,
-    sizeBytes: session.fileSizeBytes,
-    sourceDetail: sources[index]?.sourceDetail ?? session.displayName,
-    thumbnailDataUrl: getSuccessValue(state.thumbnailsBySessionId[session.id] ?? idleResource()) ?? null,
-    thumbnailAspectRatio: resolveThumbnailAspectRatio(session.decoded.width, session.decoded.height)
+  return entries.map((entry, index) => ({
+    id: entry.id,
+    label: labels[index] ?? entry.displayName,
+    sizeBytes: entry.fileSizeBytes,
+    sourceDetail: entry.sourceDetail,
+    thumbnailDataUrl: entry.thumbnailDataUrl,
+    thumbnailAspectRatio: entry.thumbnailAspectRatio,
+    selectable: entry.selectable
   }));
 }
 
-function buildOpenedImageOptionLabels(
+interface OpenedImageOptionEntry {
+  id: string;
+  displayName: string;
+  displayNameIsCustom?: boolean;
+  fileSizeBytes: number | null;
+  sourceDetail: string;
+  thumbnailDataUrl: string | null;
+  thumbnailAspectRatio: number | null;
+  selectable: boolean;
+}
+
+function buildLoadedOpenedImageEntry(
   state: ViewerAppState,
-  sources: PathAwareOpenedImageLabelSource[]
-): string[] {
-  const labels = state.sessions.map((session) => session.displayName);
-  const pathAwareSources = state.sessions
-    .map((session, index) => ({
+  session: OpenedImageSession
+): OpenedImageOptionEntry {
+  return {
+    id: session.id,
+    displayName: session.displayName,
+    displayNameIsCustom: session.displayNameIsCustom,
+    fileSizeBytes: session.fileSizeBytes,
+    sourceDetail: getSessionSourceDetail(session),
+    thumbnailDataUrl: getSuccessValue(state.thumbnailsBySessionId[session.id] ?? idleResource()) ?? null,
+    thumbnailAspectRatio: resolveThumbnailAspectRatio(session.decoded.width, session.decoded.height),
+    selectable: true
+  };
+}
+
+function buildPendingOpenedImageEntry(
+  reservation: PendingOpenedImageReservation
+): OpenedImageOptionEntry {
+  return {
+    id: reservation.id,
+    displayName: reservation.displayName,
+    fileSizeBytes: reservation.fileSizeBytes,
+    sourceDetail: getOpenedImageSourceDetail(reservation.source, reservation.filename),
+    thumbnailDataUrl: null,
+    thumbnailAspectRatio: null,
+    selectable: false
+  };
+}
+
+function buildOpenedImageOptionLabels(entries: OpenedImageOptionEntry[]): string[] {
+  const labels = entries.map((entry) => entry.displayName);
+  const pathAwareSources = entries
+    .map((entry, index) => ({
       index,
-      session,
-      source: sources[index] ?? {
-        fallbackLabel: session.displayName,
-        sourceDetail: session.displayName
+      entry,
+      source: {
+        fallbackLabel: entry.displayName,
+        sourceDetail: entry.sourceDetail
       }
     }))
-    .filter(({ session }) => !session.displayNameIsCustom);
+    .filter(({ entry }) => !entry.displayNameIsCustom);
   const pathAwareLabels = buildPathAwareOpenedImageLabels(pathAwareSources.map(({ source }) => source));
 
   for (const [pathAwareIndex, entry] of pathAwareSources.entries()) {
@@ -234,12 +274,7 @@ export function shouldAutoEnterColormapMode(
 }
 
 export function getSessionSourceDetail(session: OpenedImageSession): string {
-  if (session.source.kind === 'url') {
-    return session.source.url;
-  }
-
-  const relativePath = session.source.file.webkitRelativePath.trim();
-  return relativePath || session.source.file.name || session.filename;
+  return getOpenedImageSourceDetail(session.source, session.filename);
 }
 
 function getBatchExportSourcePath(session: OpenedImageSession): string {
@@ -249,6 +284,18 @@ function getBatchExportSourcePath(session: OpenedImageSession): string {
 
   const relativePath = session.source.file.webkitRelativePath.trim();
   return relativePath || session.source.file.name || session.filename;
+}
+
+function getOpenedImageSourceDetail(
+  source: OpenedImageSession['source'],
+  filename: string
+): string {
+  if (source.kind === 'url') {
+    return source.url;
+  }
+
+  const relativePath = source.file.webkitRelativePath.trim();
+  return relativePath || source.file.name || filename;
 }
 
 export interface PathAwareOpenedImageLabelSource {

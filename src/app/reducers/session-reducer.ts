@@ -15,18 +15,66 @@ export function sessionReducer(
   _context: ViewerReducerContext
 ): ViewerAppState {
   switch (intent.type) {
+    case 'pendingOpenedImagesReserved': {
+      if (intent.reservations.length === 0) {
+        return state;
+      }
+
+      const existingIds = new Set([
+        ...state.sessions.map((session) => session.id),
+        ...state.pendingOpenedImages.map((reservation) => reservation.id)
+      ]);
+      const reservations = intent.reservations.filter((reservation) => !existingIds.has(reservation.id));
+      if (reservations.length === 0) {
+        return state;
+      }
+
+      return {
+        ...state,
+        pendingOpenedImages: [
+          ...state.pendingOpenedImages,
+          ...reservations
+        ]
+      };
+    }
+    case 'pendingOpenedImagesCleared': {
+      if (state.pendingOpenedImages.length === 0) {
+        return state;
+      }
+
+      if (!intent.sessionIds) {
+        return {
+          ...state,
+          pendingOpenedImages: []
+        };
+      }
+
+      const removeIds = new Set(intent.sessionIds);
+      const pendingOpenedImages = state.pendingOpenedImages.filter((reservation) => !removeIds.has(reservation.id));
+      return pendingOpenedImages.length === state.pendingOpenedImages.length
+        ? state
+        : {
+            ...state,
+            pendingOpenedImages
+          };
+    }
     case 'sessionLoaded': {
       const shouldActivate = intent.activate !== false || !selectActiveSession(state);
+      const pendingOpenedImages = state.pendingOpenedImages.filter(
+        (reservation) => reservation.id !== intent.session.id
+      );
       if (!shouldActivate) {
         return {
           ...state,
-          sessions: [...state.sessions, intent.session]
+          sessions: [...state.sessions, intent.session],
+          pendingOpenedImages
         };
       }
 
       return {
         ...state,
         sessions: [...state.sessions, intent.session],
+        pendingOpenedImages,
         activeSessionId: intent.session.id,
         sessionState: cloneViewerSessionState(intent.session.state),
         interactionState: createInteractionState(intent.session.state)
@@ -131,7 +179,15 @@ export function sessionReducer(
     case 'sessionClosed': {
       const removeIndex = state.sessions.findIndex((session) => session.id === intent.sessionId);
       if (removeIndex < 0) {
-        return state;
+        const pendingOpenedImages = state.pendingOpenedImages.filter(
+          (reservation) => reservation.id !== intent.sessionId
+        );
+        return pendingOpenedImages.length === state.pendingOpenedImages.length
+          ? state
+          : {
+              ...state,
+              pendingOpenedImages
+            };
       }
 
       const removingActive = state.activeSessionId === intent.sessionId;
@@ -141,7 +197,10 @@ export function sessionReducer(
       if (!removingActive) {
         return {
           ...state,
-          sessions: remainingSessions
+          sessions: remainingSessions,
+          pendingOpenedImages: state.pendingOpenedImages.filter(
+            (reservation) => reservation.id !== intent.sessionId
+          )
         };
       }
 
@@ -150,6 +209,7 @@ export function sessionReducer(
         return {
           ...state,
           sessions: [],
+          pendingOpenedImages: [],
           activeSessionId: null,
           sessionState: cleared,
           interactionState: createInteractionState(cleared)
@@ -170,6 +230,9 @@ export function sessionReducer(
       return {
         ...state,
         sessions: remainingSessions,
+        pendingOpenedImages: state.pendingOpenedImages.filter(
+          (reservation) => reservation.id !== intent.sessionId
+        ),
         activeSessionId: nextSession.id,
         sessionState: nextSessionState,
         interactionState: createInteractionState(nextSessionState)
@@ -180,6 +243,7 @@ export function sessionReducer(
       return {
         ...state,
         sessions: [],
+        pendingOpenedImages: [],
         activeSessionId: null,
         sessionState: cleared,
         interactionState: createInteractionState(cleared)

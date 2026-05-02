@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => {
   const createCoreState = () => ({
     activeSessionId: null,
     sessions: [],
+    pendingOpenedImages: [],
     errorMessage: null,
     isLoading: false,
     colormapRegistry: null as
