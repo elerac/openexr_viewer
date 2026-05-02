@@ -590,6 +590,11 @@ input[type='range'] {
   min-height: 0;
 }
 
+.app-dialog--batch .app-dialog-body {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .app-dialog--settings .app-dialog-body {
   overflow: auto;
 }

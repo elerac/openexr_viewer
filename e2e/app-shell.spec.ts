@@ -941,6 +941,86 @@ test('exports selected file-channel cells as one batch zip download', async ({ p
   }
 });
 
+test('keeps batch export actions separated from scrollable content at constrained height', async ({ page }) => {
+  await page.setViewportSize({ width: 1159, height: 733 });
+  await gotoViewerApp(page);
+
+  const openedImages = page.locator('#opened-images-select');
+  const batchFileNames = [
+    'batch_rgb_1.exr',
+    'batch_rgb_2.exr',
+    'batch_rgb_3.exr',
+    'batch_rgb_4.exr',
+    'batch_rgb_5.exr'
+  ];
+
+  for (const [index, name] of batchFileNames.entries()) {
+    await page.setInputFiles('#file-input', {
+      name,
+      mimeType: 'image/exr',
+      buffer: buildRgbAuxExr()
+    });
+    await expect(openedImages.locator('option')).toHaveCount(index + 1, { timeout: 30000 });
+  }
+
+  const fileMenuButton = page.getByRole('button', { name: 'File', exact: true });
+  const exportBatchMenuItem = page.locator('#export-image-batch-button');
+  const exportBatchDialog = page.locator('#export-batch-dialog-form');
+
+  await fileMenuButton.click();
+  await expect(exportBatchMenuItem).toBeEnabled();
+  await exportBatchMenuItem.click();
+  await expect(exportBatchDialog).toBeVisible();
+  await expect(page.locator('.export-batch-file-toggle').filter({ hasText: batchFileNames[0] })).toBeVisible();
+
+  const layout = await exportBatchDialog.evaluate((dialog) => {
+    const body = dialog.querySelector<HTMLElement>('.app-dialog-body');
+    const actions = dialog.querySelector<HTMLElement>('.app-dialog-actions');
+    const matrix = dialog.querySelector<HTMLElement>('#export-batch-matrix');
+    const cancelButton = dialog.querySelector<HTMLElement>('#export-batch-dialog-cancel-button');
+    const submitButton = dialog.querySelector<HTMLElement>('#export-batch-dialog-submit-button');
+    if (!body || !actions || !matrix || !cancelButton || !submitButton) {
+      throw new Error('Expected batch export dialog layout elements.');
+    }
+
+    const bodyRect = body.getBoundingClientRect();
+    const actionsRect = actions.getBoundingClientRect();
+    const cancelRect = cancelButton.getBoundingClientRect();
+    const submitRect = submitButton.getBoundingClientRect();
+    const bodyStyle = getComputedStyle(body);
+    const matrixStyle = getComputedStyle(matrix);
+
+    return {
+      actionsBottom: actionsRect.bottom,
+      actionsTop: actionsRect.top,
+      bodyBottom: bodyRect.bottom,
+      bodyClientHeight: body.clientHeight,
+      bodyOverflowX: bodyStyle.overflowX,
+      bodyOverflowY: bodyStyle.overflowY,
+      bodyScrollHeight: body.scrollHeight,
+      cancelBottom: cancelRect.bottom,
+      cancelTop: cancelRect.top,
+      matrixOverflowX: matrixStyle.overflowX,
+      matrixOverflowY: matrixStyle.overflowY,
+      submitBottom: submitRect.bottom,
+      submitTop: submitRect.top,
+      viewportHeight: window.innerHeight
+    };
+  });
+
+  expect(layout.bodyOverflowX).toBe('hidden');
+  expect(layout.bodyOverflowY).toBe('auto');
+  expect(layout.bodyScrollHeight).toBeGreaterThan(layout.bodyClientHeight + 1);
+  expect(layout.actionsTop).toBeGreaterThanOrEqual(layout.bodyBottom - 1);
+  expect(layout.cancelTop).toBeGreaterThanOrEqual(layout.bodyBottom - 1);
+  expect(layout.submitTop).toBeGreaterThanOrEqual(layout.bodyBottom - 1);
+  expect(layout.cancelBottom).toBeLessThanOrEqual(layout.actionsBottom + 1);
+  expect(layout.submitBottom).toBeLessThanOrEqual(layout.actionsBottom + 1);
+  expect(layout.actionsBottom).toBeLessThanOrEqual(layout.viewportHeight - 16);
+  expect(layout.matrixOverflowX).toBe('auto');
+  expect(layout.matrixOverflowY).toBe('auto');
+});
+
 test('fits portrait batch export thumbnails inside their preview frames', async ({ page }) => {
   await gotoViewerApp(page);
 
