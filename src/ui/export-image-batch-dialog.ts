@@ -36,8 +36,23 @@ const DEFAULT_SCREENSHOT_BATCH_ARCHIVE_FILENAME = 'openexr-screenshot-export.zip
 const CELL_KEY_SEPARATOR = '\u001f';
 const BATCH_EXPORT_RESOURCE_KEY = 'export-batch';
 const PNG_COMPRESSION_VALIDATION_MESSAGE = 'PNG compression must be an integer from 0 to 9.';
+const BATCH_PREVIEW_IDLE_TIMEOUT_MS = 250;
+const BATCH_PREVIEW_IDLE_FALLBACK_DELAY_MS = 64;
+const SCREENSHOT_BATCH_PREVIEW_DEBOUNCE_MS = 250;
 type ExportBatchDialogMode = 'image' | 'screenshot';
 export type ExportBatchFilenameSource = 'openFilesName' | 'sourcePath';
+
+interface IdleDeadlineLike {
+  readonly didTimeout: boolean;
+  timeRemaining(): number;
+}
+
+type IdleCallbackLike = (deadline: IdleDeadlineLike) => void;
+
+interface BatchPreviewWindowLike {
+  requestIdleCallback?: (callback: IdleCallbackLike, options?: { timeout?: number }) => number;
+  cancelIdleCallback?: (handle: number) => void;
+}
 
 interface ExportImageBatchDialogCallbacks {
   onExportImageBatch: (request: ExportImageBatchRequest, signal: AbortSignal) => Promise<void>;
@@ -60,6 +75,14 @@ export interface ExportBatchColumn {
   order: number;
 }
 
+interface BatchPreviewJob {
+  previewKey: string;
+  file: ExportImageBatchTarget['files'][number];
+  channel: ExportImageBatchChannelTarget;
+  requestId: number;
+  order: number;
+}
+
 export class ExportImageBatchDialogController implements Disposable {
   private readonly disposables = new DisposableBag();
   private target: ExportImageBatchTarget | null = null;
@@ -74,7 +97,11 @@ export class ExportImageBatchDialogController implements Disposable {
   private abortController: AbortController | null = null;
   private previewAbortController: AbortController | null = null;
   private previewGeneration = 0;
-  private previewQueue: Promise<void> = Promise.resolve();
+  private previewProcessing = false;
+  private previewScrollRafHandle: number | null = null;
+  private screenshotPreviewDebounceHandle: number | null = null;
+  private previewJobSequence = 0;
+  private readonly previewJobsByKey = new Map<string, BatchPreviewJob>();
   private readonly previewResourcesByKey = new Map<string, AsyncResource<string | null>>();
   private nextRequestId = 1;
   private disposed = false;
@@ -121,6 +148,10 @@ export class ExportImageBatchDialogController implements Disposable {
       this.handleMatrixChange(event);
     });
 
+    this.disposables.addEventListener(this.elements.exportBatchMatrix, 'scroll', () => {
+      this.schedulePreviewReprioritization();
+    });
+
     this.disposables.addEventListener(this.elements.exportBatchWidthInput, 'input', () => {
       this.handleScreenshotSizeInput('width');
     });
@@ -164,6 +195,17 @@ export class ExportImageBatchDialogController implements Disposable {
 
   private isPreviewPending(previewKey: string): boolean {
     return this.previewResourcesByKey.get(previewKey)?.status === 'pending';
+  }
+
+  private getPreviewPresentation(previewKey: string): { dataUrl: string | null; isPending: boolean } {
+    if (!this.hasValidScreenshotOutputSize()) {
+      return { dataUrl: null, isPending: false };
+    }
+
+    return {
+      dataUrl: this.getPreviewDataUrl(previewKey),
+      isPending: this.isPreviewPending(previewKey) || !this.previewResourcesByKey.has(previewKey)
+    };
   }
 
   private takeRequestId(): number {
@@ -481,7 +523,7 @@ export class ExportImageBatchDialogController implements Disposable {
     const sourceValue = parsePositiveInteger(sourceInput.value);
     if (!sourceValue) {
       this.abortPreviewWork({ clearCache: true });
-      this.renderMatrix();
+      this.updateAllPreviewElements();
       this.updateStatus();
       return;
     }
@@ -500,8 +542,9 @@ export class ExportImageBatchDialogController implements Disposable {
       this.callbacks.onScreenshotOutputSizeChange?.({ width: outputWidth, height: outputHeight });
     }
 
-    this.abortPreviewWork({ clearCache: true });
-    this.renderMatrix();
+    this.abortPreviewWork({ clearCache: false, cancelDebounce: false });
+    this.updateAllPreviewElements();
+    this.scheduleScreenshotPreviewRefresh();
     this.updateStatus();
   }
 
@@ -705,18 +748,16 @@ export class ExportImageBatchDialogController implements Disposable {
     _channel: ExportImageBatchChannelTarget
   ): HTMLElement {
     const previewKey = serializeCellKey(file.sessionId, columnKey);
-    const canPreview = this.hasValidScreenshotOutputSize();
-    const dataUrl = canPreview ? this.getPreviewDataUrl(previewKey) : null;
-    const isPending =
-      canPreview && (this.isPreviewPending(previewKey) || !this.previewResourcesByKey.has(previewKey));
+    const { dataUrl, isPending } = this.getPreviewPresentation(previewKey);
     return createBatchCellPreview(previewKey, dataUrl, isPending);
   }
 
   private queueVisiblePreviews(columns: ExportBatchColumn[], target: ExportImageBatchTarget): void {
-    if (this.disposed || this.busy || !this.open) {
+    if (this.disposed || this.busy || !this.open || !this.hasValidScreenshotOutputSize()) {
       return;
     }
 
+    let queued = false;
     for (const file of target.files) {
       const visibleChannels = getVisibleBatchChannels(file.channels, this.includeSplitRgbChannels);
       for (const column of columns) {
@@ -725,91 +766,355 @@ export class ExportImageBatchDialogController implements Disposable {
           continue;
         }
 
-        this.queuePreviewRequest(serializeCellKey(file.sessionId, column.key), file, channel);
+        queued = this.queuePreviewJob(serializeCellKey(file.sessionId, column.key), file, channel) || queued;
       }
+    }
+
+    if (queued) {
+      this.startPreviewProcessing();
     }
   }
 
-  private queuePreviewRequest(
+  private queuePreviewJob(
     previewKey: string,
     file: ExportImageBatchTarget['files'][number],
     channel: ExportImageBatchChannelTarget
-  ): void {
+  ): boolean {
     if (
       this.disposed ||
       this.busy ||
       !this.open ||
-      this.previewResourcesByKey.has(previewKey)
+      this.previewResourcesByKey.has(previewKey) ||
+      this.previewJobsByKey.has(previewKey)
+    ) {
+      return false;
+    }
+
+    const requestId = this.takeRequestId();
+    this.previewResourcesByKey.set(previewKey, pendingResource(previewKey, requestId));
+    this.previewJobsByKey.set(previewKey, {
+      previewKey,
+      file,
+      channel,
+      requestId,
+      order: this.previewJobSequence
+    });
+    this.previewJobSequence += 1;
+    this.updatePreviewElements(previewKey);
+    return true;
+  }
+
+  private queueCurrentPreviews(): void {
+    const target = this.target;
+    if (!target || target.files.length === 0) {
+      return;
+    }
+
+    const columns = buildExportBatchColumns(target.files, this.includeSplitRgbChannels);
+    if (columns.length === 0) {
+      return;
+    }
+
+    this.queueVisiblePreviews(columns, target);
+  }
+
+  private startPreviewProcessing(): void {
+    if (
+      this.previewProcessing ||
+      this.disposed ||
+      this.busy ||
+      !this.open ||
+      this.previewJobsByKey.size === 0
     ) {
       return;
     }
 
     const generation = this.previewGeneration;
     const abortController = this.getPreviewAbortController();
+    this.previewProcessing = true;
+    void this.processPreviewJobs(generation, abortController)
+      .finally(() => {
+        this.previewProcessing = false;
+        if (
+          !this.disposed &&
+          !this.busy &&
+          this.open &&
+          this.previewJobsByKey.size > 0
+        ) {
+          this.startPreviewProcessing();
+        }
+      });
+  }
+
+  private async processPreviewJobs(generation: number, abortController: AbortController): Promise<void> {
+    while (this.previewJobsByKey.size > 0) {
+      if (
+        this.disposed ||
+        this.busy ||
+        !this.open ||
+        generation !== this.previewGeneration ||
+        abortController.signal.aborted
+      ) {
+        return;
+      }
+
+      await this.waitForNextPaint(abortController.signal);
+      await this.waitForIdleSlot(abortController.signal, BATCH_PREVIEW_IDLE_TIMEOUT_MS);
+
+      if (
+        this.disposed ||
+        this.busy ||
+        !this.open ||
+        generation !== this.previewGeneration ||
+        abortController.signal.aborted
+      ) {
+        return;
+      }
+
+      const job = this.takeNextPreviewJob();
+      if (!job) {
+        return;
+      }
+
+      if (!isPendingMatch(
+        this.previewResourcesByKey.get(job.previewKey) ?? idleResource(),
+        job.previewKey,
+        job.requestId
+      )) {
+        continue;
+      }
+
+      const request = this.createPreviewRequest(job);
+      if (!request) {
+        this.previewResourcesByKey.delete(job.previewKey);
+        this.updatePreviewElements(job.previewKey);
+        continue;
+      }
+
+      try {
+        const pixels = await this.callbacks.onResolveExportImageBatchPreview(request, abortController.signal);
+        if (
+          this.disposed ||
+          generation !== this.previewGeneration ||
+          abortController.signal.aborted ||
+          !isPendingMatch(this.previewResourcesByKey.get(job.previewKey) ?? idleResource(), job.previewKey, job.requestId)
+        ) {
+          continue;
+        }
+
+        this.previewResourcesByKey.set(job.previewKey, successResource(job.previewKey, createPngDataUrlFromPixels(pixels)));
+      } catch (error) {
+        if (
+          generation !== this.previewGeneration ||
+          abortController.signal.aborted ||
+          isAbortError(error) ||
+          !isPendingMatch(this.previewResourcesByKey.get(job.previewKey) ?? idleResource(), job.previewKey, job.requestId)
+        ) {
+          continue;
+        }
+
+        this.previewResourcesByKey.set(job.previewKey, errorResource(job.previewKey, error, 'Preview failed.'));
+      } finally {
+        if (generation === this.previewGeneration) {
+          this.updatePreviewElements(job.previewKey);
+        }
+      }
+    }
+  }
+
+  private createPreviewRequest(job: BatchPreviewJob): ExportImageBatchPreviewRequest | null {
     const screenshot = this.getScreenshotRegionForRequest();
     if (this.dialogMode === 'screenshot' && !screenshot) {
-      return;
+      return null;
     }
 
     const baseRequest = {
-      sessionId: file.sessionId,
-      activeLayer: file.activeLayer,
-      displaySelection: cloneDisplaySelection(channel.selection) ?? channel.selection,
-      channelLabel: channel.label
+      sessionId: job.file.sessionId,
+      activeLayer: job.file.activeLayer,
+      displaySelection: cloneDisplaySelection(job.channel.selection) ?? job.channel.selection,
+      channelLabel: job.channel.label
     };
-    const request: ExportImageBatchPreviewRequest = screenshot
+
+    return screenshot
       ? {
         ...baseRequest,
         mode: 'screenshot',
         ...screenshot
       }
       : baseRequest;
+  }
 
-    const requestId = this.takeRequestId();
-    this.previewResourcesByKey.set(previewKey, pendingResource(previewKey, requestId));
-    this.updatePreviewElements(previewKey);
-    this.previewQueue = this.previewQueue
-      .catch(() => undefined)
-      .then(async () => {
-        if (
-          this.disposed ||
-          this.busy ||
-          !this.open ||
-          generation !== this.previewGeneration ||
-          abortController.signal.aborted
-        ) {
-          return;
+  private takeNextPreviewJob(): BatchPreviewJob | null {
+    let selectedJob: BatchPreviewJob | null = null;
+    let selectedPriority = Number.POSITIVE_INFINITY;
+
+    for (const job of this.previewJobsByKey.values()) {
+      const priority = this.getPreviewJobPriority(job.previewKey);
+      if (
+        !selectedJob ||
+        priority < selectedPriority ||
+        (priority === selectedPriority && job.order < selectedJob.order)
+      ) {
+        selectedJob = job;
+        selectedPriority = priority;
+      }
+    }
+
+    if (selectedJob) {
+      this.previewJobsByKey.delete(selectedJob.previewKey);
+    }
+
+    return selectedJob;
+  }
+
+  private getPreviewJobPriority(previewKey: string): number {
+    if (this.checkedCellKeys.has(previewKey)) {
+      return 0;
+    }
+
+    return this.isPreviewCellVisible(previewKey) ? 1 : 2;
+  }
+
+  private isPreviewCellVisible(previewKey: string): boolean {
+    const matrixRect = this.elements.exportBatchMatrix.getBoundingClientRect();
+    if (matrixRect.width <= 0 || matrixRect.height <= 0) {
+      return true;
+    }
+
+    for (const element of this.elements.exportBatchMatrix.querySelectorAll<HTMLElement>('.export-batch-cell-preview')) {
+      if (element.dataset.previewKey !== previewKey) {
+        continue;
+      }
+
+      const rect = element.getBoundingClientRect();
+      return (
+        rect.bottom >= matrixRect.top &&
+        rect.top <= matrixRect.bottom &&
+        rect.right >= matrixRect.left &&
+        rect.left <= matrixRect.right
+      );
+    }
+
+    return false;
+  }
+
+  private schedulePreviewReprioritization(): void {
+    if (this.disposed || this.busy || !this.open || this.previewJobsByKey.size === 0) {
+      return;
+    }
+
+    if (typeof window.requestAnimationFrame !== 'function') {
+      this.startPreviewProcessing();
+      return;
+    }
+
+    if (this.previewScrollRafHandle !== null) {
+      return;
+    }
+
+    this.previewScrollRafHandle = window.requestAnimationFrame(() => {
+      this.previewScrollRafHandle = null;
+      this.startPreviewProcessing();
+    });
+  }
+
+  private scheduleScreenshotPreviewRefresh(): void {
+    if (this.screenshotPreviewDebounceHandle !== null) {
+      window.clearTimeout(this.screenshotPreviewDebounceHandle);
+    }
+
+    this.screenshotPreviewDebounceHandle = window.setTimeout(() => {
+      this.screenshotPreviewDebounceHandle = null;
+      if (this.disposed || this.busy || !this.open || this.dialogMode !== 'screenshot') {
+        return;
+      }
+
+      if (!this.hasValidScreenshotOutputSize()) {
+        this.abortPreviewWork({ clearCache: true, cancelDebounce: false });
+        this.updateAllPreviewElements();
+        this.updateStatus();
+        return;
+      }
+
+      this.abortPreviewWork({ clearCache: true, cancelDebounce: false });
+      this.updateAllPreviewElements();
+      this.queueCurrentPreviews();
+    }, SCREENSHOT_BATCH_PREVIEW_DEBOUNCE_MS);
+  }
+
+  private waitForNextPaint(signal: AbortSignal): Promise<void> {
+    if (signal.aborted || typeof window.requestAnimationFrame !== 'function') {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      let firstHandle = 0;
+      let secondHandle = 0;
+      const cleanup = () => {
+        signal.removeEventListener('abort', onAbort);
+      };
+      const onAbort = () => {
+        if (firstHandle) {
+          window.cancelAnimationFrame(firstHandle);
         }
-
-        try {
-          const pixels = await this.callbacks.onResolveExportImageBatchPreview(request, abortController.signal);
-          if (
-            this.disposed ||
-            generation !== this.previewGeneration ||
-            abortController.signal.aborted ||
-            !isPendingMatch(this.previewResourcesByKey.get(previewKey) ?? idleResource(), previewKey, requestId)
-          ) {
-            return;
-          }
-
-          this.previewResourcesByKey.set(previewKey, successResource(previewKey, createPngDataUrlFromPixels(pixels)));
-        } catch (error) {
-          if (
-            generation !== this.previewGeneration ||
-            abortController.signal.aborted ||
-            isAbortError(error) ||
-            !isPendingMatch(this.previewResourcesByKey.get(previewKey) ?? idleResource(), previewKey, requestId)
-          ) {
-            return;
-          }
-
-          this.previewResourcesByKey.set(previewKey, errorResource(previewKey, error, 'Preview failed.'));
-        } finally {
-          if (generation === this.previewGeneration) {
-            this.updatePreviewElements(previewKey);
-          }
+        if (secondHandle) {
+          window.cancelAnimationFrame(secondHandle);
         }
+        cleanup();
+        resolve();
+      };
+
+      signal.addEventListener('abort', onAbort, { once: true });
+      firstHandle = window.requestAnimationFrame(() => {
+        firstHandle = 0;
+        secondHandle = window.requestAnimationFrame(() => {
+          secondHandle = 0;
+          cleanup();
+          resolve();
+        });
       });
+    });
+  }
+
+  private waitForIdleSlot(signal: AbortSignal, timeoutMs: number): Promise<void> {
+    if (signal.aborted) {
+      return Promise.resolve();
+    }
+
+    const windowLike = window as Window & typeof globalThis & BatchPreviewWindowLike;
+    return new Promise((resolve) => {
+      const cleanupAbort = () => {
+        signal.removeEventListener('abort', onAbort);
+      };
+      const onAbort = () => {
+        cleanup();
+        resolve();
+      };
+      let cleanup = cleanupAbort;
+
+      signal.addEventListener('abort', onAbort, { once: true });
+
+      if (typeof windowLike.requestIdleCallback !== 'function') {
+        const handle = window.setTimeout(() => {
+          cleanupAbort();
+          resolve();
+        }, BATCH_PREVIEW_IDLE_FALLBACK_DELAY_MS);
+        cleanup = () => {
+          window.clearTimeout(handle);
+          cleanupAbort();
+        };
+        return;
+      }
+
+      const handle = windowLike.requestIdleCallback(() => {
+        cleanupAbort();
+        resolve();
+      }, { timeout: timeoutMs });
+      cleanup = () => {
+        windowLike.cancelIdleCallback?.(handle);
+        cleanupAbort();
+      };
+    });
   }
 
   private getPreviewAbortController(): AbortController {
@@ -819,11 +1124,15 @@ export class ExportImageBatchDialogController implements Disposable {
     return this.previewAbortController;
   }
 
-  private abortPreviewWork(options: { clearCache: boolean }): void {
+  private abortPreviewWork(options: { clearCache: boolean; cancelDebounce?: boolean }): void {
     this.previewGeneration += 1;
     this.previewAbortController?.abort(createAbortError('Batch export preview cancelled.'));
     this.previewAbortController = null;
-    this.previewQueue = Promise.resolve();
+    this.previewJobsByKey.clear();
+    this.cancelPreviewReprioritization();
+    if (options.cancelDebounce !== false) {
+      this.cancelScreenshotPreviewRefresh();
+    }
     if (options.clearCache) {
       this.previewResourcesByKey.clear();
     } else {
@@ -835,13 +1144,40 @@ export class ExportImageBatchDialogController implements Disposable {
     }
   }
 
+  private cancelPreviewReprioritization(): void {
+    if (this.previewScrollRafHandle === null) {
+      return;
+    }
+
+    if (typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(this.previewScrollRafHandle);
+    }
+    this.previewScrollRafHandle = null;
+  }
+
+  private cancelScreenshotPreviewRefresh(): void {
+    if (this.screenshotPreviewDebounceHandle === null) {
+      return;
+    }
+
+    window.clearTimeout(this.screenshotPreviewDebounceHandle);
+    this.screenshotPreviewDebounceHandle = null;
+  }
+
   private updatePreviewElements(previewKey: string): void {
-    const dataUrl = this.getPreviewDataUrl(previewKey);
-    const isPending = this.isPreviewPending(previewKey) || !this.previewResourcesByKey.has(previewKey);
+    const { dataUrl, isPending } = this.getPreviewPresentation(previewKey);
     for (const element of this.elements.exportBatchMatrix.querySelectorAll<HTMLElement>('.export-batch-cell-preview')) {
       if (element.dataset.previewKey === previewKey) {
         updateBatchCellPreview(element, dataUrl, isPending);
       }
+    }
+  }
+
+  private updateAllPreviewElements(): void {
+    for (const element of this.elements.exportBatchMatrix.querySelectorAll<HTMLElement>('.export-batch-cell-preview')) {
+      const previewKey = element.dataset.previewKey ?? '';
+      const { dataUrl, isPending } = this.getPreviewPresentation(previewKey);
+      updateBatchCellPreview(element, dataUrl, isPending);
     }
   }
 

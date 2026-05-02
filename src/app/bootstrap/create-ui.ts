@@ -102,7 +102,7 @@ export function createViewerUi({
         getRenderCache,
         getRenderer,
         isDisposed,
-        previewMaxLongestEdge: 96
+        previewMaxLongestEdge: 64
       });
     },
     onExportColormap: async (request: ExportColormapRequest) => {

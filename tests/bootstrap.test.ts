@@ -1179,9 +1179,9 @@ describe('bootstrap app lifecycle', () => {
       channelLabel: 'RGB'
     }, abortController.signal);
 
-    expect(pixels.width).toBe(96);
-    expect(pixels.height).toBe(24);
-    expect(pixels.data).toHaveLength(96 * 24 * 4);
+    expect(pixels.width).toBe(64);
+    expect(pixels.height).toBe(16);
+    expect(pixels.data).toHaveLength(64 * 16 * 4);
 
     expect(mocks.renderCachePrepareActiveSession).not.toHaveBeenCalled();
     expect(mocks.rendererReadExportPixels).not.toHaveBeenCalled();
@@ -1234,9 +1234,9 @@ describe('bootstrap app lifecycle', () => {
       state: mocks.coreState.sessionState
     };
     const pixels = {
-      width: 96,
-      height: 48,
-      data: new Uint8ClampedArray(96 * 48 * 4)
+      width: 64,
+      height: 32,
+      data: new Uint8ClampedArray(64 * 32 * 4)
     };
     const mutableCoreState = mocks.coreState as unknown as {
       activeSessionId: string | null;
@@ -1293,8 +1293,8 @@ describe('bootstrap app lifecycle', () => {
     expect(mocks.rendererReadExportPixels).toHaveBeenCalledWith(expect.objectContaining({
       sourceWidth: 192,
       sourceHeight: 48,
-      outputWidth: 96,
-      outputHeight: 48,
+      outputWidth: 64,
+      outputHeight: 32,
       screenshot: {
         rect: { x: 8, y: 4, width: 120, height: 60 },
         sourceViewport: { width: 240, height: 120 }
