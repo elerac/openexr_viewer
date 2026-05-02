@@ -562,6 +562,101 @@ test('exports the active image as a png download from the file menu', async ({ p
   expectPngSignature(await readDownloadBytes(download));
 });
 
+test('keeps export dialog actions visible and scrolls body on short viewports', async ({ page }) => {
+  await page.setViewportSize({ width: 1159, height: 533 });
+  await gotoViewerApp(page);
+  await openGalleryCbox(page);
+
+  const fileMenuButton = page.getByRole('button', { name: 'File', exact: true });
+  const exportMenuItem = page.locator('#export-image-button');
+  const exportDialog = page.locator('#export-dialog-form');
+  const exportDialogBody = exportDialog.locator('.app-dialog-body');
+  const exportPreviewCanvas = page.locator('#export-preview-canvas');
+
+  await fileMenuButton.click();
+  await exportMenuItem.click();
+
+  await expect(exportDialog).toBeVisible();
+  await expect(exportPreviewCanvas).toBeVisible({ timeout: 30000 });
+
+  const initialLayout = await exportDialog.evaluate((dialog) => {
+    const body = dialog.querySelector<HTMLElement>('.app-dialog-body');
+    const actions = dialog.querySelector<HTMLElement>('.app-dialog-actions');
+    const cancelButton = dialog.querySelector<HTMLElement>('#export-dialog-cancel-button');
+    const submitButton = dialog.querySelector<HTMLElement>('#export-dialog-submit-button');
+    if (!body || !actions || !cancelButton || !submitButton) {
+      throw new Error('Expected export dialog layout elements.');
+    }
+
+    const dialogRect = dialog.getBoundingClientRect();
+    const bodyRect = body.getBoundingClientRect();
+    const actionsRect = actions.getBoundingClientRect();
+    const cancelRect = cancelButton.getBoundingClientRect();
+    const submitRect = submitButton.getBoundingClientRect();
+    const bodyStyle = getComputedStyle(body);
+
+    return {
+      actionsBottom: actionsRect.bottom,
+      actionsTop: actionsRect.top,
+      bodyBottom: bodyRect.bottom,
+      bodyClientHeight: body.clientHeight,
+      bodyOverflowX: bodyStyle.overflowX,
+      bodyOverflowY: bodyStyle.overflowY,
+      bodyScrollHeight: body.scrollHeight,
+      cancelBottom: cancelRect.bottom,
+      cancelTop: cancelRect.top,
+      dialogBottom: dialogRect.bottom,
+      dialogTop: dialogRect.top,
+      submitBottom: submitRect.bottom,
+      submitTop: submitRect.top,
+      viewportHeight: window.innerHeight
+    };
+  });
+
+  expect(initialLayout.dialogTop).toBeGreaterThanOrEqual(16);
+  expect(initialLayout.dialogBottom).toBeLessThanOrEqual(initialLayout.viewportHeight - 16);
+  expect(initialLayout.bodyOverflowX).toBe('hidden');
+  expect(initialLayout.bodyOverflowY).toBe('auto');
+  expect(initialLayout.bodyScrollHeight).toBeGreaterThan(initialLayout.bodyClientHeight + 1);
+  expect(initialLayout.actionsTop).toBeGreaterThanOrEqual(initialLayout.bodyBottom - 1);
+  expect(initialLayout.cancelTop).toBeGreaterThanOrEqual(initialLayout.actionsTop - 1);
+  expect(initialLayout.submitTop).toBeGreaterThanOrEqual(initialLayout.actionsTop - 1);
+  expect(initialLayout.cancelBottom).toBeLessThanOrEqual(initialLayout.actionsBottom + 1);
+  expect(initialLayout.submitBottom).toBeLessThanOrEqual(initialLayout.actionsBottom + 1);
+  expect(initialLayout.actionsBottom).toBeLessThanOrEqual(initialLayout.viewportHeight - 16);
+
+  await exportDialogBody.evaluate((body) => {
+    body.scrollTop = body.scrollHeight;
+  });
+
+  const scrolledLayout = await exportDialog.evaluate((dialog) => {
+    const body = dialog.querySelector<HTMLElement>('.app-dialog-body');
+    const actions = dialog.querySelector<HTMLElement>('.app-dialog-actions');
+    const previewStage = dialog.querySelector<HTMLElement>('#export-preview-stage');
+    if (!body || !actions || !previewStage) {
+      throw new Error('Expected export dialog scroll elements.');
+    }
+
+    const bodyRect = body.getBoundingClientRect();
+    const actionsRect = actions.getBoundingClientRect();
+    const previewRect = previewStage.getBoundingClientRect();
+
+    return {
+      actionsBottom: actionsRect.bottom,
+      bodyBottom: bodyRect.bottom,
+      bodyScrollTop: body.scrollTop,
+      previewBottom: previewRect.bottom,
+      previewTop: previewRect.top,
+      viewportHeight: window.innerHeight
+    };
+  });
+
+  expect(scrolledLayout.bodyScrollTop).toBeGreaterThan(0);
+  expect(scrolledLayout.previewTop).toBeLessThan(scrolledLayout.bodyBottom);
+  expect(scrolledLayout.previewBottom).toBeLessThanOrEqual(scrolledLayout.bodyBottom + 1);
+  expect(scrolledLayout.actionsBottom).toBeLessThanOrEqual(scrolledLayout.viewportHeight - 16);
+});
+
 test('temporarily renames an open file from the Open Files list', async ({ page }) => {
   await gotoViewerApp(page);
   await openGalleryCbox(page);

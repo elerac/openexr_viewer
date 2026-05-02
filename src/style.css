@@ -556,7 +556,9 @@ input[type='range'] {
 
 .app-dialog {
   width: min(100%, 26rem);
+  max-height: min(42rem, calc(100vh - 2rem));
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 1rem;
   padding: 1rem;
   border: 1px solid var(--panel-border);
@@ -567,16 +569,18 @@ input[type='range'] {
   -webkit-backdrop-filter: var(--dialog-backdrop-filter);
 }
 
+@supports (height: 100dvh) {
+  .app-dialog {
+    max-height: min(42rem, calc(100dvh - 2rem));
+  }
+}
+
 .app-dialog--batch {
   width: min(100%, 58rem);
-  max-height: min(42rem, calc(100vh - 2rem));
-  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .app-dialog--settings {
   width: min(100%, 44rem);
-  max-height: min(42rem, calc(100vh - 2rem));
-  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .app-dialog-header,
@@ -585,12 +589,8 @@ input[type='range'] {
   gap: 0.75rem;
 }
 
-.app-dialog--batch .app-dialog-body,
-.app-dialog--settings .app-dialog-body {
+.app-dialog-body {
   min-height: 0;
-}
-
-.app-dialog--batch .app-dialog-body {
   overflow-x: hidden;
   overflow-y: auto;
 }
