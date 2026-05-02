@@ -52,6 +52,7 @@ export function sameOpenedImageOptions(a: ViewerOpenedImageOption[], b: ViewerOp
       && item.sourceDetail === other.sourceDetail
       && item.thumbnailDataUrl === other.thumbnailDataUrl
       && item.thumbnailAspectRatio === other.thumbnailAspectRatio
+      && item.thumbnailLoading === other.thumbnailLoading
       && item.selectable === other.selectable;
   });
 }

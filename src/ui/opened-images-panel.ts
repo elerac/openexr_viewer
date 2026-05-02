@@ -882,7 +882,7 @@ function createOpenedFileRow(
   row.className = 'image-browser-row opened-file-row';
 
   const grip = createOpenedFileGrip();
-  const thumbnail = createOpenedFileThumbnail(item.thumbnailDataUrl ?? null);
+  const thumbnail = createOpenedFileThumbnail(item.thumbnailDataUrl ?? null, item.thumbnailLoading === true);
 
   const label = document.createElement('span');
   label.className = 'image-browser-row-label opened-file-label';
@@ -917,7 +917,7 @@ function createOpenedFileDragImage(item: OpenedImageOptionItem): HTMLDivElement 
 
   const visual = document.createElement('span');
   visual.className = 'opened-file-drag-image-visual';
-  if (item.thumbnailDataUrl) {
+  if (item.thumbnailDataUrl && item.thumbnailLoading !== true) {
     const image = document.createElement('img');
     image.className = 'opened-file-drag-image-thumbnail';
     image.src = item.thumbnailDataUrl;
@@ -925,7 +925,7 @@ function createOpenedFileDragImage(item: OpenedImageOptionItem): HTMLDivElement 
     image.draggable = false;
     visual.append(image);
   } else {
-    visual.append(createOpenedFileThumbnail(null));
+    visual.append(createOpenedFileThumbnail(null, item.thumbnailLoading === true));
   }
 
   const label = document.createElement('span');
@@ -962,6 +962,11 @@ function updateOpenedFileRow(
   row.setAttribute('role', 'option');
   row.setAttribute('aria-selected', options.selected ? 'true' : 'false');
   row.setAttribute('aria-disabled', options.selectionDisabled ? 'true' : 'false');
+  if (item.thumbnailLoading === true) {
+    row.setAttribute('aria-busy', 'true');
+  } else {
+    row.removeAttribute('aria-busy');
+  }
   row.tabIndex = options.selectionDisabled ? -1 : 0;
   row.draggable = !options.actionDisabled && !options.editing;
   row.classList.toggle('opened-file-row--dragging', options.dragging);
@@ -971,7 +976,7 @@ function updateOpenedFileRow(
   updateOpenedFileLabel(refs, item, options.editing, options.actionDisabled);
   refs.label.title = `Path: ${item.sourceDetail ?? item.label}\nSize: ${options.sizeText}`;
 
-  const nextThumbnail = createOpenedFileThumbnail(item.thumbnailDataUrl ?? null);
+  const nextThumbnail = createOpenedFileThumbnail(item.thumbnailDataUrl ?? null, item.thumbnailLoading === true);
   if (!sameThumbnail(refs.thumbnail, nextThumbnail)) {
     row.replaceChild(nextThumbnail, refs.thumbnail);
     refs.thumbnail = nextThumbnail;
@@ -1133,7 +1138,16 @@ function createOpenedFileActionIcon(iconName: 'reload' | 'close'): SVGSVGElement
   return svg;
 }
 
-function createOpenedFileThumbnail(thumbnailDataUrl: string | null): HTMLElement {
+function createOpenedFileThumbnail(thumbnailDataUrl: string | null, loading = false): HTMLElement {
+  if (loading) {
+    const indicator = document.createElement('span');
+    indicator.className = 'opened-file-thumbnail-loading';
+    indicator.setAttribute('aria-hidden', 'true');
+    indicator.title = 'Loading thumbnail';
+    indicator.append(createOpenedFileThumbnailLoadingIcon());
+    return indicator;
+  }
+
   if (!thumbnailDataUrl) {
     const icon = document.createElement('span');
     icon.className = 'file-row-icon';
@@ -1148,6 +1162,33 @@ function createOpenedFileThumbnail(thumbnailDataUrl: string | null): HTMLElement
   image.draggable = false;
   image.setAttribute('aria-hidden', 'true');
   return image;
+}
+
+function createOpenedFileThumbnailLoadingIcon(): SVGSVGElement {
+  const svg = createSvgElement('svg');
+  svg.classList.add('opened-file-thumbnail-loading-icon');
+  svg.setAttribute('viewBox', '0 0 20 20');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+
+  const arc = createSvgElement('path');
+  arc.setAttribute('d', 'M15.5 9.8a5.6 5.6 0 1 1-2.4-4.6');
+  arc.setAttribute('fill', 'none');
+  arc.setAttribute('stroke', 'currentColor');
+  arc.setAttribute('stroke-linecap', 'round');
+  arc.setAttribute('stroke-linejoin', 'round');
+  arc.setAttribute('stroke-width', '2');
+
+  const arrow = createSvgElement('path');
+  arrow.setAttribute('d', 'M13 2.9l.6 2.9 2.8-.7');
+  arrow.setAttribute('fill', 'none');
+  arrow.setAttribute('stroke', 'currentColor');
+  arrow.setAttribute('stroke-linecap', 'round');
+  arrow.setAttribute('stroke-linejoin', 'round');
+  arrow.setAttribute('stroke-width', '2');
+
+  svg.append(arc, arrow);
+  return svg;
 }
 
 function createSvgElement<K extends keyof SVGElementTagNameMap>(tagName: K): SVGElementTagNameMap[K] {

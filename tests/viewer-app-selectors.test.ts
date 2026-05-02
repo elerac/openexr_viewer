@@ -95,6 +95,74 @@ describe('path-aware opened image labels', () => {
 });
 
 describe('opened image option labels', () => {
+  it('marks pending opened-image reservations as thumbnail loading', () => {
+    const core = new ViewerAppCore();
+    core.dispatch({
+      type: 'pendingOpenedImagesReserved',
+      reservations: [{
+        id: 'pending-1',
+        filename: 'sphere_owl.exr',
+        displayName: 'sphere_owl.exr',
+        fileSizeBytes: 3,
+        source: {
+          kind: 'url',
+          url: '/sphere_owl.exr'
+        }
+      }]
+    });
+
+    expect(buildOpenedImageOptions(core.getState())[0]).toMatchObject({
+      label: 'sphere_owl.exr',
+      thumbnailDataUrl: null,
+      thumbnailLoading: true,
+      selectable: false
+    });
+  });
+
+  it('tracks loaded opened-image thumbnail loading status until thumbnail generation finishes', () => {
+    const core = new ViewerAppCore();
+    core.dispatch({
+      type: 'sessionLoaded',
+      session: createSession({
+        id: 'session-1',
+        filename: 'image.exr',
+        displayName: 'image.exr',
+        sourceDetail: 'shots/image.exr'
+      })
+    });
+
+    expect(buildOpenedImageOptions(core.getState())[0]).toMatchObject({
+      thumbnailDataUrl: null,
+      thumbnailLoading: true
+    });
+
+    core.dispatch({ type: 'thumbnailRequested', sessionId: 'session-1', token: 1 });
+    core.dispatch({
+      type: 'thumbnailReady',
+      sessionId: 'session-1',
+      token: 1,
+      thumbnailDataUrl: 'data:image/png;base64,AAAA'
+    });
+
+    expect(buildOpenedImageOptions(core.getState())[0]).toMatchObject({
+      thumbnailDataUrl: 'data:image/png;base64,AAAA',
+      thumbnailLoading: false
+    });
+
+    core.dispatch({ type: 'thumbnailRequested', sessionId: 'session-1', token: 2 });
+    core.dispatch({
+      type: 'thumbnailReady',
+      sessionId: 'session-1',
+      token: 2,
+      thumbnailDataUrl: null
+    });
+
+    expect(buildOpenedImageOptions(core.getState())[0]).toMatchObject({
+      thumbnailDataUrl: null,
+      thumbnailLoading: false
+    });
+  });
+
   it('shows compact path labels for folder-loaded duplicate basenames', () => {
     const core = new ViewerAppCore();
     core.dispatch({

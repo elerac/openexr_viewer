@@ -1,8 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { sameViewerSessionState, sameProbeReadout } from '../src/app/viewer-app-equality';
+import { sameOpenedImageOptions, sameViewerSessionState, sameProbeReadout } from '../src/app/viewer-app-equality';
 import { createViewerSessionState } from './helpers/state-fixtures';
 
 describe('viewer app equality helpers', () => {
+  it('compares opened-image thumbnail loading state', () => {
+    const base = [{
+      id: 'session-1',
+      label: 'image.exr',
+      sizeBytes: 3,
+      sourceDetail: 'shots/image.exr',
+      thumbnailDataUrl: null,
+      thumbnailAspectRatio: 1,
+      thumbnailLoading: false,
+      selectable: true
+    }];
+
+    expect(sameOpenedImageOptions(base, [{ ...base[0] }])).toBe(true);
+    expect(sameOpenedImageOptions(base, [{ ...base[0], thumbnailLoading: true }])).toBe(false);
+  });
+
   it('compares viewer session state structurally', () => {
     const base = createViewerSessionState();
     const same = createViewerSessionState();

@@ -66,6 +66,7 @@ export function buildOpenedImageOptions(state: ViewerAppState): ViewerOpenedImag
     sourceDetail: entry.sourceDetail,
     thumbnailDataUrl: entry.thumbnailDataUrl,
     thumbnailAspectRatio: entry.thumbnailAspectRatio,
+    thumbnailLoading: entry.thumbnailLoading,
     selectable: entry.selectable
   }));
 }
@@ -78,6 +79,7 @@ interface OpenedImageOptionEntry {
   sourceDetail: string;
   thumbnailDataUrl: string | null;
   thumbnailAspectRatio: number | null;
+  thumbnailLoading: boolean;
   selectable: boolean;
 }
 
@@ -85,14 +87,16 @@ function buildLoadedOpenedImageEntry(
   state: ViewerAppState,
   session: OpenedImageSession
 ): OpenedImageOptionEntry {
+  const thumbnailResource = state.thumbnailsBySessionId[session.id] ?? idleResource<string | null>();
   return {
     id: session.id,
     displayName: session.displayName,
     displayNameIsCustom: session.displayNameIsCustom,
     fileSizeBytes: session.fileSizeBytes,
     sourceDetail: getSessionSourceDetail(session),
-    thumbnailDataUrl: getSuccessValue(state.thumbnailsBySessionId[session.id] ?? idleResource()) ?? null,
+    thumbnailDataUrl: getSuccessValue(thumbnailResource) ?? null,
     thumbnailAspectRatio: resolveThumbnailAspectRatio(session.decoded.width, session.decoded.height),
+    thumbnailLoading: thumbnailResource.status === 'pending' || thumbnailResource.status === 'stale',
     selectable: true
   };
 }
@@ -107,6 +111,7 @@ function buildPendingOpenedImageEntry(
     sourceDetail: getOpenedImageSourceDetail(reservation.source, reservation.filename),
     thumbnailDataUrl: null,
     thumbnailAspectRatio: null,
+    thumbnailLoading: true,
     selectable: false
   };
 }

@@ -2132,6 +2132,30 @@ body.is-resizing-panel-rows * {
   clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%);
 }
 
+.opened-file-thumbnail-loading {
+  width: 1.55rem;
+  height: 1.55rem;
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  align-self: center;
+  color: color-mix(in srgb, var(--accent) 92%, #ffffff 8%);
+  line-height: 0;
+}
+
+.opened-file-thumbnail-loading-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  display: block;
+  animation: spin 0.85s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.image-browser-row[aria-selected='true'] .opened-file-thumbnail-loading {
+  color: #ffffff;
+}
+
 .opened-file-thumbnail {
   display: block;
   width: auto;

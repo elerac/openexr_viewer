@@ -5184,7 +5184,7 @@ describe('opened files actions', () => {
     expect((openedFilesList.querySelector('.opened-file-row') as HTMLDivElement).draggable).toBe(false);
   });
 
-  it('renders pending opened-file rows with filename and disabled actions but no thumbnail', () => {
+  it('renders pending opened-file rows with filename, disabled actions, and a loading thumbnail indicator', () => {
     installUiFixture();
 
     const onOpenedImageSelected = vi.fn();
@@ -5202,6 +5202,7 @@ describe('opened files actions', () => {
       sizeBytes: 3,
       thumbnailDataUrl: null,
       thumbnailAspectRatio: null,
+      thumbnailLoading: true,
       selectable: false
     }], null);
 
@@ -5214,9 +5215,12 @@ describe('opened files actions', () => {
 
     expect(row.textContent).toContain('queued.exr');
     expect(row.getAttribute('aria-disabled')).toBe('true');
+    expect(row.getAttribute('aria-busy')).toBe('true');
     expect(row.getAttribute('aria-selected')).toBe('false');
     expect(row.draggable).toBe(false);
-    expect(openedFilesList.querySelector('.file-row-icon')).toBeInstanceOf(HTMLSpanElement);
+    expect(openedFilesList.querySelector('.opened-file-thumbnail-loading')).toBeInstanceOf(HTMLSpanElement);
+    expect(openedFilesList.querySelector('.opened-file-thumbnail-loading-icon')).toBeInstanceOf(SVGSVGElement);
+    expect(openedFilesList.querySelector('.file-row-icon')).toBeNull();
     expect(openedFilesList.querySelector('.opened-file-thumbnail')).toBeNull();
     expect(reloadButton?.disabled).toBe(true);
     expect(closeButton?.disabled).toBe(true);
@@ -5232,6 +5236,38 @@ describe('opened files actions', () => {
     expect(onOpenedImageSelected).not.toHaveBeenCalled();
     expect(onReloadSelectedOpenedImage).not.toHaveBeenCalled();
     expect(onCloseSelectedOpenedImage).not.toHaveBeenCalled();
+  });
+
+  it('renders a loading indicator in the open-file thumbnail slot until the thumbnail arrives', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setOpenedImageOptions([{
+      id: 'session-1',
+      label: 'beauty.exr',
+      thumbnailDataUrl: null,
+      thumbnailLoading: true
+    }], 'session-1');
+
+    const row = document.querySelector('#opened-files-list .opened-file-row') as HTMLDivElement;
+
+    expect(row.getAttribute('aria-busy')).toBe('true');
+    expect(row.querySelector('.opened-file-thumbnail-loading')).toBeInstanceOf(HTMLSpanElement);
+    expect(row.querySelector('.opened-file-thumbnail-loading-icon')).toBeInstanceOf(SVGSVGElement);
+    expect(row.querySelector('.file-row-icon')).toBeNull();
+    expect(row.querySelector('.opened-file-thumbnail')).toBeNull();
+
+    ui.setOpenedImageOptions([{
+      id: 'session-1',
+      label: 'beauty.exr',
+      thumbnailDataUrl: 'data:image/png;base64,AAAA',
+      thumbnailLoading: false
+    }], 'session-1');
+
+    expect(row.getAttribute('aria-busy')).toBeNull();
+    expect(row.querySelector('.opened-file-thumbnail')).toBeInstanceOf(HTMLImageElement);
+    expect(row.querySelector('.opened-file-thumbnail-loading')).toBeNull();
+    expect(row.querySelector('.file-row-icon')).toBeNull();
   });
 
   it('renders path-aware opened file labels in the row and compatibility select', () => {

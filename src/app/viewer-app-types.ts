@@ -74,6 +74,7 @@ export interface ViewerOpenedImageOption {
   sourceDetail: string;
   thumbnailDataUrl: string | null;
   thumbnailAspectRatio: number | null;
+  thumbnailLoading: boolean;
   selectable: boolean;
 }
 

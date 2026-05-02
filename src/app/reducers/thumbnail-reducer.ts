@@ -2,6 +2,7 @@ import {
   idleResource,
   isPendingMatch,
   pendingResource,
+  staleResource,
   successResource
 } from '../../async-resource';
 import { buildChannelThumbnailSessionPrefix } from '../../channel-thumbnail-keys';
@@ -14,6 +15,14 @@ export function thumbnailReducer(
   context: ViewerReducerContext
 ): ViewerAppState {
   switch (intent.type) {
+    case 'sessionLoaded':
+      return {
+        ...state,
+        thumbnailsBySessionId: {
+          ...state.thumbnailsBySessionId,
+          [intent.session.id]: staleResource(intent.session.id)
+        }
+      };
     case 'thumbnailRequested':
       return {
         ...state,
@@ -68,6 +77,10 @@ export function thumbnailReducer(
       return sessionExists(context.initialState, intent.sessionId)
         ? {
             ...state,
+            thumbnailsBySessionId: {
+              ...state.thumbnailsBySessionId,
+              [intent.sessionId]: staleResource(intent.sessionId)
+            },
             ...pruneChannelThumbnailStateForSession(state, intent.sessionId)
           }
         : state;
