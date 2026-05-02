@@ -18,13 +18,16 @@ test('defers opened-file thumbnails until idle time after first render', async (
   await openGalleryCbox(page);
   await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
   await expect(openedFileRow).toHaveCount(1);
-  await expect(openedFileRow.locator('.file-row-icon')).toHaveCount(1);
+  await expect(openedFileRow.locator('.opened-file-thumbnail-loading')).toHaveCount(1);
+  await expect(openedFileRow.locator('.opened-file-thumbnail-loading-icon')).toHaveCount(1);
+  await expect(openedFileRow.locator('.file-row-icon')).toHaveCount(0);
   await expect(openedFileRow.locator('.opened-file-thumbnail')).toHaveCount(0);
   await expect.poll(async () => await getPendingIdleCallbackCount(page)).not.toBe(0);
 
   await flushAllIdleCallbacks(page);
 
   await expect(openedFileRow.locator('.opened-file-thumbnail')).toHaveAttribute('src', /^data:image\/png;base64,/);
+  await expect(openedFileRow.locator('.opened-file-thumbnail-loading')).toHaveCount(0);
   await expect(openedFileRow.locator('.file-row-icon')).toHaveCount(0);
   await expect.poll(async () => await getPendingIdleCallbackCount(page)).toBe(0);
 });
