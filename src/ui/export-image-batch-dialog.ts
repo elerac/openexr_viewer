@@ -41,7 +41,6 @@ const PNG_COMPRESSION_VALIDATION_MESSAGE = 'PNG compression must be an integer f
 const BATCH_PREVIEW_IDLE_TIMEOUT_MS = 250;
 const BATCH_PREVIEW_IDLE_FALLBACK_DELAY_MS = 64;
 const SCREENSHOT_BATCH_PREVIEW_DEBOUNCE_MS = 250;
-const EXPORT_PROGRESS_REVEAL_DELAY_MS = 300;
 type ExportBatchDialogMode = 'image' | 'screenshot';
 export type ExportBatchFilenameSource = 'openFilesName' | 'sourcePath';
 
@@ -115,7 +114,6 @@ export class ExportImageBatchDialogController implements Disposable {
   private previewProcessing = false;
   private previewScrollRafHandle: number | null = null;
   private screenshotPreviewDebounceHandle: number | null = null;
-  private exportProgressRevealTimeoutHandle: number | null = null;
   private exportProgressVisible = false;
   private exportProgressUpdate: ExportProgressUpdate | null = null;
   private previewJobSequence = 0;
@@ -1539,7 +1537,7 @@ export class ExportImageBatchDialogController implements Disposable {
     const requestId = this.takeRequestId();
     this.exportResource = pendingResource(BATCH_EXPORT_RESOURCE_KEY, requestId);
     this.syncBusyControls();
-    const reportProgress = this.startExportProgress();
+    const reportProgress = this.startExportProgress(entries.length);
 
     const abortController = new AbortController();
     this.abortController = abortController;
@@ -1588,18 +1586,17 @@ export class ExportImageBatchDialogController implements Disposable {
     return this.elements.exportBatchUseOpenFilesNamesCheckbox.checked ? 'openFilesName' : 'sourcePath';
   }
 
-  private startExportProgress(): (update: ExportProgressUpdate) => void {
+  private startExportProgress(total: number): (update: ExportProgressUpdate) => void {
     this.resetExportProgress();
-    this.exportProgressRevealTimeoutHandle = window.setTimeout(() => {
-      this.exportProgressRevealTimeoutHandle = null;
-      if (this.disposed || !this.open || !this.busy) {
-        return;
-      }
-
-      this.exportProgressVisible = true;
-      this.elements.exportBatchProgress.classList.remove('hidden');
-      this.renderExportProgress();
-    }, EXPORT_PROGRESS_REVEAL_DELAY_MS);
+    this.exportProgressVisible = true;
+    this.exportProgressUpdate = {
+      completed: 0,
+      total: Math.max(1, total),
+      stage: 'preparing'
+    };
+    this.elements.exportBatchProgress.classList.remove('hidden');
+    this.renderExportProgress();
+    this.setStatus(formatBatchExportProgress(this.exportProgressUpdate));
 
     return (update) => {
       this.handleExportProgress(update);
@@ -1636,11 +1633,6 @@ export class ExportImageBatchDialogController implements Disposable {
   }
 
   private resetExportProgress(): void {
-    if (this.exportProgressRevealTimeoutHandle !== null) {
-      window.clearTimeout(this.exportProgressRevealTimeoutHandle);
-      this.exportProgressRevealTimeoutHandle = null;
-    }
-
     this.exportProgressVisible = false;
     this.exportProgressUpdate = null;
     this.elements.exportBatchProgress.classList.add('hidden');

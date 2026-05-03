@@ -4487,8 +4487,7 @@ describe('view menu', () => {
     expect(batchDialog.classList.contains('hidden')).toBe(true);
   });
 
-  it('shows delayed determinate batch export progress and hides it when cancelled', async () => {
-    vi.useFakeTimers();
+  it('shows immediate determinate batch export progress and hides it when cancelled', async () => {
     installUiFixture();
 
     let rejectExport!: (reason?: unknown) => void;
@@ -4504,12 +4503,6 @@ describe('view menu', () => {
       onProgress?: typeof reportProgress
     ) => {
       reportProgress = onProgress;
-      onProgress?.({
-        completed: 0,
-        total: 3,
-        stage: 'rendering',
-        currentFilename: 'image-1.RGB.png'
-      });
       signal.addEventListener('abort', () => {
         rejectExport(signal.reason);
       }, { once: true });
@@ -4530,12 +4523,19 @@ describe('view menu', () => {
     const progressLabel = document.getElementById('export-batch-progress-label') as HTMLElement;
     const status = document.getElementById('export-batch-dialog-status') as HTMLElement;
 
-    vi.advanceTimersByTime(299);
-    expect(progress.classList.contains('hidden')).toBe(true);
-
-    vi.advanceTimersByTime(1);
     expect(progress.classList.contains('hidden')).toBe(false);
     expect(progressBar.max).toBe(3);
+    expect(progressBar.value).toBe(0);
+    expect(progressLabel.textContent).toBe('Preparing batch export...');
+    expect(status.textContent).toBe('Preparing batch export...');
+
+    reportProgress?.({
+      completed: 0,
+      total: 3,
+      stage: 'rendering',
+      currentFilename: 'image-1.RGB.png'
+    });
+
     expect(progressBar.value).toBe(0);
     expect(progressLabel.textContent).toBe('Exporting 1 of 3: image-1.RGB.png');
     expect(status.textContent).toBe('Exporting 1 of 3: image-1.RGB.png');
