@@ -30,7 +30,7 @@ export function readExportPixels(
   const gl = state.gl;
   validateExportOutputSize(gl, outputWidth, outputHeight);
   if (screenshot) {
-    validateScreenshotExportRegion(screenshot);
+    validateScreenshotExportRegion(screenshot, sourceWidth, sourceHeight);
   }
 
   const sourceSurface = getOrCreateExportSurface(gl, state.exportSourceSurface, outputWidth, outputHeight);
@@ -129,6 +129,63 @@ function buildScreenshotExportRender(
     screenOriginY: number;
   };
 } {
+  return screenshot.coordinateSpace === 'image'
+    ? buildImageScreenshotExportRender(viewerState, screenshot, outputWidth, outputHeight)
+    : buildViewportScreenshotExportRender(viewerState, screenshot, outputWidth, outputHeight);
+}
+
+function buildImageScreenshotExportRender(
+  viewerState: ViewerState,
+  screenshot: Extract<NonNullable<ReadExportPixelsArgs['screenshot']>, { coordinateSpace: 'image' }>,
+  outputWidth: number,
+  outputHeight: number
+): {
+  state: ViewerState;
+  options: {
+    viewportWidth: number;
+    viewportHeight: number;
+    outputWidth: number;
+    outputHeight: number;
+    screenOriginX: number;
+    screenOriginY: number;
+  };
+} {
+  const scale = outputWidth / screenshot.imageRect.width;
+  return {
+    state: {
+      ...viewerState,
+      viewerMode: 'image',
+      zoom: scale,
+      panX: screenshot.imageRect.x + screenshot.imageRect.width * 0.5,
+      panY: screenshot.imageRect.y + screenshot.imageRect.height * 0.5
+    },
+    options: {
+      viewportWidth: outputWidth,
+      viewportHeight: outputHeight,
+      outputWidth,
+      outputHeight,
+      screenOriginX: 0,
+      screenOriginY: 0
+    }
+  };
+}
+
+function buildViewportScreenshotExportRender(
+  viewerState: ViewerState,
+  screenshot: Extract<NonNullable<ReadExportPixelsArgs['screenshot']>, { coordinateSpace: 'viewport' }>,
+  outputWidth: number,
+  outputHeight: number
+): {
+  state: ViewerState;
+  options: {
+    viewportWidth: number;
+    viewportHeight: number;
+    outputWidth: number;
+    outputHeight: number;
+    screenOriginX: number;
+    screenOriginY: number;
+  };
+} {
   const scale = outputWidth / screenshot.rect.width;
   const viewportWidth = screenshot.sourceViewport.width * scale;
   const viewportHeight = screenshot.sourceViewport.height * scale;
@@ -149,7 +206,40 @@ function buildScreenshotExportRender(
 }
 
 function validateScreenshotExportRegion(
-  screenshot: NonNullable<ReadExportPixelsArgs['screenshot']>
+  screenshot: NonNullable<ReadExportPixelsArgs['screenshot']>,
+  sourceWidth: number,
+  sourceHeight: number
+): void {
+  if (screenshot.coordinateSpace === 'image') {
+    validateImageScreenshotExportRegion(screenshot, sourceWidth, sourceHeight);
+    return;
+  }
+
+  validateViewportScreenshotExportRegion(screenshot);
+}
+
+function validateImageScreenshotExportRegion(
+  screenshot: Extract<NonNullable<ReadExportPixelsArgs['screenshot']>, { coordinateSpace: 'image' }>,
+  sourceWidth: number,
+  sourceHeight: number
+): void {
+  const { imageRect } = screenshot;
+  if (
+    !isPositiveFinite(imageRect.width) ||
+    !isPositiveFinite(imageRect.height) ||
+    !Number.isFinite(imageRect.x) ||
+    !Number.isFinite(imageRect.y) ||
+    imageRect.x < 0 ||
+    imageRect.y < 0 ||
+    imageRect.x + imageRect.width > sourceWidth + 1e-6 ||
+    imageRect.y + imageRect.height > sourceHeight + 1e-6
+  ) {
+    throw new Error('Screenshot image export region must be inside the source image.');
+  }
+}
+
+function validateViewportScreenshotExportRegion(
+  screenshot: Extract<NonNullable<ReadExportPixelsArgs['screenshot']>, { coordinateSpace: 'viewport' }>
 ): void {
   const { rect, sourceViewport } = screenshot;
   if (

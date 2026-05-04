@@ -10,11 +10,12 @@ import {
 } from '../../display/evaluator';
 import { createPngBlobFromPixels } from '../../export-image';
 import { buildColormapExportPixels, type ExportImagePixels } from '../../export/export-pixels';
+import { cloneScreenshotRegionCrop } from '../../export/screenshot-region';
 import {
   buildReproductionMetadataFilename,
   buildScreenshotReproductionMetadata,
   serializeScreenshotReproductionMetadata,
-  type ScreenshotReproductionMetadataV1
+  type ScreenshotReproductionMetadataV2
 } from '../../export/screenshot-reproduction-metadata';
 import { createAbortError, isAbortError, throwIfAborted } from '../../lifecycle';
 import { RenderCacheService } from '../../services/render-cache-service';
@@ -228,8 +229,8 @@ export function createImageExportPixelsResolver({
       return pixels;
     }
 
-	    assertActiveSessionCurrent(core.getState(), activeSession, options.signal);
-	    getRenderCache().prepareActiveSession(activeSession, state.sessionState);
+    assertActiveSessionCurrent(core.getState(), activeSession, options.signal);
+    getRenderCache().prepareActiveSession(activeSession, state.sessionState);
     if (options.signal) {
       throwIfAborted(options.signal);
     }
@@ -239,7 +240,7 @@ export function createImageExportPixelsResolver({
       throw createAbortError('Viewer application has been disposed.');
     }
 
-	    const requestedWidth = screenshotRegion?.outputWidth ?? activeSession.decoded.width;
+    const requestedWidth = screenshotRegion?.outputWidth ?? activeSession.decoded.width;
     const requestedHeight = screenshotRegion?.outputHeight ?? activeSession.decoded.height;
     const outputSize = options.previewMaxLongestEdge
       ? resolveBoundedImageExportSize(requestedWidth, requestedHeight, options.previewMaxLongestEdge)
@@ -252,10 +253,7 @@ export function createImageExportPixelsResolver({
       sourceWidth: activeSession.decoded.width,
       sourceHeight: activeSession.decoded.height,
       ...(screenshotRegion ? {
-        screenshot: {
-          rect: screenshotRegion.rect,
-          sourceViewport: screenshotRegion.sourceViewport
-        }
+        screenshot: cloneScreenshotRegionCrop(screenshotRegion)
       } : {}),
       ...(outputSize ? {
         outputWidth: outputSize.width,
@@ -381,8 +379,7 @@ export async function handleExportScreenshotRegions(
         filename: outputFilename,
         format: 'png',
         mode: 'screenshot',
-        rect: { ...region.rect },
-        sourceViewport: { ...region.sourceViewport },
+        ...cloneScreenshotRegionCrop(region),
         outputWidth: region.outputWidth,
         outputHeight: region.outputHeight,
         pngCompressionLevel: request.pngCompressionLevel
@@ -758,10 +755,7 @@ async function resolveBatchEntryExportResult({
     sourceWidth: session.decoded.width,
     sourceHeight: session.decoded.height,
     ...(screenshotRegion ? {
-      screenshot: {
-        rect: screenshotRegion.rect,
-        sourceViewport: screenshotRegion.sourceViewport
-      }
+      screenshot: cloneScreenshotRegionCrop(screenshotRegion)
     } : {}),
     ...(outputSize ? {
       outputWidth: outputSize.width,
@@ -1125,7 +1119,7 @@ export function triggerBrowserDownload(blob: Blob, filename: string): void {
   }, 1000);
 }
 
-function createJsonBlob(metadata: ScreenshotReproductionMetadataV1): Blob {
+function createJsonBlob(metadata: ScreenshotReproductionMetadataV2): Blob {
   return new Blob([serializeScreenshotReproductionMetadata(metadata)], {
     type: 'application/json'
   });

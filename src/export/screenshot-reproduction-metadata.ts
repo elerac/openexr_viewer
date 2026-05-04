@@ -1,15 +1,18 @@
 import { cloneDisplayLuminanceRange } from '../colormap-range';
 import { cloneDisplaySelection } from '../display-model';
+import {
+  cloneScreenshotRegionCrop,
+  getScreenshotRegionCropSize,
+  type ScreenshotRegionCrop
+} from './screenshot-region';
 import type {
   ExportScreenshotRegion,
   OpenedImageSession,
   PngCompressionLevel,
   ViewerState,
-  ViewportInfo,
-  ViewportRect
 } from '../types';
 
-const SCREENSHOT_REPRODUCTION_METADATA_SCHEMA_VERSION = 1;
+const SCREENSHOT_REPRODUCTION_METADATA_SCHEMA_VERSION = 2;
 const APP_NAME = 'openexr-viewer';
 
 export interface ScreenshotReproductionMetadataBatchContext {
@@ -33,8 +36,8 @@ export interface BuildScreenshotReproductionMetadataArgs {
   batch?: ScreenshotReproductionMetadataBatchContext;
 }
 
-export interface ScreenshotReproductionMetadataV1 {
-  schemaVersion: 1;
+export interface ScreenshotReproductionMetadataV2 {
+  schemaVersion: 2;
   app: {
     name: string;
   };
@@ -48,8 +51,7 @@ export interface ScreenshotReproductionMetadataV1 {
     batch?: ScreenshotReproductionMetadataBatchContext;
   };
   screenshot: {
-    rect: ViewportRect;
-    sourceViewport: ViewportInfo;
+    crop: ScreenshotRegionCrop;
     outputWidth: number;
     outputHeight: number;
     outputScale: {
@@ -103,7 +105,7 @@ export function buildScreenshotReproductionMetadata({
   renderState,
   createdAt = new Date().toISOString(),
   batch
-}: BuildScreenshotReproductionMetadataArgs): ScreenshotReproductionMetadataV1 {
+}: BuildScreenshotReproductionMetadataArgs): ScreenshotReproductionMetadataV2 {
   const layer = session.decoded.layers[renderState.activeLayer] ?? null;
   return {
     schemaVersion: SCREENSHOT_REPRODUCTION_METADATA_SCHEMA_VERSION,
@@ -120,13 +122,12 @@ export function buildScreenshotReproductionMetadata({
       ...(batch ? { batch: { ...batch } } : {})
     },
     screenshot: {
-      rect: { ...region.rect },
-      sourceViewport: { ...region.sourceViewport },
+      crop: cloneScreenshotRegionCrop(region),
       outputWidth: region.outputWidth,
       outputHeight: region.outputHeight,
       outputScale: {
-        x: region.outputWidth / region.rect.width,
-        y: region.outputHeight / region.rect.height
+        x: region.outputWidth / getScreenshotRegionCropSize(region).width,
+        y: region.outputHeight / getScreenshotRegionCropSize(region).height
       }
     },
     viewer: {
@@ -170,11 +171,11 @@ export function buildReproductionMetadataFilename(pngFilename: string): string {
     : `${pngFilename}.json`;
 }
 
-export function serializeScreenshotReproductionMetadata(metadata: ScreenshotReproductionMetadataV1): string {
+export function serializeScreenshotReproductionMetadata(metadata: ScreenshotReproductionMetadataV2): string {
   return `${JSON.stringify(metadata, null, 2)}\n`;
 }
 
-function resolveSourceIdentity(session: OpenedImageSession): ScreenshotReproductionMetadataV1['sourceImage']['source'] {
+function resolveSourceIdentity(session: OpenedImageSession): ScreenshotReproductionMetadataV2['sourceImage']['source'] {
   if (session.source.kind === 'url') {
     return {
       kind: 'url',

@@ -17,6 +17,11 @@ import {
   parsePngCompressionLevel,
   type ExportImagePixels
 } from '../export-image';
+import {
+  buildScaledScreenshotRegion,
+  cloneScreenshotRegionCrop,
+  getScreenshotRegionAspectRatio
+} from '../export/screenshot-region';
 import { createAbortError, DisposableBag, isAbortError, type Disposable } from '../lifecycle';
 import {
   DEFAULT_PNG_COMPRESSION_LEVEL,
@@ -612,10 +617,7 @@ export class ExportImageBatchDialogController implements Disposable {
 
       return this.screenshotRegions.map((region) => ({
         ...region,
-        rect: { ...region.rect },
-        sourceViewport: { ...region.sourceViewport },
-        outputWidth: Math.max(1, Math.round(region.rect.width * outputScale)),
-        outputHeight: Math.max(1, Math.round(region.rect.height * outputScale))
+        ...buildScaledScreenshotRegion(region, outputScale)
       }));
     }
 
@@ -628,8 +630,7 @@ export class ExportImageBatchDialogController implements Disposable {
 
     return [{
       ...region,
-      rect: { ...region.rect },
-      sourceViewport: { ...region.sourceViewport },
+      ...cloneScreenshotRegionCrop(region),
       outputWidth,
       outputHeight
     }];
@@ -757,7 +758,7 @@ export class ExportImageBatchDialogController implements Disposable {
     }
 
     const region = this.screenshotRegions[0]!;
-    const aspectRatio = region.rect.width / Math.max(region.rect.height, Number.EPSILON);
+    const aspectRatio = getScreenshotRegionAspectRatio(region);
     const sourceInput = source === 'width' ? this.elements.exportBatchWidthInput : this.elements.exportBatchHeightInput;
     const targetInput = source === 'width' ? this.elements.exportBatchHeightInput : this.elements.exportBatchWidthInput;
     const sourceValue = parsePositiveInteger(sourceInput.value);
@@ -2011,8 +2012,7 @@ export function buildExportBatchEntries(
           entries.push({
             ...baseEntry,
             mode: 'screenshot' as const,
-            rect: { ...region.rect },
-            sourceViewport: { ...region.sourceViewport },
+            ...cloneScreenshotRegionCrop(region),
             outputWidth: region.outputWidth,
             outputHeight: region.outputHeight,
             ...(region.count > 1
@@ -2150,8 +2150,7 @@ function buildScreenshotRegionItem(
     label: `Region ${index + 1}`,
     index,
     count,
-    rect: { ...region.rect },
-    sourceViewport: { ...region.sourceViewport },
+    ...cloneScreenshotRegionCrop(region),
     outputWidth: region.outputWidth,
     outputHeight: region.outputHeight
   };
@@ -2163,8 +2162,7 @@ function cloneScreenshotRegions(regions: ExportScreenshotRegionItem[]): ExportSc
     ...region,
     index,
     count,
-    rect: { ...region.rect },
-    sourceViewport: { ...region.sourceViewport }
+    ...cloneScreenshotRegionCrop(region)
   }));
 }
 

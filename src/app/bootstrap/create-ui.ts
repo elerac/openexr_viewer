@@ -222,6 +222,28 @@ export function createViewerUi({
     onRulersVisibleChange: (enabled) => {
       core.dispatch({ type: 'rulersVisibleSet', enabled });
     },
+    getScreenshotSelectionContext: () => {
+      const state = core.getState();
+      const activeSession = selectActiveSession(state);
+      const renderState = mergeRenderState(state.sessionState, state.interactionState);
+      return {
+        viewerMode: renderState.viewerMode,
+        view: {
+          zoom: renderState.zoom,
+          panX: renderState.panX,
+          panY: renderState.panY,
+          panoramaYawDeg: renderState.panoramaYawDeg,
+          panoramaPitchDeg: renderState.panoramaPitchDeg,
+          panoramaHfovDeg: renderState.panoramaHfovDeg
+        },
+        imageSize: activeSession
+          ? {
+              width: activeSession.decoded.width,
+              height: activeSession.decoded.height
+            }
+          : null
+      };
+    },
     getScreenshotFitRect: () => {
       const state = core.getState();
       const activeSession = selectActiveSession(state);

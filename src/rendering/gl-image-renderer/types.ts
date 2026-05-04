@@ -1,6 +1,6 @@
 import type { DisplaySourceBinding } from '../../display/bindings';
 import type { ExportImagePixels } from '../../export/export-pixels';
-import type { DecodedLayer, ViewerState, ViewportInfo, ViewportRect } from '../../types';
+import type { DecodedLayer, ImageRect, ViewerState, ViewportInfo, ViewportRect } from '../../types';
 
 export interface CommonUniforms {
   viewport: WebGLUniformLocation;
@@ -75,10 +75,16 @@ export interface ReadExportPixelsArgs {
   sourceHeight: number;
   outputWidth?: number;
   outputHeight?: number;
-  screenshot?: {
-    rect: ViewportRect;
-    sourceViewport: ViewportInfo;
-  };
+  screenshot?:
+    | {
+        coordinateSpace: 'image';
+        imageRect: ImageRect;
+      }
+    | {
+        coordinateSpace: 'viewport';
+        rect: ViewportRect;
+        sourceViewport: ViewportInfo;
+      };
 }
 
 export interface GlImageRendererState {

@@ -55,6 +55,13 @@ export interface ImagePixel {
   iy: number;
 }
 
+export interface ImageRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface ImageRoi {
   x0: number;
   y0: number;
@@ -250,19 +257,29 @@ export interface ScreenshotReproductionMetadataExportOptions {
   includeReproductionMetadata?: boolean;
 }
 
-export interface ExportScreenshotRegion {
+export interface ExportImageScreenshotRegion {
+  coordinateSpace: 'image';
+  imageRect: ImageRect;
+  outputWidth: number;
+  outputHeight: number;
+}
+
+export interface ExportViewportScreenshotRegion {
+  coordinateSpace: 'viewport';
   rect: ViewportRect;
   sourceViewport: ViewportInfo;
   outputWidth: number;
   outputHeight: number;
 }
 
-export interface ExportScreenshotRegionItem extends ExportScreenshotRegion {
+export type ExportScreenshotRegion = ExportImageScreenshotRegion | ExportViewportScreenshotRegion;
+
+export type ExportScreenshotRegionItem = ExportScreenshotRegion & {
   id: string;
   label: string;
   index: number;
   count: number;
-}
+};
 
 export interface ExportFullImageRequest extends PngExportOptions {
   filename: string;
@@ -270,14 +287,14 @@ export interface ExportFullImageRequest extends PngExportOptions {
   mode?: 'image';
 }
 
-export interface ExportScreenshotRequest
-  extends ExportScreenshotRegion,
-    PngExportOptions,
-    ScreenshotReproductionMetadataExportOptions {
+export type ExportScreenshotRequest =
+  ExportScreenshotRegion &
+  PngExportOptions &
+  ScreenshotReproductionMetadataExportOptions & {
   filename: string;
   format: ExportImageFormat;
   mode: 'screenshot';
-}
+};
 
 export type ExportImageRequest = ExportFullImageRequest | ExportScreenshotRequest;
 
@@ -359,7 +376,10 @@ export type ExportImageTarget =
   | ({
       filename: string;
       kind: 'screenshot';
-    } & Pick<ExportScreenshotRegion, 'rect' | 'sourceViewport'> &
+    } & (
+      | Pick<ExportImageScreenshotRegion, 'coordinateSpace' | 'imageRect'>
+      | Pick<ExportViewportScreenshotRegion, 'coordinateSpace' | 'rect' | 'sourceViewport'>
+    ) &
       Partial<Pick<ExportScreenshotRegion, 'outputWidth' | 'outputHeight'>>)
   | {
       filename: string;

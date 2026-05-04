@@ -880,14 +880,24 @@ test('exports image-viewer screenshot reproduction metadata as a zip download', 
   const metadata = JSON.parse(Buffer.from(metadataBytes).toString('utf8')) as {
     schemaVersion: number;
     export: { pngFilename: string; jsonFilename: string };
-    screenshot: { outputWidth: number; outputHeight: number };
+    screenshot: {
+      crop: {
+        coordinateSpace: string;
+        imageRect?: { x: number; y: number; width: number; height: number };
+      };
+      outputWidth: number;
+      outputHeight: number;
+    };
     viewer: { viewerMode: string };
   };
-  expect(metadata.schemaVersion).toBe(1);
+  expect(metadata.schemaVersion).toBe(2);
   expect(metadata.export).toMatchObject({
     pngFilename: 'cbox_rgb-screenshot.png',
     jsonFilename: 'cbox_rgb-screenshot.json'
   });
+  expect(metadata.screenshot.crop.coordinateSpace).toBe('image');
+  expect(metadata.screenshot.crop.imageRect?.width).toBeGreaterThan(0);
+  expect(metadata.screenshot.crop.imageRect?.height).toBeGreaterThan(0);
   expect(metadata.screenshot.outputWidth).toBeGreaterThan(0);
   expect(metadata.screenshot.outputHeight).toBeGreaterThan(0);
   expect(metadata.viewer.viewerMode).toBe('image');

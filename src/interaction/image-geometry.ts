@@ -10,6 +10,8 @@ export interface ViewportClientRect {
   height: number;
 }
 
+type ImageViewTransform = Pick<ViewerViewState, 'zoom' | 'panX' | 'panY'>;
+
 const FIT_VIEW_EPSILON = 1e-6;
 
 export function clampZoom(zoom: number): number {
@@ -23,7 +25,7 @@ export function exposureToScale(exposureEv: number): number {
 export function screenToImage(
   screenX: number,
   screenY: number,
-  state: ViewerState,
+  state: ImageViewTransform,
   viewport: ViewportInfo,
   imageWidth: number,
   imageHeight: number
@@ -44,7 +46,7 @@ export function screenToImage(
 export function screenToImageClamped(
   screenX: number,
   screenY: number,
-  state: ViewerState,
+  state: ImageViewTransform,
   viewport: ViewportInfo,
   imageWidth: number,
   imageHeight: number
@@ -65,7 +67,7 @@ export function screenToImageClamped(
 export function imageToScreen(
   imageX: number,
   imageY: number,
-  state: ViewerState,
+  state: ImageViewTransform,
   viewport: ViewportInfo
 ): { x: number; y: number } {
   return {

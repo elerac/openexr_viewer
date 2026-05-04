@@ -11,6 +11,13 @@ import {
   renderPixelsToCanvas,
   type ExportImagePixels
 } from '../export-image';
+import {
+  buildScaledScreenshotRegion,
+  cloneScreenshotRegionCrop,
+  getScreenshotRegionAspectRatio,
+  getScreenshotRegionCropSize,
+  serializeScreenshotRegionCrop
+} from '../export/screenshot-region';
 import { DisposableBag, isAbortError, type Disposable } from '../lifecycle';
 import {
   DEFAULT_PNG_COMPRESSION_LEVEL,
@@ -434,7 +441,7 @@ export class ExportImageDialogController implements Disposable {
       return;
     }
 
-    const aspectRatio = target.rect.width / Math.max(target.rect.height, Number.EPSILON);
+    const aspectRatio = getScreenshotRegionAspectRatio(target);
     const sourceInput = source === 'width' ? this.elements.exportWidthInput : this.elements.exportHeightInput;
     const targetInput = source === 'width' ? this.elements.exportHeightInput : this.elements.exportWidthInput;
     const sourceValue = parsePositiveInteger(sourceInput.value);
@@ -574,8 +581,7 @@ export class ExportImageDialogController implements Disposable {
       try {
         const pixels = await this.callbacks.onResolveExportImagePreview({
           mode: 'screenshot',
-          rect: { ...region.rect },
-          sourceViewport: { ...region.sourceViewport },
+          ...cloneScreenshotRegionCrop(region),
           outputWidth: region.outputWidth,
           outputHeight: region.outputHeight
         }, abortController.signal);
@@ -875,8 +881,7 @@ function parseExportImageRequest(
       filename: args.filename,
       format: 'png',
       mode: 'screenshot',
-      rect: { ...target.rect },
-      sourceViewport: { ...target.sourceViewport },
+      ...cloneScreenshotRegionCrop(target),
       outputWidth,
       outputHeight,
       pngCompressionLevel: args.pngCompressionLevel,
@@ -907,8 +912,7 @@ function parseExportImagePreviewRequest(
 
   return {
     mode: 'screenshot',
-    rect: { ...target.rect },
-    sourceViewport: { ...target.sourceViewport },
+    ...cloneScreenshotRegionCrop(target),
     outputWidth,
     outputHeight
   };
@@ -933,9 +937,10 @@ function buildDefaultScreenshotOutputSize(
     };
   }
 
+  const cropSize = getScreenshotRegionCropSize(target);
   return {
-    width: Math.max(1, Math.round(target.rect.width)),
-    height: Math.max(1, Math.round(target.rect.height))
+    width: Math.max(1, Math.round(cropSize.width)),
+    height: Math.max(1, Math.round(cropSize.height))
   };
 }
 
@@ -952,8 +957,7 @@ function cloneExportImageTarget(target: ExportImageTarget | null): ExportImageTa
       outputScale: target.outputScale,
       regions: target.regions.map((region) => ({
         ...region,
-        rect: { ...region.rect },
-        sourceViewport: { ...region.sourceViewport }
+        ...cloneScreenshotRegionCrop(region)
       }))
     };
   }
@@ -962,8 +966,7 @@ function cloneExportImageTarget(target: ExportImageTarget | null): ExportImageTa
     return {
       filename: target.filename,
       kind: 'screenshot',
-      rect: { ...target.rect },
-      sourceViewport: { ...target.sourceViewport },
+      ...cloneScreenshotRegionCrop(target),
       outputWidth: target.outputWidth,
       outputHeight: target.outputHeight
     };
@@ -1008,10 +1011,7 @@ function buildScaledScreenshotRegions(
 ): ExportScreenshotRegionItem[] {
   return regions.map((region) => ({
     ...region,
-    rect: { ...region.rect },
-    sourceViewport: { ...region.sourceViewport },
-    outputWidth: Math.max(1, Math.round(region.rect.width * outputScale)),
-    outputHeight: Math.max(1, Math.round(region.rect.height * outputScale))
+    ...buildScaledScreenshotRegion(region, outputScale)
   }));
 }
 
@@ -1046,8 +1046,7 @@ function serializeScreenshotRegionsPreviewRequest(regions: ExportScreenshotRegio
   return JSON.stringify(regions.map((region) => ({
     id: region.id,
     index: region.index,
-    rect: region.rect,
-    sourceViewport: region.sourceViewport,
+    crop: serializeScreenshotRegionCrop(region),
     outputWidth: region.outputWidth,
     outputHeight: region.outputHeight
   })));

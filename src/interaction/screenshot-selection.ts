@@ -1,4 +1,5 @@
-import type { ViewportInfo, ViewportRect } from '../types';
+import type { ImageRect, ViewerViewState, ViewportInfo, ViewportRect } from '../types';
+import { getPanoramaProjectionDiameter } from './panorama-geometry';
 import type { PointerPosition } from './shared';
 
 export const SCREENSHOT_SELECTION_MIN_SIZE = 16;
@@ -75,6 +76,102 @@ export function clampScreenshotSelectionRect(
     y: clamp(sanitizeCoordinate(rect.y), 0, maxHeight - height),
     width,
     height
+  };
+}
+
+export function clampScreenshotSelectionImageRect(
+  rect: ImageRect,
+  imageSize: ViewportInfo
+): ImageRect {
+  const maxWidth = Math.max(1, Math.floor(imageSize.width));
+  const maxHeight = Math.max(1, Math.floor(imageSize.height));
+  const width = Math.min(maxWidth, Math.max(1, sanitizeImageDimension(rect.width)));
+  const height = Math.min(maxHeight, Math.max(1, sanitizeImageDimension(rect.height)));
+  return {
+    x: clamp(sanitizeImageCoordinate(rect.x), 0, maxWidth - width),
+    y: clamp(sanitizeImageCoordinate(rect.y), 0, maxHeight - height),
+    width,
+    height
+  };
+}
+
+export function screenRectToImageRect(
+  rect: ViewportRect,
+  view: Pick<ViewerViewState, 'zoom' | 'panX' | 'panY'>,
+  viewport: ViewportInfo,
+  imageSize: ViewportInfo
+): ImageRect | null {
+  if (
+    imageSize.width <= 0 ||
+    imageSize.height <= 0 ||
+    viewport.width <= 0 ||
+    viewport.height <= 0 ||
+    !Number.isFinite(view.zoom) ||
+    view.zoom <= 0
+  ) {
+    return null;
+  }
+
+  const left = view.panX + (rect.x - viewport.width * 0.5) / view.zoom;
+  const right = view.panX + (rect.x + rect.width - viewport.width * 0.5) / view.zoom;
+  const top = view.panY + (rect.y - viewport.height * 0.5) / view.zoom;
+  const bottom = view.panY + (rect.y + rect.height - viewport.height * 0.5) / view.zoom;
+  const x0 = Math.floor(Math.min(left, right));
+  const y0 = Math.floor(Math.min(top, bottom));
+  const x1 = Math.ceil(Math.max(left, right));
+  const y1 = Math.ceil(Math.max(top, bottom));
+  const horizontal = clampImageSpan(x0, x1, imageSize.width);
+  const vertical = clampImageSpan(y0, y1, imageSize.height);
+  return {
+    x: horizontal.origin,
+    y: vertical.origin,
+    width: horizontal.size,
+    height: vertical.size
+  };
+}
+
+export function imageRectToScreenRect(
+  rect: ImageRect,
+  view: Pick<ViewerViewState, 'zoom' | 'panX' | 'panY'>,
+  viewport: ViewportInfo
+): ViewportRect {
+  const left = (rect.x - view.panX) * view.zoom + viewport.width * 0.5;
+  const right = (rect.x + rect.width - view.panX) * view.zoom + viewport.width * 0.5;
+  const top = (rect.y - view.panY) * view.zoom + viewport.height * 0.5;
+  const bottom = (rect.y + rect.height - view.panY) * view.zoom + viewport.height * 0.5;
+  return {
+    x: Math.min(left, right),
+    y: Math.min(top, bottom),
+    width: Math.abs(right - left),
+    height: Math.abs(bottom - top)
+  };
+}
+
+export function screenRectToPanoramaProjectionRect(
+  rect: ViewportRect,
+  viewport: ViewportInfo,
+  panoramaHfovDeg: number
+): ViewportRect {
+  const scale = Math.max(Number.EPSILON, getPanoramaProjectionDiameter(viewport, panoramaHfovDeg) * 0.5);
+  return {
+    x: (rect.x - viewport.width * 0.5) / scale,
+    y: (rect.y - viewport.height * 0.5) / scale,
+    width: rect.width / scale,
+    height: rect.height / scale
+  };
+}
+
+export function panoramaProjectionRectToScreenRect(
+  rect: ViewportRect,
+  viewport: ViewportInfo,
+  panoramaHfovDeg: number
+): ViewportRect {
+  const scale = Math.max(Number.EPSILON, getPanoramaProjectionDiameter(viewport, panoramaHfovDeg) * 0.5);
+  return {
+    x: viewport.width * 0.5 + rect.x * scale,
+    y: viewport.height * 0.5 + rect.y * scale,
+    width: rect.width * scale,
+    height: rect.height * scale
   };
 }
 
@@ -978,6 +1075,31 @@ function sanitizeCoordinate(value: number): number {
 
 function sanitizeDimension(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function sanitizeImageCoordinate(value: number): number {
+  return Number.isFinite(value) ? Math.floor(value) : 0;
+}
+
+function sanitizeImageDimension(value: number): number {
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : 1;
+}
+
+function clampImageSpan(start: number, end: number, size: number): { origin: number; size: number } {
+  const maxSize = Math.max(1, Math.floor(size));
+  const clampedStart = clamp(start, 0, maxSize);
+  const clampedEnd = clamp(end, 0, maxSize);
+  if (clampedEnd > clampedStart) {
+    return {
+      origin: clampedStart,
+      size: clampedEnd - clampedStart
+    };
+  }
+
+  return {
+    origin: clamp(clampedStart, 0, maxSize - 1),
+    size: 1
+  };
 }
 
 function clamp(value: number, min: number, max: number): number {

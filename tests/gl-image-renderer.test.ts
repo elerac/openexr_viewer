@@ -389,6 +389,7 @@ describe('gl image renderer', () => {
       outputWidth: 40,
       outputHeight: 20,
       screenshot: {
+        coordinateSpace: 'viewport',
         rect: { x: 10, y: 5, width: 20, height: 10 },
         sourceViewport: { width: 100, height: 50 }
       }
@@ -490,6 +491,7 @@ describe('gl image renderer', () => {
       outputWidth: 40,
       outputHeight: 20,
       screenshot: {
+        coordinateSpace: 'viewport',
         rect: { x: 10, y: 5, width: 20, height: 10 },
         sourceViewport: { width: 100, height: 50 }
       }
@@ -537,6 +539,7 @@ describe('gl image renderer', () => {
       outputWidth: 40,
       outputHeight: 20,
       screenshot: {
+        coordinateSpace: 'viewport',
         rect: { x: 10, y: 5, width: 20, height: 10 },
         sourceViewport: { width: 100, height: 50 }
       }

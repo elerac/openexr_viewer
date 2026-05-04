@@ -1107,8 +1107,8 @@ describe('bootstrap app lifecycle', () => {
 
     await expect(callbacks.onResolveExportImagePreview({
       mode: 'screenshot',
-      rect: { x: 0, y: 0, width: 512, height: 256 },
-      sourceViewport: { width: 1024, height: 512 },
+      coordinateSpace: 'image',
+      imageRect: { x: 0, y: 0, width: 512, height: 256 },
       outputWidth: 1024,
       outputHeight: 512
     }, abortController.signal)).resolves.toBe(pixels);
@@ -1289,6 +1289,7 @@ describe('bootstrap app lifecycle', () => {
         filename: string;
         format: 'png';
         mode: 'screenshot';
+        coordinateSpace: 'viewport';
         rect: { x: number; y: number; width: number; height: number };
         sourceViewport: { width: number; height: number };
         outputWidth: number;
@@ -1302,6 +1303,7 @@ describe('bootstrap app lifecycle', () => {
       filename: 'image-screenshot.png',
       format: 'png',
       mode: 'screenshot',
+      coordinateSpace: 'viewport',
       rect: { x: 8, y: 4, width: 120, height: 60 },
       sourceViewport: { width: 240, height: 120 },
       outputWidth: 240,
@@ -1327,8 +1329,11 @@ describe('bootstrap app lifecycle', () => {
       schemaVersion: number;
       export: { pngFilename: string; jsonFilename: string; pngCompressionLevel: number };
       screenshot: {
-        rect: { x: number; y: number; width: number; height: number };
-        sourceViewport: { width: number; height: number };
+        crop: {
+          coordinateSpace: 'viewport';
+          rect: { x: number; y: number; width: number; height: number };
+          sourceViewport: { width: number; height: number };
+        };
         outputWidth: number;
         outputHeight: number;
         outputScale: { x: number; y: number };
@@ -1338,15 +1343,18 @@ describe('bootstrap app lifecycle', () => {
       display: { activeLayer: number; layerName: string; displaySelection: typeof rgbSelection; exposureEv: number };
     };
 
-    expect(metadata.schemaVersion).toBe(1);
+    expect(metadata.schemaVersion).toBe(2);
     expect(metadata.export).toMatchObject({
       pngFilename: 'image-screenshot.png',
       jsonFilename: 'image-screenshot.json',
       pngCompressionLevel: 6
     });
     expect(metadata.screenshot).toMatchObject({
-      rect: { x: 8, y: 4, width: 120, height: 60 },
-      sourceViewport: { width: 240, height: 120 },
+      crop: {
+        coordinateSpace: 'viewport',
+        rect: { x: 8, y: 4, width: 120, height: 60 },
+        sourceViewport: { width: 240, height: 120 }
+      },
       outputWidth: 240,
       outputHeight: 120,
       outputScale: { x: 2, y: 2 }
@@ -1427,8 +1435,8 @@ describe('bootstrap app lifecycle', () => {
     await expect(callbacks.onResolveExportImagePreview(
       {
         mode: 'screenshot',
-        rect: { x: 0, y: 0, width: 128, height: 64 },
-        sourceViewport: { width: 256, height: 128 },
+        coordinateSpace: 'image',
+        imageRect: { x: 0, y: 0, width: 128, height: 64 },
         outputWidth: 128,
         outputHeight: 64
       },
@@ -1608,6 +1616,7 @@ describe('bootstrap app lifecycle', () => {
         displaySelection: typeof rgbSelection;
         channelLabel: string;
         mode: 'screenshot';
+        coordinateSpace: 'viewport';
         rect: { x: number; y: number; width: number; height: number };
         sourceViewport: { width: number; height: number };
         outputWidth: number;
@@ -1622,6 +1631,7 @@ describe('bootstrap app lifecycle', () => {
       displaySelection: rgbSelection,
       channelLabel: 'RGB',
       mode: 'screenshot',
+      coordinateSpace: 'viewport',
       rect: { x: 8, y: 4, width: 120, height: 60 },
       sourceViewport: { width: 240, height: 120 },
       outputWidth: 240,
@@ -1638,6 +1648,7 @@ describe('bootstrap app lifecycle', () => {
       outputWidth: 64,
       outputHeight: 32,
       screenshot: {
+        coordinateSpace: 'viewport',
         rect: { x: 8, y: 4, width: 120, height: 60 },
         sourceViewport: { width: 240, height: 120 }
       },
@@ -2148,6 +2159,7 @@ describe('bootstrap app lifecycle', () => {
           displaySelection: typeof rgbSelection | typeof depthSelection;
           channelLabel: string;
           mode: 'screenshot';
+          coordinateSpace: 'viewport';
           rect: { x: number; y: number; width: number; height: number };
           sourceViewport: { width: number; height: number };
           outputWidth: number;
@@ -2168,6 +2180,7 @@ describe('bootstrap app lifecycle', () => {
           displaySelection: rgbSelection,
           channelLabel: 'RGB',
           mode: 'screenshot',
+          coordinateSpace: 'viewport',
           rect: { x: 10, y: 5, width: 40, height: 20 },
           sourceViewport: { width: 100, height: 50 },
           outputWidth: 80,
@@ -2180,6 +2193,7 @@ describe('bootstrap app lifecycle', () => {
           displaySelection: depthSelection,
           channelLabel: 'Z',
           mode: 'screenshot',
+          coordinateSpace: 'viewport',
           rect: { x: 10, y: 5, width: 40, height: 20 },
           sourceViewport: { width: 100, height: 50 },
           outputWidth: 80,
@@ -2196,6 +2210,7 @@ describe('bootstrap app lifecycle', () => {
       outputWidth: 80,
       outputHeight: 40,
       screenshot: {
+        coordinateSpace: 'viewport',
         rect: { x: 10, y: 5, width: 40, height: 20 },
         sourceViewport: { width: 100, height: 50 }
       },
@@ -2214,6 +2229,7 @@ describe('bootstrap app lifecycle', () => {
       outputWidth: 80,
       outputHeight: 40,
       screenshot: {
+        coordinateSpace: 'viewport',
         rect: { x: 10, y: 5, width: 40, height: 20 },
         sourceViewport: { width: 100, height: 50 }
       },
@@ -2328,6 +2344,7 @@ describe('bootstrap app lifecycle', () => {
           displaySelection: typeof rgbSelection;
           channelLabel: string;
           mode: 'screenshot';
+          coordinateSpace: 'viewport';
           rect: { x: number; y: number; width: number; height: number };
           sourceViewport: { width: number; height: number };
           outputWidth: number;
@@ -2351,6 +2368,7 @@ describe('bootstrap app lifecycle', () => {
         displaySelection: rgbSelection,
         channelLabel: 'RGB',
         mode: 'screenshot',
+        coordinateSpace: 'viewport',
         rect: { x: 10, y: 5, width: 40, height: 20 },
         sourceViewport: { width: 100, height: 50 },
         outputWidth: 80,
@@ -2372,6 +2390,16 @@ describe('bootstrap app lifecycle', () => {
         pngCompressionLevel: number;
         batch: { archiveFilename: string; sessionId: string; channelLabel: string; outputFilename: string };
       };
+      screenshot: {
+        crop: {
+          coordinateSpace: 'viewport';
+          rect: { x: number; y: number; width: number; height: number };
+          sourceViewport: { width: number; height: number };
+        };
+        outputWidth: number;
+        outputHeight: number;
+        outputScale: { x: number; y: number };
+      };
       viewer: { viewerMode: string; panX: number; panY: number; panoramaHfovDeg: number };
       display: { layerName: string; displaySelection: typeof rgbSelection };
     };
@@ -2385,6 +2413,16 @@ describe('bootstrap app lifecycle', () => {
         channelLabel: 'RGB',
         outputFilename: 'beauty-screenshot.RGB.png'
       }
+    });
+    expect(metadata.screenshot).toMatchObject({
+      crop: {
+        coordinateSpace: 'viewport',
+        rect: { x: 10, y: 5, width: 40, height: 20 },
+        sourceViewport: { width: 100, height: 50 }
+      },
+      outputWidth: 80,
+      outputHeight: 40,
+      outputScale: { x: 2, y: 2 }
     });
     expect(metadata.viewer).toMatchObject({
       viewerMode: 'panorama',

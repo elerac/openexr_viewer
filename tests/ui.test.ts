@@ -27,7 +27,7 @@ import { formatProbeCoordinates } from '../src/ui/probe-readout';
 import { getListboxOptionIndexAtClientY } from '../src/ui/render-helpers';
 import { ViewerUi } from '../src/ui/viewer-ui';
 import { SPECTRUM_LATTICE_THEME_ID, THEME_STORAGE_KEY } from '../src/theme';
-import type { ExportImagePreviewRequest, ViewportRect } from '../src/types';
+import type { ExportImagePreviewRequest, ViewerMode, ViewportRect } from '../src/types';
 import {
   SPECTRUM_LATTICE_MOTION_ANIMATE,
   SPECTRUM_LATTICE_MOTION_FOLLOW_SYSTEM,
@@ -3192,8 +3192,8 @@ describe('view menu', () => {
     expect(heightInput.value).toBe('70');
     expect(onResolveExportImagePreview).toHaveBeenCalledWith({
       mode: 'screenshot',
-      rect: { x: 30, y: 15, width: 140, height: 70 },
-      sourceViewport: { width: 200, height: 100 },
+      coordinateSpace: 'image',
+      imageRect: { x: 30, y: 15, width: 140, height: 70 },
       outputWidth: 140,
       outputHeight: 70
     }, expect.any(AbortSignal));
@@ -3212,8 +3212,8 @@ describe('view menu', () => {
         format: 'png',
         pngCompressionLevel: 9,
         mode: 'screenshot',
-        rect: { x: 30, y: 15, width: 140, height: 70 },
-        sourceViewport: { width: 200, height: 100 },
+        coordinateSpace: 'image',
+        imageRect: { x: 30, y: 15, width: 140, height: 70 },
         outputWidth: 280,
         outputHeight: 140,
         includeReproductionMetadata: true
@@ -3275,8 +3275,8 @@ describe('view menu', () => {
     expect(heightInput.value).toBe('140');
     expect(onResolveExportImagePreview).toHaveBeenLastCalledWith({
       mode: 'screenshot',
-      rect: { x: 40, y: 20, width: 140, height: 70 },
-      sourceViewport: { width: 200, height: 100 },
+      coordinateSpace: 'image',
+      imageRect: { x: 40, y: 20, width: 140, height: 70 },
       outputWidth: 280,
       outputHeight: 140
     }, expect.any(AbortSignal));
@@ -3298,8 +3298,8 @@ describe('view menu', () => {
     expect(heightInput.value).toBe('140');
     expect(onResolveExportImagePreview).toHaveBeenLastCalledWith({
       mode: 'screenshot',
-      rect: { x: 40, y: 20, width: 140, height: 70 },
-      sourceViewport: { width: 200, height: 100 },
+      coordinateSpace: 'image',
+      imageRect: { x: 40, y: 20, width: 140, height: 70 },
       outputWidth: 280,
       outputHeight: 140
     }, expect.any(AbortSignal));
@@ -3320,13 +3320,114 @@ describe('view menu', () => {
     expect(heightInput.value).toBe('60');
     expect(onResolveExportImagePreview).toHaveBeenLastCalledWith({
       mode: 'screenshot',
-      rect: { x: 40, y: 20, width: 120, height: 60 },
-      sourceViewport: { width: 200, height: 100 },
+      coordinateSpace: 'image',
+      imageRect: { x: 40, y: 20, width: 120, height: 60 },
       outputWidth: 120,
       outputHeight: 60
     }, expect.any(AbortSignal));
 
     dialogCancelButton.click();
+  });
+
+  it('keeps image screenshot selections anchored to source pixels after a viewer resize', async () => {
+    installUiFixture();
+
+    const onResolveExportImagePreview = vi.fn(async () => createPreviewPixels(32, 16));
+    const ui = new ViewerUi(createUiCallbacks({ onResolveExportImagePreview }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+    mockDomRect(viewerContainer, { top: 0, bottom: 100, height: 100, width: 200 });
+
+    const selectionBox = document.getElementById('screenshot-selection-box') as HTMLDivElement;
+    const widthInput = document.getElementById('export-width-input') as HTMLInputElement;
+    const heightInput = document.getElementById('export-height-input') as HTMLInputElement;
+
+    (document.getElementById('export-screenshot-button') as HTMLButtonElement).click();
+    ui.setScreenshotSelectionRect({ x: 40, y: 20, width: 120, height: 60 });
+
+    mockDomRect(viewerContainer, { top: 0, bottom: 150, height: 150, width: 300 });
+    ui.setViewerViewportRect({ left: 0, top: 0, width: 300, height: 150 });
+
+    expect(selectionBox.style.left).toBe('90px');
+    expect(selectionBox.style.top).toBe('45px');
+    expect(selectionBox.style.width).toBe('120px');
+    expect(selectionBox.style.height).toBe('60px');
+
+    (document.getElementById('screenshot-selection-export-button') as HTMLButtonElement).click();
+    await flushMicrotasks();
+
+    expect(widthInput.value).toBe('120');
+    expect(heightInput.value).toBe('60');
+    expect(onResolveExportImagePreview).toHaveBeenLastCalledWith({
+      mode: 'screenshot',
+      coordinateSpace: 'image',
+      imageRect: { x: 40, y: 20, width: 120, height: 60 },
+      outputWidth: 120,
+      outputHeight: 60
+    }, expect.any(AbortSignal));
+
+    (document.getElementById('export-dialog-cancel-button') as HTMLButtonElement).click();
+    ui.dispose();
+  });
+
+  it('keeps panorama screenshot selections anchored to projection coordinates after a viewer resize', async () => {
+    installUiFixture();
+
+    const onResolveExportImagePreview = vi.fn(async () => createPreviewPixels(32, 16));
+    const ui = new ViewerUi(createUiCallbacks({
+      getScreenshotSelectionContext: () => ({
+        viewerMode: 'panorama' as const,
+        view: {
+          zoom: 1,
+          panX: 100,
+          panY: 50,
+          panoramaYawDeg: 0,
+          panoramaPitchDeg: 0,
+          panoramaHfovDeg: 90
+        },
+        imageSize: { width: 200, height: 100 }
+      }),
+      onResolveExportImagePreview
+    }));
+    ui.setOpenedImageOptions([{ id: 'session-1', label: 'image.exr' }], 'session-1');
+    ui.setExportTarget({ filename: 'image.png' });
+
+    const viewerContainer = document.getElementById('viewer-container') as HTMLElement;
+    mockDomRect(viewerContainer, { top: 0, bottom: 200, height: 200, width: 400 });
+
+    const selectionBox = document.getElementById('screenshot-selection-box') as HTMLDivElement;
+    const widthInput = document.getElementById('export-width-input') as HTMLInputElement;
+    const heightInput = document.getElementById('export-height-input') as HTMLInputElement;
+
+    (document.getElementById('export-screenshot-button') as HTMLButtonElement).click();
+    ui.setScreenshotSelectionRect({ x: 150, y: 70, width: 100, height: 60 });
+
+    mockDomRect(viewerContainer, { top: 0, bottom: 300, height: 300, width: 600 });
+    ui.setViewerViewportRect({ left: 0, top: 0, width: 600, height: 300 });
+
+    expect(selectionBox.style.left).toBe('225px');
+    expect(selectionBox.style.top).toBe('105px');
+    expect(selectionBox.style.width).toBe('150px');
+    expect(selectionBox.style.height).toBe('90px');
+
+    (document.getElementById('screenshot-selection-export-button') as HTMLButtonElement).click();
+    await flushMicrotasks();
+
+    expect(widthInput.value).toBe('150');
+    expect(heightInput.value).toBe('90');
+    expect(onResolveExportImagePreview).toHaveBeenLastCalledWith({
+      mode: 'screenshot',
+      coordinateSpace: 'viewport',
+      rect: { x: 225, y: 105, width: 150, height: 90 },
+      sourceViewport: { width: 600, height: 300 },
+      outputWidth: 150,
+      outputHeight: 90
+    }, expect.any(AbortSignal));
+
+    (document.getElementById('export-dialog-cancel-button') as HTMLButtonElement).click();
+    ui.dispose();
   });
 
   it('fits screenshot selection to the current visible image bounds', () => {
@@ -3456,7 +3557,7 @@ describe('view menu', () => {
 
     screenshotButton.click();
     ui.setScreenshotSelectionResizeActive(true);
-    ui.setScreenshotSelectionRect({ x: 40, y: 24, width: 88, height: 88 }, { squareSnapped: true });
+    ui.setScreenshotSelectionRect({ x: 40, y: 30, width: 88, height: 88 }, { squareSnapped: true });
 
     expect(selectionBox.classList.contains('is-square-snapped')).toBe(true);
     expect(selectionSize.classList.contains('is-square-snapped')).toBe(true);
@@ -3483,8 +3584,8 @@ describe('view menu', () => {
     expect(heightInput.value).toBe('88');
     expect(onResolveExportImagePreview).toHaveBeenLastCalledWith({
       mode: 'screenshot',
-      rect: { x: 40, y: 24, width: 88, height: 88 },
-      sourceViewport: { width: 200, height: 160 },
+      coordinateSpace: 'image',
+      imageRect: { x: 40, y: 0, width: 88, height: 88 },
       outputWidth: 88,
       outputHeight: 88
     }, expect.any(AbortSignal));
@@ -3552,6 +3653,8 @@ describe('view menu', () => {
       archiveFilename: string;
       entries: Array<{
         mode?: 'image' | 'screenshot';
+        coordinateSpace?: 'image' | 'viewport';
+        imageRect?: { x: number; y: number; width: number; height: number };
         rect?: { x: number; y: number; width: number; height: number };
         sourceViewport?: { width: number; height: number };
         outputWidth?: number;
@@ -3724,16 +3827,16 @@ describe('view menu', () => {
       entries: [
         {
           mode: 'screenshot',
-          rect: { x: 30, y: 15, width: 140, height: 70 },
-          sourceViewport: { width: 200, height: 100 },
+          coordinateSpace: 'image',
+          imageRect: { x: 30, y: 15, width: 140, height: 70 },
           outputWidth: 280,
           outputHeight: 140,
           outputFilename: 'Hero Plate-screenshot.RGB.png'
         },
         {
           mode: 'screenshot',
-          rect: { x: 30, y: 15, width: 140, height: 70 },
-          sourceViewport: { width: 200, height: 100 },
+          coordinateSpace: 'image',
+          imageRect: { x: 30, y: 15, width: 140, height: 70 },
           outputWidth: 280,
           outputHeight: 140,
           outputFilename: 'Depth Pass-screenshot.Z.png'
@@ -3793,19 +3896,19 @@ describe('view menu', () => {
     );
     expect(initialPreviewRequests.map((request) => ({
       mode: request.mode,
-      rect: request.mode === 'screenshot' ? request.rect : null,
+      imageRect: request.mode === 'screenshot' && request.coordinateSpace === 'image' ? request.imageRect : null,
       outputWidth: request.mode === 'screenshot' ? request.outputWidth : null,
       outputHeight: request.mode === 'screenshot' ? request.outputHeight : null
     }))).toEqual([
       {
         mode: 'screenshot',
-        rect: { x: 30, y: 15, width: 140, height: 70 },
+        imageRect: { x: 30, y: 15, width: 140, height: 70 },
         outputWidth: 140,
         outputHeight: 70
       },
       {
         mode: 'screenshot',
-        rect: { x: 54, y: 30, width: 140, height: 70 },
+        imageRect: { x: 54, y: 30, width: 140, height: 70 },
         outputWidth: 140,
         outputHeight: 70
       }
@@ -3847,7 +3950,8 @@ describe('view menu', () => {
             label: 'Region 1',
             index: 0,
             count: 2,
-            rect: { x: 30, y: 15, width: 140, height: 70 },
+            coordinateSpace: 'image',
+            imageRect: { x: 30, y: 15, width: 140, height: 70 },
             outputWidth: 280,
             outputHeight: 140
           }),
@@ -3855,7 +3959,8 @@ describe('view menu', () => {
             label: 'Region 2',
             index: 1,
             count: 2,
-            rect: { x: 54, y: 30, width: 140, height: 70 },
+            coordinateSpace: 'image',
+            imageRect: { x: 54, y: 30, width: 140, height: 70 },
             outputWidth: 280,
             outputHeight: 140
           })
@@ -3916,6 +4021,8 @@ describe('view menu', () => {
       archiveFilename: string;
       entries: Array<{
         outputFilename: string;
+        coordinateSpace?: 'image' | 'viewport';
+        imageRect?: { x: number; y: number; width: number; height: number };
         rect?: { x: number; y: number; width: number; height: number };
         outputWidth?: number;
         outputHeight?: number;
@@ -3968,7 +4075,8 @@ describe('view menu', () => {
       'image-2-screenshot.R2.Z.png'
     ]);
     expect(request?.entries[0]).toMatchObject({
-      rect: { x: 20, y: 10, width: 120, height: 60 },
+      coordinateSpace: 'image',
+      imageRect: { x: 20, y: 10, width: 120, height: 60 },
       outputWidth: 240,
       outputHeight: 120,
       screenshotRegionIndex: 0,
@@ -3976,7 +4084,8 @@ describe('view menu', () => {
       screenshotRegionCount: 2
     });
     expect(request?.entries[2]).toMatchObject({
-      rect: { x: 44, y: 34, width: 120, height: 60 },
+      coordinateSpace: 'image',
+      imageRect: { x: 44, y: 34, width: 120, height: 60 },
       outputWidth: 240,
       outputHeight: 120,
       screenshotRegionIndex: 1,
@@ -3992,6 +4101,8 @@ describe('view menu', () => {
       sessionId: string;
       channelLabel: string;
       mode?: 'image' | 'screenshot';
+      coordinateSpace?: 'image' | 'viewport';
+      imageRect?: { x: number; y: number; width: number; height: number };
       rect?: { x: number; y: number; width: number; height: number };
       outputWidth?: number;
       outputHeight?: number;
@@ -4035,35 +4146,35 @@ describe('view menu', () => {
     expect(onResolveExportImageBatchPreview.mock.calls.map(([request]) => ({
       channelLabel: request.channelLabel,
       mode: request.mode,
-      rect: request.rect,
+      imageRect: request.imageRect,
       outputWidth: request.outputWidth,
       outputHeight: request.outputHeight
     }))).toEqual([
       {
         channelLabel: 'RGB',
         mode: 'screenshot',
-        rect: { x: 20, y: 10, width: 120, height: 60 },
+        imageRect: { x: 20, y: 10, width: 120, height: 60 },
         outputWidth: 120,
         outputHeight: 60
       },
       {
         channelLabel: 'RGB',
         mode: 'screenshot',
-        rect: { x: 44, y: 34, width: 120, height: 60 },
+        imageRect: { x: 44, y: 34, width: 120, height: 60 },
         outputWidth: 120,
         outputHeight: 60
       },
       {
         channelLabel: 'Z',
         mode: 'screenshot',
-        rect: { x: 20, y: 10, width: 120, height: 60 },
+        imageRect: { x: 20, y: 10, width: 120, height: 60 },
         outputWidth: 120,
         outputHeight: 60
       },
       {
         channelLabel: 'Z',
         mode: 'screenshot',
-        rect: { x: 44, y: 34, width: 120, height: 60 },
+        imageRect: { x: 44, y: 34, width: 120, height: 60 },
         outputWidth: 120,
         outputHeight: 60
       }
@@ -4130,8 +4241,8 @@ describe('view menu', () => {
     await flushMicrotasks();
     expect(onResolveExportImagePreview).toHaveBeenLastCalledWith({
       mode: 'screenshot',
-      rect: { x: 40, y: 20, width: 120, height: 60 },
-      sourceViewport: { width: 200, height: 100 },
+      coordinateSpace: 'image',
+      imageRect: { x: 40, y: 20, width: 120, height: 60 },
       outputWidth: 240,
       outputHeight: 120
     }, expect.any(AbortSignal));
@@ -4179,8 +4290,8 @@ describe('view menu', () => {
     expect(heightInput.value).toBe('120');
     expect(onResolveExportImagePreview).toHaveBeenLastCalledWith({
       mode: 'screenshot',
-      rect: { x: 40, y: 20, width: 120, height: 60 },
-      sourceViewport: { width: 200, height: 100 },
+      coordinateSpace: 'image',
+      imageRect: { x: 40, y: 20, width: 120, height: 60 },
       outputWidth: 240,
       outputHeight: 120
     }, expect.any(AbortSignal));
@@ -8946,6 +9057,18 @@ function createUiCallbacksBase() {
     onAutoExposurePercentileChange: () => {},
     onImageLoadWorkersChange: () => {},
     onRulersVisibleChange: () => {},
+    getScreenshotSelectionContext: () => ({
+      viewerMode: 'image' as ViewerMode,
+      view: {
+        zoom: 1,
+        panX: 100,
+        panY: 50,
+        panoramaYawDeg: 0,
+        panoramaPitchDeg: 0,
+        panoramaHfovDeg: 100
+      },
+      imageSize: { width: 200, height: 100 }
+    }),
     getScreenshotFitRect: (): ViewportRect | null => null,
     onViewerModeChange: () => {},
     onLayerChange: () => {},

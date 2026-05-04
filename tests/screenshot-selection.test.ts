@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clampScreenshotSelectionImageRect,
   clampScreenshotSelectionRect,
   createDefaultScreenshotSelectionRect,
+  imageRectToScreenRect,
+  panoramaProjectionRectToScreenRect,
   resolveScreenshotSelectionHandle,
+  screenRectToImageRect,
+  screenRectToPanoramaProjectionRect,
   updateScreenshotSelectionRectFromDrag
 } from '../src/interaction/screenshot-selection';
 
@@ -27,6 +32,79 @@ describe('screenshot selection geometry', () => {
       y: 0,
       width: 16,
       height: 120
+    });
+  });
+
+  it('converts screen rectangles to clamped source image pixel rectangles', () => {
+    expect(screenRectToImageRect(
+      { x: 80, y: 40, width: 60, height: 30 },
+      { zoom: 2, panX: 50, panY: 25 },
+      { width: 200, height: 100 },
+      { width: 100, height: 50 }
+    )).toEqual({
+      x: 40,
+      y: 20,
+      width: 30,
+      height: 15
+    });
+
+    expect(screenRectToImageRect(
+      { x: 40, y: 10, width: 80, height: 80 },
+      { zoom: 1, panX: 50, panY: 25 },
+      { width: 200, height: 100 },
+      { width: 100, height: 50 }
+    )).toEqual({
+      x: 0,
+      y: 0,
+      width: 70,
+      height: 50
+    });
+  });
+
+  it('converts image pixel rectangles back to screen rectangles', () => {
+    expect(imageRectToScreenRect(
+      { x: 40, y: 20, width: 30, height: 15 },
+      { zoom: 2, panX: 50, panY: 25 },
+      { width: 200, height: 100 }
+    )).toEqual({
+      x: 80,
+      y: 40,
+      width: 60,
+      height: 30
+    });
+  });
+
+  it('clamps screenshot image rectangles to integer image bounds', () => {
+    expect(clampScreenshotSelectionImageRect({
+      x: -5.4,
+      y: 45.8,
+      width: 20.2,
+      height: 10.8
+    }, { width: 100, height: 50 })).toEqual({
+      x: 0,
+      y: 39,
+      width: 20,
+      height: 11
+    });
+  });
+
+  it('converts panorama selections through projection-relative coordinates', () => {
+    const viewport = { width: 400, height: 200 };
+    const projectionRect = screenRectToPanoramaProjectionRect(
+      { x: 150, y: 70, width: 100, height: 60 },
+      viewport,
+      90
+    );
+
+    expect(projectionRect.x).toBeCloseTo(-0.25);
+    expect(projectionRect.y).toBeCloseTo(-0.15);
+    expect(projectionRect.width).toBeCloseTo(0.5);
+    expect(projectionRect.height).toBeCloseTo(0.3);
+    expect(panoramaProjectionRectToScreenRect(projectionRect, viewport, 90)).toEqual({
+      x: 150,
+      y: 70,
+      width: 100,
+      height: 60
     });
   });
 
