@@ -22,7 +22,8 @@ import { buildViewerStateForLayer, createInitialState } from '../src/viewer-stor
 import { createSinglePaneLayout, splitActiveViewerPane } from '../src/viewer-pane-layout';
 import {
   createChannelMonoSelection,
-  createLayerFromChannels
+  createLayerFromChannels,
+  createStokesSelection
 } from './helpers/state-fixtures';
 import type { DecodedExrImage, OpenedImageSession } from '../src/types';
 
@@ -686,5 +687,50 @@ describe('viewer app lanes', () => {
 
     expect(after.probeReadout).toBe(before.probeReadout);
     expect(after.renderState).not.toBe(before.renderState);
+  });
+
+  it('invalidates the spectral readout when saved Stokes plot defaults change', () => {
+    const decoded: DecodedExrImage = {
+      width: 2,
+      height: 1,
+      layers: [createLayerFromChannels({
+        'S0.400nm': [2, 2],
+        'S1.400nm': [-1, -1],
+        'S2.400nm': [0, 0],
+        'S3.400nm': [0, 0],
+        'S0.500nm': [4, 4],
+        'S1.500nm': [1, 1],
+        'S2.500nm': [0, 0],
+        'S3.500nm': [0, 0]
+      }, 'spectral-stokes')]
+    };
+    const sessionState = {
+      ...buildViewerStateForLayer(createInitialState(), decoded, 0),
+      displaySelection: createStokesSelection('s1_over_s0', 'stokesScalar', null, '500nm')
+    };
+    const session = createSession('session-1', decoded);
+    const state: ViewerAppState = {
+      ...createInitialViewerAppState(),
+      sessions: [{ ...session, state: sessionState }],
+      activeSessionId: session.id,
+      sessionState,
+      interactionState: createInteractionState(sessionState)
+    };
+    const next: ViewerAppState = {
+      ...state,
+      stokesColormapDefaults: {
+        ...state.stokesColormapDefaults,
+        normalized: {
+          ...state.stokesColormapDefaults.normalized,
+          range: { min: -0.5, max: 0.5 },
+          zeroCentered: false
+        }
+      }
+    };
+
+    const renderFlags = createRenderFlags(state, next);
+
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.SpectralReadout)).toBe(true);
+    expect(hasRenderFlag(renderFlags, ViewerRenderInvalidationFlags.RenderImage)).toBe(false);
   });
 });

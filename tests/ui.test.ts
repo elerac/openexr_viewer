@@ -352,7 +352,8 @@ describe('spectral inspector', () => {
         { channelName: '405.5nm', wavelength: 405.5, seriesKey: '', seriesLabel: '', intensity: 0.25 },
         { channelName: 'HOGE.520nm', wavelength: 520, seriesKey: 'HOGE', seriesLabel: 'HOGE', intensity: 0.75 },
         { channelName: 'FUGA735.25nm', wavelength: 735.25, seriesKey: '', seriesLabel: '', intensity: 0.5 }
-      ]
+      ],
+      yAxis: null
     });
 
     const spectralPanel = document.getElementById('spectral-panel') as HTMLElement;
@@ -394,7 +395,8 @@ describe('spectral inspector', () => {
         { channelName: 'HOGE.520nm', wavelength: 520, seriesKey: 'HOGE', seriesLabel: 'HOGE' },
         { channelName: 'FUGA735.25nm', wavelength: 735.25, seriesKey: '', seriesLabel: '' }
       ],
-      points: []
+      points: [],
+      yAxis: null
     });
 
     expect(spectralPanel.classList.contains('hidden')).toBe(false);
@@ -413,7 +415,8 @@ describe('spectral inspector', () => {
       pixel: null,
       imageSize: null,
       channels: [],
-      points: []
+      points: [],
+      yAxis: null
     });
 
     expect(spectralPanel.classList.contains('hidden')).toBe(true);
@@ -440,7 +443,8 @@ describe('spectral inspector', () => {
         { channelName: '400nm', wavelength: 400, seriesKey: '', seriesLabel: '', intensity: 0.25 },
         { channelName: '500nm', wavelength: 500, seriesKey: '', seriesLabel: '', intensity: 0.75 },
         { channelName: '700nm', wavelength: 700, seriesKey: '', seriesLabel: '', intensity: 0.5 }
-      ]
+      ],
+      yAxis: null
     });
 
     const initialSvg = document.querySelector<SVGSVGElement>('#spectral-plot svg');
@@ -492,7 +496,8 @@ describe('spectral inspector', () => {
         { channelName: '400nm', wavelength: 400, seriesKey: '', seriesLabel: '', intensity: 40 },
         { channelName: '500nm', wavelength: 500, seriesKey: '', seriesLabel: '', intensity: 100.5 },
         { channelName: '600nm', wavelength: 600, seriesKey: '', seriesLabel: '', intensity: 80 }
-      ]
+      ],
+      yAxis: null
     });
 
     const points = Array.from(document.querySelectorAll<SVGCircleElement>('#spectral-plot .spectral-point'));
@@ -503,6 +508,42 @@ describe('spectral inspector', () => {
     expect(points.at(1)?.getAttribute('cy')).toBe('14');
     expect(yTickLabels).not.toContain('100.5');
     expect(yTickLabels).not.toContain('112.56');
+  });
+
+  it('uses fixed signed y-axis ranges with a zero spectral reference line', () => {
+    installUiFixture();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    ui.setSpectralReadout({
+      visible: true,
+      mode: 'Hover',
+      pixel: { x: 1, y: 2 },
+      imageSize: { width: 10, height: 20 },
+      channels: [
+        { channelName: 'S1/S0.400nm', wavelength: 400, seriesKey: 'S1/S0', seriesLabel: 'S1/S0' },
+        { channelName: 'S1/S0.500nm', wavelength: 500, seriesKey: 'S1/S0', seriesLabel: 'S1/S0' }
+      ],
+      points: [
+        { channelName: 'S1/S0.400nm', wavelength: 400, seriesKey: 'S1/S0', seriesLabel: 'S1/S0', intensity: -0.5 },
+        { channelName: 'S1/S0.500nm', wavelength: 500, seriesKey: 'S1/S0', seriesLabel: 'S1/S0', intensity: 0.5 }
+      ],
+      yAxis: {
+        range: { min: -1, max: 1 },
+        zeroCentered: true
+      }
+    });
+
+    const zeroLine = document.querySelector<SVGLineElement>('#spectral-plot .spectral-zero-line');
+    const areaPath = document.querySelector<SVGPathElement>('#spectral-plot path');
+    const yTickLabels = Array.from(
+      document.querySelectorAll<SVGTextElement>('#spectral-plot .spectral-tick-label--y')
+    ).map((text) => text.textContent);
+
+    expect(yTickLabels).toEqual(expect.arrayContaining(['-1', '0', '1']));
+    const zeroY = Number(zeroLine?.getAttribute('y1'));
+    expect(zeroY).toBeCloseTo(107, 6);
+    expect(Number(zeroLine?.getAttribute('y2'))).toBeCloseTo(zeroY, 6);
+    expect(areaPath?.getAttribute('d')?.startsWith(`M 42 ${zeroLine?.getAttribute('y1')}`)).toBe(true);
   });
 
   it('keeps crowded min and max wavelength tick labels over normal tick labels', () => {
@@ -523,7 +564,8 @@ describe('spectral inspector', () => {
         { channelName: '398nm', wavelength: 398, seriesKey: '', seriesLabel: '', intensity: 0.25 },
         { channelName: '500nm', wavelength: 500, seriesKey: '', seriesLabel: '', intensity: 0.75 },
         { channelName: '604nm', wavelength: 604, seriesKey: '', seriesLabel: '', intensity: 0.5 }
-      ]
+      ],
+      yAxis: null
     });
 
     const wavelengthTickLabels = Array.from(

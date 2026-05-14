@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildSpectralPlotPoints,
+  buildSpectralStokesPlotPoints,
   detectSpectralChannels,
+  detectSpectralStokesChannelGroups,
   parseSpectralChannel,
   parseSpectralChannelName
 } from '../src/spectral';
@@ -160,5 +162,78 @@ describe('spectral channel helpers', () => {
       { channelName: '400nm', wavelength: 400, seriesKey: '', seriesLabel: '', intensity: 0.25 },
       { channelName: '600nm', wavelength: 600, seriesKey: '', seriesLabel: '', intensity: -0.5 }
     ]);
+  });
+
+  it('detects complete spectral Stokes wavelength groups', () => {
+    expect(detectSpectralStokesChannelGroups([
+      'S1.500nm',
+      'S0.400nm',
+      'S3.400nm',
+      'S1.400nm',
+      'S2.400nm',
+      'S0.500nm',
+      'S2.500nm',
+      'S3.500nm',
+      'S0.600nm',
+      'S1.600nm',
+      'S2.600nm'
+    ])).toEqual([
+      {
+        wavelength: 400,
+        suffix: '400nm',
+        s0: 'S0.400nm',
+        s1: 'S1.400nm',
+        s2: 'S2.400nm',
+        s3: 'S3.400nm'
+      },
+      {
+        wavelength: 500,
+        suffix: '500nm',
+        s0: 'S0.500nm',
+        s1: 'S1.500nm',
+        s2: 'S2.500nm',
+        s3: 'S3.500nm'
+      }
+    ]);
+  });
+
+  it('builds derived spectral Stokes plot points for selected components', () => {
+    const groups = detectSpectralStokesChannelGroups([
+      'S0.400nm', 'S1.400nm', 'S2.400nm', 'S3.400nm',
+      'S0.500nm', 'S1.500nm', 'S2.500nm', 'S3.500nm'
+    ]);
+    const sample = {
+      x: 0,
+      y: 0,
+      values: {
+        'S0.400nm': 2,
+        'S1.400nm': -1,
+        'S2.400nm': 0,
+        'S3.400nm': 0,
+        'S0.500nm': 2,
+        'S1.500nm': 1,
+        'S2.500nm': 1,
+        'S3.500nm': Math.sqrt(2)
+      }
+    };
+
+    const normalized = buildSpectralStokesPlotPoints(sample, groups, 's1_over_s0');
+    const aolp = buildSpectralStokesPlotPoints(sample, groups, 'aolp');
+    const dop = buildSpectralStokesPlotPoints(sample, groups, 'dop');
+
+    expect(normalized).toEqual([
+      { channelName: 'S1/S0.400nm', wavelength: 400, seriesKey: 'S1/S0', seriesLabel: 'S1/S0', intensity: -0.5 },
+      { channelName: 'S1/S0.500nm', wavelength: 500, seriesKey: 'S1/S0', seriesLabel: 'S1/S0', intensity: 0.5 }
+    ]);
+    expect(aolp[0]).toMatchObject({
+      channelName: 'AoLP.400nm',
+      wavelength: 400,
+      seriesKey: 'AoLP',
+      seriesLabel: 'AoLP'
+    });
+    expect(aolp[0]?.intensity).toBeCloseTo(Math.PI / 2, 6);
+    expect(aolp[1]?.intensity).toBeCloseTo(Math.PI / 8, 6);
+    expect(dop[0]?.intensity).toBeCloseTo(0.5, 6);
+    expect(dop[1]?.intensity).toBeCloseTo(1, 6);
   });
 });

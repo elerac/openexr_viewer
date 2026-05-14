@@ -3,6 +3,7 @@ import {
   sameExportBatchTarget,
   sameOpenedImageOptions,
   sameProbeReadout,
+  sameSpectralPlotReadout,
   sameViewerSessionState
 } from '../src/app/viewer-app-equality';
 import { createViewerSessionState } from './helpers/state-fixtures';
@@ -125,5 +126,33 @@ describe('viewer app equality helpers', () => {
 
     expect(sameProbeReadout(previous, same)).toBe(true);
     expect(sameProbeReadout(previous, changed)).toBe(false);
+  });
+
+  it('compares spectral plot y-axis metadata', () => {
+    const base = {
+      visible: true,
+      mode: 'Hover' as const,
+      pixel: { x: 0, y: 0 },
+      imageSize: { width: 2, height: 1 },
+      channels: [
+        { channelName: 'S1/S0.400nm', wavelength: 400, seriesKey: 'S1/S0', seriesLabel: 'S1/S0' }
+      ],
+      points: [
+        { channelName: 'S1/S0.400nm', wavelength: 400, seriesKey: 'S1/S0', seriesLabel: 'S1/S0', intensity: 0.5 }
+      ],
+      yAxis: {
+        range: { min: -1, max: 1 },
+        zeroCentered: true
+      }
+    };
+
+    expect(sameSpectralPlotReadout(base, { ...base })).toBe(true);
+    expect(sameSpectralPlotReadout(base, {
+      ...base,
+      yAxis: {
+        range: { min: -0.5, max: 0.5 },
+        zeroCentered: true
+      }
+    })).toBe(false);
   });
 });

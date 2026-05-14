@@ -20,6 +20,7 @@ import {
   samePanePath,
   sameViewerPaneLayout
 } from '../viewer-pane-layout';
+import { sameStokesColormapDefaultSettings } from '../stokes-colormap-settings';
 import type { DisplayLuminanceRange, OpenedImageSession, ViewerRenderState } from '../types';
 import { buildProbeReadoutModel } from './probe-presentation';
 import { buildRoiReadoutModel } from './roi-presentation';
@@ -372,6 +373,7 @@ function createSpectralPlotReadoutSelector(): (
   let previousLockedPixel: ViewerAppState['sessionState']['lockedPixel'] = null;
   let previousHoveredPixel: ViewerAppState['interactionState']['hoveredPixel'] = null;
   let previousDisplaySelection: ViewerAppState['sessionState']['displaySelection'] = null;
+  let previousStokesColormapDefaults: ViewerAppState['stokesColormapDefaults'] | null = null;
   let previousResult = buildSpectralPlotReadoutModel({
     activeSession: null,
     activeLayer: null,
@@ -390,7 +392,9 @@ function createSpectralPlotReadoutSelector(): (
       height === previousHeight &&
       samePixel(state.sessionState.lockedPixel, previousLockedPixel) &&
       samePixel(state.interactionState.hoveredPixel, previousHoveredPixel) &&
-      sameDisplaySelection(state.sessionState.displaySelection, previousDisplaySelection)
+      sameDisplaySelection(state.sessionState.displaySelection, previousDisplaySelection) &&
+      previousStokesColormapDefaults !== null &&
+      sameStokesColormapDefaultSettings(state.stokesColormapDefaults, previousStokesColormapDefaults)
     ) {
       return previousResult;
     }
@@ -402,11 +406,13 @@ function createSpectralPlotReadoutSelector(): (
     previousLockedPixel = state.sessionState.lockedPixel;
     previousHoveredPixel = state.interactionState.hoveredPixel;
     previousDisplaySelection = state.sessionState.displaySelection;
+    previousStokesColormapDefaults = state.stokesColormapDefaults;
     previousResult = buildSpectralPlotReadoutModel({
       activeSession,
       activeLayer,
       sessionState: state.sessionState,
-      interactionState: state.interactionState
+      interactionState: state.interactionState,
+      stokesColormapDefaults: state.stokesColormapDefaults
     });
     return previousResult;
   };

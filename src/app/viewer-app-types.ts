@@ -63,6 +63,10 @@ export interface SpectralPlotReadoutModel {
   imageSize: { width: number; height: number } | null;
   channels: SpectralChannel[];
   points: SpectralPlotPoint[];
+  yAxis: {
+    range: DisplayLuminanceRange;
+    zeroCentered: boolean;
+  } | null;
 }
 
 export interface RoiReadoutModel {

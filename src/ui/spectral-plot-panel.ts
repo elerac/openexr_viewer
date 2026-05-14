@@ -33,6 +33,11 @@ interface SpectralXAxisTickCandidate {
   order: number;
 }
 
+interface SpectralYAxisRange {
+  min: number;
+  max: number;
+}
+
 export class SpectralPlotPanel implements Disposable {
   private readonly resizeObserver: ResizeObserver | null;
   private latestReadout: SpectralPlotReadoutModel | null = null;
@@ -178,7 +183,11 @@ function renderSpectralChart(readout: SpectralPlotReadoutModel, measuredWidth: n
   const intensities = points.map((point) => point.intensity);
   const xMin = Math.min(...wavelengths);
   const xMax = Math.max(...wavelengths);
-  const yMax = resolveSpectralYMax(intensities);
+  const yRange = resolveSpectralYRange(intensities, readout.yAxis);
+  const yMin = yRange.min;
+  const yMax = yRange.max;
+  const ySpan = Math.max(Number.EPSILON, yMax - yMin);
+  const yBaseline = clamp(0, yMin, yMax);
   const xScale = (wavelength: number): number => {
     const range = xMax - xMin;
     if (range <= 0) {
@@ -187,9 +196,9 @@ function renderSpectralChart(readout: SpectralPlotReadoutModel, measuredWidth: n
     return margin.left + ((wavelength - xMin) / range) * plotWidth;
   };
   const yScale = (intensity: number): number =>
-    margin.top + plotHeight - (clamp(intensity, 0, yMax) / (yMax || 1)) * plotHeight;
+    margin.top + plotHeight - ((clamp(intensity, yMin, yMax) - yMin) / ySpan) * plotHeight;
   const xTicks = makeWavelengthTicks(xMin, xMax, 6, xScale);
-  const yTicks = makeTicks(0, yMax, 4);
+  const yTicks = makeTicks(yMin, yMax, 4);
 
   const svg = createSvgElement('svg');
   setSvgAttributes(svg, {
@@ -277,6 +286,20 @@ function renderSpectralChart(readout: SpectralPlotReadoutModel, measuredWidth: n
     }));
   }
 
+  if (yMin < 0 && yMax > 0) {
+    const zeroLine = createSvgElement('line');
+    setSvgAttributes(zeroLine, {
+      class: 'spectral-zero-line',
+      x1: margin.left,
+      x2: margin.left + plotWidth,
+      y1: yScale(0),
+      y2: yScale(0),
+      stroke: 'rgba(248, 250, 252, 0.42)',
+      'stroke-width': 1
+    });
+    svg.append(zeroLine);
+  }
+
   for (const tick of xTicks) {
     const line = createSvgElement('line');
     setSvgAttributes(line, {
@@ -299,7 +322,7 @@ function renderSpectralChart(readout: SpectralPlotReadoutModel, measuredWidth: n
   if (points.length > 0) {
     const areaPath = createSvgElement('path');
     setSvgAttributes(areaPath, {
-      d: buildAreaPath(points, xScale, yScale),
+      d: buildAreaPath(points, xScale, yScale, yBaseline),
       fill: 'url(#spectral-area-fill)',
       opacity: 0.78,
       'clip-path': 'url(#spectral-plot-clip)'
@@ -375,7 +398,8 @@ function renderSpectralChart(readout: SpectralPlotReadoutModel, measuredWidth: n
 function buildAreaPath(
   points: SpectralPlotReadoutModel['points'],
   xScale: (wavelength: number) => number,
-  yScale: (intensity: number) => number
+  yScale: (intensity: number) => number,
+  baseline: number
 ): string {
   const first = points[0];
   const last = points[points.length - 1];
@@ -384,9 +408,9 @@ function buildAreaPath(
   }
 
   return [
-    `M ${xScale(first.wavelength)} ${yScale(0)}`,
+    `M ${xScale(first.wavelength)} ${yScale(baseline)}`,
     ...points.map((point) => `L ${xScale(point.wavelength)} ${yScale(point.intensity)}`),
-    `L ${xScale(last.wavelength)} ${yScale(0)}`,
+    `L ${xScale(last.wavelength)} ${yScale(baseline)}`,
     'Z'
   ].join(' ');
 }
@@ -429,9 +453,29 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function resolveSpectralYMax(intensities: readonly number[]): number {
+function resolveSpectralYRange(
+  intensities: readonly number[],
+  yAxis: SpectralPlotReadoutModel['yAxis']
+): SpectralYAxisRange {
+  if (yAxis && Number.isFinite(yAxis.range.min) && Number.isFinite(yAxis.range.max)) {
+    return normalizeSpectralYRange(yAxis.range.min, yAxis.range.max);
+  }
+
   const maxIntensity = Math.max(...intensities, 0);
-  return maxIntensity > 0 ? maxIntensity : 1;
+  return { min: 0, max: maxIntensity > 0 ? maxIntensity : 1 };
+}
+
+function normalizeSpectralYRange(min: number, max: number): SpectralYAxisRange {
+  if (max > min) {
+    return { min, max };
+  }
+
+  const center = Number.isFinite(min) ? min : 0;
+  const margin = Math.max(1, Math.abs(center) * 0.1);
+  return {
+    min: center - margin,
+    max: center + margin
+  };
 }
 
 function wavelengthToRgb(wavelength: number): { r: number; g: number; b: number; visible: boolean } {

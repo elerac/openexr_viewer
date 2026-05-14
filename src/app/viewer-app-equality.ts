@@ -240,7 +240,8 @@ export function sameSpectralPlotReadout(
     sameSpectralPixel(a.pixel, b.pixel) &&
     sameImageSize(a.imageSize, b.imageSize) &&
     sameSpectralChannels(a.channels, b.channels) &&
-    sameSpectralPlotPoints(a.points, b.points)
+    sameSpectralPlotPoints(a.points, b.points) &&
+    sameSpectralYAxis(a.yAxis, b.yAxis)
   );
 }
 
@@ -338,6 +339,20 @@ function sameSpectralChannels(
       item.channelName === other.channelName &&
       item.wavelength === other.wavelength;
   });
+}
+
+function sameSpectralYAxis(
+  a: SpectralPlotReadoutModel['yAxis'],
+  b: SpectralPlotReadoutModel['yAxis']
+): boolean {
+  if (!a && !b) {
+    return true;
+  }
+  if (!a || !b) {
+    return false;
+  }
+
+  return a.zeroCentered === b.zeroCentered && sameDisplayLuminanceRange(a.range, b.range);
 }
 
 function sameSpectralPixel(

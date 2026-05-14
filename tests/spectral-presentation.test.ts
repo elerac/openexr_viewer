@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { buildSpectralPlotReadoutModel } from '../src/app/spectral-presentation';
+import { createDefaultStokesColormapDefaultSettings } from '../src/stokes';
 import type { OpenedImageSession } from '../src/types';
 import {
   createChannelMonoSelection,
   createImage,
   createLayer,
   createLayerFromChannels,
+  createStokesSelection,
   createViewerInteractionState,
   createViewerSessionState
 } from './helpers/state-fixtures';
@@ -70,6 +72,7 @@ describe('spectral readout presentation', () => {
     });
 
     expect(readout.visible).toBe(true);
+    expect(readout.yAxis).toBeNull();
     expect(readout.pixel).toBeNull();
     expect(readout.channels).toEqual([
       { channelName: '400nm', wavelength: 400, seriesKey: '', seriesLabel: '' },
@@ -136,5 +139,77 @@ describe('spectral readout presentation', () => {
     ]);
     expect(readout.points[0]?.intensity).toBeCloseTo(0.3, 6);
     expect(readout.points[1]?.intensity).toBeCloseTo(1.3, 6);
+    expect(readout.yAxis).toBeNull();
+  });
+
+  it('plots the selected spectral Stokes component across wavelengths', () => {
+    const layer = createLayerFromChannels({
+      'S0.400nm': [2, 2, 2, 2],
+      'S1.400nm': [-1, -1, -1, -1],
+      'S2.400nm': [0, 0, 0, 0],
+      'S3.400nm': [0, 0, 0, 0],
+      'S0.500nm': [4, 4, 4, 4],
+      'S1.500nm': [1, 1, 1, 1],
+      'S2.500nm': [0, 0, 0, 0],
+      'S3.500nm': [0, 0, 0, 0]
+    }, 'spectral-stokes');
+    const session = createSession(layer);
+    const readout = buildSpectralPlotReadoutModel({
+      activeSession: session,
+      activeLayer: layer,
+      sessionState: createViewerSessionState({
+        displaySelection: createStokesSelection('s1_over_s0', 'stokesScalar', null, '500nm')
+      }),
+      interactionState: createViewerInteractionState({ hoveredPixel: { ix: 0, iy: 0 } })
+    });
+
+    expect(readout.visible).toBe(true);
+    expect(readout.channels).toEqual([
+      { channelName: 'S1/S0.400nm', wavelength: 400, seriesKey: 'S1/S0', seriesLabel: 'S1/S0' },
+      { channelName: 'S1/S0.500nm', wavelength: 500, seriesKey: 'S1/S0', seriesLabel: 'S1/S0' }
+    ]);
+    expect(readout.points).toEqual([
+      { channelName: 'S1/S0.400nm', wavelength: 400, seriesKey: 'S1/S0', seriesLabel: 'S1/S0', intensity: -0.5 },
+      { channelName: 'S1/S0.500nm', wavelength: 500, seriesKey: 'S1/S0', seriesLabel: 'S1/S0', intensity: 0.25 }
+    ]);
+    expect(readout.yAxis).toEqual({
+      range: { min: -1, max: 1 },
+      zeroCentered: true
+    });
+  });
+
+  it('uses saved Stokes defaults for spectral plot y-axis ranges', () => {
+    const layer = createLayerFromChannels({
+      'S0.400nm': [2],
+      'S1.400nm': [1],
+      'S2.400nm': [0],
+      'S3.400nm': [0],
+      'S0.500nm': [2],
+      'S1.500nm': [0],
+      'S2.500nm': [1],
+      'S3.500nm': [0]
+    }, 'spectral-stokes');
+    const session = createSession(layer);
+    const stokesColormapDefaults = createDefaultStokesColormapDefaultSettings();
+    stokesColormapDefaults.normalized = {
+      ...stokesColormapDefaults.normalized,
+      range: { min: -0.2, max: 0.6 },
+      zeroCentered: true
+    };
+
+    const readout = buildSpectralPlotReadoutModel({
+      activeSession: session,
+      activeLayer: layer,
+      sessionState: createViewerSessionState({
+        displaySelection: createStokesSelection('s2_over_s0', 'stokesScalar', null, '500nm')
+      }),
+      interactionState: createViewerInteractionState({ hoveredPixel: { ix: 0, iy: 0 } }),
+      stokesColormapDefaults
+    });
+
+    expect(readout.yAxis).toEqual({
+      range: { min: -0.6, max: 0.6 },
+      zeroCentered: true
+    });
   });
 });
