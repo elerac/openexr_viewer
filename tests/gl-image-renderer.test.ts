@@ -143,6 +143,47 @@ describe('gl image renderer', () => {
     expect(Array.from((texImageCall?.[8] as Float32Array).slice(0, 4))).toEqual(Array.from(cpuTexture));
   });
 
+  it('uploads spectral Stokes RGB components as derived RGBA32F source textures', () => {
+    const { renderer, gl } = createHarness();
+    const layer = createLayerFromChannels({
+      'S0.400nm': [1],
+      'S1.400nm': [1],
+      'S2.400nm': [0],
+      'S3.400nm': [0],
+      'S0.500nm': [1],
+      'S1.500nm': [0],
+      'S2.500nm': [1],
+      'S3.500nm': [0]
+    });
+    const selection = createStokesSelection('aolp', 'stokesSpectralRgb');
+    const binding = buildDisplaySourceBinding(layer, selection);
+
+    const uploads = renderer.ensureLayerChannelsResident(
+      'session-1',
+      0,
+      1,
+      1,
+      layer,
+      getDisplaySourceBindingChannelNames(binding)
+    );
+    renderer.setDisplaySelectionBindings('session-1', 0, 1, 1, binding);
+
+    const texImageCalls = gl.texImage2D.mock.calls.slice(-4);
+    expect(uploads).toEqual([
+      { channelName: '__spectralStokesRgb:S0', textureBytes: 16, materializedBytes: 0 },
+      { channelName: '__spectralStokesRgb:S1', textureBytes: 16, materializedBytes: 0 },
+      { channelName: '__spectralStokesRgb:S2', textureBytes: 16, materializedBytes: 0 },
+      { channelName: '__spectralStokesRgb:S3', textureBytes: 16, materializedBytes: 0 }
+    ]);
+    expect(texImageCalls).toHaveLength(4);
+    for (const texImageCall of texImageCalls) {
+      expect(texImageCall?.[2]).toBe(gl.RGBA32F);
+      expect(texImageCall?.[6]).toBe(gl.RGBA);
+      expect(texImageCall?.[8]).toBeInstanceOf(Float32Array);
+      expect((texImageCall?.[8] as Float32Array)[3]).toBe(1);
+    }
+  });
+
   it('discards materialized interleaved CPU data when source texture upload fails', () => {
     const { renderer, gl } = createHarness();
     const layer = createInterleavedLayerFromChannels({

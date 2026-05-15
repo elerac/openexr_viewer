@@ -10,7 +10,8 @@ import type { DecodedExrImage, DecodedLayer, DisplayLuminanceRange, ImageStats, 
 import { buildViewerStateForLayer, createInitialState } from '../src/viewer-store';
 import {
   createChannelMonoSelection,
-  createLayerFromChannels
+  createLayerFromChannels,
+  createStokesSelection
 } from './helpers/state-fixtures';
 
 const MB = 1024 * 1024;
@@ -223,6 +224,59 @@ describe('render cache service', () => {
       ['R', 'G', 'B']
     );
     expect(renderer.setDisplaySelectionBindings).toHaveBeenCalledTimes(3);
+  });
+
+  it('uploads derived spectral Stokes RGB source textures for grouped Stokes selections', () => {
+    const decoded: DecodedExrImage = {
+      width: 1,
+      height: 1,
+      layers: [createLayerFromChannels({
+        'S0.400nm': [1],
+        'S1.400nm': [1],
+        'S2.400nm': [0],
+        'S3.400nm': [0],
+        'S0.500nm': [1],
+        'S1.500nm': [0],
+        'S2.500nm': [1],
+        'S3.500nm': [0]
+      }, 'spectral-stokes')]
+    };
+    const session = createSession('session-1', decoded);
+    const state = {
+      ...session.state,
+      displaySelection: createStokesSelection('aolp', 'stokesSpectralRgb')
+    };
+    const ui = createUiMock();
+    const renderer = createRendererMock();
+    const service = new RenderCacheService({
+      ui,
+      renderer
+    });
+
+    const result = service.prepareActiveSession(session, state);
+
+    expect(result.textureDirty).toBe(true);
+    expect(renderer.ensureLayerChannelsResident).toHaveBeenCalledWith(
+      'session-1',
+      0,
+      1,
+      1,
+      decoded.layers[0],
+      [
+        '__spectralStokesRgb:S0',
+        '__spectralStokesRgb:S1',
+        '__spectralStokesRgb:S2',
+        '__spectralStokesRgb:S3'
+      ]
+    );
+    expect([
+      ...getEntries(service).get(session.id)?.residentLayers.get(0)?.residentChannels.keys() ?? []
+    ]).toEqual([
+      '__spectralStokesRgb:S0',
+      '__spectralStokesRgb:S1',
+      '__spectralStokesRgb:S2',
+      '__spectralStokesRgb:S3'
+    ]);
   });
 
   it('keeps texture preparation separate from lazy, deduped luminance requests', async () => {

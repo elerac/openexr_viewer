@@ -23,7 +23,10 @@ import {
   buildDisplaySourceBinding,
   getDisplaySourceBindingChannelNames
 } from '../display/bindings';
-import { isSpectralRgbSourceName } from '../spectral';
+import {
+  isSpectralRgbSourceName,
+  isSpectralStokesRgbSourceName
+} from '../spectral';
 import {
   buildDisplayAutoExposureRevisionKey,
   buildDisplayImageStatsRevisionKey,
@@ -280,7 +283,8 @@ export class RenderCacheService implements Disposable {
     const textureRevisionKey = buildDisplayTextureRevisionKey(state);
     const binding = buildDisplaySourceBinding(layer, state.displaySelection, state.visualizationMode);
     const requiredChannelNames = getDisplaySourceBindingChannelNames(binding).filter((channelName) => {
-      return isSpectralRgbSourceName(channelName) || layer.channelStorage.channelIndexByName[channelName] !== undefined;
+      return isDerivedDisplaySourceName(channelName) ||
+        layer.channelStorage.channelIndexByName[channelName] !== undefined;
     });
     const protectedBinding = this.createProtectedBinding(session.id, state.activeLayer, requiredChannelNames);
     let residentLayer = this.getOrCreateResidentLayerEntry(entry, state.activeLayer);
@@ -1635,12 +1639,16 @@ function predictRetainedChannelBytes(
     ? predictChannelTextureBytes(width, height)
     : 0;
   return channelNames.reduce((total, channelName) => {
-    if (isSpectralRgbSourceName(channelName)) {
+    if (isDerivedDisplaySourceName(channelName)) {
       return total + perChannelTextureBytes * 4;
     }
 
     return total + perChannelTextureBytes + perChannelMaterializedBytes;
   }, 0);
+}
+
+function isDerivedDisplaySourceName(channelName: string): boolean {
+  return isSpectralRgbSourceName(channelName) || isSpectralStokesRgbSourceName(channelName);
 }
 
 function resolveWindowLike(): RenderCacheWindowLike | null {
