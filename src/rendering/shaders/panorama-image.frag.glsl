@@ -58,6 +58,7 @@ const float REC709_LUMINANCE_WEIGHT_R = 0.2126;
 const float REC709_LUMINANCE_WEIGHT_G = 0.7152;
 const float REC709_LUMINANCE_WEIGHT_B = 0.0722;
 const float DISPLAY_GAMMA_MIN = 0.01;
+const float STOKES_VECTOR_VALIDITY_ATOL = 1.0e-8;
 
 struct DisplaySample {
   vec3 linear;
@@ -69,8 +70,34 @@ bool isFiniteValue(float value) {
   return !(isnan(value) || isinf(value));
 }
 
+float nanValue() {
+  return uintBitsToFloat(0x7fc00000u);
+}
+
+bool isPhysicallyValidStokesVector(float s0, float s1, float s2, float s3) {
+  if (
+    !isFiniteValue(s0) ||
+    !isFiniteValue(s1) ||
+    !isFiniteValue(s2) ||
+    !isFiniteValue(s3) ||
+    s0 < 0.0
+  ) {
+    return false;
+  }
+
+  return s0 * s0 - (s1 * s1 + s2 * s2 + s3 * s3) >= -abs(STOKES_VECTOR_VALIDITY_ATOL);
+}
+
 float sanitizeDisplayValue(float value) {
   return isFiniteValue(value) ? value : 0.0;
+}
+
+vec3 sanitizeDisplayColor(vec3 color) {
+  return vec3(
+    sanitizeDisplayValue(color.r),
+    sanitizeDisplayValue(color.g),
+    sanitizeDisplayValue(color.b)
+  );
 }
 
 float sanitizeAlphaValue(float value) {
@@ -128,7 +155,13 @@ ivec2 colormapCoord(int index) {
 }
 
 vec3 sampleColormap(float value, float vmin, float vmax) {
-  if (vmax <= vmin || uColormapEntryCount < 2 || uColormapTextureSize.x <= 0 || uColormapTextureSize.y <= 0) {
+  if (
+    !isFiniteValue(value) ||
+    vmax <= vmin ||
+    uColormapEntryCount < 2 ||
+    uColormapTextureSize.x <= 0 ||
+    uColormapTextureSize.y <= 0
+  ) {
     return vec3(0.0);
   }
 
@@ -194,58 +227,75 @@ vec3 hsvToRgb(vec3 hsv) {
 
 float computeStokesAolp(float s1, float s2) {
   if (!isFiniteValue(s1) || !isFiniteValue(s2)) {
-    return 0.0;
+    return nanValue();
+  }
+
+  if (s1 == 0.0 && s2 == 0.0) {
+    return nanValue();
   }
 
   float aolp = 0.5 * atan(s2, s1);
+  if (!isFiniteValue(aolp)) {
+    return nanValue();
+  }
+
   return aolp < 0.0 ? aolp + PI : aolp;
 }
 
 float computeStokesDolp(float s0, float s1, float s2) {
   if (!isFiniteValue(s0) || !isFiniteValue(s1) || !isFiniteValue(s2) || s0 == 0.0) {
-    return 0.0;
+    return nanValue();
   }
 
   float dolp = sqrt(s1 * s1 + s2 * s2) / s0;
-  return isFiniteValue(dolp) ? dolp : 0.0;
+  return isFiniteValue(dolp) ? dolp : nanValue();
 }
 
 float computeStokesDop(float s0, float s1, float s2, float s3) {
   if (!isFiniteValue(s0) || !isFiniteValue(s1) || !isFiniteValue(s2) || !isFiniteValue(s3) || s0 == 0.0) {
-    return 0.0;
+    return nanValue();
   }
 
   float dop = sqrt(s1 * s1 + s2 * s2 + s3 * s3) / s0;
-  return isFiniteValue(dop) ? dop : 0.0;
+  return isFiniteValue(dop) ? dop : nanValue();
 }
 
 float computeStokesDocp(float s0, float s3) {
   if (!isFiniteValue(s0) || !isFiniteValue(s3) || s0 == 0.0) {
-    return 0.0;
+    return nanValue();
   }
 
   float docp = abs(s3) / s0;
-  return isFiniteValue(docp) ? docp : 0.0;
+  return isFiniteValue(docp) ? docp : nanValue();
 }
 
 float computeStokesEang(float s1, float s2, float s3) {
   if (!isFiniteValue(s1) || !isFiniteValue(s2) || !isFiniteValue(s3)) {
-    return 0.0;
+    return nanValue();
   }
 
-  return 0.5 * atan(s3, sqrt(s1 * s1 + s2 * s2));
+  if (s1 == 0.0 && s2 == 0.0 && s3 == 0.0) {
+    return nanValue();
+  }
+
+  float eang = 0.5 * atan(s3, sqrt(s1 * s1 + s2 * s2));
+  return isFiniteValue(eang) ? eang : nanValue();
 }
 
 float computeStokesNormalizedComponent(float s0, float component) {
   if (!isFiniteValue(s0) || !isFiniteValue(component) || s0 == 0.0) {
-    return 0.0;
+    return nanValue();
   }
 
   float normalized = component / s0;
-  return isFiniteValue(normalized) ? normalized : 0.0;
+  return isFiniteValue(normalized) ? normalized : nanValue();
 }
 
 float computeStokesDisplayValue(int parameter, float s0, float s1, float s2, float s3) {
+  if (!isPhysicallyValidStokesVector(s0, s1, s2, s3)) {
+    return nanValue();
+  }
+
   if (parameter == STOKES_PARAMETER_AOLP) {
     return computeStokesAolp(s1, s2);
   }
@@ -278,6 +328,10 @@ float computeStokesDisplayValue(int parameter, float s0, float s1, float s2, flo
 }
 
 float computeStokesDegreeModulationValue(int parameter, float s0, float s1, float s2, float s3) {
+  if (!isPhysicallyValidStokesVector(s0, s1, s2, s3)) {
+    return nanValue();
+  }
+
   if (parameter == STOKES_PARAMETER_AOLP) {
     return computeStokesDolp(s0, s1, s2);
   }
@@ -292,7 +346,8 @@ float computeStokesDegreeModulationValue(int parameter, float s0, float s1, floa
 }
 
 float computeStokesDegreeModulationDisplayValue(int parameter, float s0, float s1, float s2, float s3) {
-  return clamp(computeStokesDegreeModulationValue(parameter, s0, s1, s2, s3), 0.0, 1.0);
+  float value = computeStokesDegreeModulationValue(parameter, s0, s1, s2, s3);
+  return isFiniteValue(value) ? clamp(value, 0.0, 1.0) : 0.0;
 }
 
 float readSource0(ivec2 pixel) {
@@ -617,6 +672,6 @@ void main() {
   }
 
   linear *= exp2(uExposure);
-  vec3 color = linearToDisplayGamma(linear);
+  vec3 color = sanitizeDisplayColor(linearToDisplayGamma(linear));
   outColor = encodeOutputColor(screen, color, imageAlpha);
 }

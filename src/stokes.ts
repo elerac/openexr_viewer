@@ -487,22 +487,52 @@ export function clampStokesDegreeModulationValue(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
+export const STOKES_VECTOR_VALIDITY_ATOL = 1.0e-8;
+
+export function isPhysicallyValidStokesVector(
+  s0: number,
+  s1: number,
+  s2: number,
+  s3: number,
+  atol = STOKES_VECTOR_VALIDITY_ATOL
+): boolean {
+  if (
+    !Number.isFinite(s0) ||
+    !Number.isFinite(s1) ||
+    !Number.isFinite(s2) ||
+    !Number.isFinite(s3) ||
+    s0 < 0
+  ) {
+    return false;
+  }
+
+  return s0 ** 2 - (s1 ** 2 + s2 ** 2 + s3 ** 2) >= -Math.abs(atol);
+}
+
 export function computeStokesAolp(s1: number, s2: number): number {
   if (!Number.isFinite(s1) || !Number.isFinite(s2)) {
-    return 0;
+    return Number.NaN;
+  }
+
+  if (s1 === 0 && s2 === 0) {
+    return Number.NaN;
   }
 
   const aolp = 0.5 * Math.atan2(s2, s1);
+  if (!Number.isFinite(aolp)) {
+    return Number.NaN;
+  }
+
   return aolp < 0 ? aolp + Math.PI : aolp;
 }
 
 export function computeStokesDolp(s0: number, s1: number, s2: number): number {
   if (!Number.isFinite(s0) || !Number.isFinite(s1) || !Number.isFinite(s2) || s0 === 0) {
-    return 0;
+    return Number.NaN;
   }
 
   const dolp = Math.sqrt(s1 ** 2 + s2 ** 2) / s0;
-  return Number.isFinite(dolp) ? dolp : 0;
+  return Number.isFinite(dolp) ? dolp : Number.NaN;
 }
 
 export function computeStokesDop(s0: number, s1: number, s2: number, s3: number): number {
@@ -513,37 +543,42 @@ export function computeStokesDop(s0: number, s1: number, s2: number, s3: number)
     !Number.isFinite(s3) ||
     s0 === 0
   ) {
-    return 0;
+    return Number.NaN;
   }
 
   const dop = Math.sqrt(s1 ** 2 + s2 ** 2 + s3 ** 2) / s0;
-  return Number.isFinite(dop) ? dop : 0;
+  return Number.isFinite(dop) ? dop : Number.NaN;
 }
 
 export function computeStokesDocp(s0: number, s3: number): number {
   if (!Number.isFinite(s0) || !Number.isFinite(s3) || s0 === 0) {
-    return 0;
+    return Number.NaN;
   }
 
   const docp = Math.abs(s3) / s0;
-  return Number.isFinite(docp) ? docp : 0;
+  return Number.isFinite(docp) ? docp : Number.NaN;
 }
 
 export function computeStokesEang(s1: number, s2: number, s3: number): number {
   if (!Number.isFinite(s1) || !Number.isFinite(s2) || !Number.isFinite(s3)) {
-    return 0;
+    return Number.NaN;
   }
 
-  return 0.5 * Math.atan2(s3, Math.sqrt(s1 ** 2 + s2 ** 2));
+  if (s1 === 0 && s2 === 0 && s3 === 0) {
+    return Number.NaN;
+  }
+
+  const eang = 0.5 * Math.atan2(s3, Math.sqrt(s1 ** 2 + s2 ** 2));
+  return Number.isFinite(eang) ? eang : Number.NaN;
 }
 
 export function computeStokesNormalizedComponent(s0: number, component: number): number {
   if (!Number.isFinite(s0) || !Number.isFinite(component) || s0 === 0) {
-    return 0;
+    return Number.NaN;
   }
 
   const normalized = component / s0;
-  return Number.isFinite(normalized) ? normalized : 0;
+  return Number.isFinite(normalized) ? normalized : Number.NaN;
 }
 
 export function computeStokesDisplayValue(
@@ -553,6 +588,10 @@ export function computeStokesDisplayValue(
   s2: number,
   s3: number
 ): number {
+  if (!isPhysicallyValidStokesVector(s0, s1, s2, s3)) {
+    return Number.NaN;
+  }
+
   switch (parameter) {
     case 'aolp':
       return computeStokesAolp(s1, s2);
@@ -583,10 +622,19 @@ export function computeStokesDegreeModulationValue(
 ): number | null {
   switch (parameter) {
     case 'aolp':
+      if (!isPhysicallyValidStokesVector(s0, s1, s2, s3)) {
+        return Number.NaN;
+      }
       return computeStokesDolp(s0, s1, s2);
     case 'cop':
+      if (!isPhysicallyValidStokesVector(s0, s1, s2, s3)) {
+        return Number.NaN;
+      }
       return computeStokesDocp(s0, s3);
     case 'top':
+      if (!isPhysicallyValidStokesVector(s0, s1, s2, s3)) {
+        return Number.NaN;
+      }
       return computeStokesDop(s0, s1, s2, s3);
     case 'dolp':
     case 'dop':
@@ -606,7 +654,9 @@ export function computeStokesDegreeModulationDisplayValue(
   s3: number
 ): number | null {
   const value = computeStokesDegreeModulationValue(parameter, s0, s1, s2, s3);
-  return value === null ? null : clampStokesDegreeModulationValue(value);
+  return value === null || !Number.isFinite(value)
+    ? value
+    : clampStokesDegreeModulationValue(value);
 }
 
 function buildScalarStokesDisplayOption(

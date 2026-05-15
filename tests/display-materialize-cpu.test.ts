@@ -65,7 +65,7 @@ describe('display CPU materialization', () => {
     expect(texture[12]).toBeCloseTo((3 * Math.PI) / 4, 6);
   });
 
-  it('builds scalar Stokes DoLP display textures and stabilizes invalid samples', () => {
+  it('builds scalar Stokes DoLP display textures and fills invalid samples with NaN', () => {
     const layer = createLayerFromChannels({
       S0: [1, 2, 0, 1],
       S1: [1, 1, 1, Number.NaN],
@@ -76,8 +76,47 @@ describe('display CPU materialization', () => {
     const texture = buildSelectedDisplayTexture(layer, 2, 2, createStokesSelection('dolp'));
     expect(texture[0]).toBeCloseTo(1, 6);
     expect(texture[4]).toBeCloseTo(1, 6);
-    expect(texture[8]).toBe(0);
-    expect(texture[12]).toBe(0);
+    expect(texture[8]).toBeNaN();
+    expect(texture[12]).toBeNaN();
+  });
+
+  it('fills scalar Stokes angle display values with NaN for invalid full vectors', () => {
+    const layer = createLayerFromChannels({
+      S0: [1],
+      S1: [2],
+      S2: [0],
+      S3: [0]
+    }, 'invalid-stokes-angle');
+
+    const texture = buildSelectedDisplayTexture(layer, 1, 1, createStokesSelection('aolp'));
+    const sample = samplePixelValuesForDisplay(layer, 1, 1, { ix: 0, iy: 0 }, createStokesSelection('aolp'));
+
+    expect(texture[0]).toBeNaN();
+    expect(texture[1]).toBeNaN();
+    expect(texture[2]).toBeNaN();
+    expect(texture[3]).toBeNaN();
+    expect(sample?.values.AoLP).toBeNaN();
+  });
+
+  it('fills scalar Stokes angle display values with NaN for unpolarized vectors', () => {
+    const layer = createLayerFromChannels({
+      S0: [1],
+      S1: [0],
+      S2: [0],
+      S3: [0]
+    }, 'unpolarized-stokes-angle');
+
+    const angleTexture = buildSelectedDisplayTexture(layer, 1, 1, createStokesSelection('aolp'));
+    const degreeTexture = buildSelectedDisplayTexture(layer, 1, 1, createStokesSelection('dolp'));
+    const sample = samplePixelValuesForDisplay(layer, 1, 1, { ix: 0, iy: 0 }, createStokesSelection('aolp'));
+
+    expect(angleTexture[0]).toBeNaN();
+    expect(angleTexture[1]).toBeNaN();
+    expect(angleTexture[2]).toBeNaN();
+    expect(angleTexture[3]).toBe(0);
+    expect(degreeTexture[0]).toBe(0);
+    expect(sample?.values.AoLP).toBeNaN();
+    expect(sample?.values.DoLP).toBe(0);
   });
 
   it('builds linear-only Stokes DoP with missing S3 treated as zero', () => {
@@ -159,6 +198,39 @@ describe('display CPU materialization', () => {
     expect(split[2]).toBeCloseTo(Math.PI / 6, 6);
   });
 
+  it('fills grouped RGB Stokes display components with NaN for invalid component vectors', () => {
+    const layer = createLayerFromChannels({
+      'S0.R': [1],
+      'S0.G': [2],
+      'S0.B': [4],
+      'S1.R': [2],
+      'S1.G': [1],
+      'S1.B': [2],
+      'S2.R': [0],
+      'S2.G': [Math.sqrt(3)],
+      'S2.B': [0],
+      'S3.R': [0],
+      'S3.G': [0],
+      'S3.B': [0]
+    }, 'invalid-stokes-rgb');
+
+    const texture = buildSelectedDisplayTexture(layer, 1, 1, createStokesSelection('dolp', 'stokesRgb'));
+    const sample = samplePixelValuesForDisplay(
+      layer,
+      1,
+      1,
+      { ix: 0, iy: 0 },
+      createStokesSelection('dolp', 'stokesRgb')
+    );
+
+    expect(texture[0]).toBeNaN();
+    expect(texture[1]).toBeCloseTo(1, 6);
+    expect(texture[2]).toBeCloseTo(0.5, 6);
+    expect(texture[3]).toBe(1);
+    expect(sample?.values['DoLP.R']).toBeNaN();
+    expect(sample?.values['DoLP.G']).toBeCloseTo(1, 6);
+  });
+
   it('handles null display selections by returning black textures', () => {
     const layer = createLayer();
     const texture = buildSelectedDisplayTexture(layer, 2, 2, null);
@@ -224,6 +296,32 @@ describe('display CPU materialization', () => {
     expect(sample?.values['S1/S0 Spectral RGB.R']).toBeCloseTo(-0.5, 5);
     expect(sample?.values['S1/S0 Spectral RGB.G']).toBeCloseTo(-0.5, 5);
     expect(sample?.values['S1/S0 Spectral RGB.B']).toBeCloseTo(-0.5, 5);
+  });
+
+  it('fills spectral Stokes RGB display values with NaN for invalid vectors', () => {
+    const channelValues: Record<string, number[]> = {};
+    for (let wavelength = 380; wavelength <= 780; wavelength += 20) {
+      channelValues[`S0.${wavelength}nm`] = [1];
+      channelValues[`S1.${wavelength}nm`] = [2];
+      channelValues[`S2.${wavelength}nm`] = [0];
+      channelValues[`S3.${wavelength}nm`] = [0];
+    }
+    const layer = createLayerFromChannels(channelValues, 'invalid-spectral-stokes');
+
+    const texture = buildSelectedDisplayTexture(layer, 1, 1, createStokesSelection('aolp', 'stokesSpectralRgb'));
+    const sample = samplePixelValuesForDisplay(
+      layer,
+      1,
+      1,
+      { ix: 0, iy: 0 },
+      createStokesSelection('aolp', 'stokesSpectralRgb')
+    );
+
+    expect(texture[0]).toBeNaN();
+    expect(texture[1]).toBeNaN();
+    expect(texture[2]).toBeNaN();
+    expect(texture[3]).toBe(1);
+    expect(sample?.values['AoLP Spectral RGB.R']).toBeNaN();
   });
 
   it('preserves signed S1/S2/S3 spectral RGB samples for spectral Stokes layers', () => {

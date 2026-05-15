@@ -12,6 +12,7 @@ import {
   detectScalarStokesChannels,
   getStokesDegreeModulationLabel,
   getStokesParameterLabel,
+  isPhysicallyValidStokesVector,
   type RgbStokesChannels,
   type RgbStokesComponent,
   type ScalarStokesChannels
@@ -124,6 +125,10 @@ export function computeRawStokesDisplayValue(
   s2: number,
   s3: number
 ): number {
+  if (!isPhysicallyValidStokesVector(s0, s1, s2, s3)) {
+    return Number.NaN;
+  }
+
   switch (parameter) {
     case 'aolp':
       return computeRawStokesAolp(s1, s2);
@@ -260,6 +265,10 @@ function computeRawStokesAolp(s1: number, s2: number): number {
     return Number.NaN;
   }
 
+  if (s1 === 0 && s2 === 0) {
+    return Number.NaN;
+  }
+
   const aolp = 0.5 * Math.atan2(s2, s1);
   if (!Number.isFinite(aolp)) {
     return Number.NaN;
@@ -303,6 +312,10 @@ function computeRawStokesDocp(s0: number, s3: number): number {
 
 function computeRawStokesEang(s1: number, s2: number, s3: number): number {
   if (!Number.isFinite(s1) || !Number.isFinite(s2) || !Number.isFinite(s3)) {
+    return Number.NaN;
+  }
+
+  if (s1 === 0 && s2 === 0 && s3 === 0) {
     return Number.NaN;
   }
 

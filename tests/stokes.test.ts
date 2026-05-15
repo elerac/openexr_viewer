@@ -4,6 +4,9 @@ import {
   computeStokesDocp,
   computeStokesDop,
   computeStokesDolp,
+  computeStokesDisplayValue,
+  computeStokesDegreeModulationDisplayValue,
+  computeStokesDegreeModulationValue,
   computeStokesEang,
   computeStokesNormalizedComponent,
   createDefaultStokesColormapDefaultSettings,
@@ -14,6 +17,7 @@ import {
   getStokesColormapDefault,
   getStokesColormapDefaultGroup,
   getStokesDisplayOptions,
+  isPhysicallyValidStokesVector,
   resolveStokesColormapDefaultLabel
 } from '../src/stokes';
 
@@ -422,33 +426,67 @@ describe('stokes', () => {
     expect(computeStokesAolp(0, 1)).toBeCloseTo(Math.PI / 4, 6);
     expect(computeStokesAolp(-1, 0)).toBeCloseTo(Math.PI / 2, 6);
     expect(computeStokesAolp(0, -1)).toBeCloseTo((3 * Math.PI) / 4, 6);
-    expect(computeStokesAolp(Number.NaN, 1)).toBe(0);
+    expect(computeStokesAolp(0, 0)).toBeNaN();
+    expect(computeStokesAolp(Number.NaN, 1)).toBeNaN();
 
     expect(computeStokesDolp(1, 1, 0)).toBeCloseTo(1, 6);
     expect(computeStokesDolp(2, 1, Math.sqrt(3))).toBeCloseTo(1, 6);
-    expect(computeStokesDolp(0, 1, 1)).toBe(0);
-    expect(computeStokesDolp(1, Number.NaN, 1)).toBe(0);
+    expect(computeStokesDolp(0, 1, 1)).toBeNaN();
+    expect(computeStokesDolp(1, Number.NaN, 1)).toBeNaN();
 
     expect(computeStokesDop(1, 0, 0, 0)).toBe(0);
     expect(computeStokesDop(1, 1, 0, 0)).toBeCloseTo(1, 6);
     expect(computeStokesDop(2, 1, 1, Math.sqrt(2))).toBeCloseTo(1, 6);
-    expect(computeStokesDop(0, 1, 1, 1)).toBe(0);
-    expect(computeStokesDop(1, 1, Number.NaN, 1)).toBe(0);
+    expect(computeStokesDop(0, 1, 1, 1)).toBeNaN();
+    expect(computeStokesDop(1, 1, Number.NaN, 1)).toBeNaN();
 
     expect(computeStokesDocp(1, 0)).toBe(0);
     expect(computeStokesDocp(2, -1)).toBeCloseTo(0.5, 6);
-    expect(computeStokesDocp(0, 1)).toBe(0);
-    expect(computeStokesDocp(1, Number.NaN)).toBe(0);
+    expect(computeStokesDocp(0, 1)).toBeNaN();
+    expect(computeStokesDocp(1, Number.NaN)).toBeNaN();
 
     expect(computeStokesEang(0, 0, 1)).toBeCloseTo(Math.PI / 4, 6);
     expect(computeStokesEang(0, 0, -1)).toBeCloseTo(-Math.PI / 4, 6);
     expect(computeStokesEang(1, 0, 0)).toBe(0);
-    expect(computeStokesEang(Number.NaN, 0, 1)).toBe(0);
+    expect(computeStokesEang(0, 0, 0)).toBeNaN();
+    expect(computeStokesEang(Number.NaN, 0, 1)).toBeNaN();
 
     expect(computeStokesNormalizedComponent(2, 1)).toBeCloseTo(0.5, 6);
     expect(computeStokesNormalizedComponent(2, -1)).toBeCloseTo(-0.5, 6);
-    expect(computeStokesNormalizedComponent(0, 1)).toBe(0);
-    expect(computeStokesNormalizedComponent(Number.NaN, 1)).toBe(0);
-    expect(computeStokesNormalizedComponent(1, Number.NaN)).toBe(0);
+    expect(computeStokesNormalizedComponent(0, 1)).toBeNaN();
+    expect(computeStokesNormalizedComponent(Number.NaN, 1)).toBeNaN();
+    expect(computeStokesNormalizedComponent(1, Number.NaN)).toBeNaN();
+  });
+
+  it('checks physical Stokes vector validity with tolerance', () => {
+    expect(isPhysicallyValidStokesVector(1, 1, 0, 0)).toBe(true);
+    expect(isPhysicallyValidStokesVector(0, 0, 0, 0)).toBe(true);
+    expect(isPhysicallyValidStokesVector(-1, 0, 0, 0)).toBe(false);
+    expect(isPhysicallyValidStokesVector(1, Number.NaN, 0, 0)).toBe(false);
+    expect(isPhysicallyValidStokesVector(1, Math.sqrt(1 + 5.0e-9), 0, 0)).toBe(true);
+    expect(isPhysicallyValidStokesVector(1, Math.sqrt(1 + 2.0e-8), 0, 0)).toBe(false);
+  });
+
+  it('returns NaN for computed Stokes values with invalid full vectors', () => {
+    expect(computeStokesDisplayValue('aolp', 1, 2, 0, 0)).toBeNaN();
+    expect(computeStokesDisplayValue('dolp', 1, 2, 0, 0)).toBeNaN();
+    expect(computeStokesDisplayValue('dop', 1, 2, 0, 0)).toBeNaN();
+    expect(computeStokesDisplayValue('s1_over_s0', 1, 2, 0, 0)).toBeNaN();
+
+    expect(computeStokesDisplayValue('aolp', 0, 0, 0, 0)).toBeNaN();
+    expect(computeStokesDisplayValue('top', 0, 0, 0, 0)).toBeNaN();
+    expect(computeStokesDisplayValue('dolp', 0, 0, 0, 0)).toBeNaN();
+    expect(computeStokesDisplayValue('dop', 0, 0, 0, 0)).toBeNaN();
+    expect(computeStokesDisplayValue('s1_over_s0', 0, 0, 0, 0)).toBeNaN();
+
+    expect(computeStokesDisplayValue('aolp', 1, 0, 0, 0)).toBeNaN();
+    expect(computeStokesDisplayValue('top', 1, 0, 0, 0)).toBeNaN();
+    expect(computeStokesDisplayValue('dolp', 1, 0, 0, 0)).toBe(0);
+    expect(computeStokesDisplayValue('dop', 1, 0, 0, 0)).toBe(0);
+
+    expect(computeStokesDegreeModulationValue('aolp', 1, 2, 0, 0)).toBeNaN();
+    expect(computeStokesDegreeModulationValue('top', 0, 0, 0, 0)).toBeNaN();
+    expect(computeStokesDegreeModulationValue('dolp', 1, 2, 0, 0)).toBeNull();
+    expect(computeStokesDegreeModulationDisplayValue('aolp', 1, 2, 0, 0)).toBeNaN();
   });
 });

@@ -49,16 +49,14 @@ describe('display probe sampling', () => {
       'S2.Y': [1],
       'S3.Y': [0]
     }, 'suffixed-stokes');
-    const spectralLayer = createLayerFromChannels({
-      'S0.400nm': [1],
-      'S1.400nm': [-0.5],
-      'S2.400nm': [0],
-      'S3.400nm': [0],
-      'S0.500nm': [1],
-      'S1.500nm': [-0.5],
-      'S2.500nm': [0],
-      'S3.500nm': [0]
-    }, 'spectral-stokes');
+    const spectralChannels: Record<string, number[]> = {};
+    for (let wavelength = 380; wavelength <= 780; wavelength += 20) {
+      spectralChannels[`S0.${wavelength}nm`] = [1];
+      spectralChannels[`S1.${wavelength}nm`] = [-0.5];
+      spectralChannels[`S2.${wavelength}nm`] = [0];
+      spectralChannels[`S3.${wavelength}nm`] = [0];
+    }
+    const spectralLayer = createLayerFromChannels(spectralChannels, 'spectral-stokes');
 
     expect(
       samplePixelValuesForDisplay(scalarLayer, 1, 1, { ix: 0, iy: 0 }, createStokesSelection('aolp'))?.values.AoLP
