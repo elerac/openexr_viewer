@@ -11,6 +11,7 @@ import {
   type DisplayPixelValues
 } from '../display/evaluator';
 import { isStokesDisplayAvailable } from '../stokes';
+import { appendSpectralStokesRgbSampleValues } from '../stokes/spectral-stokes-rgb';
 import { appendStokesSampleValues } from '../stokes/stokes-display';
 import { isSpectralRgbDisplayAvailable } from '../spectral';
 import type { DecodedLayer, ImagePixel, PixelSample, VisualizationMode } from '../types';
@@ -78,7 +79,11 @@ export function samplePixelValuesForDisplay(
 
   const flatIndex = pixel.iy * width + pixel.ix;
   if (isStokesSelection(selection) && isStokesDisplayAvailable(layer.channelNames, selection)) {
-    appendStokesSampleValues(layer, flatIndex, selection, sample.values, visualizationMode);
+    if (selection.source.kind === 'spectralRgb') {
+      appendSpectralStokesRgbSampleValues(layer, flatIndex, selection, sample.values, visualizationMode);
+    } else {
+      appendStokesSampleValues(layer, flatIndex, selection, sample.values, visualizationMode);
+    }
   }
 
   if (isSpectralRgbSelection(selection) && isSpectralRgbDisplayAvailable(layer.channelNames, selection)) {

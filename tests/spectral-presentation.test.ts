@@ -178,6 +178,38 @@ describe('spectral readout presentation', () => {
     });
   });
 
+  it('plots spectral Stokes RGB selections across wavelengths', () => {
+    const layer = createLayerFromChannels({
+      'S0.400nm': [2],
+      'S1.400nm': [-1],
+      'S2.400nm': [0],
+      'S3.400nm': [0],
+      'S0.500nm': [4],
+      'S1.500nm': [1],
+      'S2.500nm': [0],
+      'S3.500nm': [0]
+    }, 'spectral-stokes');
+    const session = createSession(layer);
+    const readout = buildSpectralPlotReadoutModel({
+      activeSession: session,
+      activeLayer: layer,
+      sessionState: createViewerSessionState({
+        displaySelection: createStokesSelection('s1_over_s0', 'stokesSpectralRgb')
+      }),
+      interactionState: createViewerInteractionState({ hoveredPixel: { ix: 0, iy: 0 } })
+    });
+
+    expect(readout.visible).toBe(true);
+    expect(readout.channels).toEqual([
+      { channelName: 'S1/S0.400nm', wavelength: 400, seriesKey: 'S1/S0', seriesLabel: 'S1/S0' },
+      { channelName: 'S1/S0.500nm', wavelength: 500, seriesKey: 'S1/S0', seriesLabel: 'S1/S0' }
+    ]);
+    expect(readout.points).toEqual([
+      { channelName: 'S1/S0.400nm', wavelength: 400, seriesKey: 'S1/S0', seriesLabel: 'S1/S0', intensity: -0.5 },
+      { channelName: 'S1/S0.500nm', wavelength: 500, seriesKey: 'S1/S0', seriesLabel: 'S1/S0', intensity: 0.25 }
+    ]);
+  });
+
   it('uses saved Stokes defaults for spectral plot y-axis ranges', () => {
     const layer = createLayerFromChannels({
       'S0.400nm': [2],

@@ -41,6 +41,16 @@ describe('display bindings', () => {
       '500nm': [1],
       '600nm': [1]
     });
+    const spectralStokesLayer = createLayerFromChannels({
+      'S0.400nm': [1],
+      'S1.400nm': [0.25],
+      'S2.400nm': [0],
+      'S3.400nm': [0],
+      'S0.500nm': [1],
+      'S1.500nm': [0.25],
+      'S2.500nm': [0],
+      'S3.500nm': [0]
+    });
 
     const rgbBinding = buildDisplaySourceBinding(channelLayer, createChannelRgbSelection('R', 'G', 'B', 'A'));
     const monoBinding = buildDisplaySourceBinding(channelLayer, createChannelMonoSelection('G', 'A'));
@@ -55,6 +65,15 @@ describe('display bindings', () => {
       'colormap'
     );
     const spectralBinding = buildDisplaySourceBinding(spectralLayer, createSpectralRgbSelection());
+    const spectralStokesBinding = buildDisplaySourceBinding(
+      spectralStokesLayer,
+      createStokesSelection('s1_over_s0', 'stokesSpectralRgb')
+    );
+    const spectralStokesColormapBinding = buildDisplaySourceBinding(
+      spectralStokesLayer,
+      createStokesSelection('s1_over_s0', 'stokesSpectralRgb'),
+      'colormap'
+    );
 
     expect(rgbBinding.mode).toBe('channelRgb');
     expect(rgbBinding.slots.slice(0, 4)).toEqual(['R', 'G', 'B', 'A']);
@@ -83,5 +102,16 @@ describe('display bindings', () => {
     expect(spectralBinding.mode).toBe('spectralRgb');
     expect(spectralBinding.slots[0]).toBe('__spectralRgb:');
     expect(spectralBinding.usesImageAlpha).toBe(false);
+    expect(spectralStokesBinding.mode).toBe('stokesSpectralRgb');
+    expect(spectralStokesBinding.slots.slice(0, 4)).toEqual([
+      '__spectralStokesRgb:S0',
+      '__spectralStokesRgb:S1',
+      '__spectralStokesRgb:S2',
+      '__spectralStokesRgb:S3'
+    ]);
+    expect(spectralStokesBinding.usesImageAlpha).toBe(false);
+    expect(spectralStokesBinding.stokesParameter).toBe('s1_over_s0');
+    expect(spectralStokesColormapBinding.mode).toBe('stokesSpectralRgbLuminance');
+    expect(spectralStokesColormapBinding.slots).toEqual(spectralStokesBinding.slots);
   });
 });

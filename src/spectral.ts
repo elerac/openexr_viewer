@@ -41,7 +41,7 @@ interface IndexedSpectralChannel extends SpectralChannel {
   index: number;
 }
 
-type SpectralStokesComponent = 'S0' | 'S1' | 'S2' | 'S3';
+export type SpectralStokesComponent = 'S0' | 'S1' | 'S2' | 'S3';
 
 interface IndexedSpectralStokesChannel {
   channelName: string;
@@ -69,6 +69,8 @@ const RESERVED_SPECTRAL_LAYER_PATTERN = /^(?:S[0-4]|T)\./i;
 const SPECTRAL_CHANNEL_PATTERN = /(\d+(?:[.,]\d+)?(?:[eE][-+]?\d+)?)nm$/i;
 const MIN_SPECTRAL_CHANNEL_COUNT = 2;
 const SPECTRAL_RGB_SOURCE_PREFIX = '__spectralRgb:';
+const SPECTRAL_STOKES_RGB_SOURCE_PREFIX = '__spectralStokesRgb:';
+const SIGNED_STOKES_SPECTRAL_RGB_SERIES = new Set<string>(['S1', 'S2', 'S3']);
 
 export function parseSpectralChannelName(channelName: string): number | null {
   return parseSpectralChannel(channelName)?.wavelength ?? null;
@@ -235,6 +237,16 @@ export function isSpectralRgbDisplayAvailable(
   return detectSpectralChannelsForSeries(channelNames, selection.seriesKey).length >= MIN_SPECTRAL_CHANNEL_COUNT;
 }
 
+export function shouldReadSpectralRgbSeriesSigned(
+  channelNames: string[],
+  seriesKey: string
+): boolean {
+  return (
+    SIGNED_STOKES_SPECTRAL_RGB_SERIES.has(seriesKey) &&
+    isSpectralStokesRgbDisplayAvailable(channelNames)
+  );
+}
+
 export function pickDefaultSpectralRgbSelection(channelNames: string[]): SpectralRgbSelection | null {
   if (!isSpectralOnlyLayer(channelNames)) {
     return null;
@@ -263,6 +275,25 @@ export function isSpectralRgbSourceName(sourceName: string | null | undefined): 
   return parseSpectralRgbSourceName(sourceName) !== null;
 }
 
+export function buildSpectralStokesRgbSourceName(component: SpectralStokesComponent): string {
+  return `${SPECTRAL_STOKES_RGB_SOURCE_PREFIX}${component}`;
+}
+
+export function parseSpectralStokesRgbSourceName(
+  sourceName: string | null | undefined
+): SpectralStokesComponent | null {
+  if (!sourceName?.startsWith(SPECTRAL_STOKES_RGB_SOURCE_PREFIX)) {
+    return null;
+  }
+
+  const component = sourceName.slice(SPECTRAL_STOKES_RGB_SOURCE_PREFIX.length).toUpperCase();
+  return isSpectralStokesComponent(component) ? component : null;
+}
+
+export function isSpectralStokesRgbSourceName(sourceName: string | null | undefined): boolean {
+  return parseSpectralStokesRgbSourceName(sourceName) !== null;
+}
+
 export function detectSpectralStokesChannelGroups(channelNames: string[]): SpectralStokesChannelGroup[] {
   const candidatesByWavelength = new Map<string, SpectralStokesSeriesCandidate>();
 
@@ -286,6 +317,22 @@ export function detectSpectralStokesChannelGroups(channelNames: string[]): Spect
     .map(buildSpectralStokesChannelGroup)
     .filter((group): group is SpectralStokesChannelGroup => group !== null)
     .sort((a, b) => a.wavelength - b.wavelength);
+}
+
+export function isSpectralStokesRgbDisplayAvailable(channelNames: string[]): boolean {
+  return detectSpectralStokesChannelGroups(channelNames).length >= MIN_SPECTRAL_CHANNEL_COUNT;
+}
+
+export function buildSpectralStokesComponentChannels(
+  groups: readonly SpectralStokesChannelGroup[],
+  component: SpectralStokesComponent
+): SpectralChannel[] {
+  return groups.map((group) => ({
+    channelName: getSpectralStokesComponentChannelName(group, component),
+    wavelength: group.wavelength,
+    seriesKey: component,
+    seriesLabel: component
+  }));
 }
 
 export function buildSpectralStokesChannels(
@@ -366,6 +413,26 @@ function parseSpectralStokesChannel(channelName: string): IndexedSpectralStokesC
     wavelength,
     suffix: dotIndex >= 0 ? channelName.slice(dotIndex + 1) : `${match[2]}nm`
   };
+}
+
+function isSpectralStokesComponent(value: string): value is SpectralStokesComponent {
+  return value === 'S0' || value === 'S1' || value === 'S2' || value === 'S3';
+}
+
+function getSpectralStokesComponentChannelName(
+  group: SpectralStokesChannelGroup,
+  component: SpectralStokesComponent
+): string {
+  switch (component) {
+    case 'S0':
+      return group.s0;
+    case 'S1':
+      return group.s1;
+    case 'S2':
+      return group.s2;
+    case 'S3':
+      return group.s3;
+  }
 }
 
 function buildSpectralStokesChannelGroup(

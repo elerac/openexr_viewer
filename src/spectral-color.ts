@@ -21,6 +21,10 @@ export interface SpectralRgbSample {
   b: number;
 }
 
+export interface ReadSpectralRgbSampleOptions {
+  clamp?: boolean;
+}
+
 const XYZ_TO_LINEAR_SRGB = [
   [3.24096994, -1.53738318, -0.49861076],
   [-0.96924364, 1.8759675, 0.04155506],
@@ -87,7 +91,8 @@ export function resolveSpectralRgbChannels(
 export function readSpectralRgbSampleAtIndex(
   channels: readonly ResolvedSpectralRgbChannel[],
   pixelIndex: number,
-  output?: SpectralRgbSample
+  output?: SpectralRgbSample,
+  options: ReadSpectralRgbSampleOptions = {}
 ): SpectralRgbSample {
   const out = output ?? { ...EMPTY_SPECTRAL_RGB_SAMPLE };
   let r = 0;
@@ -101,10 +106,19 @@ export function readSpectralRgbSampleAtIndex(
     b += value * channel.b;
   }
 
-  out.r = clamp01(r);
-  out.g = clamp01(g);
-  out.b = clamp01(b);
+  const shouldClamp = options.clamp ?? true;
+  out.r = shouldClamp ? clamp01(r) : sanitizeSpectralValue(r);
+  out.g = shouldClamp ? clamp01(g) : sanitizeSpectralValue(g);
+  out.b = shouldClamp ? clamp01(b) : sanitizeSpectralValue(b);
   return out;
+}
+
+export function readSignedSpectralRgbSampleAtIndex(
+  channels: readonly ResolvedSpectralRgbChannel[],
+  pixelIndex: number,
+  output?: SpectralRgbSample
+): SpectralRgbSample {
+  return readSpectralRgbSampleAtIndex(channels, pixelIndex, output, { clamp: false });
 }
 
 export function trapezoidWeights(sortedWavelengthsNm: readonly number[]): number[] {

@@ -42,6 +42,12 @@ describe('display revision keys', () => {
     })).toBe('2:stokesScalar:dolp:scalar:500nm');
 
     expect(buildDisplayTextureRevisionKey({
+      activeLayer: 3,
+      displaySelection: createStokesSelection('s1_over_s0', 'stokesSpectralRgb'),
+      visualizationMode: 'colormap'
+    })).toBe('3:stokesScalar:s1_over_s0:spectralRgb:colormap');
+
+    expect(buildDisplayTextureRevisionKey({
       activeLayer: 4,
       displaySelection: createSpectralRgbSelection('hoge')
     })).toBe('4:spectralRgb:hoge');
@@ -69,6 +75,12 @@ describe('display revision keys', () => {
       displaySelection: createStokesSelection('aolp', 'stokesRgb'),
       visualizationMode: 'colormap'
     })).toBe('3:stokesAngle:aolp:rgbLuminance:colormap');
+
+    expect(buildDisplayLuminanceRevisionKey({
+      activeLayer: 3,
+      displaySelection: createStokesSelection('s1_over_s0', 'stokesSpectralRgb'),
+      visualizationMode: 'rgb'
+    })).toBe('3:stokesScalar:s1_over_s0:spectralRgb:rgb');
 
     expect(buildDisplayLuminanceRevisionKey({
       activeLayer: 4,

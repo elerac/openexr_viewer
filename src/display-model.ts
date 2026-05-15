@@ -17,7 +17,8 @@ export type StokesScalarParameter = Exclude<StokesParameter, StokesAngleParamete
 export type StokesSource =
   | { kind: 'scalar'; suffix?: string }
   | { kind: 'rgbLuminance' }
-  | { kind: 'rgbComponent'; component: 'R' | 'G' | 'B' };
+  | { kind: 'rgbComponent'; component: 'R' | 'G' | 'B' }
+  | { kind: 'spectralRgb' };
 
 export type StokesDegreeModulationParameter = StokesAngleParameter;
 export type StokesDegreeModulationState = Record<StokesDegreeModulationParameter, boolean>;
@@ -167,7 +168,12 @@ export function isStokesAngleSelection(selection: DisplaySelection | null): sele
 }
 
 export function isGroupedRgbStokesSelection(selection: DisplaySelection | null): selection is StokesSelection {
-  return Boolean(isStokesSelection(selection) && selection.source.kind === 'rgbLuminance');
+  return Boolean(
+    isStokesSelection(selection) && (
+      selection.source.kind === 'rgbLuminance' ||
+      selection.source.kind === 'spectralRgb'
+    )
+  );
 }
 
 export function isMonoSelection(selection: DisplaySelection | null): boolean {
@@ -233,6 +239,10 @@ export function getDisplaySelectionValueLabel(selection: DisplaySelection | null
   }
 
   const label = getStokesParameterLabel(selection.parameter);
+  if (selection.source.kind === 'spectralRgb') {
+    return `${label} Spectral RGB`;
+  }
+
   return appendStokesSourceSuffix(label, getStokesSourceLabelSuffix(selection.source));
 }
 
@@ -246,6 +256,10 @@ export function getDisplaySelectionDegreeModulationValueLabel(
   const label = getStokesDegreeModulationLabel(selection.parameter);
   if (!label) {
     return null;
+  }
+
+  if (selection.source.kind === 'spectralRgb') {
+    return `${label} Spectral RGB`;
   }
 
   return appendStokesSourceSuffix(label, getStokesSourceLabelSuffix(selection.source));
@@ -334,6 +348,8 @@ function formatStokesSelectionLabel(selection: StokesSelection): string {
       return `${label}.(R,G,B)`;
     case 'rgbComponent':
       return `${label}.${selection.source.component}`;
+    case 'spectralRgb':
+      return `${label} Spectral RGB`;
   }
 }
 

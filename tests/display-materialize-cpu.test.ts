@@ -171,6 +171,71 @@ describe('display CPU materialization', () => {
     expect(sample?.values['Spectral RGB.B']).toBeCloseTo(texture[2] ?? 0, 6);
   });
 
+  it('builds signed spectral Stokes RGB display textures before deriving Stokes parameters', () => {
+    const channelValues: Record<string, number[]> = {};
+    for (let wavelength = 380; wavelength <= 780; wavelength += 20) {
+      channelValues[`S0.${wavelength}nm`] = [1];
+      channelValues[`S1.${wavelength}nm`] = [-0.5];
+      channelValues[`S2.${wavelength}nm`] = [0];
+      channelValues[`S3.${wavelength}nm`] = [0];
+    }
+    const layer = createLayerFromChannels(channelValues, 'spectral-stokes');
+
+    const texture = buildSelectedDisplayTexture(layer, 1, 1, createStokesSelection('s1_over_s0', 'stokesSpectralRgb'));
+    const colormapTexture = buildSelectedDisplayTexture(
+      layer,
+      1,
+      1,
+      createStokesSelection('s1_over_s0', 'stokesSpectralRgb'),
+      'colormap'
+    );
+    const sample = samplePixelValuesForDisplay(
+      layer,
+      1,
+      1,
+      { ix: 0, iy: 0 },
+      createStokesSelection('s1_over_s0', 'stokesSpectralRgb')
+    );
+
+    expect(texture[0]).toBeCloseTo(-0.5, 5);
+    expect(texture[1]).toBeCloseTo(-0.5, 5);
+    expect(texture[2]).toBeCloseTo(-0.5, 5);
+    expect(texture[3]).toBe(1);
+    expect(colormapTexture[0]).toBeCloseTo(-0.5, 5);
+    expect(colormapTexture[1]).toBeCloseTo(-0.5, 5);
+    expect(colormapTexture[2]).toBeCloseTo(-0.5, 5);
+    expect(sample?.values['S1/S0 Spectral RGB.R']).toBeCloseTo(-0.5, 5);
+    expect(sample?.values['S1/S0 Spectral RGB.G']).toBeCloseTo(-0.5, 5);
+    expect(sample?.values['S1/S0 Spectral RGB.B']).toBeCloseTo(-0.5, 5);
+  });
+
+  it('preserves signed S1/S2/S3 spectral RGB samples for spectral Stokes layers', () => {
+    const channelValues: Record<string, number[]> = {};
+    for (let wavelength = 380; wavelength <= 780; wavelength += 20) {
+      channelValues[`S0.${wavelength}nm`] = [1];
+      channelValues[`S1.${wavelength}nm`] = [-0.5];
+      channelValues[`S2.${wavelength}nm`] = [-0.25];
+      channelValues[`S3.${wavelength}nm`] = [-0.75];
+    }
+    const layer = createLayerFromChannels(channelValues, 'spectral-stokes');
+
+    const s1Texture = buildSelectedDisplayTexture(layer, 1, 1, createSpectralRgbSelection('S1'));
+    const s2Texture = buildSelectedDisplayTexture(layer, 1, 1, createSpectralRgbSelection('S2'));
+    const s3Texture = buildSelectedDisplayTexture(layer, 1, 1, createSpectralRgbSelection('S3'));
+
+    expect(s1Texture[0]).toBeLessThan(0);
+    expect(s1Texture[1]).toBeLessThan(0);
+    expect(s1Texture[2]).toBeLessThan(0);
+    expect(s2Texture[0]).toBeLessThan(0);
+    expect(s2Texture[1]).toBeLessThan(0);
+    expect(s2Texture[2]).toBeLessThan(0);
+    expect(s3Texture[0]).toBeLessThan(0);
+    expect(s3Texture[1]).toBeLessThan(0);
+    expect(s3Texture[2]).toBeLessThan(0);
+    expect(Math.abs(s3Texture[1] ?? 0)).toBeGreaterThan(Math.abs(s1Texture[1] ?? 0));
+    expect(Math.abs(s1Texture[1] ?? 0)).toBeGreaterThan(Math.abs(s2Texture[1] ?? 0));
+  });
+
   it('does not trigger planar materialization during normal display reads', () => {
     const layer = createLayer();
 

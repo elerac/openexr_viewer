@@ -289,6 +289,28 @@ describe('probe helpers', () => {
     ]);
   });
 
+  it('uses grouped spectral RGB Stokes derived values for probe preview', () => {
+    const preview = buildProbeColorPreview(
+      {
+        x: 0,
+        y: 0,
+        values: {
+          'S1/S0 Spectral RGB.R': -0.25,
+          'S1/S0 Spectral RGB.G': -0.5,
+          'S1/S0 Spectral RGB.B': -0.75
+        }
+      },
+      createStokesSelection('s1_over_s0', 'stokesSpectralRgb'),
+      0
+    );
+
+    expect(preview?.displayValues).toEqual([
+      { label: 'R', value: '-0.250' },
+      { label: 'G', value: '-0.500' },
+      { label: 'B', value: '-0.750' }
+    ]);
+  });
+
   it('keeps grouped RGB Stokes colormap probe previews mono-valued', () => {
     const preview = buildProbeColorPreview(
       { x: 0, y: 0, values: { DoLP: 0.5 } },
@@ -302,6 +324,21 @@ describe('probe helpers', () => {
     );
 
     expect(preview?.displayValues).toEqual([{ label: 'Mono', value: '0.500' }]);
+  });
+
+  it('keeps grouped spectral RGB Stokes colormap probe previews mono-valued', () => {
+    const preview = buildProbeColorPreview(
+      { x: 0, y: 0, values: { 'S1/S0 Spectral RGB': -0.5 } },
+      createStokesSelection('s1_over_s0', 'stokesSpectralRgb'),
+      0,
+      {
+        mode: 'colormap',
+        colormapRange: { min: -1, max: 1 },
+        colormapLut: redBlackGreenLut
+      }
+    );
+
+    expect(preview?.displayValues).toEqual([{ label: 'Mono', value: '-0.500' }]);
   });
 
   it('uses one mono display value for split RGB Stokes probe preview', () => {

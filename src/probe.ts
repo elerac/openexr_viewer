@@ -159,10 +159,11 @@ function readProbeDisplayValues(
   if (isStokesSelection(selection)) {
     if (visualizationMode === 'rgb' && isGroupedRgbStokesSelection(selection)) {
       const label = getStokesParameterLabel(selection.parameter);
+      const displayLabel = getDisplaySelectionValueLabel(selection) ?? label;
       return [
-        readFirstProbeChannel(sample, [`${label}.R`, label]),
-        readFirstProbeChannel(sample, [`${label}.G`, label]),
-        readFirstProbeChannel(sample, [`${label}.B`, label])
+        readFirstProbeChannel(sample, [`${displayLabel}.R`, `${label}.R`, displayLabel, label]),
+        readFirstProbeChannel(sample, [`${displayLabel}.G`, `${label}.G`, displayLabel, label]),
+        readFirstProbeChannel(sample, [`${displayLabel}.B`, `${label}.B`, displayLabel, label])
       ];
     }
 

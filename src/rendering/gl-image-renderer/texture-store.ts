@@ -4,7 +4,18 @@ import {
   type DisplaySourceBinding
 } from '../../display/bindings';
 import { buildSelectedDisplayTexture } from '../../display/materialize-cpu';
-import { parseSpectralRgbSourceName } from '../../spectral';
+import {
+  buildSpectralStokesComponentChannels,
+  detectSpectralStokesChannelGroups,
+  parseSpectralRgbSourceName,
+  parseSpectralStokesRgbSourceName,
+  type SpectralStokesComponent
+} from '../../spectral';
+import {
+  buildReflectanceSpectralRgbCoefficients,
+  readSignedSpectralRgbSampleAtIndex,
+  resolveSpectralRgbChannels
+} from '../../spectral-color';
 import type { ResidentChannelUpload } from '../../display-cache';
 import type { DecodedLayer } from '../../types';
 import type { GlImageRendererState, LayerSourceTextures } from './types';
@@ -64,6 +75,20 @@ export function ensureLayerChannelsResident(
       continue;
     }
 
+    const spectralStokesComponent = parseSpectralStokesRgbSourceName(channelName);
+    if (spectralStokesComponent !== null) {
+      uploads.push(uploadSpectralStokesRgbSourceTexture(
+        state,
+        layerTextures,
+        width,
+        height,
+        layer,
+        channelName,
+        spectralStokesComponent
+      ));
+      continue;
+    }
+
     if (layer.channelStorage.channelIndexByName[channelName] === undefined) {
       continue;
     }
@@ -112,6 +137,76 @@ export function ensureLayerChannelsResident(
   }
 
   return uploads;
+}
+
+function uploadSpectralStokesRgbSourceTexture(
+  state: GlImageRendererState,
+  layerTextures: LayerSourceTextures,
+  width: number,
+  height: number,
+  layer: DecodedLayer,
+  sourceName: string,
+  component: SpectralStokesComponent
+): ResidentChannelUpload {
+  const pixels = buildSignedSpectralStokesRgbPixels(layer, width, height, component);
+  let texture: WebGLTexture | null = null;
+  try {
+    texture = state.gl.createTexture();
+    if (!texture) {
+      throw new Error('Failed to create spectral Stokes RGB source texture.');
+    }
+
+    state.gl.bindTexture(state.gl.TEXTURE_2D, texture);
+    configureSourceTexture(state.gl);
+    state.gl.texImage2D(
+      state.gl.TEXTURE_2D,
+      0,
+      state.gl.RGBA32F,
+      width,
+      height,
+      0,
+      state.gl.RGBA,
+      state.gl.FLOAT,
+      pixels
+    );
+    layerTextures.textureByChannel.set(sourceName, texture);
+    return {
+      channelName: sourceName,
+      textureBytes: predictRgba32fTextureBytes(width, height),
+      materializedBytes: 0
+    };
+  } catch (error) {
+    if (texture) {
+      state.gl.deleteTexture(texture);
+    }
+    throw error;
+  }
+}
+
+function buildSignedSpectralStokesRgbPixels(
+  layer: DecodedLayer,
+  width: number,
+  height: number,
+  component: SpectralStokesComponent
+): Float32Array {
+  const pixelCount = width * height;
+  const out = new Float32Array(pixelCount * 4);
+  const groups = detectSpectralStokesChannelGroups(layer.channelNames);
+  const channels = resolveSpectralRgbChannels(
+    layer,
+    buildReflectanceSpectralRgbCoefficients(buildSpectralStokesComponentChannels(groups, component))
+  );
+
+  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
+    const outIndex = pixelIndex * 4;
+    const sample = readSignedSpectralRgbSampleAtIndex(channels, pixelIndex);
+    out[outIndex + 0] = sample.r;
+    out[outIndex + 1] = sample.g;
+    out[outIndex + 2] = sample.b;
+    out[outIndex + 3] = 1;
+  }
+
+  return out;
 }
 
 function uploadSpectralRgbSourceTexture(

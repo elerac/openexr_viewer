@@ -6,6 +6,7 @@ import {
   detectSpectralChannels,
   detectSpectralStokesChannelGroups,
   getSpectralRgbDisplayOptions,
+  isSpectralRgbDisplayAvailable,
   parseSpectralChannel,
   parseSpectralChannelName
 } from '../src/spectral';
@@ -255,6 +256,25 @@ describe('spectral channel helpers', () => {
       'fuga Spectral RGB'
     ]);
     expect(options[0]?.selection).toEqual(createSpectralRgbSelection('hoge'));
+  });
+
+  it('keeps signed spectral Stokes components available as spectral RGB options', () => {
+    const channelNames = [
+      'S0.400nm', 'S1.400nm', 'S2.400nm', 'S3.400nm',
+      'S0.500nm', 'S1.500nm', 'S2.500nm', 'S3.500nm'
+    ];
+    const options = getSpectralRgbDisplayOptions(channelNames);
+
+    expect(options.map((option) => option.label)).toEqual([
+      'S0 Spectral RGB',
+      'S1 Spectral RGB',
+      'S2 Spectral RGB',
+      'S3 Spectral RGB'
+    ]);
+    expect(isSpectralRgbDisplayAvailable(channelNames, createSpectralRgbSelection('S0'))).toBe(true);
+    expect(isSpectralRgbDisplayAvailable(channelNames, createSpectralRgbSelection('S1'))).toBe(true);
+    expect(isSpectralRgbDisplayAvailable(channelNames, createSpectralRgbSelection('S2'))).toBe(true);
+    expect(isSpectralRgbDisplayAvailable(channelNames, createSpectralRgbSelection('S3'))).toBe(true);
   });
 
   it('resolves channels for a selected spectral RGB series', () => {

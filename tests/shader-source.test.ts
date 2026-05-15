@@ -16,5 +16,7 @@ describe('shader source regressions', () => {
     expect(source).toContain('uniform float uDisplayGamma;');
     expect(source).toContain('linearToDisplayGamma');
     expect(source).toContain('sign(linear) * pow(abs(linear)');
+    expect(source).toContain('DISPLAY_MODE_STOKES_SPECTRAL_RGB');
+    expect(source).toContain('readSpectralStokesRgbDisplaySample');
   });
 });

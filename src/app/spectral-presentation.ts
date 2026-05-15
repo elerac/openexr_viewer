@@ -107,6 +107,18 @@ type SpectralPlotSource = Pick<SpectralPlotReadoutModel, 'channels' | 'yAxis'> &
 
 function resolveSpectralPlotSource(args: BuildSpectralPresentationArgs): SpectralPlotSource | null {
   const selection = args.sessionState.displaySelection;
+  if (isStokesSelection(selection) && selection.source.kind === 'spectralRgb') {
+    const groups = detectSpectralStokesChannelGroups(args.activeLayer!.channelNames);
+    if (groups.length >= 2) {
+      const stokesDefaults = args.stokesColormapDefaults ?? createDefaultStokesColormapDefaultSettings();
+      return {
+        channels: buildSpectralStokesChannels(groups, selection.parameter),
+        yAxis: resolveSpectralStokesYAxis(selection, stokesDefaults),
+        buildPoints: (sample) => buildSpectralStokesPlotPoints(sample, groups, selection.parameter)
+      };
+    }
+  }
+
   const selectedStokesWavelength = isStokesSelection(selection) && selection.source.kind === 'scalar'
     ? parseSpectralStokesSuffixWavelength(selection.source.suffix)
     : null;

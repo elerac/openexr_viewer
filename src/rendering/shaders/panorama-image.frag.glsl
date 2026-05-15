@@ -34,6 +34,8 @@ const int DISPLAY_MODE_STOKES_DIRECT = 3;
 const int DISPLAY_MODE_STOKES_RGB = 4;
 const int DISPLAY_MODE_STOKES_RGB_LUMINANCE = 5;
 const int DISPLAY_MODE_SPECTRAL_RGB = 6;
+const int DISPLAY_MODE_STOKES_SPECTRAL_RGB = 7;
+const int DISPLAY_MODE_STOKES_SPECTRAL_RGB_LUMINANCE = 8;
 const int ALPHA_OUTPUT_OPAQUE = 0;
 const int ALPHA_OUTPUT_STRAIGHT = 1;
 const int ALPHA_OUTPUT_PREMULTIPLIED = 2;
@@ -341,6 +343,22 @@ float readSource11(ivec2 pixel) {
   return texelFetch(uSourceTextures[11], pixel, 0).r;
 }
 
+vec3 readRgbSource0(ivec2 pixel) {
+  return texelFetch(uSourceTextures[0], pixel, 0).rgb;
+}
+
+vec3 readRgbSource1(ivec2 pixel) {
+  return texelFetch(uSourceTextures[1], pixel, 0).rgb;
+}
+
+vec3 readRgbSource2(ivec2 pixel) {
+  return texelFetch(uSourceTextures[2], pixel, 0).rgb;
+}
+
+vec3 readRgbSource3(ivec2 pixel) {
+  return texelFetch(uSourceTextures[3], pixel, 0).rgb;
+}
+
 vec4 readDirectStokesSample(ivec2 pixel) {
   return vec4(
     readSource0(pixel),
@@ -379,6 +397,44 @@ vec3 readRgbStokesDisplaySample(ivec2 pixel) {
   vec4 stokesR = vec4(readSource0(pixel), readSource1(pixel), readSource2(pixel), readSource3(pixel));
   vec4 stokesG = vec4(readSource4(pixel), readSource5(pixel), readSource6(pixel), readSource7(pixel));
   vec4 stokesB = vec4(readSource8(pixel), readSource9(pixel), readSource10(pixel), readSource11(pixel));
+  return vec3(
+    computeStokesDisplayValue(uStokesParameter, stokesR.x, stokesR.y, stokesR.z, stokesR.w),
+    computeStokesDisplayValue(uStokesParameter, stokesG.x, stokesG.y, stokesG.z, stokesG.w),
+    computeStokesDisplayValue(uStokesParameter, stokesB.x, stokesB.y, stokesB.z, stokesB.w)
+  );
+}
+
+vec4 readSpectralStokesRgbComponentSample(ivec2 pixel, int componentIndex) {
+  vec3 s0 = readRgbSource0(pixel);
+  vec3 s1 = readRgbSource1(pixel);
+  vec3 s2 = readRgbSource2(pixel);
+  vec3 s3 = readRgbSource3(pixel);
+  if (componentIndex == 0) {
+    return vec4(s0.r, s1.r, s2.r, s3.r);
+  }
+  if (componentIndex == 1) {
+    return vec4(s0.g, s1.g, s2.g, s3.g);
+  }
+  return vec4(s0.b, s1.b, s2.b, s3.b);
+}
+
+vec4 readSpectralStokesRgbLuminanceSample(ivec2 pixel) {
+  vec3 s0 = readRgbSource0(pixel);
+  vec3 s1 = readRgbSource1(pixel);
+  vec3 s2 = readRgbSource2(pixel);
+  vec3 s3 = readRgbSource3(pixel);
+  return vec4(
+    computeRec709Luminance(s0.r, s0.g, s0.b),
+    computeRec709Luminance(s1.r, s1.g, s1.b),
+    computeRec709Luminance(s2.r, s2.g, s2.b),
+    computeRec709Luminance(s3.r, s3.g, s3.b)
+  );
+}
+
+vec3 readSpectralStokesRgbDisplaySample(ivec2 pixel) {
+  vec4 stokesR = readSpectralStokesRgbComponentSample(pixel, 0);
+  vec4 stokesG = readSpectralStokesRgbComponentSample(pixel, 1);
+  vec4 stokesB = readSpectralStokesRgbComponentSample(pixel, 2);
   return vec3(
     computeStokesDisplayValue(uStokesParameter, stokesR.x, stokesR.y, stokesR.z, stokesR.w),
     computeStokesDisplayValue(uStokesParameter, stokesG.x, stokesG.y, stokesG.z, stokesG.w),
@@ -437,6 +493,16 @@ DisplaySample readDisplaySample(ivec2 pixel) {
 
   if (uDisplayMode == DISPLAY_MODE_STOKES_RGB_LUMINANCE) {
     vec4 stokes = readRgbLuminanceStokesSample(pixel);
+    float value = computeStokesDisplayValue(uStokesParameter, stokes.x, stokes.y, stokes.z, stokes.w);
+    return DisplaySample(vec3(value), 1.0, stokes);
+  }
+
+  if (uDisplayMode == DISPLAY_MODE_STOKES_SPECTRAL_RGB) {
+    return DisplaySample(readSpectralStokesRgbDisplaySample(pixel), 1.0, vec4(0.0));
+  }
+
+  if (uDisplayMode == DISPLAY_MODE_STOKES_SPECTRAL_RGB_LUMINANCE) {
+    vec4 stokes = readSpectralStokesRgbLuminanceSample(pixel);
     float value = computeStokesDisplayValue(uStokesParameter, stokes.x, stokes.y, stokes.z, stokes.w);
     return DisplaySample(vec3(value), 1.0, stokes);
   }

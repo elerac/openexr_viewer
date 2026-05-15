@@ -65,4 +65,20 @@ describe('channel view items', () => {
     expect(selectVisibleChannelViewItems(items, true).map((item) => item.value)).toContain('spectralRgb:');
     expect(findSelectedChannelViewItem(items, createSpectralRgbSelection())?.label).toBe('Spectral RGB');
   });
+
+  it('includes signed spectral Stokes RGB descriptors alongside derived Stokes spectral RGB descriptors', () => {
+    const items = buildChannelViewItems([
+      'S0.400nm', 'S1.400nm', 'S2.400nm', 'S3.400nm',
+      'S0.500nm', 'S1.500nm', 'S2.500nm', 'S3.500nm'
+    ]);
+    const visible = selectVisibleChannelViewItems(items, false);
+
+    expect(visible.map((item) => item.label)).toContain('S0 Spectral RGB');
+    expect(visible.map((item) => item.label)).toContain('S1 Spectral RGB');
+    expect(visible.map((item) => item.label)).toContain('S2 Spectral RGB');
+    expect(visible.map((item) => item.label)).toContain('S3 Spectral RGB');
+    expect(visible.map((item) => item.label)).toContain('S1/S0 Spectral RGB');
+    expect(findSelectedChannelViewItem(items, createStokesSelection('s1_over_s0', 'stokesSpectralRgb'))?.value)
+      .toBe('stokesSpectralRgb:s1_over_s0:group');
+  });
 });

@@ -49,6 +49,16 @@ describe('display probe sampling', () => {
       'S2.Y': [1],
       'S3.Y': [0]
     }, 'suffixed-stokes');
+    const spectralLayer = createLayerFromChannels({
+      'S0.400nm': [1],
+      'S1.400nm': [-0.5],
+      'S2.400nm': [0],
+      'S3.400nm': [0],
+      'S0.500nm': [1],
+      'S1.500nm': [-0.5],
+      'S2.500nm': [0],
+      'S3.500nm': [0]
+    }, 'spectral-stokes');
 
     expect(
       samplePixelValuesForDisplay(scalarLayer, 1, 1, { ix: 0, iy: 0 }, createStokesSelection('aolp'))?.values.AoLP
@@ -93,6 +103,25 @@ describe('display probe sampling', () => {
         'colormap'
       )?.values.AoLP
     ).toBeCloseTo(Math.PI / 4, 6);
+    expect(
+      samplePixelValuesForDisplay(
+        spectralLayer,
+        1,
+        1,
+        { ix: 0, iy: 0 },
+        createStokesSelection('s1_over_s0', 'stokesSpectralRgb')
+      )?.values['S1/S0 Spectral RGB.R']
+    ).toBeCloseTo(-0.5, 5);
+    expect(
+      samplePixelValuesForDisplay(
+        spectralLayer,
+        1,
+        1,
+        { ix: 0, iy: 0 },
+        createStokesSelection('s1_over_s0', 'stokesSpectralRgb'),
+        'colormap'
+      )?.values['S1/S0 Spectral RGB']
+    ).toBeCloseTo(-0.5, 5);
   });
 
   it('reads per-pixel display values for overlays without overloading stokes alpha', () => {

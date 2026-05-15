@@ -6,6 +6,10 @@ import {
   computeRgbStokesMonoValues,
   readScalarStokesSample
 } from '../stokes/stokes-display';
+import {
+  computeRawSpectralStokesRgbDisplayValueForComponent,
+  computeSpectralStokesRgbMonoValues
+} from '../stokes/spectral-stokes-rgb';
 import { readSpectralRgbSampleAtIndex } from '../spectral-color';
 import type { StatsChannelSummary } from '../types';
 import type { DisplaySelectionEvaluator } from '../display/evaluator';
@@ -51,9 +55,33 @@ export function createDisplaySelectionStatsAccumulators(
     }
     case 'spectralRgb':
       return [
-        createStatsAccumulator('R', (pixelIndex) => readSpectralRgbSampleAtIndex(evaluator.channels, pixelIndex).r),
-        createStatsAccumulator('G', (pixelIndex) => readSpectralRgbSampleAtIndex(evaluator.channels, pixelIndex).g),
-        createStatsAccumulator('B', (pixelIndex) => readSpectralRgbSampleAtIndex(evaluator.channels, pixelIndex).b)
+        createStatsAccumulator(
+          'R',
+          (pixelIndex) => readSpectralRgbSampleAtIndex(
+            evaluator.channels,
+            pixelIndex,
+            undefined,
+            { clamp: !evaluator.signed }
+          ).r
+        ),
+        createStatsAccumulator(
+          'G',
+          (pixelIndex) => readSpectralRgbSampleAtIndex(
+            evaluator.channels,
+            pixelIndex,
+            undefined,
+            { clamp: !evaluator.signed }
+          ).g
+        ),
+        createStatsAccumulator(
+          'B',
+          (pixelIndex) => readSpectralRgbSampleAtIndex(
+            evaluator.channels,
+            pixelIndex,
+            undefined,
+            { clamp: !evaluator.signed }
+          ).b
+        )
       ];
     case 'stokesDirect':
       return [
@@ -95,6 +123,43 @@ export function createDisplaySelectionStatsAccumulators(
           'Mono',
           (pixelIndex) => {
             const sample = computeRgbStokesMonoValues(evaluator.r, evaluator.g, evaluator.b, pixelIndex);
+            return computeRawStokesDisplayValue(
+              evaluator.parameter,
+              sample.s0,
+              sample.s1,
+              sample.s2,
+              sample.s3
+            );
+          }
+        )
+      ];
+    case 'stokesSpectralRgb':
+      return [
+        createStatsAccumulator('R', (pixelIndex) => computeRawSpectralStokesRgbDisplayValueForComponent(
+          evaluator.parameter,
+          evaluator.channels,
+          pixelIndex,
+          'r'
+        )),
+        createStatsAccumulator('G', (pixelIndex) => computeRawSpectralStokesRgbDisplayValueForComponent(
+          evaluator.parameter,
+          evaluator.channels,
+          pixelIndex,
+          'g'
+        )),
+        createStatsAccumulator('B', (pixelIndex) => computeRawSpectralStokesRgbDisplayValueForComponent(
+          evaluator.parameter,
+          evaluator.channels,
+          pixelIndex,
+          'b'
+        ))
+      ];
+    case 'stokesSpectralRgbLuminance':
+      return [
+        createStatsAccumulator(
+          'Mono',
+          (pixelIndex) => {
+            const sample = computeSpectralStokesRgbMonoValues(evaluator.channels, pixelIndex);
             return computeRawStokesDisplayValue(
               evaluator.parameter,
               sample.s0,

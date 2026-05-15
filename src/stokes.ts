@@ -266,6 +266,12 @@ export function buildRgbStokesSplitSelection(
     : { kind: 'stokesScalar', parameter, source: { kind: 'rgbComponent', component } };
 }
 
+export function buildSpectralStokesRgbSelection(parameter: StokesParameter): StokesSelection {
+  return isStokesAngleParameter(parameter)
+    ? { kind: 'stokesAngle', parameter, source: { kind: 'spectralRgb' } }
+    : { kind: 'stokesScalar', parameter, source: { kind: 'spectralRgb' } };
+}
+
 export function buildScalarStokesMapping(channels: ScalarStokesChannels): DisplayChannelMapping {
   return {
     displayR: channels.s0,
@@ -289,6 +295,16 @@ export function buildRgbStokesComponentMapping(channels: ScalarStokesChannels): 
     displayR: channels.s0,
     displayG: channels.s0,
     displayB: channels.s0,
+    displayA: null
+  };
+}
+
+export function buildSpectralStokesRgbMapping(parameter: StokesParameter): DisplayChannelMapping {
+  const label = `${getStokesParameterLabel(parameter)} Spectral RGB`;
+  return {
+    displayR: `${label}.R`,
+    displayG: `${label}.G`,
+    displayB: `${label}.B`,
     displayA: null
   };
 }
@@ -321,6 +337,12 @@ export function getStokesDisplayOptions(
           buildRgbStokesSplitDisplayOption(parameter, 'B', rgbChannels.b)
         );
       }
+    }
+  }
+
+  if (isSpectralStokesRgbDisplayAvailableForChannelNames(channelNames)) {
+    for (const parameter of STOKES_PARAMETER_ORDER) {
+      options.push(buildSpectralStokesRgbDisplayOption(parameter));
     }
   }
 
@@ -401,9 +423,15 @@ export function isStokesDisplayAvailable(
     return true;
   }
 
-  return selection.source.kind === 'scalar'
-    ? Boolean(detectScalarStokesChannels(channelNames, selection.source.suffix ?? null))
-    : Boolean(detectRgbStokesChannels(channelNames));
+  if (selection.source.kind === 'scalar') {
+    return Boolean(detectScalarStokesChannels(channelNames, selection.source.suffix ?? null));
+  }
+
+  if (selection.source.kind === 'spectralRgb') {
+    return isSpectralStokesRgbDisplayAvailableForChannelNames(channelNames);
+  }
+
+  return Boolean(detectRgbStokesChannels(channelNames));
 }
 
 export {
@@ -634,4 +662,50 @@ function buildRgbStokesSplitDisplayOption(
     mapping: buildRgbStokesComponentMapping(channels),
     component
   };
+}
+
+function buildSpectralStokesRgbDisplayOption(parameter: StokesParameter): StokesDisplayOption {
+  const selection = buildSpectralStokesRgbSelection(parameter);
+  return {
+    key: `stokesSpectralRgb:${parameter}:group`,
+    label: getDisplaySelectionOptionLabel(selection),
+    selection,
+    mapping: buildSpectralStokesRgbMapping(parameter),
+    component: null
+  };
+}
+
+function isSpectralStokesRgbDisplayAvailableForChannelNames(channelNames: string[]): boolean {
+  const componentsByWavelength = new Map<string, Set<StokesChannelComponent>>();
+
+  for (const channelName of channelNames) {
+    const match = channelName.match(/^(S[0-3])\.(\d+(?:,\d+)?(?:[eE][-+]?\d+)?)nm$/i);
+    if (!match) {
+      continue;
+    }
+
+    const wavelength = Number(match[2]?.replace(',', '.'));
+    if (!Number.isFinite(wavelength)) {
+      continue;
+    }
+
+    const key = String(wavelength);
+    const components = componentsByWavelength.get(key) ?? new Set<StokesChannelComponent>();
+    components.add(match[1]!.toUpperCase() as StokesChannelComponent);
+    componentsByWavelength.set(key, components);
+  }
+
+  let completeWavelengthCount = 0;
+  for (const components of componentsByWavelength.values()) {
+    if (
+      components.has('S0') &&
+      components.has('S1') &&
+      components.has('S2') &&
+      components.has('S3')
+    ) {
+      completeWavelengthCount += 1;
+    }
+  }
+
+  return completeWavelengthCount >= 2;
 }

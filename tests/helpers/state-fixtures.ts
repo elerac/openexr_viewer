@@ -12,6 +12,7 @@ import {
   buildRgbStokesLuminanceSelection,
   buildRgbStokesSplitSelection,
   buildScalarStokesSelection,
+  buildSpectralStokesRgbSelection,
   type RgbStokesComponent
 } from '../../src/stokes';
 import { buildSpectralRgbSelection } from '../../src/spectral';
@@ -158,12 +159,16 @@ export function createViewerInteractionState(
 
 export function createStokesSelection(
   stokesParameter: StokesParameter,
-  displaySource: 'stokesScalar' | 'stokesRgb' = 'stokesScalar',
+  displaySource: 'stokesScalar' | 'stokesRgb' | 'stokesSpectralRgb' = 'stokesScalar',
   component: RgbStokesComponent | null = null,
   scalarSuffix: string | null = null
 ): StokesSelection {
   if (displaySource === 'stokesScalar') {
     return buildScalarStokesSelection(stokesParameter, scalarSuffix);
+  }
+
+  if (displaySource === 'stokesSpectralRgb') {
+    return buildSpectralStokesRgbSelection(stokesParameter);
   }
 
   return component

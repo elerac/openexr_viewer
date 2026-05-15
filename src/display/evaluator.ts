@@ -14,6 +14,13 @@ import {
   type ResolvedScalarStokesChannels,
   type StokesSample
 } from '../stokes/stokes-display';
+import {
+  computeRawSpectralStokesRgbDisplayValues,
+  computeSpectralStokesRgbDisplayValues,
+  computeSpectralStokesRgbMonoValues,
+  resolveSpectralStokesRgbChannelArrays,
+  type ResolvedSpectralStokesRgbChannels
+} from '../stokes/spectral-stokes-rgb';
 import type { DecodedLayer, VisualizationMode } from '../types';
 import {
   buildDisplaySourceBinding,
@@ -28,7 +35,8 @@ import {
 } from '../spectral-color';
 import {
   detectSpectralChannelsForSeries,
-  parseSpectralRgbSourceName
+  parseSpectralRgbSourceName,
+  shouldReadSpectralRgbSeriesSigned
 } from '../spectral';
 
 export interface DisplayPixelValues {
@@ -61,6 +69,7 @@ export type DisplaySelectionEvaluator =
       kind: 'spectralRgb';
       binding: DisplaySourceBinding;
       channels: ResolvedSpectralRgbChannel[];
+      signed: boolean;
     }
   | {
       kind: 'stokesDirect';
@@ -83,6 +92,18 @@ export type DisplaySelectionEvaluator =
       r: ResolvedScalarStokesChannels;
       g: ResolvedScalarStokesChannels;
       b: ResolvedScalarStokesChannels;
+    }
+  | {
+      kind: 'stokesSpectralRgb';
+      binding: DisplaySourceBinding;
+      parameter: NonNullable<DisplaySourceBinding['stokesParameter']>;
+      channels: ResolvedSpectralStokesRgbChannels;
+    }
+  | {
+      kind: 'stokesSpectralRgbLuminance';
+      binding: DisplaySourceBinding;
+      parameter: NonNullable<DisplaySourceBinding['stokesParameter']>;
+      channels: ResolvedSpectralStokesRgbChannels;
     };
 
 export function resolveDisplaySelectionEvaluator(
@@ -127,6 +148,10 @@ export function createDisplaySelectionEvaluator(
       return createRgbStokesEvaluator(layer, binding, 'stokesRgb');
     case 'stokesRgbLuminance':
       return createRgbStokesEvaluator(layer, binding, 'stokesRgbLuminance');
+    case 'stokesSpectralRgb':
+      return createSpectralStokesRgbEvaluator(layer, binding, 'stokesSpectralRgb');
+    case 'stokesSpectralRgbLuminance':
+      return createSpectralStokesRgbEvaluator(layer, binding, 'stokesSpectralRgbLuminance');
   }
 }
 
@@ -159,7 +184,7 @@ export function readDisplaySelectionPixelValuesAtIndex(
       );
     }
     case 'spectralRgb':
-      return writeSpectralRgbDisplayPixel(out, evaluator.channels, pixelIndex);
+      return writeSpectralRgbDisplayPixel(out, evaluator.channels, evaluator.signed, pixelIndex);
     case 'stokesDirect':
       return writeStokesDisplayPixel(
         out,
@@ -180,6 +205,19 @@ export function readDisplaySelectionPixelValuesAtIndex(
         out,
         evaluator.parameter,
         computeRgbStokesMonoValues(evaluator.r, evaluator.g, evaluator.b, pixelIndex)
+      );
+    case 'stokesSpectralRgb':
+      return writeSpectralStokesRgbDisplayPixel(
+        out,
+        evaluator.parameter,
+        evaluator.channels,
+        pixelIndex
+      );
+    case 'stokesSpectralRgbLuminance':
+      return writeStokesDisplayPixel(
+        out,
+        evaluator.parameter,
+        computeSpectralStokesRgbMonoValues(evaluator.channels, pixelIndex)
       );
   }
 }
@@ -213,7 +251,7 @@ export function readDisplaySelectionOverlayPixelValuesAtIndex(
       );
     }
     case 'spectralRgb':
-      return writeSpectralRgbDisplayPixel(out, evaluator.channels, pixelIndex);
+      return writeSpectralRgbDisplayPixel(out, evaluator.channels, evaluator.signed, pixelIndex);
     case 'stokesDirect':
       return writeRawStokesDisplayPixel(
         out,
@@ -234,6 +272,19 @@ export function readDisplaySelectionOverlayPixelValuesAtIndex(
         out,
         evaluator.parameter,
         computeRgbStokesMonoValues(evaluator.r, evaluator.g, evaluator.b, pixelIndex)
+      );
+    case 'stokesSpectralRgb':
+      return writeRawSpectralStokesRgbDisplayPixel(
+        out,
+        evaluator.parameter,
+        evaluator.channels,
+        pixelIndex
+      );
+    case 'stokesSpectralRgbLuminance':
+      return writeRawStokesDisplayPixel(
+        out,
+        evaluator.parameter,
+        computeSpectralStokesRgbMonoValues(evaluator.channels, pixelIndex)
       );
   }
 }
@@ -267,7 +318,7 @@ export function readDisplaySelectionSnapshotPixelValuesAtIndex(
       );
     }
     case 'spectralRgb':
-      return writeSpectralRgbDisplayPixel(out, evaluator.channels, pixelIndex);
+      return writeSpectralRgbDisplayPixel(out, evaluator.channels, evaluator.signed, pixelIndex);
     case 'stokesDirect':
       return writeStokesSnapshotDisplayPixel(
         out,
@@ -288,6 +339,19 @@ export function readDisplaySelectionSnapshotPixelValuesAtIndex(
         out,
         evaluator.parameter,
         computeRgbStokesMonoValues(evaluator.r, evaluator.g, evaluator.b, pixelIndex)
+      );
+    case 'stokesSpectralRgb':
+      return writeSpectralStokesRgbSnapshotDisplayPixel(
+        out,
+        evaluator.parameter,
+        evaluator.channels,
+        pixelIndex
+      );
+    case 'stokesSpectralRgbLuminance':
+      return writeStokesSnapshotDisplayPixel(
+        out,
+        evaluator.parameter,
+        computeSpectralStokesRgbMonoValues(evaluator.channels, pixelIndex)
       );
   }
 }
@@ -338,7 +402,8 @@ function createSpectralRgbEvaluator(
   return {
     kind: 'spectralRgb',
     binding,
-    channels: resolveSpectralRgbChannels(layer, coefficients)
+    channels: resolveSpectralRgbChannels(layer, coefficients),
+    signed: shouldReadSpectralRgbSeriesSigned(layer.channelNames, seriesKey)
   };
 }
 
@@ -365,6 +430,27 @@ function createRgbStokesEvaluator(
   };
 }
 
+function createSpectralStokesRgbEvaluator(
+  layer: DecodedLayer,
+  binding: DisplaySourceBinding,
+  kind: 'stokesSpectralRgb' | 'stokesSpectralRgbLuminance'
+): DisplaySelectionEvaluator {
+  const parameter = binding.stokesParameter;
+  if (!parameter) {
+    return {
+      kind: 'empty',
+      binding: createEmptyDisplaySourceBinding()
+    };
+  }
+
+  return {
+    kind,
+    binding,
+    parameter,
+    channels: resolveSpectralStokesRgbChannelArrays(layer)
+  };
+}
+
 function setDisplayPixelValues(
   output: DisplayPixelValues,
   r: number,
@@ -382,9 +468,10 @@ function setDisplayPixelValues(
 function writeSpectralRgbDisplayPixel(
   output: DisplayPixelValues,
   channels: readonly ResolvedSpectralRgbChannel[],
+  signed: boolean,
   pixelIndex: number
 ): DisplayPixelValues {
-  const rgb = readSpectralRgbSampleAtIndex(channels, pixelIndex);
+  const rgb = readSpectralRgbSampleAtIndex(channels, pixelIndex, undefined, { clamp: !signed });
   return setDisplayPixelValues(output, rgb.r, rgb.g, rgb.b, 1);
 }
 
@@ -414,6 +501,16 @@ function writeRgbStokesDisplayPixel(
   );
 }
 
+function writeSpectralStokesRgbDisplayPixel(
+  output: DisplayPixelValues,
+  parameter: NonNullable<DisplaySourceBinding['stokesParameter']>,
+  channels: ResolvedSpectralStokesRgbChannels,
+  pixelIndex: number
+): DisplayPixelValues {
+  const values = computeSpectralStokesRgbDisplayValues(parameter, channels, pixelIndex);
+  return setDisplayPixelValues(output, values.r, values.g, values.b, 1);
+}
+
 function writeRawStokesDisplayPixel(
   output: DisplayPixelValues,
   parameter: NonNullable<DisplaySourceBinding['stokesParameter']>,
@@ -438,6 +535,16 @@ function writeRawRgbStokesDisplayPixel(
     computeRawStokesDisplayValueForChannels(parameter, b, pixelIndex),
     1
   );
+}
+
+function writeRawSpectralStokesRgbDisplayPixel(
+  output: DisplayPixelValues,
+  parameter: NonNullable<DisplaySourceBinding['stokesParameter']>,
+  channels: ResolvedSpectralStokesRgbChannels,
+  pixelIndex: number
+): DisplayPixelValues {
+  const values = computeRawSpectralStokesRgbDisplayValues(parameter, channels, pixelIndex);
+  return setDisplayPixelValues(output, values.r, values.g, values.b, 1);
 }
 
 function writeStokesSnapshotDisplayPixel(
@@ -471,6 +578,16 @@ function writeRgbStokesSnapshotDisplayPixel(
     computeStokesDisplayValueForChannels(parameter, b, pixelIndex),
     1
   );
+}
+
+function writeSpectralStokesRgbSnapshotDisplayPixel(
+  output: DisplayPixelValues,
+  parameter: NonNullable<DisplaySourceBinding['stokesParameter']>,
+  channels: ResolvedSpectralStokesRgbChannels,
+  pixelIndex: number
+): DisplayPixelValues {
+  const values = computeSpectralStokesRgbDisplayValues(parameter, channels, pixelIndex);
+  return setDisplayPixelValues(output, values.r, values.g, values.b, 1);
 }
 
 function getOptionalChannelReadView(

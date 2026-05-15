@@ -7,6 +7,7 @@ import {
   computeStokesEang,
   computeStokesNormalizedComponent,
   createDefaultStokesColormapDefaultSettings,
+  buildSpectralStokesRgbSelection,
   detectRgbStokesChannels,
   detectScalarStokesChannelSets,
   detectScalarStokesChannels,
@@ -166,6 +167,33 @@ describe('stokes', () => {
 
     expect(detectScalarStokesChannelSets(rgbNames)).toEqual([]);
     expect(getStokesDisplayOptions(rgbNames).filter((option) => option.key.startsWith('stokesScalar:'))).toEqual([]);
+  });
+
+  it('exposes complete spectral Stokes sets as grouped spectral RGB Stokes options', () => {
+    const options = getStokesDisplayOptions([
+      'S0.400nm', 'S1.400nm', 'S2.400nm', 'S3.400nm',
+      'S0.500nm', 'S1.500nm', 'S2.500nm', 'S3.500nm'
+    ]);
+    const spectralOptions = options.filter((option) => option.key.startsWith('stokesSpectralRgb:'));
+
+    expect(spectralOptions.map((option) => option.label)).toEqual([
+      'S1/S0 Spectral RGB',
+      'S2/S0 Spectral RGB',
+      'S3/S0 Spectral RGB',
+      'AoLP Spectral RGB',
+      'DoP Spectral RGB',
+      'DoLP Spectral RGB',
+      'DoCP Spectral RGB',
+      'CoP Spectral RGB',
+      'ToP Spectral RGB'
+    ]);
+    expect(spectralOptions[0]?.selection).toEqual(buildSpectralStokesRgbSelection('s1_over_s0'));
+    expect(spectralOptions[0]?.mapping).toEqual({
+      displayR: 'S1/S0 Spectral RGB.R',
+      displayG: 'S1/S0 Spectral RGB.G',
+      displayB: 'S1/S0 Spectral RGB.B',
+      displayA: null
+    });
   });
 
   it('groups Stokes parameters by default colormap behavior', () => {

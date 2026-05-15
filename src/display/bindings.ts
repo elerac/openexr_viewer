@@ -11,7 +11,9 @@ import {
   type ScalarStokesChannels
 } from '../stokes';
 import {
+  buildSpectralStokesRgbSourceName,
   buildSpectralRgbSourceName,
+  isSpectralStokesRgbDisplayAvailable,
   isSpectralRgbDisplayAvailable
 } from '../spectral';
 import { getRgbComponentChannels } from '../stokes/stokes-display';
@@ -26,7 +28,9 @@ export type DisplaySourceMode =
   | 'spectralRgb'
   | 'stokesDirect'
   | 'stokesRgb'
-  | 'stokesRgbLuminance';
+  | 'stokesRgbLuminance'
+  | 'stokesSpectralRgb'
+  | 'stokesSpectralRgbLuminance';
 
 export interface DisplaySourceBinding {
   mode: DisplaySourceMode;
@@ -136,6 +140,15 @@ function buildStokesDisplaySourceBinding(
       : createEmptyDisplaySourceBinding();
   }
 
+  if (selection.source.kind === 'spectralRgb') {
+    return isSpectralStokesRgbDisplayAvailable(layer.channelNames)
+      ? createSpectralStokesRgbBinding(
+          selection.parameter,
+          visualizationMode === 'colormap' ? 'stokesSpectralRgbLuminance' : 'stokesSpectralRgb'
+        )
+      : createEmptyDisplaySourceBinding();
+  }
+
   const channels = detectRgbStokesChannels(layer.channelNames);
   if (!channels) {
     return createEmptyDisplaySourceBinding();
@@ -180,6 +193,23 @@ function createRgbStokesBinding(
       channels.r.s0, channels.r.s1, channels.r.s2, channels.r.s3,
       channels.g.s0, channels.g.s1, channels.g.s2, channels.g.s3,
       channels.b.s0, channels.b.s1, channels.b.s2, channels.b.s3
+    ],
+    false,
+    parameter
+  );
+}
+
+function createSpectralStokesRgbBinding(
+  parameter: StokesParameter,
+  mode: 'stokesSpectralRgb' | 'stokesSpectralRgbLuminance'
+): DisplaySourceBinding {
+  return createDisplaySourceBinding(
+    mode,
+    [
+      buildSpectralStokesRgbSourceName('S0'),
+      buildSpectralStokesRgbSourceName('S1'),
+      buildSpectralStokesRgbSourceName('S2'),
+      buildSpectralStokesRgbSourceName('S3')
     ],
     false,
     parameter
