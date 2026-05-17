@@ -1,10 +1,12 @@
 import {
+  buildChannelViewStacks,
   findSelectedChannelViewItem,
-  hasSplitChannelViewItems,
-  selectVisibleChannelViewItems,
+  pruneExpandedChannelStackKeys,
+  selectStackedChannelViewItems,
+  type ChannelViewStackInfo,
+  type ChannelViewStackedThumbnailItem,
   type ChannelViewThumbnailItem
 } from '../channel-view-items';
-import { findMergedSelectionForSplitDisplay, findSplitSelectionForMergedDisplay } from '../display-selection';
 import { cloneDisplaySelection, sameDisplaySelection } from '../display-model';
 import { AppFullscreenController } from './app-fullscreen-controller';
 import { ChannelPanel } from './channel-panel';
@@ -324,7 +326,8 @@ export class ViewerUi implements Disposable {
   private screenshotSelectionResizeActive = false;
   private screenshotSelectionSquareSnapped = false;
   private screenshotSelectionSnapGuide: ScreenshotSelectionSnapGuide = createEmptySnapGuide();
-  private includeSplitRgbChannels = false;
+  private readonly expandedChannelStackKeysByScope = new Map<string, Set<string>>();
+  private channelStackScopeKey = 'default';
   private channelThumbnailItems: ChannelThumbnailOptionItem[] = [];
   private rgbGroupChannelNames: string[] = [];
   private currentChannelSelection: DisplaySelection | null = null;
@@ -394,13 +397,14 @@ export class ViewerUi implements Disposable {
       onChannelViewRowClick: () => {
         this.globalKeyboardController.setVerticalNavigationTarget('channelView');
       },
-      onSplitToggle: (includeSplitRgbChannels) => {
-        this.handleRgbSplitToggle(includeSplitRgbChannels);
-      }
+      onSplitToggle: () => undefined
     });
     this.channelThumbnailStrip = new ChannelThumbnailStrip(this.elements, {
       onChannelViewChange: (value) => {
         this.handleChannelViewValueChange(value);
+      },
+      onChannelStackToggle: (stackKey) => {
+        this.handleChannelStackToggle(stackKey);
       },
       onCollapsedContentAvailabilityChange: (available) => {
         this.layoutSplitController.setBottomCollapsedContentAvailable(available);
@@ -1360,6 +1364,7 @@ export class ViewerUi implements Disposable {
     this.rgbGroupChannelNames = [];
     this.channelThumbnailItems = [];
     this.currentChannelSelection = null;
+    this.channelStackScopeKey = 'default';
     this.layerPanel.clearForNoImage();
     this.channelPanel.clearForNoImage();
     this.channelThumbnailStrip.clearForNoImage();
@@ -1377,7 +1382,8 @@ export class ViewerUi implements Disposable {
   setRgbGroupOptions(
     channelNames: string[],
     selected: DisplaySelection | null,
-    channelThumbnailItems: ChannelThumbnailOptionItem[] = []
+    channelThumbnailItems: ChannelThumbnailOptionItem[] = [],
+    channelStackScopeKey: string = this.resolveDefaultChannelStackScopeKey()
   ): void {
     if (this.disposed) {
       return;
@@ -1389,19 +1395,11 @@ export class ViewerUi implements Disposable {
     this.hasActiveChannelImage = true;
     this.rgbGroupChannelNames = [...channelNames];
     this.channelThumbnailItems = [...channelThumbnailItems];
-
-    const remappedSelection = this.includeSplitRgbChannels
-      ? findSplitSelectionForMergedDisplay(channelNames, selected)
-      : findMergedSelectionForSplitDisplay(channelNames, selected);
-    const shouldNotifyRemap = Boolean(
-      remappedSelection && !sameDisplaySelection(remappedSelection, this.currentChannelSelection)
-    );
-    this.currentChannelSelection = cloneDisplaySelection(remappedSelection ?? selected);
+    this.channelStackScopeKey = channelStackScopeKey;
+    this.pruneExpandedChannelStackKeys();
+    this.expandChannelStackForSelection(selected);
+    this.currentChannelSelection = cloneDisplaySelection(selected);
     this.renderChannelViewControls();
-
-    if (shouldNotifyRemap && remappedSelection) {
-      this.callbacks.onRgbGroupChange(remappedSelection);
-    }
   }
 
   private handleChannelViewValueChange(value: string): void {
@@ -1415,15 +1413,38 @@ export class ViewerUi implements Disposable {
     this.callbacks.onRgbGroupChange(item.selection);
   }
 
-  private handleRgbSplitToggle(includeSplitRgbChannels: boolean): void {
-    if (this.includeSplitRgbChannels === includeSplitRgbChannels) {
+  private handleChannelStackToggle(stackKey: string): void {
+    const stack = this.getChannelViewStacks().find((entry) => entry.key === stackKey);
+    if (!stack) {
       return;
     }
 
-    this.includeSplitRgbChannels = includeSplitRgbChannels;
-    const remappedSelection = includeSplitRgbChannels
-      ? findSplitSelectionForMergedDisplay(this.rgbGroupChannelNames, this.currentChannelSelection)
-      : findMergedSelectionForSplitDisplay(this.rgbGroupChannelNames, this.currentChannelSelection);
+    const itemByValue = this.getChannelThumbnailItemsByValue();
+    const parent = itemByValue.get(stack.parentValue) ?? null;
+    const children = stack.childValues
+      .map((value) => itemByValue.get(value) ?? null)
+      .filter((item): item is ChannelThumbnailOptionItem => item !== null);
+    if (!parent || children.length === 0) {
+      return;
+    }
+
+    const expandedStackKeys = new Set(this.getExpandedChannelStackKeys());
+    const expanded = expandedStackKeys.has(stack.key);
+    let remappedSelection: DisplaySelection | null = null;
+
+    if (expanded) {
+      expandedStackKeys.delete(stack.key);
+      if (children.some((child) => sameDisplaySelection(child.selection, this.currentChannelSelection))) {
+        remappedSelection = parent.selection;
+      }
+    } else {
+      expandedStackKeys.add(stack.key);
+      if (sameDisplaySelection(parent.selection, this.currentChannelSelection)) {
+        remappedSelection = children[0]?.selection ?? null;
+      }
+    }
+
+    this.setExpandedChannelStackKeys(expandedStackKeys);
     if (remappedSelection) {
       this.currentChannelSelection = cloneDisplaySelection(remappedSelection);
     }
@@ -1434,18 +1455,78 @@ export class ViewerUi implements Disposable {
     }
   }
 
+  private getVisibleChannelViewItems(): ChannelViewStackedThumbnailItem[] {
+    return selectStackedChannelViewItems(
+      this.rgbGroupChannelNames,
+      this.channelThumbnailItems,
+      this.getExpandedChannelStackKeys()
+    );
+  }
+
+  private getChannelViewStacks(): ChannelViewStackInfo[] {
+    return buildChannelViewStacks(this.rgbGroupChannelNames, this.channelThumbnailItems);
+  }
+
+  private getChannelThumbnailItemsByValue(): Map<string, ChannelThumbnailOptionItem> {
+    return new Map(this.channelThumbnailItems.map((item) => [item.value, item]));
+  }
+
+  private getExpandedChannelStackKeys(): Set<string> {
+    const existing = this.expandedChannelStackKeysByScope.get(this.channelStackScopeKey);
+    if (existing) {
+      return existing;
+    }
+
+    const created = new Set<string>();
+    this.expandedChannelStackKeysByScope.set(this.channelStackScopeKey, created);
+    return created;
+  }
+
+  private setExpandedChannelStackKeys(stackKeys: ReadonlySet<string>): void {
+    this.expandedChannelStackKeysByScope.set(this.channelStackScopeKey, new Set(stackKeys));
+  }
+
+  private pruneExpandedChannelStackKeys(): void {
+    const current = this.getExpandedChannelStackKeys();
+    const pruned = pruneExpandedChannelStackKeys(this.rgbGroupChannelNames, this.channelThumbnailItems, current);
+    if (!sameStringSet(current, pruned)) {
+      this.setExpandedChannelStackKeys(pruned);
+    }
+  }
+
+  private expandChannelStackForSelection(selection: DisplaySelection | null): void {
+    if (!selection) {
+      return;
+    }
+
+    const itemByValue = this.getChannelThumbnailItemsByValue();
+    const expandedStackKeys = new Set(this.getExpandedChannelStackKeys());
+    for (const stack of this.getChannelViewStacks()) {
+      for (const childValue of stack.childValues) {
+        const child = itemByValue.get(childValue);
+        if (child && sameDisplaySelection(child.selection, selection)) {
+          expandedStackKeys.add(stack.key);
+          this.setExpandedChannelStackKeys(expandedStackKeys);
+          return;
+        }
+      }
+    }
+  }
+
+  private resolveDefaultChannelStackScopeKey(): string {
+    return this.activeSessionId ? `${this.activeSessionId}:0` : 'default';
+  }
+
   private renderChannelViewControls(): void {
-    const visibleItems = selectVisibleChannelViewItems(this.channelThumbnailItems, this.includeSplitRgbChannels);
+    this.pruneExpandedChannelStackKeys();
+    const visibleItems = this.getVisibleChannelViewItems();
     const selectedItem = findSelectedChannelViewItem(visibleItems, this.currentChannelSelection) ?? visibleItems[0] ?? null;
     const selectedValue = selectedItem?.value ?? '';
     if (!findSelectedChannelViewItem(visibleItems, this.currentChannelSelection) && selectedItem) {
       this.currentChannelSelection = cloneDisplaySelection(selectedItem.selection);
     }
 
-    this.channelPanel.setSplitToggleState(
-      this.includeSplitRgbChannels,
-      hasSplitChannelViewItems(this.channelThumbnailItems)
-    );
+    this.channelPanel.setSplitToggleState(false, false);
     this.channelPanel.setChannelViewItems(visibleItems, selectedValue);
 
     if (this.hasActiveChannelImage) {
@@ -3009,6 +3090,20 @@ function isTextEntryTarget(target: EventTarget | null): boolean {
     target instanceof HTMLSelectElement ||
     target.isContentEditable
   );
+}
+
+function sameStringSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) {
+    return false;
+  }
+
+  for (const value of a) {
+    if (!b.has(value)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function readStoredAutoFitImageOnSelect(): boolean {

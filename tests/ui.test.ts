@@ -7881,7 +7881,6 @@ describe('channel thumbnail strip', () => {
     };
     const ui = new ViewerUi(createUiCallbacks({ onRgbGroupChange }));
     const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
-    const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
     const channelSelect = document.getElementById('rgb-group-select') as HTMLSelectElement;
     const strip = document.getElementById('channel-thumbnail-strip') as HTMLElement;
     const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
@@ -7896,7 +7895,7 @@ describe('channel thumbnail strip', () => {
       b: 'beauty.B',
       alpha: null
     }, channelThumbnailItems);
-    splitToggle.click();
+    clickChannelStackToggleForValue('group:beauty');
     onRgbGroupChange.mockClear();
 
     const greenTile = document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile')[1];
@@ -7938,7 +7937,7 @@ describe('channel thumbnail strip', () => {
     ]);
   });
 
-  it('uses Split RGB to switch spectral RGB thumbnails to wavelength channels', () => {
+  it('uses stack badges to expand and collapse spectral RGB thumbnails', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
 
@@ -7957,14 +7956,15 @@ describe('channel thumbnail strip', () => {
       seriesKey: ''
     }, channelThumbnailItems);
 
-    expect(splitToggle.classList.contains('hidden')).toBe(false);
+    expect(splitToggle.classList.contains('hidden')).toBe(true);
+    expect(splitToggle.disabled).toBe(true);
     expect(splitToggle.getAttribute('aria-pressed')).toBe('false');
     expect(Array.from(channelSelect.options).map((option) => option.textContent)).toEqual(['Spectral RGB']);
     expect(document.querySelectorAll('#channel-thumbnail-strip .channel-thumbnail-tile')).toHaveLength(1);
+    expect(getChannelStackToggleForValue('spectralRgb:').textContent).toBe('3');
 
-    splitToggle.click();
+    clickChannelStackToggleForValue('spectralRgb:');
 
-    expect(splitToggle.getAttribute('aria-pressed')).toBe('true');
     expect(Array.from(channelSelect.options).map((option) => option.textContent)).toEqual([
       '410nm',
       '500nm',
@@ -7972,13 +7972,18 @@ describe('channel thumbnail strip', () => {
     ]);
     expect(channelSelect.value).toBe('channel:410nm');
     expect(document.querySelectorAll('#channel-thumbnail-strip .channel-thumbnail-tile')).toHaveLength(3);
+    expect(Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-stack-toggle')).map((toggle) => toggle.textContent)).toEqual([
+      '1/3',
+      '2/3',
+      '3/3'
+    ]);
     expect(onRgbGroupChange).toHaveBeenLastCalledWith({
       kind: 'channelMono',
       channel: '410nm',
       alpha: null
     });
 
-    splitToggle.click();
+    clickChannelStackToggleForValue('channel:500nm');
 
     expect(splitToggle.getAttribute('aria-pressed')).toBe('false');
     expect(Array.from(channelSelect.options).map((option) => option.textContent)).toEqual(['Spectral RGB']);
@@ -7990,7 +7995,47 @@ describe('channel thumbnail strip', () => {
     });
   });
 
-  it('uses Split RGB to switch spectral Stokes RGB thumbnails to wavelength Stokes parameters', () => {
+  it('hides stack badges when the measured badge is larger than 75% of the measured thumbnail image', () => {
+    installUiFixture();
+    mockDesktopLayoutGeometry();
+
+    const ui = new ViewerUi(createUiCallbacks());
+    const channelNames = ['410nm', '500nm', '650nm'];
+    const strip = document.getElementById('channel-thumbnail-strip') as HTMLElement;
+    const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
+      ...item,
+      thumbnailDataUrl: 'data:image/png;base64,AAAA'
+    }));
+
+    ui.setRgbGroupOptions(channelNames, {
+      kind: 'spectralRgb',
+      seriesKey: ''
+    }, channelThumbnailItems);
+
+    const toggle = getChannelStackToggleForValue('spectralRgb:');
+    mockChannelThumbnailStripGeometry({ stripHeight: 120, tileHeight: 106, labelHeight: 16 });
+    mockChannelStackBadgeGeometry('spectralRgb:', {
+      imageSize: 28,
+      badgeWidth: 22,
+      badgeHeight: 16
+    });
+    triggerResizeObserversForElement(strip);
+
+    expect(toggle.classList.contains('channel-thumbnail-stack-toggle--size-hidden')).toBe(true);
+    expect(toggle.getAttribute('aria-hidden')).toBe('true');
+
+    mockChannelStackBadgeGeometry('spectralRgb:', {
+      imageSize: 80,
+      badgeWidth: 22,
+      badgeHeight: 16
+    });
+    triggerResizeObserversForElement(strip);
+
+    expect(toggle.classList.contains('channel-thumbnail-stack-toggle--size-hidden')).toBe(false);
+    expect(toggle.getAttribute('aria-hidden')).toBe('false');
+  });
+
+  it('uses stack badges to expand and collapse spectral Stokes RGB thumbnails', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
 
@@ -8000,7 +8045,6 @@ describe('channel thumbnail strip', () => {
       'S0.400nm', 'S1.400nm', 'S2.400nm', 'S3.400nm',
       'S0.500nm', 'S1.500nm', 'S2.500nm', 'S3.500nm'
     ];
-    const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
     const channelSelect = document.getElementById('rgb-group-select') as HTMLSelectElement;
     const channelThumbnailItems = buildChannelViewItems(channelNames).map((item) => ({
       ...item,
@@ -8013,15 +8057,13 @@ describe('channel thumbnail strip', () => {
       source: { kind: 'spectralRgb' }
     }, channelThumbnailItems);
 
-    expect(splitToggle.classList.contains('hidden')).toBe(false);
-    expect(splitToggle.getAttribute('aria-pressed')).toBe('false');
     expect(Array.from(channelSelect.options).map((option) => option.textContent)).toContain('S1/S0 Spectral RGB');
     expect(Array.from(channelSelect.options).map((option) => option.textContent)).not.toContain('S1/S0.400nm');
     expect(channelSelect.value).toBe('stokesSpectralRgb:s1_over_s0:group');
+    expect(getChannelStackToggleForValue('stokesSpectralRgb:s1_over_s0:group').textContent).toBe('2');
 
-    splitToggle.click();
+    clickChannelStackToggleForValue('stokesSpectralRgb:s1_over_s0:group');
 
-    expect(splitToggle.getAttribute('aria-pressed')).toBe('true');
     expect(Array.from(channelSelect.options).map((option) => option.textContent)).toContain('S1/S0.400nm');
     expect(Array.from(channelSelect.options).map((option) => option.textContent)).not.toContain('S1/S0 Spectral RGB');
     expect(channelSelect.value).toBe('stokesScalar:s1_over_s0:400nm');
@@ -8031,9 +8073,8 @@ describe('channel thumbnail strip', () => {
       source: { kind: 'scalar', suffix: '400nm' }
     });
 
-    splitToggle.click();
+    clickChannelStackToggleForValue('stokesScalar:s1_over_s0:500nm');
 
-    expect(splitToggle.getAttribute('aria-pressed')).toBe('false');
     expect(channelSelect.value).toBe('stokesSpectralRgb:s1_over_s0:group');
     expect(onRgbGroupChange).toHaveBeenLastCalledWith({
       kind: 'stokesScalar',
@@ -8049,7 +8090,6 @@ describe('channel thumbnail strip', () => {
     const onRgbGroupChange = vi.fn();
     const ui = new ViewerUi(createUiCallbacks({ onRgbGroupChange }));
     const viewerContainer = ui.viewerContainer;
-    const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
     const channelSelect = document.getElementById('rgb-group-select') as HTMLSelectElement;
     const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
 
@@ -8063,7 +8103,7 @@ describe('channel thumbnail strip', () => {
       ...item,
       thumbnailDataUrl: null
     })));
-    splitToggle.click();
+    clickChannelStackToggleForValue('group:beauty');
     onRgbGroupChange.mockClear();
 
     const tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
@@ -8096,7 +8136,6 @@ describe('channel thumbnail strip', () => {
 
     const ui = new ViewerUi(createUiCallbacks());
     const viewerContainer = ui.viewerContainer;
-    const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
     const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
 
     ui.setRgbGroupOptions(channelNames, {
@@ -8109,7 +8148,7 @@ describe('channel thumbnail strip', () => {
       ...item,
       thumbnailDataUrl: null
     })));
-    splitToggle.click();
+    clickChannelStackToggleForValue('group:beauty');
 
     const tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
     const dataTransfer = createMockDataTransfer();
@@ -8129,7 +8168,6 @@ describe('channel thumbnail strip', () => {
 
     const onRgbGroupChange = vi.fn();
     const ui = new ViewerUi(createUiCallbacks({ onRgbGroupChange }));
-    const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
     const channelSelect = document.getElementById('rgb-group-select') as HTMLSelectElement;
     const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
 
@@ -8143,7 +8181,7 @@ describe('channel thumbnail strip', () => {
       ...item,
       thumbnailDataUrl: null
     })));
-    splitToggle.click();
+    clickChannelStackToggleForValue('group:beauty');
     onRgbGroupChange.mockClear();
 
     const tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
@@ -8175,7 +8213,6 @@ describe('channel thumbnail strip', () => {
     const ui = new ViewerUi(createUiCallbacks({ onRgbGroupChange, onFilesDropped }));
     const viewerContainer = ui.viewerContainer;
     const dropOverlay = document.getElementById('drop-overlay') as HTMLDivElement;
-    const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
     const channelSelect = document.getElementById('rgb-group-select') as HTMLSelectElement;
     const channelNames = ['beauty.R', 'beauty.G', 'beauty.B'];
 
@@ -8189,7 +8226,7 @@ describe('channel thumbnail strip', () => {
       ...item,
       thumbnailDataUrl: null
     })));
-    splitToggle.click();
+    clickChannelStackToggleForValue('group:beauty');
     onRgbGroupChange.mockClear();
 
     let tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
@@ -8602,7 +8639,6 @@ describe('channel thumbnail strip', () => {
       ...item,
       thumbnailDataUrl: null
     }));
-    const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
     const channelSelect = document.getElementById('rgb-group-select') as HTMLSelectElement;
     const getTiles = (): HTMLButtonElement[] => Array.from(
       document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile')
@@ -8616,7 +8652,7 @@ describe('channel thumbnail strip', () => {
       alpha: null
     }, channelThumbnailItems);
 
-    splitToggle.click();
+    clickChannelStackToggleForValue('group:beauty');
     onRgbGroupChange.mockClear();
 
     let tiles = getTiles();
@@ -8661,14 +8697,13 @@ describe('channel thumbnail strip', () => {
     });
   });
 
-  it('keeps scalar alpha selections on the scalar channel when split RGB is enabled', () => {
+  it('keeps scalar alpha selections when expanding an unrelated RGB stack', () => {
     installUiFixture();
     mockDesktopLayoutGeometry();
 
     const onRgbGroupChange = vi.fn();
     const ui = new ViewerUi(createUiCallbacks({ onRgbGroupChange }));
     const channelNames = ['R', 'G', 'B', 'A', 'mask'];
-    const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
     const channelSelect = document.getElementById('rgb-group-select') as HTMLSelectElement;
 
     ui.setRgbGroupOptions(channelNames, {
@@ -8682,14 +8717,10 @@ describe('channel thumbnail strip', () => {
 
     expect(Array.from(channelSelect.selectedOptions).map((option) => option.textContent)).toEqual(['mask,A']);
 
-    splitToggle.click();
+    clickChannelStackToggleForValue('group:');
 
-    expect(Array.from(channelSelect.selectedOptions).map((option) => option.textContent)).toEqual(['mask']);
-    expect(onRgbGroupChange).toHaveBeenCalledWith({
-      kind: 'channelMono',
-      channel: 'mask',
-      alpha: null
-    });
+    expect(Array.from(channelSelect.selectedOptions).map((option) => option.textContent)).toEqual(['mask,A']);
+    expect(onRgbGroupChange).not.toHaveBeenCalled();
   });
 
   it('preserves horizontal scroll when selecting a thumbnail from a scrolled strip', () => {
@@ -9467,7 +9498,6 @@ describe('global panel arrow navigation', () => {
       ...item,
       thumbnailDataUrl: null
     }));
-    const splitToggle = document.getElementById('rgb-split-toggle-button') as HTMLButtonElement;
 
     ui.setRgbGroupOptions(channelNames, {
       kind: 'channelRgb',
@@ -9477,7 +9507,7 @@ describe('global panel arrow navigation', () => {
       alpha: null
     }, channelThumbnailItems);
 
-    splitToggle.click();
+    clickChannelStackToggleForValue('group:beauty');
     onRgbGroupChange.mockClear();
 
     const tiles = Array.from(document.querySelectorAll<HTMLButtonElement>('#channel-thumbnail-strip .channel-thumbnail-tile'));
@@ -9985,6 +10015,44 @@ function mockChannelThumbnailStripGeometry(
   return tiles;
 }
 
+function mockChannelStackBadgeGeometry(
+  value: string,
+  args: {
+    imageSize: number;
+    badgeWidth: number;
+    badgeHeight: number;
+  }
+): void {
+  const tile = document.querySelector<HTMLButtonElement>(
+    `#channel-thumbnail-strip .channel-thumbnail-tile[data-channel-value="${value}"]`
+  );
+  const preview = tile?.querySelector<HTMLElement>('.channel-thumbnail-tile-preview');
+  const image = preview?.firstElementChild;
+  const toggle = tile?.parentElement?.querySelector<HTMLButtonElement>('.channel-thumbnail-stack-toggle');
+  if (!tile || !preview || !(image instanceof HTMLElement) || !toggle) {
+    throw new Error(`Unable to mock stack badge geometry for ${value}`);
+  }
+
+  mockDomRect(preview, {
+    top: 0,
+    bottom: args.imageSize,
+    height: args.imageSize,
+    width: args.imageSize
+  });
+  mockDomRect(image, {
+    top: 0,
+    bottom: args.imageSize,
+    height: args.imageSize,
+    width: args.imageSize
+  });
+  mockDomRect(toggle, {
+    top: 0,
+    bottom: args.badgeHeight,
+    height: args.badgeHeight,
+    width: args.badgeWidth
+  });
+}
+
 function createPointerTestEvent(
   type: string,
   init: {
@@ -10384,6 +10452,24 @@ function createFileDropEvent(type: 'drop' | 'dragover', files: File[] = [new Fil
     }
   });
   return event;
+}
+
+function getChannelStackToggleForValue(value: string): HTMLButtonElement {
+  const tile = document.querySelector<HTMLButtonElement>(
+    `#channel-thumbnail-strip .channel-thumbnail-tile[data-channel-value="${value}"]`
+  );
+  const toggle = tile?.parentElement?.querySelector<HTMLButtonElement>('.channel-thumbnail-stack-toggle');
+  if (!toggle) {
+    throw new Error(`No channel stack toggle found for ${value}`);
+  }
+
+  return toggle;
+}
+
+function clickChannelStackToggleForValue(value: string): HTMLButtonElement {
+  const toggle = getChannelStackToggleForValue(value);
+  toggle.click();
+  return toggle;
 }
 
 function createChannelThumbnailDragEvent(

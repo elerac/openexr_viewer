@@ -1,4 +1,4 @@
-import type { ChannelViewThumbnailItem } from '../channel-view-items';
+import type { ChannelViewStackedThumbnailItem } from '../channel-view-items';
 import { traceViewerInteraction } from '../interaction-trace';
 import { DisposableBag, type Disposable } from '../lifecycle';
 import type { ChannelThumbnailStripElements } from './elements';
@@ -11,12 +11,16 @@ import {
 
 interface ChannelThumbnailStripCallbacks {
   onChannelViewChange: (value: string) => void;
+  onChannelStackToggle: (stackKey: string) => void;
   onCollapsedContentAvailabilityChange: (available: boolean) => void;
 }
 
 interface ChannelThumbnailTileRefs {
+  wrapper: HTMLElement;
+  tile: HTMLButtonElement;
   preview: HTMLElement;
   label: HTMLSpanElement;
+  stackToggle: HTMLButtonElement;
   thumbnailDataUrl: string | null;
 }
 
@@ -33,6 +37,7 @@ interface ChannelThumbnailPointerSelectionState {
 }
 
 const tileRefs = new WeakMap<HTMLElement, ChannelThumbnailTileRefs>();
+const tileWrapperRefs = new WeakMap<HTMLElement, ChannelThumbnailTileRefs>();
 const CHANNEL_THUMBNAIL_DRAG_MIME = 'application/x-openexr-viewer-channel-thumbnail';
 const HOVER_PREVIEW_DELAY_MS = 500;
 const HOVER_PREVIEW_GAP_PX = 8;
@@ -46,6 +51,7 @@ const DEFAULT_TILE_GAP_PX = 3.84;
 const DEFAULT_TILE_BORDER_PX = 1;
 const POINTER_CLICK_MAX_DISTANCE_PX = 8;
 const POINTER_COMMIT_SUPPRESS_CLICK_MS = 350;
+const STACK_TOGGLE_MAX_IMAGE_RATIO = 0.75;
 
 export class ChannelThumbnailStrip implements Disposable {
   private readonly disposables = new DisposableBag();
@@ -53,7 +59,7 @@ export class ChannelThumbnailStrip implements Disposable {
   private isLoading = false;
   private hasActiveImage = false;
   private restoreFocusAfterLoading = false;
-  private items: ChannelViewThumbnailItem[] = [];
+  private items: ChannelViewStackedThumbnailItem[] = [];
   private selectedValue = '';
   private hoverPreviewTimer: number | null = null;
   private hoverPreviewTile: HTMLButtonElement | null = null;
@@ -74,6 +80,22 @@ export class ChannelThumbnailStrip implements Disposable {
       if (performance.now() < this.suppressClickUntilMs) {
         event.preventDefault();
         event.stopPropagation();
+        return;
+      }
+
+      const stackToggle = findClosestStackToggle(event.target, this.elements.channelThumbnailStrip);
+      if (stackToggle) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (stackToggle.disabled || this.isLoading) {
+          return;
+        }
+
+        const stackKey = stackToggle.dataset.stackKey ?? '';
+        if (stackKey) {
+          this.endHoverPreviewSession();
+          this.callbacks.onChannelStackToggle(stackKey);
+        }
         return;
       }
 
@@ -212,7 +234,7 @@ export class ChannelThumbnailStrip implements Disposable {
     }
   }
 
-  setChannelViewItems(items: ChannelViewThumbnailItem[], selectedValue: string): void {
+  setChannelViewItems(items: ChannelViewStackedThumbnailItem[], selectedValue: string): void {
     if (this.disposed) {
       return;
     }
@@ -263,7 +285,7 @@ export class ChannelThumbnailStrip implements Disposable {
       (item) => item.value,
       (item, existing) => {
         const tile =
-          existing && existing instanceof HTMLButtonElement
+          existing && tileWrapperRefs.has(existing)
             ? existing
             : createChannelThumbnailTile();
         updateChannelThumbnailTile(tile, item, {
@@ -697,6 +719,7 @@ export class ChannelThumbnailStrip implements Disposable {
     if (isCompactChannelThumbnailStrip(strip)) {
       for (const tile of strip.querySelectorAll<HTMLButtonElement>('.channel-thumbnail-tile')) {
         const refs = tileRefs.get(tile);
+        refs?.wrapper.style.removeProperty('--channel-thumbnail-tile-width');
         tile.style.removeProperty('--channel-thumbnail-tile-width');
         refs?.preview.style.removeProperty('--channel-thumbnail-preview-height');
         refs?.preview.style.removeProperty('--channel-thumbnail-preview-width');
@@ -743,14 +766,45 @@ export class ChannelThumbnailStrip implements Disposable {
       const tileWidth = previewWidth + paddingLeft + paddingRight + borderLeft + borderRight;
 
       tile.style.setProperty('--channel-thumbnail-tile-width', formatPixels(tileWidth));
+      refs.wrapper.style.setProperty('--channel-thumbnail-tile-width', formatPixels(tileWidth));
       refs.preview.style.setProperty('--channel-thumbnail-preview-height', formatPixels(previewHeight));
       refs.preview.style.setProperty('--channel-thumbnail-preview-width', formatPixels(previewWidth));
       refs.label.style.setProperty('--channel-thumbnail-label-max-width', formatPixels(previewWidth));
     }
+
+    this.syncStackToggleVisibility();
+  }
+
+  private syncStackToggleVisibility(): void {
+    for (const tile of this.elements.channelThumbnailStrip.querySelectorAll<HTMLButtonElement>('.channel-thumbnail-tile')) {
+      const refs = tileRefs.get(tile);
+      if (!refs || !refs.stackToggle.dataset.stackKey) {
+        continue;
+      }
+
+      refs.stackToggle.classList.remove('channel-thumbnail-stack-toggle--size-hidden');
+      refs.stackToggle.setAttribute('aria-hidden', 'false');
+
+      const badgeRect = refs.stackToggle.getBoundingClientRect();
+      const imageRect = getThumbnailImageRect(refs.preview);
+      const shouldHide =
+        imageRect.width <= 0 ||
+        imageRect.height <= 0 ||
+        badgeRect.width > imageRect.width * STACK_TOGGLE_MAX_IMAGE_RATIO ||
+        badgeRect.height > imageRect.height * STACK_TOGGLE_MAX_IMAGE_RATIO;
+
+      refs.stackToggle.classList.toggle('channel-thumbnail-stack-toggle--size-hidden', shouldHide);
+      if (shouldHide) {
+        refs.stackToggle.setAttribute('aria-hidden', 'true');
+      }
+    }
   }
 }
 
-function createChannelThumbnailTile(): HTMLButtonElement {
+function createChannelThumbnailTile(): HTMLElement {
+  const wrapper = document.createElement('span');
+  wrapper.className = 'channel-thumbnail-tile-wrapper';
+
   const tile = document.createElement('button');
   tile.type = 'button';
   tile.className = 'channel-thumbnail-tile image-browser-row';
@@ -760,24 +814,35 @@ function createChannelThumbnailTile(): HTMLButtonElement {
   const label = document.createElement('span');
   label.className = 'channel-thumbnail-tile-label';
 
+  const stackToggle = document.createElement('button');
+  stackToggle.type = 'button';
+  stackToggle.className = 'channel-thumbnail-stack-toggle hidden';
+  stackToggle.setAttribute('aria-hidden', 'true');
+  stackToggle.tabIndex = -1;
+
   tile.append(preview, label);
-  tileRefs.set(tile, { preview, label, thumbnailDataUrl: null });
-  return tile;
+  wrapper.append(tile, stackToggle);
+
+  const refs = { wrapper, tile, preview, label, stackToggle, thumbnailDataUrl: null };
+  tileRefs.set(tile, refs);
+  tileWrapperRefs.set(wrapper, refs);
+  return wrapper;
 }
 
 function updateChannelThumbnailTile(
-  tile: HTMLButtonElement,
-  item: ChannelViewThumbnailItem,
+  wrapper: HTMLElement,
+  item: ChannelViewStackedThumbnailItem,
   options: {
     selected: boolean;
     disabled: boolean;
   }
 ): void {
-  const refs = tileRefs.get(tile);
+  const refs = tileWrapperRefs.get(wrapper);
   if (!refs) {
     return;
   }
 
+  const { tile } = refs;
   tile.dataset.channelValue = item.value;
   tile.setAttribute('role', 'option');
   tile.setAttribute('aria-selected', options.selected ? 'true' : 'false');
@@ -789,6 +854,44 @@ function updateChannelThumbnailTile(
   updateChannelThumbnailPreview(refs.preview, item.thumbnailDataUrl);
   refs.thumbnailDataUrl = item.thumbnailDataUrl;
   refs.label.textContent = item.label;
+
+  updateChannelThumbnailStackToggle(refs.stackToggle, item, options.disabled);
+}
+
+function updateChannelThumbnailStackToggle(
+  stackToggle: HTMLButtonElement,
+  item: ChannelViewStackedThumbnailItem,
+  disabled: boolean
+): void {
+  const stack = item.stack;
+  stackToggle.classList.remove('channel-thumbnail-stack-toggle--size-hidden');
+  if (!stack) {
+    stackToggle.classList.add('hidden');
+    stackToggle.removeAttribute('data-stack-key');
+    stackToggle.removeAttribute('aria-label');
+    stackToggle.removeAttribute('aria-expanded');
+    stackToggle.setAttribute('aria-hidden', 'true');
+    stackToggle.textContent = '';
+    stackToggle.disabled = true;
+    return;
+  }
+
+  const expanded = stack.role === 'child';
+  const label = expanded
+    ? `${stack.index + 1}/${stack.count}`
+    : String(stack.count);
+  stackToggle.classList.remove('hidden');
+  stackToggle.dataset.stackKey = stack.key;
+  stackToggle.setAttribute('aria-hidden', 'false');
+  stackToggle.setAttribute(
+    'aria-label',
+    expanded
+      ? `Collapse stack of ${stack.count} channel views`
+      : `Expand stack of ${stack.count} channel views`
+  );
+  stackToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  stackToggle.textContent = label;
+  stackToggle.disabled = disabled;
 }
 
 function createChannelThumbnailPreview(
@@ -830,8 +933,29 @@ function updateChannelThumbnailPreview(
   preview.replaceChildren(image);
 }
 
+function getThumbnailImageRect(preview: HTMLElement): DOMRect {
+  const image = preview.firstElementChild;
+  if (image instanceof HTMLElement) {
+    const rect = image.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      return rect;
+    }
+  }
+
+  return preview.getBoundingClientRect();
+}
+
 function getEnabledTiles(container: HTMLElement): HTMLButtonElement[] {
   return Array.from(container.querySelectorAll<HTMLButtonElement>('.channel-thumbnail-tile')).filter((tile) => !tile.disabled);
+}
+
+function findClosestStackToggle(target: EventTarget | null, container: HTMLElement): HTMLButtonElement | null {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+
+  const toggle = target.closest<HTMLButtonElement>('.channel-thumbnail-stack-toggle');
+  return toggle && container.contains(toggle) ? toggle : null;
 }
 
 function focusSelectedTile(container: HTMLElement): void {

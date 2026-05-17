@@ -2,20 +2,18 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { gotoViewerApp, openGalleryCbox } from './helpers/app';
 import { buildScalarChannelExr, buildSizedRgbExr, buildSpectralExr } from './helpers/exr-fixtures';
 import { installIdleCallbackController } from './helpers/idle-callbacks';
-import { dragBy, readProbeCoords, resolveViewerPoint } from './helpers/viewer';
+import { clickChannelStackToggle, dragBy, readProbeCoords, resolveViewerPoint } from './helpers/viewer';
 
 test('moves bottom-panel thumbnail selections with left and right arrow keys', async ({ page }) => {
   await gotoViewerApp(page);
 
   const bottomPanelButton = page.locator('#bottom-panel-collapse-button');
-  const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
   const channelSelect = page.locator('#rgb-group-select');
   const thumbnailTiles = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile');
 
   await openGalleryCbox(page);
   await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'true');
-  await rgbSplitToggleButton.click();
-  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await clickChannelStackToggle(page, 'group:');
   await expect(channelSelect.locator('option:checked')).toHaveText('R');
   await expect(thumbnailTiles).toHaveCount(3);
 
@@ -40,7 +38,6 @@ test('selects a large-image bottom thumbnail on the first gesture before thumbna
   await gotoViewerApp(page);
 
   const channelSelect = page.locator('#rgb-group-select');
-  const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
   const thumbnailTiles = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile');
 
   await page.setInputFiles('#file-input', {
@@ -52,8 +49,7 @@ test('selects a large-image bottom thumbnail on the first gesture before thumbna
     timeout: 30000
   });
 
-  await rgbSplitToggleButton.click();
-  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await clickChannelStackToggle(page, 'group:');
   await expect(thumbnailTiles).toHaveCount(3);
   await expect(page.locator('#channel-thumbnail-strip .channel-thumbnail-placeholder')).toHaveCount(3);
 
@@ -67,13 +63,11 @@ test('selects a bottom thumbnail when dragged into the image viewer', async ({ p
   await gotoViewerApp(page);
 
   const viewer = page.locator('#viewer-container');
-  const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
   const channelSelect = page.locator('#rgb-group-select');
   const thumbnailTiles = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile');
 
   await openGalleryCbox(page);
-  await rgbSplitToggleButton.click();
-  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await clickChannelStackToggle(page, 'group:');
   await expect(channelSelect.locator('option:checked')).toHaveText('R');
   await expect(thumbnailTiles).toHaveCount(3);
 
@@ -165,7 +159,6 @@ test('keeps collapsed bottom channel names visible and selectable', async ({ pag
 
   const bottomPanel = page.locator('#bottom-panel-content');
   const bottomPanelButton = page.locator('#bottom-panel-collapse-button');
-  const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
   const channelSelect = page.locator('#rgb-group-select');
   const thumbnailTiles = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile');
   const thumbnailPreviews = page.locator('#channel-thumbnail-strip .channel-thumbnail-tile-preview');
@@ -173,8 +166,7 @@ test('keeps collapsed bottom channel names visible and selectable', async ({ pag
 
   await openGalleryCbox(page);
   await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'true');
-  await rgbSplitToggleButton.click();
-  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await clickChannelStackToggle(page, 'group:');
   await expect(thumbnailTiles).toHaveCount(3);
   await expect(thumbnailTiles.nth(0)).toContainText('R');
   await expect(thumbnailTiles.nth(1)).toContainText('G');
@@ -249,7 +241,6 @@ test('moves open files and channel view selections with arrow keys', async ({ pa
 
   const openedImages = page.locator('#opened-images-select');
   const channelSelect = page.locator('#rgb-group-select');
-  const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
 
   await openGalleryCbox(page);
   await expect(openedImages.locator('option')).toHaveCount(1, { timeout: 30000 });
@@ -293,9 +284,7 @@ test('moves open files and channel view selections with arrow keys', async ({ pa
   await cboxRow.locator('.opened-file-label').click();
   await expect(openedImages.locator('option:checked')).toContainText('cbox_rgb.exr');
   await expect(channelSelect).toBeEnabled();
-  await expect(rgbSplitToggleButton).toBeVisible();
-  await rgbSplitToggleButton.click();
-  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await clickChannelStackToggle(page, 'group:');
   await expect(channelSelect.locator('option:checked')).toHaveText('R');
 
   const channelRows = page.locator('#channel-view-list .channel-view-row');

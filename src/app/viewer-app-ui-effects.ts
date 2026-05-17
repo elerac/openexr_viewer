@@ -104,7 +104,8 @@ export function applyUiEffects(ui: ViewerUi, transition: ViewerUiTransition): vo
     ui.setRgbGroupOptions(
       snapshot.rgbGroupChannelNames,
       snapshot.displaySelection,
-      snapshot.channelThumbnailItems
+      snapshot.channelThumbnailItems,
+      `${snapshot.activeSessionId ?? 'none'}:${snapshot.activeLayer}`
     );
   }
 

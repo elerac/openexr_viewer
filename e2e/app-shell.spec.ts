@@ -9,7 +9,7 @@ import {
   buildScalarChannelExr,
   expectedColormapLabels
 } from './helpers/exr-fixtures';
-import { readProbeCoords, resolveViewerPoint, setExposureValue } from './helpers/viewer';
+import { clickChannelStackToggle, readProbeCoords, resolveViewerPoint, setExposureValue } from './helpers/viewer';
 
 async function expectVisibleShellGap(page: Page, upper: Locator, lower: Locator): Promise<void> {
   const [expectedGap, upperBox, lowerBox] = await Promise.all([
@@ -430,19 +430,18 @@ test('opens the gallery demo image and keeps core display controls stable', asyn
   await expect(page.locator('#probe-mode')).toHaveText('Locked');
 
   await expect(rgbGroupSelect).toBeEnabled();
-  await expect(rgbSplitToggleButton).toBeVisible();
+  await expect(rgbSplitToggleButton).toBeHidden();
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');
   await expect(rgbGroupSelect.locator('option:checked')).toHaveText('RGB');
   await expect(rgbGroupSelect.locator('option').filter({ hasText: /^R$/ })).toHaveCount(0);
-  await rgbSplitToggleButton.click();
-  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await clickChannelStackToggle(page, 'group:');
   await expect(rgbGroupSelect.locator('option:checked')).toHaveText('R');
   await expect(rgbGroupSelect.locator('option').filter({ hasText: /^R$/ })).toHaveCount(1);
   await expect(rgbGroupSelect.locator('option').filter({ hasText: /^G$/ })).toHaveCount(1);
   await expect(rgbGroupSelect.locator('option').filter({ hasText: /^B$/ })).toHaveCount(1);
   await rgbGroupSelect.selectOption({ label: 'R' });
   await expect(probeColorValues.locator('.probe-color-channel')).toHaveText(['Mono:']);
-  await rgbSplitToggleButton.click();
+  await clickChannelStackToggle(page, 'channel:R');
   await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'false');
   await expect(rgbGroupSelect.locator('option:checked')).toHaveText('RGB');
 

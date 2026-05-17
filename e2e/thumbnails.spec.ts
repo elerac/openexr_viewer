@@ -6,7 +6,7 @@ import {
   installIdleCallbackController
 } from './helpers/idle-callbacks';
 import { buildLandscapeRgbExr, buildPortraitRgbExr } from './helpers/exr-fixtures';
-import { setExposureValue } from './helpers/viewer';
+import { clickChannelStackToggle, setExposureValue } from './helpers/viewer';
 
 test('defers opened-file thumbnails until idle time after first render', async ({ page }) => {
   await installIdleCallbackController(page);
@@ -71,7 +71,6 @@ test('keeps bottom-panel channel thumbnail frames stable across image selection 
   await gotoViewerApp(page);
 
   const bottomPanelButton = page.locator('#bottom-panel-collapse-button');
-  const rgbSplitToggleButton = page.locator('#rgb-split-toggle-button');
   const channelSelect = page.locator('#rgb-group-select');
   const landscapeRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'landscape_rgb.exr' });
   const portraitRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'portrait_rgb.exr' });
@@ -86,8 +85,7 @@ test('keeps bottom-panel channel thumbnail frames stable across image selection 
   });
   await expect(landscapeRow).toHaveCount(1);
   await expect(bottomPanelButton).toHaveAttribute('aria-expanded', 'true');
-  await rgbSplitToggleButton.click();
-  await expect(rgbSplitToggleButton).toHaveAttribute('aria-pressed', 'true');
+  await clickChannelStackToggle(page, 'group:');
   await expect(channelSelect.locator('option:checked')).toHaveText('R');
   await expect(thumbnailTiles).toHaveCount(3);
   await expect(page.locator('#channel-thumbnail-strip .channel-thumbnail-placeholder')).toHaveCount(3);

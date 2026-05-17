@@ -97,6 +97,18 @@ export async function dragBy(page: Page, locator: Locator, dx: number, dy: numbe
   await page.waitForTimeout(100);
 }
 
+export function getChannelStackToggle(page: Page, value: string): Locator {
+  const escapedValue = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return page
+    .locator(`#channel-thumbnail-strip .channel-thumbnail-tile[data-channel-value="${escapedValue}"]`)
+    .locator('xpath=..')
+    .locator('.channel-thumbnail-stack-toggle');
+}
+
+export async function clickChannelStackToggle(page: Page, value: string): Promise<void> {
+  await getChannelStackToggle(page, value).click();
+}
+
 export async function dragViewerRoi(
   page: Page,
   viewer: Locator,

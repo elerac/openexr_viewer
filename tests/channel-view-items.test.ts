@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildChannelViewStacks,
   buildChannelViewItems,
   findSelectedChannelViewItem,
   hasSplitChannelViewItems,
+  pruneExpandedChannelStackKeys,
+  selectStackedChannelViewItems,
   selectVisibleChannelViewItems
 } from '../src/channel-view-items';
 import { createChannelMonoSelection, createSpectralRgbSelection, createStokesSelection } from './helpers/state-fixtures';
@@ -27,6 +30,25 @@ describe('channel view items', () => {
     const depthItem = items.find((item) => item.value === 'channel:depth.Z');
     expect(depthItem?.mergedOrder).not.toBeNull();
     expect(depthItem?.splitOrder).not.toBeNull();
+  });
+
+  it('derives RGB/RGBA stack children from existing split descriptors', () => {
+    const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'beauty.A', 'depth.Z'];
+    const items = buildChannelViewItems(channelNames);
+    const stacks = buildChannelViewStacks(channelNames, items);
+
+    expect(stacks).toEqual([
+      {
+        key: 'stack:group:beauty:channelRgb:beauty.R:beauty.G:beauty.B:beauty.A',
+        parentValue: 'group:beauty',
+        childValues: [
+          'channel:beauty.R',
+          'channel:beauty.G',
+          'channel:beauty.B',
+          'channel:beauty.A'
+        ]
+      }
+    ]);
   });
 
   it('builds merged and split stokes descriptors from the same item set', () => {
@@ -71,6 +93,38 @@ describe('channel view items', () => {
     expect(findSelectedChannelViewItem(items, createSpectralRgbSelection())?.label).toBe('Spectral RGB');
   });
 
+  it('derives spectral RGB stack children and expands one stack at a time', () => {
+    const channelNames = ['410nm', '500nm', '650nm', 'mask'];
+    const items = buildChannelViewItems(channelNames);
+    const stacks = buildChannelViewStacks(channelNames, items);
+    const stackKey = stacks[0]?.key ?? '';
+
+    expect(stacks).toEqual([
+      {
+        key: 'stack:spectralRgb::spectralRgb:',
+        parentValue: 'spectralRgb:',
+        childValues: ['channel:410nm', 'channel:500nm', 'channel:650nm']
+      }
+    ]);
+    expect(selectStackedChannelViewItems(channelNames, items, new Set()).map((item) => ({
+      value: item.value,
+      stack: item.stack && { role: item.stack.role, index: item.stack.index, count: item.stack.count }
+    }))).toEqual([
+      { value: 'channel:mask', stack: null },
+      { value: 'spectralRgb:', stack: { role: 'parent', index: 0, count: 3 } }
+    ]);
+    expect(selectStackedChannelViewItems(channelNames, items, new Set([stackKey])).map((item) => ({
+      value: item.value,
+      stack: item.stack && { role: item.stack.role, index: item.stack.index, count: item.stack.count }
+    }))).toEqual([
+      { value: 'channel:mask', stack: null },
+      { value: 'channel:410nm', stack: { role: 'child', index: 0, count: 3 } },
+      { value: 'channel:500nm', stack: { role: 'child', index: 1, count: 3 } },
+      { value: 'channel:650nm', stack: { role: 'child', index: 2, count: 3 } }
+    ]);
+    expect([...pruneExpandedChannelStackKeys(channelNames, items, new Set([stackKey, 'missing']))]).toEqual([stackKey]);
+  });
+
   it('keeps auxiliary channels visible while splitting valid spectral series', () => {
     const items = buildChannelViewItems(['410nm', '500nm', '650nm', 'mask']);
 
@@ -105,5 +159,23 @@ describe('channel view items', () => {
     expect(splitVisible.map((item) => item.label)).not.toContain('S1/S0 Spectral RGB');
     expect(findSelectedChannelViewItem(items, createStokesSelection('s1_over_s0', 'stokesSpectralRgb'))?.value)
       .toBe('stokesSpectralRgb:s1_over_s0:group');
+  });
+
+  it('derives existing Stokes grouped views as stacks', () => {
+    const channelNames = [
+      'S0.R', 'S0.G', 'S0.B',
+      'S1.R', 'S1.G', 'S1.B',
+      'S2.R', 'S2.G', 'S2.B',
+      'S3.R', 'S3.G', 'S3.B'
+    ];
+    const items = buildChannelViewItems(channelNames);
+    const stack = buildChannelViewStacks(channelNames, items)
+      .find((entry) => entry.parentValue === 'stokesRgb:aolp:group');
+
+    expect(stack?.childValues).toEqual([
+      'stokesRgb:aolp:R',
+      'stokesRgb:aolp:G',
+      'stokesRgb:aolp:B'
+    ]);
   });
 });

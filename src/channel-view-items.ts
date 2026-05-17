@@ -1,5 +1,9 @@
 import { cloneDisplaySelection, sameDisplaySelection, serializeDisplaySelectionKey, type DisplaySelection } from './display-model';
-import { buildChannelDisplayOptions } from './display-selection';
+import {
+  buildChannelDisplayOptions,
+  findMergedSelectionForSplitDisplay,
+  findSplitSelectionForMergedDisplay
+} from './display-selection';
 import { getStokesDisplayOptions } from './stokes';
 import { getSpectralRgbDisplayOptions, getSpectralRgbSplitChannelNames } from './spectral';
 import type { DisplayChannelMapping } from './types';
@@ -18,6 +22,27 @@ export interface ChannelViewItem {
 export interface ChannelViewThumbnailItem extends ChannelViewItem {
   thumbnailDataUrl: string | null;
 }
+
+export interface ChannelViewStackInfo {
+  key: string;
+  parentValue: string;
+  childValues: string[];
+}
+
+export interface ChannelViewStackPresentation {
+  key: string;
+  parentValue: string;
+  childValues: string[];
+  role: 'parent' | 'child';
+  index: number;
+  count: number;
+}
+
+export type ChannelViewStackedItem<T extends ChannelViewItem = ChannelViewItem> = T & {
+  stack: ChannelViewStackPresentation | null;
+};
+
+export type ChannelViewStackedThumbnailItem = ChannelViewStackedItem<ChannelViewThumbnailItem>;
 
 export function buildChannelViewItems(channelNames: string[]): ChannelViewItem[] {
   const mergedItems = buildDisplayItems(channelNames, false);
@@ -82,6 +107,95 @@ export function hasSplitChannelViewItems(items: readonly Pick<ChannelViewItem, '
   return items.some((item) => item.mergedOrder === null || item.splitOrder === null);
 }
 
+export function buildChannelViewStacks(
+  channelNames: string[],
+  items: readonly ChannelViewItem[]
+): ChannelViewStackInfo[] {
+  const splitItems = selectVisibleChannelViewItems(items, true);
+  const stacks: ChannelViewStackInfo[] = [];
+
+  for (const parent of selectVisibleChannelViewItems(items, false)) {
+    const firstSplitSelection = findSplitSelectionForMergedDisplay(channelNames, parent.selection);
+    if (!firstSplitSelection) {
+      continue;
+    }
+
+    const childItems = splitItems
+      .filter((child) => {
+        const mergedSelection = findMergedSelectionForSplitDisplay(channelNames, child.selection);
+        return sameDisplaySelection(mergedSelection, parent.selection);
+      })
+      .sort((a, b) => compareNullableOrder(a.splitOrder, b.splitOrder));
+
+    if (
+      childItems.length < 2 ||
+      !childItems.some((child) => sameDisplaySelection(child.selection, firstSplitSelection))
+    ) {
+      continue;
+    }
+
+    stacks.push({
+      key: `stack:${parent.value}:${parent.selectionKey}`,
+      parentValue: parent.value,
+      childValues: childItems.map((child) => child.value)
+    });
+  }
+
+  return stacks;
+}
+
+export function selectStackedChannelViewItems<T extends ChannelViewItem>(
+  channelNames: string[],
+  items: readonly T[],
+  expandedStackKeys: ReadonlySet<string>
+): ChannelViewStackedItem<T>[] {
+  const stacks = buildChannelViewStacks(channelNames, items);
+  const stackByParentValue = new Map(stacks.map((stack) => [stack.parentValue, stack]));
+  const itemByValue = new Map(items.map((item) => [item.value, item]));
+  const visibleItems: ChannelViewStackedItem<T>[] = [];
+
+  for (const item of selectVisibleChannelViewItems(items, false)) {
+    const stack = stackByParentValue.get(item.value);
+    if (!stack) {
+      visibleItems.push(withoutStack(item));
+      continue;
+    }
+
+    if (!expandedStackKeys.has(stack.key)) {
+      visibleItems.push(withStackPresentation(item, stack, 'parent', 0));
+      continue;
+    }
+
+    stack.childValues.forEach((childValue, index) => {
+      const child = itemByValue.get(childValue);
+      if (child) {
+        visibleItems.push(withStackPresentation(child, stack, 'child', index));
+      }
+    });
+  }
+
+  return visibleItems;
+}
+
+export function pruneExpandedChannelStackKeys(
+  channelNames: string[],
+  items: readonly ChannelViewItem[],
+  expandedStackKeys: ReadonlySet<string>
+): Set<string> {
+  const validStackKeys = new Set(buildChannelViewStacks(channelNames, items).map((stack) => stack.key));
+  return new Set([...expandedStackKeys].filter((key) => validStackKeys.has(key)));
+}
+
+export function findChannelViewStackForValue(
+  channelNames: string[],
+  items: readonly ChannelViewItem[],
+  value: string
+): ChannelViewStackInfo | null {
+  return buildChannelViewStacks(channelNames, items).find((stack) => (
+    stack.parentValue === value || stack.childValues.includes(value)
+  )) ?? null;
+}
+
 export function findSelectedChannelViewItem<T extends Pick<ChannelViewItem, 'selection'>>(
   items: readonly T[],
   selected: DisplaySelection | null
@@ -142,6 +256,32 @@ function compareNullableOrder(a: number | null, b: number | null): number {
   const left = a ?? Number.MAX_SAFE_INTEGER;
   const right = b ?? Number.MAX_SAFE_INTEGER;
   return left - right;
+}
+
+function withoutStack<T extends ChannelViewItem>(item: T): ChannelViewStackedItem<T> {
+  return {
+    ...item,
+    stack: null
+  };
+}
+
+function withStackPresentation<T extends ChannelViewItem>(
+  item: T,
+  stack: ChannelViewStackInfo,
+  role: ChannelViewStackPresentation['role'],
+  index: number
+): ChannelViewStackedItem<T> {
+  return {
+    ...item,
+    stack: {
+      key: stack.key,
+      parentValue: stack.parentValue,
+      childValues: [...stack.childValues],
+      role,
+      index,
+      count: stack.childValues.length
+    }
+  };
 }
 
 function formatChannelViewLabel(label: string): string {

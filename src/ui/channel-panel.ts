@@ -325,9 +325,8 @@ export class ChannelPanel implements Disposable {
   }
 
   private updateRgbSplitToggleState(): void {
-    this.elements.rgbSplitToggleButton.classList.toggle('hidden', !this.hasSplitChannelViews);
-    this.elements.rgbSplitToggleButton.disabled =
-      this.isLoading || this.isRgbViewLoading || !this.hasSplitChannelViews;
+    this.elements.rgbSplitToggleButton.classList.add('hidden');
+    this.elements.rgbSplitToggleButton.disabled = true;
     this.elements.rgbSplitToggleButton.setAttribute(
       'aria-pressed',
       this.includeSplitRgbChannels ? 'true' : 'false'
