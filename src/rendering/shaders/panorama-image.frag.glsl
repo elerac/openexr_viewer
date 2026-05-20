@@ -61,7 +61,7 @@ const float REC709_LUMINANCE_WEIGHT_R = 0.2126;
 const float REC709_LUMINANCE_WEIGHT_G = 0.7152;
 const float REC709_LUMINANCE_WEIGHT_B = 0.0722;
 const float DISPLAY_GAMMA_MIN = 0.01;
-const float STOKES_VECTOR_VALIDITY_ATOL = 1.0e-8;
+const float STOKES_VECTOR_VALIDITY_RTOL = 1.0e-8;
 const vec3 INVALID_VALUE_WARNING_COLOR = vec3(1.0, 0.0, 1.0);
 
 struct DisplaySample {
@@ -98,7 +98,8 @@ bool isPhysicallyValidStokesVector(float s0, float s1, float s2, float s3) {
     return false;
   }
 
-  return s0 * s0 - (s1 * s1 + s2 * s2 + s3 * s3) >= -abs(STOKES_VECTOR_VALIDITY_ATOL);
+  float s0Squared = s0 * s0;
+  return s0Squared - (s1 * s1 + s2 * s2 + s3 * s3) >= -abs(STOKES_VECTOR_VALIDITY_RTOL) * s0Squared;
 }
 
 bool hasFiniteStokesVectorComponents(float s0, float s1, float s2, float s3) {

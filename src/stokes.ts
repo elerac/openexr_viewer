@@ -531,14 +531,14 @@ export function clampStokesDegreeModulationValue(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
-export const STOKES_VECTOR_VALIDITY_ATOL = 1.0e-8;
+export const STOKES_VECTOR_VALIDITY_RTOL = 1.0e-8;
 
 export function isPhysicallyValidStokesVector(
   s0: number,
   s1: number,
   s2: number,
   s3: number,
-  atol = STOKES_VECTOR_VALIDITY_ATOL
+  rtol = STOKES_VECTOR_VALIDITY_RTOL
 ): boolean {
   if (
     !Number.isFinite(s0) ||
@@ -550,7 +550,8 @@ export function isPhysicallyValidStokesVector(
     return false;
   }
 
-  return s0 ** 2 - (s1 ** 2 + s2 ** 2 + s3 ** 2) >= -Math.abs(atol);
+  const s0Squared = s0 ** 2;
+  return s0Squared - (s1 ** 2 + s2 ** 2 + s3 ** 2) >= -Math.abs(rtol) * s0Squared;
 }
 
 export function shouldMaskInvalidStokesVectors(options: StokesComputationOptions = {}): boolean {

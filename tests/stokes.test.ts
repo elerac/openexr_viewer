@@ -494,13 +494,18 @@ describe('stokes', () => {
     expect(computeStokesNormalizedComponent(1, Number.NaN)).toBeNaN();
   });
 
-  it('checks physical Stokes vector validity with tolerance', () => {
+  it('checks physical Stokes vector validity with relative tolerance', () => {
     expect(isPhysicallyValidStokesVector(1, 1, 0, 0)).toBe(true);
     expect(isPhysicallyValidStokesVector(0, 0, 0, 0)).toBe(true);
+    expect(isPhysicallyValidStokesVector(0, 1, 0, 0)).toBe(false);
     expect(isPhysicallyValidStokesVector(-1, 0, 0, 0)).toBe(false);
     expect(isPhysicallyValidStokesVector(1, Number.NaN, 0, 0)).toBe(false);
     expect(isPhysicallyValidStokesVector(1, Math.sqrt(1 + 5.0e-9), 0, 0)).toBe(true);
     expect(isPhysicallyValidStokesVector(1, Math.sqrt(1 + 2.0e-8), 0, 0)).toBe(false);
+
+    const scale = 100;
+    expect(isPhysicallyValidStokesVector(scale, scale * Math.sqrt(1 + 5.0e-9), 0, 0)).toBe(true);
+    expect(isPhysicallyValidStokesVector(scale, scale * Math.sqrt(1 + 2.0e-8), 0, 0)).toBe(false);
   });
 
   it('returns NaN for computed Stokes values with invalid full vectors', () => {

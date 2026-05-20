@@ -19,6 +19,11 @@ describe('shader source regressions', () => {
     expect(source).toContain('uniform float uInvalidValueWarningPhase;');
     expect(source).toContain('linearToDisplayGamma');
     expect(source).toContain('sign(linear) * pow(abs(linear)');
+    expect(source).toContain('const float STOKES_VECTOR_VALIDITY_RTOL = 1.0e-8;');
+    expect(source).not.toContain('STOKES_VECTOR_VALIDITY_ATOL');
+    expect(source).toContain(
+      's0Squared - (s1 * s1 + s2 * s2 + s3 * s3) >= -abs(STOKES_VECTOR_VALIDITY_RTOL) * s0Squared'
+    );
     expect(source).toContain('uMaskInvalidStokesVectors && !isPhysicallyValidStokesVector');
     expect(source).toContain('bool invalidValue;');
     expect(source).toContain('applyInvalidValueWarning');
