@@ -33,8 +33,10 @@ function createSession(args: {
   displayName: string;
   displayNameIsCustom?: boolean;
   sourceDetail: string;
+  decoded?: DecodedExrImage;
+  activeLayer?: number;
 }): OpenedImageSession {
-  const decoded = createDecodedImage();
+  const decoded = args.decoded ?? createDecodedImage();
   return {
     id: args.id,
     filename: args.filename,
@@ -46,7 +48,7 @@ function createSession(args: {
       file: createFile(args.filename, args.sourceDetail)
     },
     decoded,
-    state: buildViewerStateForLayer(createInitialState(), decoded, 0)
+    state: buildViewerStateForLayer(createInitialState(), decoded, args.activeLayer ?? 0)
   };
 }
 
@@ -262,5 +264,64 @@ describe('opened image option labels', () => {
       label: 'Hero Plate.exr',
       sourcePath: 'shots/hoge/image.exr'
     });
+  });
+
+  it('includes each opened file effective active-layer metadata', () => {
+    const core = new ViewerAppCore();
+    const decoded = {
+      width: 2,
+      height: 1,
+      layers: [
+        {
+          ...createLayerFromChannels({ R: [1, 0] }, 'beauty'),
+          metadata: [{ key: 'compression', label: 'Compression', value: 'PIZ' }]
+        },
+        {
+          ...createLayerFromChannels({ Z: [0.5, 0.25] }, 'depth'),
+          metadata: [{ key: 'name', label: 'Name', value: 'depth' }]
+        }
+      ]
+    };
+
+    core.dispatch({
+      type: 'sessionLoaded',
+      session: createSession({
+        id: 'session-1',
+        filename: 'layered.exr',
+        displayName: 'layered.exr',
+        sourceDetail: 'shots/layered.exr',
+        decoded
+      })
+    });
+
+    expect(buildOpenedImageOptions(core.getState())[0]?.metadata).toEqual([
+      { key: 'compression', label: 'Compression', value: 'PIZ' }
+    ]);
+
+    core.dispatch({
+      type: 'sessionLoaded',
+      activate: false,
+      session: createSession({
+        id: 'session-2',
+        filename: 'inactive-layered.exr',
+        displayName: 'inactive-layered.exr',
+        sourceDetail: 'shots/inactive-layered.exr',
+        decoded,
+        activeLayer: 1
+      })
+    });
+
+    expect(buildOpenedImageOptions(core.getState())[1]?.metadata).toEqual([
+      { key: 'name', label: 'Name', value: 'depth' }
+    ]);
+
+    core.dispatch({ type: 'activeLayerSet', activeLayer: 1 });
+
+    expect(buildOpenedImageOptions(core.getState())[0]?.metadata).toEqual([
+      { key: 'name', label: 'Name', value: 'depth' }
+    ]);
+    expect(buildOpenedImageOptions(core.getState())[1]?.metadata).toEqual([
+      { key: 'name', label: 'Name', value: 'depth' }
+    ]);
   });
 });

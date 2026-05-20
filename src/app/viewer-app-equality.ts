@@ -54,6 +54,7 @@ export function sameOpenedImageOptions(a: ViewerOpenedImageOption[], b: ViewerOp
       && item.label === other.label
       && item.sizeBytes === other.sizeBytes
       && item.sourceDetail === other.sourceDetail
+      && sameMetadata(item.metadata, other.metadata)
       && item.thumbnailDataUrl === other.thumbnailDataUrl
       && item.thumbnailAspectRatio === other.thumbnailAspectRatio
       && item.thumbnailLoading === other.thumbnailLoading

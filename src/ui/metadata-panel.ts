@@ -14,21 +14,23 @@ export function setMetadata(
 
   elements.metadataEmptyState.classList.add('hidden');
   elements.metadataTable.classList.remove('hidden');
-  elements.metadataTable.replaceChildren(
-    ...metadata.map((item) => {
-      const row = document.createElement('div');
-      row.className = 'metadata-row';
+  elements.metadataTable.replaceChildren(...createMetadataRows(metadata));
+}
 
-      const key = document.createElement('span');
-      key.className = 'metadata-key';
-      key.textContent = item.label;
+export function createMetadataRows(metadata: ExrMetadataEntry[]): HTMLDivElement[] {
+  return metadata.map((item) => {
+    const row = document.createElement('div');
+    row.className = 'metadata-row';
 
-      const value = document.createElement('span');
-      value.className = 'metadata-value';
-      value.textContent = item.value;
+    const key = document.createElement('span');
+    key.className = 'metadata-key';
+    key.textContent = item.label;
 
-      row.append(key, value);
-      return row;
-    })
-  );
+    const value = document.createElement('span');
+    value.className = 'metadata-value';
+    value.textContent = item.value;
+
+    row.append(key, value);
+    return row;
+  });
 }

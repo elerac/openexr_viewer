@@ -1,8 +1,11 @@
+import type { ExrMetadataEntry } from '../types';
+
 export interface OpenedImageOptionItem {
   id: string;
   label: string;
   sizeBytes?: number | null;
   sourceDetail?: string;
+  metadata?: ExrMetadataEntry[] | null;
   thumbnailDataUrl?: string | null;
   thumbnailAspectRatio?: number | null;
   thumbnailLoading?: boolean;

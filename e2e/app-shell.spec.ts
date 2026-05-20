@@ -426,7 +426,16 @@ test('opens the gallery demo image and keeps core display controls stable', asyn
   await expect(openedFileRow.locator('.opened-file-thumbnail')).toHaveAttribute('src', /^data:image\/png;base64,/);
   await expect(reloadOpenedFileButton).toBeVisible();
   await expect(closeOpenedFileButton).toBeVisible();
-  await expect(openedFileRow.locator('.opened-file-label')).toHaveAttribute('title', /Path: .*cbox_rgb\.exr\nSize: .* MB/);
+  await expect(openedFileRow.locator('.opened-file-label')).not.toHaveAttribute('title');
+  await openedFileRow.hover();
+  const openedFileTooltip = page.locator('#opened-file-info-tooltip');
+  await expect(openedFileTooltip).toBeVisible();
+  await expect(openedFileTooltip).toContainText('cbox_rgb.exr');
+  await expect(openedFileTooltip).toContainText('compression');
+  await expect(openedFileTooltip).toContainText('PIZ');
+  await expect(openedFileTooltip).toContainText('dataWindow');
+  await expect(openedFileTooltip).toContainText('channels');
+  await page.mouse.move(0, 0);
   await expect(metadataTable).toContainText('compression');
   await expect(metadataTable).toContainText('PIZ');
   await expect(metadataTable).toContainText('dataWindow');
@@ -694,7 +703,7 @@ test('temporarily renames an open file from the Open Files list', async ({ page 
   const renamedRow = page.locator('#opened-files-list .opened-file-row').filter({ hasText: 'Hero Plate.exr' });
   await expect(renamedRow.locator('.opened-file-label')).toHaveText('Hero Plate.exr');
   await expect(openedImages.locator('option:checked')).toContainText('Hero Plate.exr');
-  await expect(renamedRow.locator('.opened-file-label')).toHaveAttribute('title', /Path: .*cbox_rgb\.exr\nSize: .* MB/);
+  await expect(renamedRow.locator('.opened-file-label')).not.toHaveAttribute('title');
 
   await fileMenuButton.click();
   await exportMenuItem.click();

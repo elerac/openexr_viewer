@@ -2611,7 +2611,7 @@ body.is-resizing-panel-rows * {
 .opened-file-info-tooltip {
   position: fixed;
   z-index: 40;
-  max-width: min(18rem, calc(100vw - 1rem));
+  max-width: min(28rem, calc(100vw - 1rem));
   display: grid;
   gap: 2px;
   padding: 6px 8px;
@@ -2655,6 +2655,22 @@ body.is-resizing-panel-rows * {
   color: var(--text-dim);
   font-size: var(--type-caption-size);
   line-height: var(--type-caption-line-height);
+}
+
+.opened-file-info-tooltip-metadata {
+  max-height: min(16rem, calc(100vh - 8rem));
+  margin-top: 4px;
+  overflow: auto;
+}
+
+.opened-file-info-tooltip-metadata .metadata-row {
+  grid-template-columns: minmax(6.4rem, 0.85fr) minmax(0, 1.5fr);
+  min-height: 26px;
+}
+
+.opened-file-info-tooltip-metadata .metadata-key,
+.opened-file-info-tooltip-metadata .metadata-value {
+  padding: 4px 7px;
 }
 
 .channel-thumbnail-strip {

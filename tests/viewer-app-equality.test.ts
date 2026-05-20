@@ -15,6 +15,7 @@ describe('viewer app equality helpers', () => {
       label: 'image.exr',
       sizeBytes: 3,
       sourceDetail: 'shots/image.exr',
+      metadata: [{ key: 'compression', label: 'Compression', value: 'PIZ' }],
       thumbnailDataUrl: null,
       thumbnailAspectRatio: 1,
       thumbnailLoading: false,
@@ -22,6 +23,10 @@ describe('viewer app equality helpers', () => {
     }];
 
     expect(sameOpenedImageOptions(base, [{ ...base[0] }])).toBe(true);
+    expect(sameOpenedImageOptions(base, [{
+      ...base[0],
+      metadata: [{ key: 'compression', label: 'Compression', value: 'ZIP' }]
+    }])).toBe(false);
     expect(sameOpenedImageOptions(base, [{ ...base[0], thumbnailLoading: true }])).toBe(false);
   });
 

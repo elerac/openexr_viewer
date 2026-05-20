@@ -2,6 +2,7 @@ import type { OpenedImageOptionItem } from './image-browser-types';
 import { DisposableBag, type Disposable } from '../lifecycle';
 import type { OpenedImageDropPlacement } from '../types';
 import type { OpenedImagesPanelElements } from './elements';
+import { createMetadataRows } from './metadata-panel';
 import {
   applyListboxRowSizing,
   findClosestListRow,
@@ -993,9 +994,15 @@ export class OpenedImagesPanel implements Disposable {
     this.openedFileInfoTooltipRow = row;
 
     const tooltip = this.ensureOpenedFileInfoTooltipElement();
-    tooltip.replaceChildren(
+    const children: HTMLElement[] = [
       createOpenedFileInfoTooltipLine(item.label, 'opened-file-info-tooltip-filename'),
       createOpenedFileInfoTooltipLine(formatFileSizeMb(item.sizeBytes ?? null), 'opened-file-info-tooltip-size')
+    ];
+    if (item.metadata && item.metadata.length > 0) {
+      children.push(createOpenedFileInfoTooltipMetadata(item.metadata));
+    }
+    tooltip.replaceChildren(
+      ...children
     );
     tooltip.hidden = false;
     row.setAttribute('aria-describedby', tooltip.id);
@@ -1228,13 +1235,11 @@ function updateOpenedFileLabel(
   editing: boolean,
   disabled: boolean
 ): void {
-  const title = `Path: ${item.sourceDetail ?? item.label}\nSize: ${formatFileSizeMb(item.sizeBytes ?? null)}`;
-
   refs.label.classList.toggle('opened-file-label--editing', editing);
   if (!editing) {
     refs.renameInput = null;
     refs.label.textContent = item.label;
-    refs.label.title = title;
+    refs.label.removeAttribute('title');
     return;
   }
 
@@ -1473,6 +1478,15 @@ function createOpenedFileInfoTooltipLine(text: string, className: string): HTMLS
   line.className = className;
   line.textContent = text;
   return line;
+}
+
+function createOpenedFileInfoTooltipMetadata(
+  metadata: NonNullable<OpenedImageOptionItem['metadata']>
+): HTMLDivElement {
+  const table = document.createElement('div');
+  table.className = 'metadata-table opened-file-info-tooltip-metadata';
+  table.replaceChildren(...createMetadataRows(metadata));
+  return table;
 }
 
 function positionOpenedFileInfoTooltip(row: HTMLElement, tooltip: HTMLElement): void {

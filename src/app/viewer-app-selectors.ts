@@ -70,6 +70,7 @@ export function buildOpenedImageOptions(state: ViewerAppState): ViewerOpenedImag
     label: labels[index] ?? entry.displayName,
     sizeBytes: entry.fileSizeBytes,
     sourceDetail: entry.sourceDetail,
+    metadata: entry.metadata,
     thumbnailDataUrl: entry.thumbnailDataUrl,
     thumbnailAspectRatio: entry.thumbnailAspectRatio,
     thumbnailLoading: entry.thumbnailLoading,
@@ -83,6 +84,7 @@ interface OpenedImageOptionEntry {
   displayNameIsCustom?: boolean;
   fileSizeBytes: number | null;
   sourceDetail: string;
+  metadata: ViewerOpenedImageOption['metadata'];
   thumbnailDataUrl: string | null;
   thumbnailAspectRatio: number | null;
   thumbnailLoading: boolean;
@@ -94,12 +96,15 @@ function buildLoadedOpenedImageEntry(
   session: OpenedImageSession
 ): OpenedImageOptionEntry {
   const thumbnailResource = state.thumbnailsBySessionId[session.id] ?? idleResource<string | null>();
+  const effectiveState = session.id === state.activeSessionId ? state.sessionState : session.state;
+  const layer = session.decoded.layers[effectiveState.activeLayer] ?? null;
   return {
     id: session.id,
     displayName: session.displayName,
     displayNameIsCustom: session.displayNameIsCustom,
     fileSizeBytes: session.fileSizeBytes,
     sourceDetail: getSessionSourceDetail(session),
+    metadata: layer?.metadata ?? null,
     thumbnailDataUrl: getSuccessValue(thumbnailResource) ?? null,
     thumbnailAspectRatio: resolveThumbnailAspectRatio(session.decoded.width, session.decoded.height),
     thumbnailLoading: thumbnailResource.status === 'pending' || thumbnailResource.status === 'stale',
@@ -115,6 +120,7 @@ function buildPendingOpenedImageEntry(
     displayName: reservation.displayName,
     fileSizeBytes: reservation.fileSizeBytes,
     sourceDetail: getOpenedImageSourceDetail(reservation.source, reservation.filename),
+    metadata: null,
     thumbnailDataUrl: null,
     thumbnailAspectRatio: null,
     thumbnailLoading: true,

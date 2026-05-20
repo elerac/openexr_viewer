@@ -7145,9 +7145,7 @@ describe('opened files actions', () => {
 
     expect(rowLabels).toEqual(['hoge/image.exr', 'fuga/image.exr']);
     expect(selectLabels).toEqual(['hoge/image.exr', 'fuga/image.exr']);
-    expect(document.querySelector('#opened-files-list .opened-file-label')?.getAttribute('title')).toBe(
-      'Path: shots/hoge/image.exr\nSize: -- MB'
-    );
+    expect(document.querySelector('#opened-files-list .opened-file-label')?.hasAttribute('title')).toBe(false);
   });
 
   it('shows opened-file filename and size quickly when hovering the whole row', () => {
@@ -7158,7 +7156,11 @@ describe('opened files actions', () => {
     ui.setOpenedImageOptions([{
       id: 'session-1',
       label: 'beauty.exr',
-      sizeBytes: 3 * 1024 * 1024
+      sizeBytes: 3 * 1024 * 1024,
+      metadata: [
+        { key: 'compression', label: 'Compression', value: 'PIZ' },
+        { key: 'channels', label: 'Channels', value: '3 (R, G, B)' }
+      ]
     }], 'session-1');
 
     const row = mockOpenedFilesListGeometry()[0] as HTMLDivElement;
@@ -7175,6 +7177,15 @@ describe('opened files actions', () => {
     expect(tooltip.getAttribute('role')).toBe('tooltip');
     expect(tooltip.querySelector('.opened-file-info-tooltip-filename')?.textContent).toBe('beauty.exr');
     expect(tooltip.querySelector('.opened-file-info-tooltip-size')?.textContent).toBe('3.0 MB');
+    expect(
+      Array.from(tooltip.querySelectorAll('.opened-file-info-tooltip-metadata .metadata-row')).map((metadataRow) => ({
+        key: metadataRow.querySelector('.metadata-key')?.textContent,
+        value: metadataRow.querySelector('.metadata-value')?.textContent
+      }))
+    ).toEqual([
+      { key: 'Compression', value: 'PIZ' },
+      { key: 'Channels', value: '3 (R, G, B)' }
+    ]);
     expect(row.getAttribute('aria-describedby')).toBe('opened-file-info-tooltip');
 
     row.dispatchEvent(new Event('pointerleave'));
@@ -7258,6 +7269,7 @@ describe('opened files actions', () => {
     const tooltip = document.querySelector('.opened-file-info-tooltip') as HTMLElement;
     expect(tooltip.querySelector('.opened-file-info-tooltip-filename')?.textContent).toBe('queued.exr');
     expect(tooltip.querySelector('.opened-file-info-tooltip-size')?.textContent).toBe('-- MB');
+    expect(tooltip.querySelector('.opened-file-info-tooltip-metadata')).toBeNull();
   });
 
   it('filters visible open-file rows by label or source path without changing total open files', () => {
