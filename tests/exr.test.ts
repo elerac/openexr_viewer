@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { getChannelReadView, readChannelValue } from '../src/channel-storage';
-import { loadExr } from '../src/exr';
+import { loadExr, readLayerInterleavedPixels } from '../src/exr';
 
 describe('exr decode', () => {
   it('decodes cbox_rgb.exr with RGB channels', async () => {
@@ -31,4 +31,38 @@ describe('exr decode', () => {
     expect(first.metadata?.some((entry) => entry.key === 'compression' && entry.value === 'PIZ')).toBe(true);
     expect(first.metadata?.some((entry) => entry.key === 'channels' && entry.value === '3 (R, G, B)')).toBe(true);
   }, 60000);
+
+  it('pads cropped data-window channels into the full display window', () => {
+    const calls: string[][] = [];
+    const reader = {
+      getLayerPixels: (_layerIndex: number, channelNames: string[]) => {
+        calls.push(channelNames);
+        if (channelNames.length !== 1) {
+          return undefined;
+        }
+
+        return channelNames[0] === 'R'
+          ? new Float32Array([1, 2, 3, 4])
+          : new Float32Array([10, 20, 30, 40]);
+      }
+    };
+
+    const interleaved = readLayerInterleavedPixels(
+      reader,
+      0,
+      ['R', 'G'],
+      4,
+      4,
+      [
+        { key: 'dataWindow', label: 'dataWindow', value: '[1,1]-[2,2]' },
+        { key: 'displayWindow', label: 'displayWin', value: '[0,0]-[3,3]' }
+      ]
+    );
+
+    expect(calls).toEqual([['R'], ['G']]);
+    expect(interleaved).toHaveLength(4 * 4 * 2);
+    expect(Array.from(interleaved.slice(0, 2))).toEqual([0, 0]);
+    expect(Array.from(interleaved.slice((1 * 4 + 1) * 2, (1 * 4 + 3) * 2))).toEqual([1, 10, 2, 20]);
+    expect(Array.from(interleaved.slice((2 * 4 + 1) * 2, (2 * 4 + 3) * 2))).toEqual([3, 30, 4, 40]);
+  });
 });
