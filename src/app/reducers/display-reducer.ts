@@ -1,4 +1,8 @@
 import {
+  getColormapAsset,
+  type ColormapAsset
+} from '../../colormaps';
+import {
   buildZeroCenteredColormapRange,
   cloneDisplayLuminanceRange,
   resolveColormapAutoRange,
@@ -166,9 +170,7 @@ export function displayReducer(
       };
     }
     case 'activeColormapSet':
-      return patchSessionState(state, {
-        activeColormapId: intent.colormapId
-      });
+      return patchSessionState(state, buildActiveColormapPatch(state, intent));
     case 'colormapRangeSet': {
       const activeSession = selectActiveSession(state);
       if (!activeSession || !Number.isFinite(intent.range.min) || !Number.isFinite(intent.range.max)) {
@@ -301,4 +303,41 @@ function clearPendingColormapActivation(state: ViewerAppState): ViewerAppState {
     ...state,
     pendingColormapActivation: null
   };
+}
+
+function buildActiveColormapPatch(
+  state: ViewerAppState,
+  intent: Extract<ViewerIntent, { type: 'activeColormapSet' }>
+): Partial<ViewerAppState['sessionState']> {
+  const patch: Partial<ViewerAppState['sessionState']> = {
+    activeColormapId: intent.colormapId
+  };
+  const asset = getActiveColormapAssetForDefault(state, intent);
+  if (!asset?.diverging) {
+    return patch;
+  }
+
+  patch.colormapZeroCentered = true;
+  patch.colormapRange = state.sessionState.colormapRangeMode === 'alwaysAuto'
+    ? resolveColormapAutoRange(
+        state.sessionState.displaySelection,
+        getSuccessValue(state.displayRangeResource) ?? null,
+        true
+      ) ?? buildZeroCenteredColormapRange(state.sessionState.colormapRange)
+    : buildZeroCenteredColormapRange(
+        state.sessionState.colormapRange ?? getSuccessValue(state.displayRangeResource) ?? null
+      );
+
+  return patch;
+}
+
+function getActiveColormapAssetForDefault(
+  state: ViewerAppState,
+  intent: Extract<ViewerIntent, { type: 'activeColormapSet' }>
+): ColormapAsset | null {
+  if (intent.applyDivergingDefault === false || !state.colormapRegistry) {
+    return null;
+  }
+
+  return getColormapAsset(state.colormapRegistry, intent.colormapId);
 }

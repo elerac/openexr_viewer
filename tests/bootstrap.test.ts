@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => {
     colormapRegistry: null as
       | {
           defaultId: string;
-          assets: Array<{ label: string; file: string }>;
+          assets: Array<{ label: string; file: string; diverging: boolean }>;
           options: Array<{ id: string; label: string }>;
         }
       | null,
@@ -113,7 +113,10 @@ const mocks = vi.hoisted(() => {
   ) => {
     return registry.options?.find((option) => option.label.toLowerCase() === label.toLowerCase())?.id ?? null;
   });
-  const getColormapAsset = vi.fn((registry: { assets?: Array<{ label: string; file: string }> }, id: string) => {
+  const getColormapAsset = vi.fn((
+    registry: { assets?: Array<{ label: string; file: string; diverging?: boolean }> },
+    id: string
+  ) => {
     const index = Number(id);
     return Number.isInteger(index) ? registry.assets?.[index] ?? null : null;
   });
@@ -514,7 +517,10 @@ afterEach(() => {
     draftRoi: null
   }));
   mocks.displayGetActiveColormapLutForState.mockImplementation(() => null);
-  mocks.getColormapAsset.mockImplementation((registry: { assets?: Array<{ label: string; file: string }> }, id: string) => {
+  mocks.getColormapAsset.mockImplementation((
+    registry: { assets?: Array<{ label: string; file: string; diverging?: boolean }> },
+    id: string
+  ) => {
     const index = Number(id);
     return Number.isInteger(index) ? registry.assets?.[index] ?? null : null;
   });
@@ -891,7 +897,7 @@ describe('bootstrap app lifecycle', () => {
 
     const registry = {
       defaultId: '0',
-      assets: [{ label: 'Viridis', file: 'colormaps/viridis.npy' }],
+      assets: [{ label: 'Viridis', file: 'colormaps/viridis.npy', diverging: false }],
       options: [{ id: '0', label: 'Viridis' }]
     };
     const lut = {
@@ -975,7 +981,7 @@ describe('bootstrap app lifecycle', () => {
 
     const registry = {
       defaultId: '0',
-      assets: [{ label: 'Viridis', file: 'colormaps/viridis.npy' }],
+      assets: [{ label: 'Viridis', file: 'colormaps/viridis.npy', diverging: false }],
       options: [{ id: '0', label: 'Viridis' }]
     };
     const lut = {
@@ -2722,9 +2728,9 @@ describe('bootstrap app lifecycle', () => {
     const registry = {
       defaultId: '0',
       assets: [
-        { label: 'Viridis', file: 'viridis.npy' },
-        { label: 'HSV', file: 'hsv.npy' },
-        { label: 'Secondary', file: 'secondary.npy' }
+        { label: 'Viridis', file: 'viridis.npy', diverging: false },
+        { label: 'HSV', file: 'hsv.npy', diverging: false },
+        { label: 'Secondary', file: 'secondary.npy', diverging: false }
       ],
       options: [
         { id: '0', label: 'Viridis' },

@@ -417,6 +417,12 @@ describe('stokes', () => {
       zeroCentered: true,
       modulation: { enabled: true }
     });
+    expect(getStokesColormapDefault('top')).toEqual({
+      colormapLabel: 'Yellow-Cyan-Yellow',
+      range: { min: -Math.PI / 4, max: Math.PI / 4 },
+      zeroCentered: true,
+      modulation: { enabled: true }
+    });
     expect(getStokesColormapDefault('s2_over_s0')).toEqual({
       colormapLabel: 'RdBu',
       range: { min: -1, max: 1 },

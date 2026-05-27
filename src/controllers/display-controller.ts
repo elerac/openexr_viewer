@@ -217,7 +217,8 @@ export class DisplayController implements Disposable {
 
         this.core.dispatch({
           type: 'activeColormapSet',
-          colormapId
+          colormapId,
+          applyDivergingDefault: false
         });
 
         const colormapRequestId = this.core.issueRequestId();
@@ -263,7 +264,10 @@ export class DisplayController implements Disposable {
     }
   }
 
-  async setActiveColormap(colormapId: string): Promise<void> {
+  async setActiveColormap(
+    colormapId: string,
+    options: { applyDivergingDefault?: boolean } = {}
+  ): Promise<void> {
     if (this.disposed) {
       return;
     }
@@ -292,7 +296,8 @@ export class DisplayController implements Disposable {
 
     this.core.dispatch({
       type: 'activeColormapSet',
-      colormapId
+      colormapId,
+      applyDivergingDefault: options.applyDivergingDefault
     });
     if (loadedLut) {
       this.core.dispatch({
@@ -430,7 +435,7 @@ export class DisplayController implements Disposable {
         type: 'stokesActiveColormapDefaultApplied',
         setting: normalizedSetting
       });
-      await this.setActiveColormap(colormapId);
+      await this.setActiveColormap(colormapId, { applyDivergingDefault: false });
     }
   }
 
@@ -466,7 +471,7 @@ export class DisplayController implements Disposable {
       type: 'stokesActiveColormapDefaultApplied',
       setting
     });
-    await this.setActiveColormap(colormapId);
+    await this.setActiveColormap(colormapId, { applyDivergingDefault: false });
   }
 
   setStokesParameterVisibility(group: StokesColormapDefaultGroup, enabled: boolean): void {

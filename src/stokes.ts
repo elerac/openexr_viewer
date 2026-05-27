@@ -128,7 +128,7 @@ export const DEFAULT_STOKES_COLORMAP_DEFAULT_SETTINGS: StokesColormapDefaultSett
   top: {
     colormapLabel: 'Yellow-Cyan-Yellow',
     range: { min: -Math.PI / 4, max: Math.PI / 4 },
-    zeroCentered: false,
+    zeroCentered: true,
     modulation: { enabled: true }
   },
   normalized: {

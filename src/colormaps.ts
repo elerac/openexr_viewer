@@ -3,6 +3,7 @@ import { DisplayLuminanceRange } from './types';
 export interface ColormapAsset {
   label: string;
   file: string;
+  diverging: boolean;
 }
 
 export interface ColormapManifest {
@@ -75,7 +76,8 @@ export function parseColormapManifest(input: unknown): ColormapRegistry {
 
     const label = validateColormapLabel(entry.label, labels, index);
     const file = validateColormapFile(entry.file, index);
-    return { label, file };
+    const diverging = validateColormapDiverging(entry.diverging, index);
+    return { label, file, diverging };
   });
 
   return {
@@ -308,6 +310,18 @@ function validateColormapFile(value: unknown, index: number): string {
   }
 
   return `colormaps/${file}`;
+}
+
+function validateColormapDiverging(value: unknown, index: number): boolean {
+  if (value === undefined) {
+    return false;
+  }
+
+  if (typeof value !== 'boolean') {
+    throw new Error(`Invalid colormap manifest entry ${index}: diverging must be a boolean.`);
+  }
+
+  return value;
 }
 
 function validateNpyMagic(bytes: Uint8Array): void {

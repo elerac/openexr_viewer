@@ -6,7 +6,8 @@
     },
     {
       "label": "RdBu",
-      "file": "RdBu.npy"
+      "file": "RdBu.npy",
+      "diverging": true
     },
     {
       "label": "HSV",
@@ -22,11 +23,13 @@
     },
     {
       "label": "Yellow-Cyan-Yellow",
-      "file": "yellow-cyan-yellow.npy"
+      "file": "yellow-cyan-yellow.npy",
+      "diverging": true
     },
     {
       "label": "coolwarm",
-      "file": "coolwarm.npy"
+      "file": "coolwarm.npy",
+      "diverging": true
     }
   ]
 }

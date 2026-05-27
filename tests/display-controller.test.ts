@@ -109,13 +109,14 @@ function stubWindow(options: { queueAnimationFrames?: boolean } = {}) {
 const registry = {
   defaultId: '0',
   assets: [
-    { label: 'Default', file: 'default.npy' },
-    { label: 'HSV', file: 'hsv.npy' },
-    { label: 'Secondary', file: 'secondary.npy' },
-    { label: 'Black-Red', file: 'black-red.npy' },
-    { label: 'RdBu', file: 'rdbu.npy' },
-    { label: 'Yellow-Black-Blue', file: 'yellow-black-blue.npy' },
-    { label: 'Yellow-Cyan-Yellow', file: 'yellow-cyan-yellow.npy' }
+    { label: 'Default', file: 'default.npy', diverging: false },
+    { label: 'HSV', file: 'hsv.npy', diverging: false },
+    { label: 'Secondary', file: 'secondary.npy', diverging: false },
+    { label: 'Black-Red', file: 'black-red.npy', diverging: false },
+    { label: 'RdBu', file: 'rdbu.npy', diverging: true },
+    { label: 'Yellow-Black-Blue', file: 'yellow-black-blue.npy', diverging: false },
+    { label: 'Yellow-Cyan-Yellow', file: 'yellow-cyan-yellow.npy', diverging: true },
+    { label: 'coolwarm', file: 'coolwarm.npy', diverging: true }
   ],
   options: [
     { id: '0', label: 'Default' },
@@ -124,7 +125,8 @@ const registry = {
     { id: '3', label: 'Black-Red' },
     { id: '4', label: 'RdBu' },
     { id: '5', label: 'Yellow-Black-Blue' },
-    { id: '6', label: 'Yellow-Cyan-Yellow' }
+    { id: '6', label: 'Yellow-Cyan-Yellow' },
+    { id: '7', label: 'coolwarm' }
   ]
 };
 
@@ -145,6 +147,12 @@ const luts = {
     label: 'Yellow-Cyan-Yellow',
     entryCount: 2,
     rgba8: new Uint8Array([255, 255, 0, 255, 0, 255, 255, 255])
+  },
+  '7': {
+    id: '7',
+    label: 'coolwarm',
+    entryCount: 2,
+    rgba8: new Uint8Array([0, 0, 255, 255, 255, 0, 0, 255])
   }
 };
 
@@ -250,6 +258,64 @@ describe('display controller shim', () => {
 
     expect(core.getState().sessionState.activeColormapId).toBe('1');
     expect(getLoadedColormapId(core)).toBe('1');
+  });
+
+  it('enables zero center for diverging colormaps without disabling it for sequential colormaps', async () => {
+    const decoded = createDecodedImage(['R', 'G', 'B']);
+    const { controller, core } = createController(createSession(decoded));
+
+    await controller.initialize();
+    controller.setColormapRange({ min: -0.25, max: 0.75 });
+
+    await controller.setActiveColormap('4');
+
+    expect(core.getState().sessionState).toMatchObject({
+      activeColormapId: '4',
+      colormapRange: { min: -0.75, max: 0.75 },
+      colormapRangeMode: 'oneTime',
+      colormapZeroCentered: true
+    });
+
+    await controller.setActiveColormap('2');
+
+    expect(core.getState().sessionState).toMatchObject({
+      activeColormapId: '2',
+      colormapRange: { min: -0.75, max: 0.75 },
+      colormapZeroCentered: true
+    });
+  });
+
+  it('applies diverging zero-center defaults from auto ranges for all diverging palettes', async () => {
+    const decoded = createDecodedImage(['R', 'G', 'B']);
+    const session = createSession(decoded);
+    const { controller, core } = createController(session);
+
+    await controller.initialize();
+    core.dispatch({
+      type: 'displayLuminanceRangeResolved',
+      requestId: null,
+      requestKey: 'range',
+      sessionId: session.id,
+      activeLayer: 0,
+      displaySelection: core.getState().sessionState.displaySelection,
+      displayLuminanceRange: { min: -0.2, max: 0.6 }
+    });
+
+    for (const colormapId of ['4', '6', '7']) {
+      if (core.getState().sessionState.colormapZeroCentered) {
+        controller.toggleColormapZeroCenter();
+      }
+      expect(core.getState().sessionState.colormapZeroCentered).toBe(false);
+
+      await controller.setActiveColormap(colormapId);
+
+      expect(core.getState().sessionState).toMatchObject({
+        activeColormapId: colormapId,
+        colormapRange: { min: -0.6, max: 0.6 },
+        colormapRangeMode: 'alwaysAuto',
+        colormapZeroCentered: true
+      });
+    }
   });
 
   it('does not duplicate an in-flight active colormap load when ensuring the active lut', async () => {
@@ -487,6 +553,37 @@ describe('display controller shim', () => {
       displaySelection: createStokesSelection('aolp')
     });
     expect(getLoadedColormapLut(core)).toEqual(luts['2']);
+  });
+
+  it('preserves explicit Stokes zero-center settings when the configured colormap is diverging', async () => {
+    const decoded = createDecodedImage(['R', 'G', 'B', 'S0', 'S1', 'S2', 'S3']);
+    const { controller, core } = createController(createSession(decoded));
+
+    await controller.initialize();
+    await controller.applyDisplaySelection(createStokesSelection('s1_over_s0'));
+
+    await controller.setStokesColormapDefaultSetting('normalized', {
+      colormapLabel: 'RdBu',
+      range: { min: -0.25, max: 0.75 },
+      zeroCentered: false,
+      modulation: null
+    });
+
+    expect(core.getState().stokesColormapDefaults.normalized).toEqual({
+      colormapLabel: 'RdBu',
+      range: { min: -0.25, max: 0.75 },
+      zeroCentered: false,
+      modulation: null
+    });
+    expect(core.getState().sessionState).toMatchObject({
+      visualizationMode: 'colormap',
+      activeColormapId: '4',
+      colormapRange: { min: -0.25, max: 0.75 },
+      colormapRangeMode: 'oneTime',
+      colormapZeroCentered: false,
+      displaySelection: createStokesSelection('s1_over_s0')
+    });
+    expect(getLoadedColormapLut(core)).toEqual(luts['4']);
   });
 
   it('resets Stokes colormap defaults and immediately restores the active group default', async () => {

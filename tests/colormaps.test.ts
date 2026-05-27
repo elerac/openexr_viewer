@@ -17,7 +17,7 @@ describe('NumPy colormap LUT parsing', () => {
     const registry = parseColormapManifest({
       colormaps: [
         { label: 'Red / Black / Green', file: 'red_black_green.npy' },
-        { label: 'Blue / Yellow', file: 'blue_yellow.npy' }
+        { label: 'Blue / Yellow', file: 'blue_yellow.npy', diverging: true }
       ]
     });
 
@@ -29,7 +29,9 @@ describe('NumPy colormap LUT parsing', () => {
     expect(registry.defaultId).toBe('0');
     expect(getColormapAsset(registry, '0')?.label).toBe('Red / Black / Green');
     expect(getColormapAsset(registry, '0')?.file).toBe('colormaps/red_black_green.npy');
+    expect(getColormapAsset(registry, '0')?.diverging).toBe(false);
     expect(getColormapAsset(registry, '1')?.label).toBe('Blue / Yellow');
+    expect(getColormapAsset(registry, '1')?.diverging).toBe(true);
     expect(getColormapAsset(registry, 'blue-yellow')).toBeNull();
     expect(findColormapIdByLabel(registry, 'blue / yellow')).toBe('1');
   });
@@ -39,6 +41,9 @@ describe('NumPy colormap LUT parsing', () => {
     expect(() => parseColormapManifest({ colormaps: [] })).toThrow(/at least one colormap/);
     expect(() => parseColormapManifest({ colormaps: [{ label: '', file: 'a.npy' }] })).toThrow(/label/);
     expect(() => parseColormapManifest({ colormaps: [{ label: 'A', file: '../a.npy' }] })).toThrow(/relative/);
+    expect(() => parseColormapManifest({ colormaps: [{ label: 'A', file: 'a.npy', diverging: 'yes' }] })).toThrow(
+      /diverging/
+    );
   });
 
   it('parses float32 RGB LUTs', () => {

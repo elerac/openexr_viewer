@@ -252,7 +252,7 @@ describe('channel thumbnail service', () => {
     const session = createSession();
     const registry = {
       defaultId: '0',
-      assets: [{ label: 'RdBu', file: 'RdBu.npy' }],
+      assets: [{ label: 'RdBu', file: 'RdBu.npy', diverging: true }],
       options: [{ id: '0', label: 'RdBu' }]
     };
     const createThumbnailDataUrl = vi.fn(() => 'thumb');
@@ -309,7 +309,7 @@ describe('channel thumbnail service', () => {
       getSession: () => session,
       getColormapRegistry: () => ({
         defaultId: '0',
-        assets: [{ label: 'RdBu', file: 'RdBu.npy' }],
+        assets: [{ label: 'RdBu', file: 'RdBu.npy', diverging: true }],
         options: [{ id: '0', label: 'RdBu' }]
       }),
       onThumbnailReady,

@@ -209,7 +209,7 @@ export type ViewerIntent =
       restoreState?: RestorableVisualizationState | null;
     }
   | { type: 'visualizationModeRequested'; visualizationMode: ViewerSessionState['visualizationMode'] }
-  | { type: 'activeColormapSet'; colormapId: string }
+  | { type: 'activeColormapSet'; colormapId: string; applyDivergingDefault?: boolean }
   | { type: 'colormapRangeSet'; range: DisplayLuminanceRange }
   | { type: 'colormapAutoRangeToggled' }
   | { type: 'colormapZeroCenteredToggled' }
