@@ -4,22 +4,28 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
 
 [![OpenEXR Viewer thumbnail](https://elerac.github.io/openexr_viewer/thumbnail.jpg)](https://elerac.github.io/openexr_viewer/)
 
-## Current MVP Features
+## Features
 
 - OpenEXR decode via a browser-safe `exrs` WASM adapter with full layer/channel extraction.
-- Built-in Gallery samples: `Gallery > cbox_rgb.exr`, `Gallery > multipart.0001.exr`, and `Gallery > brown_photostudio_02_1k.exr`.
+- Gallery samples: local `Gallery > cbox_rgb.exr`, plus remote `Gallery > multipart.0001.exr` and `Gallery > brown_photostudio_02_1k.exr` samples that require network access.
 - Local EXR load via `File > Open...` or drag/drop (drag-and-drop supports multiple files and recursive folder drops in one action).
 - Recursive folder EXR load via `File > Open Folder...`; all `.exr` files under the selected folder are appended as sessions.
-- `File > Export...` exports the full active image to LDR PNG with the current layer, channel/stokes selection, exposure, colormap, and alpha settings applied.
+- `File > Export...` exports the full active display to PNG at display image size with configurable PNG compression and current channel/stokes, exposure/gamma, colormap, and alpha settings applied.
+- `File > Export Screenshot...` exports an image-viewer or panorama-viewer screenshot region to PNG; multiple screenshot regions export as a ZIP, with optional reproduction JSON.
+- `File > Export Batch...` exports selected file/channel combinations as a ZIP of PNG images.
 - `File > Export Colormap...` exports any registered colormap as a standalone PNG gradient with configurable colormap, size, orientation, and filename.
+- Right-click `Copy Image` copies the current display image to the clipboard.
 - `View > Image viewer` / `Panorama viewer` switches between the existing 2D image view and an equirectangular panorama projection suitable for 360-degree environment maps and HDRIs.
-- `Shift` + left-drag in `Image viewer` creates a persistent rectangular ROI for measurement.
+- `View > Rulers` toggles pixel rulers in `Image viewer`.
+- `Window` controls include normal/full-screen preview plus single-pane, vertical split, and horizontal split viewer layouts.
+- Top-bar quick actions include Auto Fit, Auto Exposure, invalid-value warning, screenshot export, Metadata, app fullscreen, and the Settings gear.
+- `Shift` + left-drag in `Image viewer` creates or replaces a persistent rectangular ROI for measurement; drag an existing ROI body or handles to edit it. ROI creation/editing is disabled in `Panorama viewer`.
 - Multi-image sessions:
   - New image opens as active while previously opened images are kept in memory.
-  - `Opened Images` list allows switching active image by filename.
-  - Multi-layer EXRs expose a `Layer` selector, and session state follows the implementation: selected layer is preserved per opened session, while display channel mapping, the active probe position, and the committed ROI carry across session switches when valid for the target image. The active viewer mode is preserved across session switches, and each session remembers separate image-view and panorama-view camera state.
-  - Reorder opened images directly by click-hold-moving a filename row in the `Opened Images` list.
-  - Decoded CPU pixels plus retained display CPU/GPU copies are shown against a unified LRU cache budget instead of a texture-only active-session policy. The currently bound display channels stay protected; other retained layer textures, including other layers from the active EXR, remain evictable under the global budget. The default cap is `256 MB`, configurable from the top-bar `Settings` menu with fixed presets (`64`, `128`, `256`, `512`, `1024` MB).
+  - `Open Files` list allows switching active image by filename; rows show thumbnails/status and support filtering, inline rename, drag reorder, and drag-to-viewer-pane assignment.
+  - Multi-layer EXR state is preserved per opened session. Display channel mapping, the active probe position, and the committed ROI carry across session switches when valid for the target image. The active viewer mode is preserved across session switches, and each session remembers separate image-view and panorama-view camera state.
+  - When Auto Fit selected images is enabled, image-mode session switches and new loads fit to the viewer instead of carrying previous pan/zoom; this does not apply in `Panorama viewer`. Colormap state carries only when the display selection remains compatible.
+  - Decoded CPU pixels are included in the displayed memory usage. The LRU budget evicts retained display CPU/GPU channel resources, so decoded-only usage can exceed the selected cap. The default cap is `256 MB`, configurable from `Settings` dialog > `Memory Budget` with fixed presets (`64`, `128`, `256`, `512`, `1024` MB).
   - Per-file row `Reload` action re-decodes the selected session from its original source.
   - `File > Reload All` re-decodes all opened sessions from their original sources.
   - Per-file row `Close` action closes the selected filename entry.
@@ -29,17 +35,17 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
 - ROI inspector:
   - Shows bounds, size, total pixels, per-channel valid sample counts, and `min` / `mean` / `max` for the active display selection.
   - ROI survives view-mode switches, carries across image switches and new loads, clamps to the target image bounds when needed, and can be cleared from the Inspector.
-- Exposure control: slider + numeric input (`-10` to `+10` EV, step `0.1`).
-- Visualization mode buttons:
-  - `None` is the default RGB display path.
+- Display controls:
+  - `None` is the default RGB display path and exposes Exposure and Gamma controls. Exposure uses slider + numeric input (`-10` to `+10` EV, step `0.1`).
   - `Colormap` maps current display luminance over the full active image through the selected NumPy LUT palette.
   - Built-in palettes are listed in `public/colormaps/manifest.json` and stored as static `.npy` files in the same directory.
   - The app accepts LUT arrays with shape `(N, 3)` or `(N, 4)` and dtype `float32`, `float64`, or `uint8`.
-  - Exposure controls are hidden in `Colormap` mode because exposure does not affect that display path.
+  - RGB Exposure/Gamma controls are hidden in `Colormap` mode; colormap mode exposes separate EV/Gamma controls that affect LUT mapping.
   - `Palette` selects the active LUT without rebuilding the EXR display texture.
   - `vmin`/`vmax` can be adjusted with one dual-handle slider or numeric inputs.
   - `Auto Range` has two modes: highlighted always-auto mode follows each image/layer/channel, while one-time/manual mode preserves the current min/max across targets. Dynamic auto ranges use `v=max(abs(min), abs(max))` and map to `[-v, v]`.
   - Selecting a diverging palette auto-enables `Zero Center`, which keeps manual ranges symmetric around zero (`min=-v`, `max=v`) and also applies to fixed Stokes colormap defaults.
+  - `Reverse` flips the active colormap ramp.
   - Angle Stokes colormaps expose a paired degree modulation toggle: AoLP can be modulated by DoLP, CoP by DoCP, and ToP by DoP. AoLP also lets the modulation target be `V` (HSV value) or `S` (HSV saturation), defaulting to `V`. CoP and ToP modulation default to on; AoLP defaults to off.
   - Leaves raw numeric probe values unchanged.
 - Nearest-neighbor rendering at all zoom levels (no interpolation).
@@ -56,29 +62,31 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
   - Hover pixel readout in the Inspector.
   - Click to lock/unlock probe pixel.
   - Values are raw linear EXR channel values (pre-exposure, pre-display transform).
-  - EXR header metadata is shown below the probe values for the active image/layer, including common attributes such as compression, data/display windows, line order, channels, type, capture date, renderer/integrator, and compatible custom attributes.
+- Metadata:
+  - The top-bar Metadata dialog shows EXR header metadata for the active image/layer, including common attributes such as compression, data/display windows, line order, channels, type, capture date, renderer/integrator, and compatible custom attributes.
 - On-image pixel labels at high zoom:
   - RGB values shown inside image pixels.
   - 3-channel values stacked vertically.
   - Label colors follow channel mapping (`R`, `G`, `B`).
   - Panorama mode reuses the same value formatting, but only draws labels for source pixels with a stable, sufficiently large projected footprint.
 - Channel controls:
-  - `Channel` selector for grouped channels such as `HOGE.R/G/B`, `FUGA.R/G/B`, `normal.X/Y/Z`, and `motion.U/V`; grouped RGB remains the default display when available, while XYZ and UV groups are used when no RGB group is available. XYZ maps `X/Y/Z` to display red/green/blue, and UV maps `U/V` to display red/green with blue fixed at zero.
+  - Bottom channel thumbnail strip selects grouped channels such as `HOGE.R/G/B`, `FUGA.R/G/B`, `normal.X/Y/Z`, and `motion.U/V`; grouped RGB remains the default display when available, while XYZ and UV groups are used when no RGB group is available. XYZ maps `X/Y/Z` to display red/green/blue, and UV maps `U/V` to display red/green with blue fixed at zero.
   - Alpha is applied to normal channel displays when a matching companion exists: bare `R/G/B` and bare scalar channels use bare `A`, while namespaced channels such as `beauty.R` or `depth.Z` use `beauty.A` or `depth.A`. Collapsed channel choices group alpha into labels such as `RGBA`, `mask,A`, and `beauty.RGBA` instead of showing the companion alpha separately.
   - Auxiliary channels such as `Z`, masks, and custom AOVs are selectable directly and display as grayscale by mapping that source channel into all three display channels, which makes `Colormap` operate on that channel directly.
-  - `Split RGB` switches RGB, XYZ, and UV groups to separate component entries plus `A` when alpha exists. Split entries are hidden by default, merged group rows are hidden while split mode is active, and scalar alpha pairs such as `mask,A` split into separate `mask` and `A` entries. Turning the toggle off while a split channel is selected switches back to that channel's merged group or scalar alpha pair.
-  - Spectral wavelength series are grouped into a `Spectral RGB` entry by default using the built-in spectral-to-RGB conversion. `Split RGB` exposes the individual wavelength channels and maps back to the matching spectral RGB series when turned off.
-  - Stokes layers with `S0/S1/S2/S3` expose derived `Stokes S1/S0`, `Stokes S2/S0`, `Stokes S3/S0`, `Stokes AoLP`, `Stokes DoP`, `Stokes DoLP`, `Stokes DoCP`, `Stokes CoP`, and `Stokes ToP` entries. Complete non-RGB suffixed sets such as `S0.Y/S1.Y/S2.Y/S3.Y` are also exposed as scalar Stokes entries with suffixed labels such as `Stokes AoLP.Y`, while spectral Stokes sets such as `S0.500nm/S1.500nm/S2.500nm/S3.500nm` are grouped into entries such as `S1/S0 Spectral RGB` and split into per-wavelength entries such as `S1/S0.500nm` with `Split RGB`. Scalar AoLP uses HSV over `[0, pi]`; degree parameters use Black-Red over `[0, 1]`; CoP and ToP use signed ellipticity angle over `[-pi/4, pi/4]`. CoP enables `Zero Center` by default. Switching within the same Stokes colormap group, such as DoP/DoLP/DoCP or S1/S0/S2/S0/S3/S0, preserves the current palette, `vmin`/`vmax`, auto/manual mode, and zero-center setting.
-  - RGB Stokes layers with `S0.R/G/B` through `S3.R/G/B` expose grouped `S1/S0.RGB`, `S2/S0.RGB`, `S3/S0.RGB`, `AoLP.RGB`, `DoP.RGB`, `DoLP.RGB`, `DoCP.RGB`, `CoP.RGB`, and `ToP.RGB` entries. In `None`, grouped entries derive the selected Stokes parameter independently for `R`, `G`, and `B`; in `Colormap`, grouped entries keep the Rec.709 mono-derived visualization. `Split RGB` exposes per-component entries such as `S1/S0.R`, `AoLP.G`, and `DoP.B`.
-  - Mueller matrix layers with complete `M00` through `M33` channel sets expose a `Mueller Matrix` entry rendered as a row-major 4x4 grayscale grid with no separator pixels. Complete non-RGB suffixed sets such as `M00.Y` through `M33.Y` expose suffixed entries such as `Mueller Matrix.Y`. RGB Mueller sets with `M00.R/G/B` through `M33.R/G/B` expose a grouped `Mueller Matrix.RGB` entry, and `Split RGB` exposes per-component entries such as `Mueller Matrix.R`.
-  - When a selected layer does not expose the previous channel mapping, the viewer falls back to bare `R/G/B`, then the first RGB group, then spectral RGB when available, then a complete Mueller matrix grid when available, then the first non-alpha channel as grayscale.
-- Double-clicking the Display heading resets Palette, exposure, gamma, zero-center, and range without changing channel selection or view.
+  - Expandable channel stacks expose split component entries for RGB, XYZ, and UV groups plus `A` when alpha exists. Scalar alpha pairs such as `mask,A` expose separate `mask` and `A` entries in expanded stacks.
+  - Spectral wavelength series are grouped into a `Spectral RGB` entry by default using the built-in spectral-to-RGB conversion; expandable stacks expose individual wavelength channels.
+  - Stokes layers with `S0/S1/S2/S3` expose derived `Stokes S1/S0`, `Stokes S2/S0`, `Stokes S3/S0`, `Stokes AoLP`, `Stokes DoP`, `Stokes DoLP`, `Stokes DoCP`, `Stokes CoP`, and `Stokes ToP` entries. Complete non-RGB suffixed sets such as `S0.Y/S1.Y/S2.Y/S3.Y` are also exposed as scalar Stokes entries with suffixed labels such as `Stokes AoLP.Y`, while spectral Stokes sets such as `S0.500nm/S1.500nm/S2.500nm/S3.500nm` are grouped into entries such as `S1/S0 Spectral RGB` and expanded into per-wavelength entries such as `S1/S0.500nm`. Scalar AoLP uses HSV over `[0, pi]`; degree parameters use Black-Red over `[0, 1]`; CoP and ToP use signed ellipticity angle over `[-pi/4, pi/4]`. CoP enables `Zero Center` by default. Switching within the same Stokes colormap group, such as DoP/DoLP/DoCP or S1/S0/S2/S0/S3/S0, preserves the current palette, `vmin`/`vmax`, auto/manual mode, and zero-center setting.
+  - RGB Stokes layers with `S0.R/G/B` through `S3.R/G/B` expose grouped `S1/S0.RGB`, `S2/S0.RGB`, `S3/S0.RGB`, `AoLP.RGB`, `DoP.RGB`, `DoLP.RGB`, `DoCP.RGB`, `CoP.RGB`, and `ToP.RGB` entries. In `None`, grouped entries derive the selected Stokes parameter independently for `R`, `G`, and `B`; in `Colormap`, grouped entries keep the Rec.709 mono-derived visualization. Expanded stacks expose per-component entries such as `S1/S0.R`, `AoLP.G`, and `DoP.B`.
+  - Mueller matrix layers with complete `M00` through `M33` channel sets expose a `Mueller Matrix` entry rendered as a row-major 4x4 grayscale grid with no separator pixels. Complete non-RGB suffixed sets such as `M00.Y` through `M33.Y` expose suffixed entries such as `Mueller Matrix.Y`. RGB Mueller sets with `M00.R/G/B` through `M33.R/G/B` expose a grouped `Mueller Matrix.RGB` entry, and expanded stacks expose per-component entries such as `Mueller Matrix.R`.
+  - When a selected layer does not expose the previous channel mapping, the viewer falls back to the first non-Mueller RGB group, then RGB Mueller, then the first RGB group, then XYZ/UV, then spectral RGB when available, then grayscale, then a complete Mueller matrix grid, then the first non-alpha channel.
+- Double-clicking the Display heading resets visualization mode/palette, RGB exposure/gamma, colormap EV/gamma/range/zero-center/reverse, without changing channel selection or view.
 
 ## UI Layout
 
-- Left panel: open files, channel view, and parts/layers controls.
+- Left panel: `Open Files`.
 - Center: image viewer canvas.
-- Right side: `Inspector`.
+- Bottom panel: channel thumbnails.
+- Right side: Display, Probe, Spectral, ROI, View, and Image Stats panels.
 
 ## Tech Stack
 
@@ -142,31 +150,40 @@ npm run test:e2e
 
 ## Controls
 
-- `Opened Images` selector: switch active image session by filename.
-- `Layer` selector: switch the active layer for the selected multi-layer EXR.
-- `Opened Images` list: click-hold-move a filename row to reorder.
-- `Gallery > cbox_rgb.exr` / `multipart.0001.exr` / `brown_photostudio_02_1k.exr`: open a gallery sample and append it as a new session.
+- `Open Files` list: switch active image session by filename, filter rows, rename rows inline, or drag rows to reorder/assign to a split pane.
+- `Alt/Option+Up/Down`: reorder the active `Open Files` row.
+- `Gallery > cbox_rgb.exr` / `multipart.0001.exr` / `brown_photostudio_02_1k.exr`: open a gallery sample and append it as a new session. Remote samples require network access.
 - `File > Open...`: open one EXR file and append it as a new session.
 - `File > Open Folder...`: recursively open every `.exr` file under the selected folder and append them as new sessions.
 - Drag/drop: drop one or more `.exr` files, or drop a folder to recursively load every `.exr` under it.
-- `File > Export...`: export the active image to PNG with optional downscaling.
+- `File > Export...`: export the active full display to PNG at display image size, with configurable PNG compression.
+- `File > Export Screenshot...`: select and export screenshot regions from Image or Panorama viewer; multiple regions export as a ZIP.
+- `File > Export Batch...`: export selected file/channel combinations as a ZIP of PNG images; the batch dialog has its own `Split RGB` option.
 - `File > Export Colormap...`: export a registered colormap to a PNG gradient with selectable colormap, `width`, `height`, `orientation`, and filename.
-- `Settings > Cache Budget`: choose the decoded-plus-retained display residency cap from `64`, `128`, `256`, `512`, or `1024` MB. The value persists in `localStorage`.
+- Right-click viewer menu > `Copy Image`: copy the current display image to the clipboard.
+- Settings dialog > `Memory Budget`: choose the retained display CPU/GPU residency budget from `64`, `128`, `256`, `512`, or `1024` MB. Displayed usage also includes decoded CPU pixels. The value persists in `localStorage`.
+- Settings dialog: configure theme, spectrum lattice motion, spectral grouping default, Stokes defaults/visibility, invalid Stokes masking, auto exposure percentile, and image load workers.
 - `View > Image viewer` / `Panorama viewer`: switch between planar image viewing and spherical panorama viewing.
-- Per-file row `Reload` action: reload and re-decode that entry in `Opened Images`.
+- `View > Rulers`: toggle pixel rulers in Image viewer.
+- `Window > Full Screen Preview`: show the viewer in browser fullscreen/fallback preview mode.
+- `Window > Single Pane` / `Split Vertically` / `Split Horizontally`: reset or split the viewer panes. `Cmd+D` splits vertically, and `Cmd+Shift+D` splits horizontally.
+- Per-file row `Reload` action: reload and re-decode that entry in `Open Files`.
 - `File > Reload All`: reload and re-decode all opened image entries.
-- Per-file row `Close` action: close that entry in `Opened Images`.
+- Per-file row `Close` action: close that entry in `Open Files`.
 - `File > Close All`: close all opened image entries.
 - Mouse wheel: zoom around cursor.
-- Left drag: pan.
+- `+` / `-`: zoom in/out.
+- Left drag: pan in Image viewer.
+- `W/A/S/D`: pan in Image viewer.
 - In `Panorama viewer`, mouse wheel changes horizontal FOV, left drag orbits yaw/pitch, and `W/A/S/D` also orbit yaw/pitch.
+- `Ctrl/Cmd+S`: open `File > Export...`.
 - Hover: live probe sample.
 - Left click: lock/unlock probe.
-- `Shift` + left drag in `Image viewer`: create or replace the current ROI.
+- `Shift` + left drag in `Image viewer`: create or replace the current ROI; drag the existing ROI body/handles to edit it.
 
 ## Implementation Notes
 
-- Display path: normal RGB uses `linear * 2^EV`, then sRGB encode for screen; colormap mode maps raw display luminance through the selected `.npy` LUT. Channel-display alpha is composited over the viewer checkerboard in both RGB and colormap modes. When `Split RGB` is enabled, separate `R`, `G`, and `B` channel choices duplicate the selected source into RGB, so display luminance equals that channel value. Grouped XYZ uses the same direct component display path as RGB, and grouped UV binds `U` and `V` to red and green while leaving blue at zero. Split RGB Stokes entries derive the selected parameter from only the chosen component's Stokes channels before duplicating the scalar into RGB. Grouped RGB Stokes entries derive `R`, `G`, and `B` independently in `None`, but collapse to the existing Rec.709-derived mono path in `Colormap`. For angle Stokes modulation, the LUT color is converted to HSV, its value component is multiplied by the clamped paired degree value, and the result is converted back to RGB; AoLP can instead multiply HSV saturation when `S` modulation is selected.
+- Display path: normal RGB uses `linear * 2^EV`, then display-gamma encode for screen; colormap mode maps display luminance through the selected `.npy` LUT after colormap EV/gamma, range, zero-center, and reverse settings. Channel-display alpha is composited over the viewer checkerboard on screen in both RGB and colormap modes; exports preserve image alpha when present. When split component entries are selected, separate `R`, `G`, and `B` channel choices duplicate the selected source into RGB, so display luminance equals that channel value. Grouped XYZ uses the same direct component display path as RGB, and grouped UV binds `U` and `V` to red and green while leaving blue at zero. Split component Stokes entries derive the selected parameter from only the chosen component's Stokes channels before duplicating the scalar into RGB. Grouped RGB Stokes entries derive `R`, `G`, and `B` independently in `None`, but collapse to the existing Rec.709-derived mono path in `Colormap`. For angle Stokes modulation, the LUT color is converted to HSV, its value component is multiplied by the clamped paired degree value, and the result is converted back to RGB; AoLP can instead multiply HSV saturation when `S` modulation is selected.
 - Panorama path: the same display texture is reused, but the fragment shader interprets it as an equirectangular environment map, casts a view ray from yaw/pitch/HFOV, and fetches the matching source pixel with nearest-neighbor sampling before applying the normal RGB or colormap display transform.
 - Colormap authoring in Python:
   ```python
@@ -196,7 +213,7 @@ npm run test:e2e
 - EXR WASM is initialized through a local adapter module backed by a vendored wasm loader, avoiding app-level deep imports into `exrs` internals.
 - EXR metadata is parsed directly from header bytes before pixel decode because the current WASM decoder only exposes dimensions, layers, channels, and pixel data. Metadata parse failures do not block image loading.
 - Performance path for large images/channel sets:
-  - channel selector DOM updates are throttled to selection/image changes only,
-  - decoded CPU pixels plus retained display CPU/GPU copies are tracked under a configurable LRU memory budget, with eviction protection limited to the currently bound display channels,
+  - channel thumbnail DOM updates are throttled to selection/image changes only,
+  - decoded CPU pixels are tracked in displayed memory usage, while the configurable LRU budget evicts retained display CPU/GPU channel resources with eviction protection limited to the currently bound display channels,
   - the active display texture buffer is reused across channel and layer switches,
   - GPU upload uses `texSubImage2D` for same-size updates.
