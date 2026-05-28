@@ -19,5 +19,3 @@ uv.lock
 # OpenEXR files (ignore all .exr files except for public/cbox_rgb.exr)
 *.exr
 !public/cbox_rgb.exr
-
-public/embed/*
