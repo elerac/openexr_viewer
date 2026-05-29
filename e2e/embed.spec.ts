@@ -15,7 +15,7 @@ test('keeps the embed open-full button right-aligned without a custom name', asy
   await expectButtonRightAligned(page);
 });
 
-test('keeps the embed open-full button right-aligned with a custom name', async ({ page }) => {
+test('keeps the embed open-full button right-aligned with a custom name @smoke', async ({ page }) => {
   await page.setViewportSize({ width: 640, height: 360 });
   await gotoEmbed(page, '/?ui=embed&gallery=cbox-rgb&name=Beauty%20pass');
 

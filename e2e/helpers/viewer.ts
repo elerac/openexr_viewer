@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { waitForE2EFrames } from './app';
 
 export interface ProbeCoords {
   x: number;
@@ -139,7 +140,7 @@ export async function dragBy(page: Page, locator: Locator, dx: number, dy: numbe
   await page.mouse.down();
   await page.mouse.move(x + dx, y + dy, { steps: 4 });
   await page.mouse.up();
-  await page.waitForTimeout(100);
+  await waitForE2EFrames(page, 2);
 }
 
 export function getChannelStackToggle(page: Page, value: string): Locator {

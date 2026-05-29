@@ -744,7 +744,7 @@ test('keeps Stokes Defaults table columns visible in Settings on desktop', async
   expect(layout.clippedHeaders).toEqual([]);
 });
 
-test('stacks Stokes Defaults settings on narrow viewports without horizontal clipping', async ({ page }) => {
+test('stacks Stokes Defaults settings on narrow viewports without horizontal clipping @smoke', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 740 });
   await gotoViewerApp(page);
 
@@ -811,7 +811,7 @@ test('stacks Stokes Defaults settings on narrow viewports without horizontal cli
   expect(layout.responsiveLabels).toEqual(expect.arrayContaining(['vmax', 'Zero Center', 'Modulation']));
 });
 
-test('persists Spectrum lattice as animated idle and frozen active chrome', async ({ page }) => {
+test('persists Spectrum lattice as animated idle and frozen active chrome @smoke', async ({ page }) => {
   await installSpectrumLatticeRenderProbe(page);
   await gotoViewerApp(page);
 

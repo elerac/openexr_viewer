@@ -27,6 +27,7 @@ import {
 } from './bootstrap/export-actions';
 import { registerBootstrapEffects } from './bootstrap/register-effects';
 import { createViewerInteraction, initializeViewportLifecycle } from './bootstrap/viewport-lifecycle';
+import { installE2EHooks } from './e2e-hooks';
 import { selectActiveSession } from './viewer-app-selectors';
 import type { ViewerRuntimeUi } from '../ui/viewer-runtime-ui';
 
@@ -49,6 +50,7 @@ export async function bootstrapApp(options: BootstrapAppOptions = {}): Promise<A
   let services: BootstrapServices | null = null;
   let interaction: ViewerInteraction | null = null;
   let resizeObserver: ResizeObserver | null = null;
+  let cleanupE2EHooks: () => void = () => {};
   const unsubscribers: Array<() => void> = [];
   let disposed = false;
   const isDisposed = () => disposed;
@@ -145,6 +147,8 @@ export async function bootstrapApp(options: BootstrapAppOptions = {}): Promise<A
 
       disposed = true;
       window.removeEventListener('beforeunload', onBeforeUnload);
+      cleanupE2EHooks();
+      cleanupE2EHooks = () => {};
       while (unsubscribers.length > 0) {
         unsubscribers.pop()?.();
       }
@@ -187,6 +191,7 @@ export async function bootstrapApp(options: BootstrapAppOptions = {}): Promise<A
     });
 
     await services.displayController.initialize();
+    cleanupE2EHooks = installE2EHooks(core);
 
     window.addEventListener('beforeunload', onBeforeUnload);
   } catch (error) {

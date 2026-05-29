@@ -181,7 +181,7 @@ async function expectViewerCheckerBackground(viewer: Locator): Promise<void> {
   expect(Number.parseFloat(background.offsetY)).toBeCloseTo(-background.rectTop, 2);
 }
 
-test('boots an empty app shell with menu actions gated until an image opens', async ({ page }) => {
+test('boots an empty app shell with menu actions gated until an image opens @smoke', async ({ page }) => {
   await gotoViewerApp(page);
 
   const viewer = page.locator('#viewer-container');
@@ -393,7 +393,7 @@ test('keeps pointer-toggled auto-fit button unfocused while panning with wasd ke
   expect(Number.parseFloat(keyboardPanState.outlineWidth)).toBe(0);
 });
 
-test('opens the gallery demo image and keeps core display controls stable', async ({ page }) => {
+test('opens the gallery demo image and keeps core display controls stable @smoke', async ({ page }) => {
   await gotoViewerApp(page);
 
   const openedImages = page.locator('#opened-images-select');
@@ -560,7 +560,7 @@ test('opens the gallery demo image and keeps core display controls stable', asyn
   await expect(closeAllMenuItem).toBeDisabled();
 });
 
-test('exports the active image as a png download from the file menu', async ({ page }) => {
+test('exports the active image as a png download from the file menu @smoke', async ({ page }) => {
   await gotoViewerApp(page);
   await openGalleryCbox(page);
 
@@ -1136,7 +1136,7 @@ test('cancels screenshot mode when screenshot export dialog is canceled', async 
   await expect(selectionOverlay).toBeHidden();
 });
 
-test('exports selected file-channel cells as one batch zip download', async ({ page }) => {
+test('exports selected file-channel cells as one batch zip download @smoke', async ({ page }) => {
   await gotoViewerApp(page);
 
   const openedImages = page.locator('#opened-images-select');

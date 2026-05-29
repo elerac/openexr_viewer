@@ -296,7 +296,7 @@ test('moves open files and bottom channel thumbnail selections with arrow keys',
   await expect(thumbnailTiles.nth(1)).toBeFocused();
 });
 
-test('auto-fits images selected from Open Files when the top-bar toggle is enabled', async ({ page }) => {
+test('auto-fits images selected from Open Files when the top-bar toggle is enabled @smoke', async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 760 });
   await gotoViewerApp(page);
 

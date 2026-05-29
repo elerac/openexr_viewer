@@ -49,7 +49,7 @@ async function expectThumbnailImageAfterIdleFlush(page: Page, tile: Locator): Pr
     .toBe(1);
 }
 
-test('loads scalar Stokes channels and applies derived-channel defaults', async ({ page }) => {
+test('loads scalar Stokes channels and applies derived-channel defaults @smoke', async ({ page }) => {
   await gotoViewerApp(page);
 
   const openedImages = page.locator('#opened-images-select');

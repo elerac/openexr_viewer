@@ -8,7 +8,7 @@ import {
 import { buildLandscapeRgbExr, buildPortraitRgbExr } from './helpers/exr-fixtures';
 import { clickChannelStackToggle, setExposureValue } from './helpers/viewer';
 
-test('defers opened-file thumbnails until idle time after first render', async ({ page }) => {
+test('defers opened-file thumbnails until idle time after first render @smoke', async ({ page }) => {
   await installIdleCallbackController(page);
   await gotoViewerApp(page);
 

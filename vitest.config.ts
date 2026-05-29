@@ -7,6 +7,7 @@ export default defineConfig({
       reporter: ['text', 'html', 'json-summary'],
       include: ['src/**/*.ts'],
       exclude: [
+        'src/app/e2e-hooks.ts',
         'src/vendor/**',
         '**/*.d.ts'
       ],

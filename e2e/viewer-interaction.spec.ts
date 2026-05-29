@@ -149,7 +149,7 @@ test('toggles pixel rulers in image view and clears them in panorama view', asyn
   await expect.poll(async () => countRulerOverlayMarks(page), { timeout: 5000 }).toBe(0);
 });
 
-test('creates ROI with shift-drag and keeps ROI editing disabled in panorama mode', async ({ page }) => {
+test('creates ROI with shift-drag and keeps ROI editing disabled in panorama mode @smoke', async ({ page }) => {
   await gotoViewerApp(page);
   await openGalleryCbox(page);
 

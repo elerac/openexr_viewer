@@ -29,11 +29,21 @@ jobs:
       - name: Run unit tests with coverage
         run: npm run test:coverage
 
+      - name: Build E2E static site
+        run: npm run build:e2e
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Run Playwright tests
-        run: npm run test:e2e
+      - name: Run Playwright smoke tests
+        env:
+          PLAYWRIGHT_PREBUILT: 'true'
+          PLAYWRIGHT_WORKERS: '2'
+        run: npm run test:e2e:ci
+
+      - name: Summarize Playwright timings
+        if: always()
+        run: npm run test:e2e:timing
 
       - name: Upload Playwright artifacts
         if: failure()
@@ -45,6 +55,3 @@ jobs:
             playwright-report
           if-no-files-found: ignore
           retention-days: 7
-
-      - name: Build static site
-        run: npm run build

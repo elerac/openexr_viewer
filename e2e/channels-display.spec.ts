@@ -44,7 +44,7 @@ async function readSpectralPlotMetrics(spectralPlot: Locator): Promise<{
   });
 }
 
-test('carries exposure when opening and switching files', async ({ page }) => {
+test('carries exposure when opening and switching files @smoke', async ({ page }) => {
   await gotoViewerApp(page);
 
   const openedImages = page.locator('#opened-images-select');

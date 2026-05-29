@@ -6,13 +6,16 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:e2e": "VITE_E2E=true vite build",
     "capture:thumbnail": "node scripts/capture-thumbnail.mjs",
     "lint": "eslint src tests e2e playwright.config.ts vite.config.ts vitest.config.ts --max-warnings=0",
     "preview": "vite preview",
     "test": "vitest run --dir tests",
     "test:coverage": "vitest run --coverage --dir tests",
     "test:watch": "vitest --dir tests",
-    "test:e2e": "playwright test",
+    "test:e2e": "VITE_E2E=true playwright test",
+    "test:e2e:ci": "VITE_E2E=true playwright test --grep @smoke",
+    "test:e2e:timing": "node scripts/report-playwright-timing.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
