@@ -115,6 +115,11 @@ export function pickDefaultDisplaySelection(
     }
   }
 
+  const preferredMonoChannel = pickPreferredMonoDisplayChannel(names);
+  if (preferredMonoChannel) {
+    return buildChannelMonoSelection(channelNames, preferredMonoChannel);
+  }
+
   const grayscaleChannel = pickGrayscaleDisplayChannel(names);
   if (grayscaleChannel) {
     return buildChannelMonoSelection(channelNames, grayscaleChannel);
@@ -292,7 +297,7 @@ export function buildChannelDisplayOptions(
     }
   }
 
-  for (const channelName of channelNames) {
+  for (const channelName of orderSingleChannelNames(channelNames)) {
     if (groupedComponentChannels.has(channelName) || consumedAlphaChannels.has(channelName)) {
       continue;
     }
@@ -733,6 +738,21 @@ function pickGrayscaleDisplayChannel(channelNames: string[]): string | null {
 
   const nonAlphaChannels = channelNames.filter((channelName) => !isAlphaChannel(channelName));
   return nonAlphaChannels.length === 1 ? nonAlphaChannels[0] ?? null : null;
+}
+
+function pickPreferredMonoDisplayChannel(channelNames: string[]): string | null {
+  return channelNames.includes('Y') ? 'Y' : null;
+}
+
+function orderSingleChannelNames(channelNames: string[]): string[] {
+  if (!channelNames.includes('Y')) {
+    return channelNames;
+  }
+
+  return [
+    ...channelNames.filter((channelName) => channelName === 'Y'),
+    ...channelNames.filter((channelName) => channelName !== 'Y')
+  ];
 }
 
 function isMuellerMatrixElementName(value: string): boolean {

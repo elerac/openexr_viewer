@@ -40,6 +40,39 @@ describe('channel view items', () => {
     expect(depthItem?.splitOrder).not.toBeNull();
   });
 
+  it('prioritizes exact Y channel view items without changing grouped component order', () => {
+    const scalarItems = buildChannelViewItems(['Z', 'Y', 'mask']);
+    const rgbItems = buildChannelViewItems(['R', 'G', 'B', 'Y', 'mask']);
+    const xyzItems = buildChannelViewItems(['normal.X', 'normal.Y', 'normal.Z', 'Y']);
+    const namespacedItems = buildChannelViewItems(['foo.Z', 'foo.Y', 'Y']);
+
+    expect(selectVisibleChannelViewItems(scalarItems, false).map((item) => item.value)).toEqual([
+      'channel:Y',
+      'channel:Z',
+      'channel:mask'
+    ]);
+    expect(selectVisibleChannelViewItems(rgbItems, false).map((item) => item.value)).toEqual([
+      'group:',
+      'channel:Y',
+      'channel:mask'
+    ]);
+    expect(selectVisibleChannelViewItems(xyzItems, false).map((item) => item.value)).toEqual([
+      'groupXYZ:normal',
+      'channel:Y'
+    ]);
+    expect(selectVisibleChannelViewItems(xyzItems, true).map((item) => item.value)).toEqual([
+      'channel:normal.X',
+      'channel:normal.Y',
+      'channel:normal.Z',
+      'channel:Y'
+    ]);
+    expect(selectVisibleChannelViewItems(namespacedItems, false).map((item) => item.value)).toEqual([
+      'channel:Y',
+      'channel:foo.Z',
+      'channel:foo.Y'
+    ]);
+  });
+
   it('derives RGB/RGBA stack children from existing split descriptors', () => {
     const channelNames = ['beauty.R', 'beauty.G', 'beauty.B', 'beauty.A', 'depth.Z'];
     const items = buildChannelViewItems(channelNames);

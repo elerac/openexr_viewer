@@ -160,6 +160,30 @@ describe('display selection', () => {
     ]);
   });
 
+  it('prioritizes exact Y after grouped channel options', () => {
+    const scalarOptions = buildChannelDisplayOptions(['Z', 'Y', 'A', 'mask']);
+    const rgbOptions = buildChannelDisplayOptions(['R', 'G', 'B', 'Y', 'mask']);
+    const xyzOptions = buildChannelDisplayOptions(['normal.X', 'normal.Y', 'normal.Z', 'Y'], {
+      includeSplitChannels: true
+    });
+
+    expect(scalarOptions.map((option) => option.label)).toEqual(['Y,A', 'Z,A', 'mask,A']);
+    expect(rgbOptions.map((option) => option.label)).toEqual(['R,G,B', 'Y', 'mask']);
+    expect(xyzOptions.map((option) => option.label)).toEqual([
+      'normal.(X,Y,Z)',
+      'normal.X',
+      'normal.Y',
+      'normal.Z',
+      'Y'
+    ]);
+  });
+
+  it('does not prioritize namespaced Y suffixes as exact Y', () => {
+    const options = buildChannelDisplayOptions(['foo.Z', 'foo.Y', 'Y']);
+
+    expect(options.map((option) => option.label)).toEqual(['Y', 'foo.Z', 'foo.Y']);
+  });
+
   it('resolves alpha companions for scalar options and splits alpha companions into separate rows', () => {
     const bareOptions = buildChannelDisplayOptions(['Z', 'A']);
     const namespacedOptions = buildChannelDisplayOptions(['depth.Z', 'depth.A', 'A']);
@@ -292,10 +316,16 @@ describe('display selection', () => {
     expect(pickDefaultDisplaySelection(['AOV.X', 'HOGE.B', 'HOGE.R', 'HOGE.G'])).toEqual(
       createChannelRgbSelection('HOGE.R', 'HOGE.G', 'HOGE.B')
     );
+    expect(pickDefaultDisplaySelection(['R', 'G', 'B', 'Y'])).toEqual(
+      createChannelRgbSelection('R', 'G', 'B')
+    );
   });
 
   it('uses XYZ and UV groups as defaults when RGB is unavailable', () => {
     expect(pickDefaultDisplaySelection(['normal.X', 'normal.Y', 'normal.Z'])).toEqual(
+      createChannelRgbSelection('normal.X', 'normal.Y', 'normal.Z')
+    );
+    expect(pickDefaultDisplaySelection(['normal.X', 'normal.Y', 'normal.Z', 'Y'])).toEqual(
       createChannelRgbSelection('normal.X', 'normal.Y', 'normal.Z')
     );
     expect(pickDefaultDisplaySelection(['motion.U', 'motion.V'])).toEqual(
@@ -306,6 +336,7 @@ describe('display selection', () => {
   it('uses scalar and arbitrary channel lists as mono defaults', () => {
     expect(pickDefaultDisplaySelection(['Y'])).toEqual(createChannelMonoSelection('Y'));
     expect(pickDefaultDisplaySelection(['Y', 'A'])).toEqual(createChannelMonoSelection('Y', 'A'));
+    expect(pickDefaultDisplaySelection(['Z', 'Y', 'mask'])).toEqual(createChannelMonoSelection('Y'));
     expect(pickDefaultDisplaySelection(['A', 'Z'])).toEqual(createChannelMonoSelection('Z', 'A'));
   });
 
@@ -318,6 +349,9 @@ describe('display selection', () => {
     );
     expect(pickDefaultDisplaySelection(['R', 'G', 'B', '400nm', '500nm'])).toEqual(
       createChannelRgbSelection('R', 'G', 'B')
+    );
+    expect(pickDefaultDisplaySelection(['400nm', '500nm', 'Y'])).toEqual(
+      createSpectralRgbSelection()
     );
   });
 
