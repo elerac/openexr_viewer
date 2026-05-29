@@ -124,7 +124,7 @@ void main() {
 `;
 
 const DEFAULT_FRAME_TIME_SECONDS = 18.0;
-const SPECTRUM_LATTICE_TRANSITION_MS = 3000;
+const SPECTRUM_LATTICE_TRANSITION_MS = import.meta.env.VITE_E2E === 'true' ? 0 : 3000;
 const SPECTRUM_LATTICE_TRANSITION_COMPLETION_MS = SPECTRUM_LATTICE_TRANSITION_MS + 100;
 const IDLE_PERCEIVED_BRIGHTNESS = 1.0;
 const ACTIVE_PERCEIVED_BRIGHTNESS = 0.75;
@@ -405,6 +405,12 @@ export class SpectrumLatticeRenderer implements Disposable {
     this.transitionStartCheckerOpacity = this.checkerOpacity;
     this.targetSpectrumGridOpacity = targetSpectrumGridOpacity;
     this.transitionStartSpectrumGridOpacity = this.spectrumGridOpacity;
+    if (SPECTRUM_LATTICE_TRANSITION_MS <= 0) {
+      this.snapTransitionToTarget();
+      this.emitCurrentBlend();
+      return;
+    }
+
     this.transitionStartNowMs = now;
     this.scheduleTransitionCompletion();
   }
@@ -472,7 +478,9 @@ export class SpectrumLatticeRenderer implements Disposable {
 
   private updateMotionState(now: number): void {
     if (this.transitionStartNowMs !== null) {
-      const progress = clamp01((now - this.transitionStartNowMs) / SPECTRUM_LATTICE_TRANSITION_MS);
+      const progress = SPECTRUM_LATTICE_TRANSITION_MS > 0
+        ? clamp01((now - this.transitionStartNowMs) / SPECTRUM_LATTICE_TRANSITION_MS)
+        : 1;
       const easedProgress = smoothstep(progress);
       this.motionSpeed = lerp(this.transitionStartSpeed, this.targetMotionSpeed, easedProgress);
       this.perceivedBrightness = lerp(
