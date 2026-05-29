@@ -12,6 +12,7 @@ export class CollapsibleSectionsController implements Disposable {
 
   constructor(private readonly elements: CollapsibleSectionsElements) {
     this.bindImageBrowserToggle(this.elements.openedFilesToggle, this.elements.openedFilesList);
+    this.bindReadoutSection({ toggle: this.elements.displayControlToggle, content: this.elements.displayControlContent });
     this.bindReadoutSection({ toggle: this.elements.imageStatsToggle, content: this.elements.imageStatsContent });
     this.bindReadoutSection({ toggle: this.elements.probeToggle, content: this.elements.probeContent });
     this.bindReadoutSection({ toggle: this.elements.spectralToggle, content: this.elements.spectralContent });

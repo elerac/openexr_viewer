@@ -3254,25 +3254,7 @@ body.is-resizing-panel-rows * {
   font-variant-numeric: tabular-nums;
 }
 
-.panel-section {
-  margin-bottom: 10px;
-  padding: 8px;
-  border: 1px solid color-mix(in srgb, var(--panel-border) 82%, transparent);
-  border-radius: var(--panel-radius);
-  background: color-mix(in srgb, #202838 48%, transparent);
-}
-
-.side-panel .panel-section-label {
-  margin: 0 0 6px;
-  color: var(--text-dim);
-  font-size: var(--type-label-size);
-  line-height: var(--type-label-line-height);
-  font-weight: 700;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.display-control-panel {
+.display-control-content {
   display: grid;
   gap: 8px;
 }
@@ -3358,7 +3340,7 @@ body.is-resizing-panel-rows * {
 }
 
 .side-panel .readout-block:first-of-type {
-  margin-top: 0.5rem;
+  margin-top: 0;
 }
 
 .readout-block p,

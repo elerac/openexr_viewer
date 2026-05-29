@@ -834,66 +834,80 @@
         <div id="right-stack" class="right-stack panel-shell panel-shell--right">
           <aside id="inspector-panel" class="side-panel">
             <div class="side-panel-body">
-              <section class="panel-section display-control-panel" aria-labelledby="display-control-heading">
-                <h2 id="display-control-heading" class="panel-section-label">Display</h2>
-                <div class="control-block">
-                  <label class="colormap-palette-control" for="colormap-select">
-                    Palette
-                    <select id="colormap-select"></select>
-                  </label>
+              <section id="display-control-panel" class="readout-block display-control-panel" aria-labelledby="display-control-heading">
+                <div class="readout-block-header">
+                  <h2 id="display-control-heading">Display</h2>
+                  <button
+                    id="display-control-toggle"
+                    class="readout-block-toggle"
+                    type="button"
+                    aria-expanded="true"
+                    aria-controls="display-control-content"
+                    aria-label="Collapse Display section"
+                  >
+                    <span class="readout-block-chevron" aria-hidden="true"></span>
+                  </button>
                 </div>
-                <div id="colormap-range-control" class="control-block colormap-range-control hidden">
-                  <label for="colormap-exposure-slider">EV</label>
-                  <div class="exposure-input-row">
-                    <input id="colormap-exposure-slider" type="range" min="-10" max="10" step="0.1" value="0" />
-                    <input id="colormap-exposure-value" type="number" min="-10" max="10" step="0.1" value="0.0" />
-                  </div>
-                  <label for="colormap-gamma-slider">Gamma</label>
-                  <div class="exposure-input-row">
-                    <input id="colormap-gamma-slider" type="range" min="0.2" max="5" step="0.01" value="1" />
-                    <input id="colormap-gamma-value" type="number" min="0.2" max="5" step="0.01" value="1.0" />
-                  </div>
-                  <div class="colormap-toggle-row">
-                    <label class="checkbox-control colormap-zero-center-control" for="colormap-zero-center-button">
-                      <input id="colormap-zero-center-button" type="checkbox" />
-                      Zero Center
-                    </label>
-                    <label class="checkbox-control colormap-reverse-control" for="colormap-reverse-button">
-                      <input id="colormap-reverse-button" type="checkbox" />
-                      Reverse
+                <div id="display-control-content" class="readout-block-content display-control-content">
+                  <div class="control-block">
+                    <label class="colormap-palette-control" for="colormap-select">
+                      Palette
+                      <select id="colormap-select"></select>
                     </label>
                   </div>
-                  <div id="stokes-degree-modulation-control" class="stokes-degree-modulation-control hidden">
-                    <button id="stokes-degree-modulation-button" type="button" aria-pressed="false">DoLP Modulation</button>
-                    <div id="stokes-aolp-modulation-mode-control" class="stokes-aolp-modulation-mode-control hidden" role="group" aria-label="AoLP modulation target">
-                      <button id="stokes-aolp-modulation-value-button" type="button" aria-pressed="true" aria-label="Value modulation">V</button>
-                      <button id="stokes-aolp-modulation-saturation-button" type="button" aria-pressed="false" aria-label="Saturation modulation">S</button>
+                  <div id="colormap-range-control" class="control-block colormap-range-control hidden">
+                    <label for="colormap-exposure-slider">EV</label>
+                    <div class="exposure-input-row">
+                      <input id="colormap-exposure-slider" type="range" min="-10" max="10" step="0.1" value="0" />
+                      <input id="colormap-exposure-value" type="number" min="-10" max="10" step="0.1" value="0.0" />
+                    </div>
+                    <label for="colormap-gamma-slider">Gamma</label>
+                    <div class="exposure-input-row">
+                      <input id="colormap-gamma-slider" type="range" min="0.2" max="5" step="0.01" value="1" />
+                      <input id="colormap-gamma-value" type="number" min="0.2" max="5" step="0.01" value="1.0" />
+                    </div>
+                    <div class="colormap-toggle-row">
+                      <label class="checkbox-control colormap-zero-center-control" for="colormap-zero-center-button">
+                        <input id="colormap-zero-center-button" type="checkbox" />
+                        Zero Center
+                      </label>
+                      <label class="checkbox-control colormap-reverse-control" for="colormap-reverse-button">
+                        <input id="colormap-reverse-button" type="checkbox" />
+                        Reverse
+                      </label>
+                    </div>
+                    <div id="stokes-degree-modulation-control" class="stokes-degree-modulation-control hidden">
+                      <button id="stokes-degree-modulation-button" type="button" aria-pressed="false">DoLP Modulation</button>
+                      <div id="stokes-aolp-modulation-mode-control" class="stokes-aolp-modulation-mode-control hidden" role="group" aria-label="AoLP modulation target">
+                        <button id="stokes-aolp-modulation-value-button" type="button" aria-pressed="true" aria-label="Value modulation">V</button>
+                        <button id="stokes-aolp-modulation-saturation-button" type="button" aria-pressed="false" aria-label="Saturation modulation">S</button>
+                      </div>
+                    </div>
+                    <div class="colormap-range-heading">
+                      <span id="colormap-range-reset-label" class="resettable-control-label" title="Double-click to reset range">Range</span>
+                    </div>
+                    <div id="colormap-range-slider" class="colormap-range-slider" aria-label="Colormap vmin and vmax">
+                      <div class="colormap-range-track" aria-hidden="true"></div>
+                      <div class="colormap-range-fill" aria-hidden="true"></div>
+                      <input id="colormap-vmin-slider" class="colormap-range-thumb colormap-range-thumb-min" type="range" min="0" max="1" step="0.001" value="0" aria-label="Colormap vmin" />
+                      <input id="colormap-vmax-slider" class="colormap-range-thumb colormap-range-thumb-max" type="range" min="0" max="1" step="0.001" value="1" aria-label="Colormap vmax" />
+                    </div>
+                    <div class="colormap-range-input-row">
+                      <input id="colormap-vmin-input" type="number" step="any" value="0" aria-label="Colormap vmin" />
+                      <input id="colormap-vmax-input" type="number" step="any" value="1" aria-label="Colormap vmax" />
                     </div>
                   </div>
-                  <div class="colormap-range-heading">
-                    <span id="colormap-range-reset-label" class="resettable-control-label" title="Double-click to reset range">Range</span>
-                  </div>
-                  <div id="colormap-range-slider" class="colormap-range-slider" aria-label="Colormap vmin and vmax">
-                    <div class="colormap-range-track" aria-hidden="true"></div>
-                    <div class="colormap-range-fill" aria-hidden="true"></div>
-                    <input id="colormap-vmin-slider" class="colormap-range-thumb colormap-range-thumb-min" type="range" min="0" max="1" step="0.001" value="0" aria-label="Colormap vmin" />
-                    <input id="colormap-vmax-slider" class="colormap-range-thumb colormap-range-thumb-max" type="range" min="0" max="1" step="0.001" value="1" aria-label="Colormap vmax" />
-                  </div>
-                  <div class="colormap-range-input-row">
-                    <input id="colormap-vmin-input" type="number" step="any" value="0" aria-label="Colormap vmin" />
-                    <input id="colormap-vmax-input" type="number" step="any" value="1" aria-label="Colormap vmax" />
-                  </div>
-                </div>
-                <div id="exposure-control" class="control-block">
-                  <label for="exposure-slider">Exposure (EV)</label>
-                  <div class="exposure-input-row">
-                    <input id="exposure-slider" type="range" min="-10" max="10" step="0.1" value="0" />
-                    <input id="exposure-value" type="number" min="-10" max="10" step="0.1" value="0.0" />
-                  </div>
-                  <label for="gamma-slider">Gamma</label>
-                  <div class="exposure-input-row">
-                    <input id="gamma-slider" type="range" min="0.01" max="5" step="0.01" value="2.2" />
-                    <input id="gamma-value" type="number" min="0.01" max="5" step="0.01" value="2.2" />
+                  <div id="exposure-control" class="control-block">
+                    <label for="exposure-slider">Exposure (EV)</label>
+                    <div class="exposure-input-row">
+                      <input id="exposure-slider" type="range" min="-10" max="10" step="0.1" value="0" />
+                      <input id="exposure-value" type="number" min="-10" max="10" step="0.1" value="0.0" />
+                    </div>
+                    <label for="gamma-slider">Gamma</label>
+                    <div class="exposure-input-row">
+                      <input id="gamma-slider" type="range" min="0.01" max="5" step="0.01" value="2.2" />
+                      <input id="gamma-value" type="number" min="0.01" max="5" step="0.01" value="2.2" />
+                    </div>
                   </div>
                 </div>
               </section>

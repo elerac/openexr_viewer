@@ -408,6 +408,8 @@ test('opens the gallery demo image and keeps core display controls stable @smoke
   const rightStack = page.locator('#right-stack');
   const viewer = page.locator('#viewer-container');
   const displayHeading = page.locator('#display-control-heading');
+  const displayToggle = page.locator('#display-control-toggle');
+  const displayContent = page.locator('#display-control-content');
   const exposureValue = page.locator('#exposure-value');
   const colormapSelect = page.locator('#colormap-select');
   const colormapRangeSlider = page.locator('#colormap-range-slider');
@@ -478,6 +480,14 @@ test('opens the gallery demo image and keeps core display controls stable @smoke
   await expectMainPanelTopsAligned(viewer, imagePanel, rightStack);
 
   await expect(displayHeading).toBeVisible();
+  await expect(displayToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(displayContent).toBeVisible();
+  await displayToggle.click();
+  await expect(displayToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(displayContent).toBeHidden();
+  await displayToggle.click();
+  await expect(displayToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(displayContent).toBeVisible();
   await expectRgbDisplayMode(page);
   await setExposureValue(exposureValue, '1.3');
   await expect(exposureValue).toHaveValue('1.3');

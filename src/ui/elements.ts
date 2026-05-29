@@ -135,6 +135,8 @@ export interface Elements {
   exportColormapDialogCancelButton: HTMLButtonElement;
   exportColormapDialogSubmitButton: HTMLButtonElement;
   displayControlHeading: HTMLHeadingElement;
+  displayControlToggle: HTMLButtonElement;
+  displayControlContent: HTMLDivElement;
   colormapRangeControl: HTMLDivElement;
   colormapSelect: HTMLSelectElement;
   colormapExposureSlider: HTMLInputElement;
@@ -520,6 +522,8 @@ export type CollapsibleSectionsElements = Pick<
   Elements,
   | 'openedFilesToggle'
   | 'openedFilesList'
+  | 'displayControlToggle'
+  | 'displayControlContent'
   | 'imageStatsToggle'
   | 'imageStatsContent'
   | 'viewerStateToggle'
@@ -676,6 +680,8 @@ export function resolveElements(): Elements {
     exportColormapDialogCancelButton: requireElement('export-colormap-dialog-cancel-button', HTMLButtonElement),
     exportColormapDialogSubmitButton: requireElement('export-colormap-dialog-submit-button', HTMLButtonElement),
     displayControlHeading: requireElement('display-control-heading', HTMLHeadingElement),
+    displayControlToggle: requireElement('display-control-toggle', HTMLButtonElement),
+    displayControlContent: requireElement('display-control-content', HTMLDivElement),
     colormapRangeControl: requireElement('colormap-range-control', HTMLDivElement),
     colormapSelect: requireElement('colormap-select', HTMLSelectElement),
     colormapExposureSlider: requireElement('colormap-exposure-slider', HTMLInputElement),

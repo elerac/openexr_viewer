@@ -619,6 +619,8 @@ describe('metadata inspector', () => {
 
     new ViewerUi(createUiCallbacks());
 
+    const displayToggle = document.getElementById('display-control-toggle') as HTMLButtonElement;
+    const displayContent = document.getElementById('display-control-content') as HTMLDivElement;
     const probeToggle = document.getElementById('probe-toggle') as HTMLButtonElement;
     const probeContent = document.getElementById('probe-content') as HTMLDivElement;
     const roiToggle = document.getElementById('roi-toggle') as HTMLButtonElement;
@@ -629,6 +631,8 @@ describe('metadata inspector', () => {
     expect(document.getElementById('metadata-panel')).toBeNull();
     expect(document.getElementById('metadata-toggle')).toBeNull();
     expect(document.getElementById('metadata-content')).toBeNull();
+    expect(displayToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(displayContent.hidden).toBe(false);
     expect(probeToggle.getAttribute('aria-expanded')).toBe('true');
     expect(probeContent.hidden).toBe(false);
     expect(roiToggle.getAttribute('aria-expanded')).toBe('true');
@@ -636,16 +640,20 @@ describe('metadata inspector', () => {
     expect(imageStatsToggle.getAttribute('aria-expanded')).toBe('true');
     expect(imageStatsContent.hidden).toBe(false);
 
+    displayToggle.click();
     probeToggle.click();
     roiToggle.click();
     imageStatsToggle.click();
 
+    expect(displayToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(displayContent.hidden).toBe(true);
     expect(probeToggle.getAttribute('aria-expanded')).toBe('false');
     expect(probeContent.hidden).toBe(true);
     expect(roiToggle.getAttribute('aria-expanded')).toBe('false');
     expect(roiContent.hidden).toBe(true);
     expect(imageStatsToggle.getAttribute('aria-expanded')).toBe('false');
     expect(imageStatsContent.hidden).toBe(true);
+    expect(document.querySelector('#display-control-panel.readout-block .readout-block-header')).not.toBeNull();
     expect(document.querySelector('#probe-panel .readout-block-header')).not.toBeNull();
     expect(document.querySelector('#roi-panel .readout-block-header')).not.toBeNull();
     expect(document.querySelector('#image-stats-panel .readout-block-header')).not.toBeNull();
