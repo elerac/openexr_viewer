@@ -2486,12 +2486,14 @@ describe('view menu', () => {
     expect(galleryItems.map((item) => item.textContent?.trim())).toEqual([
       'cbox_rgb.exr',
       'multipart.0001.exr',
-      'brown_photostudio_02_1k.exr'
+      'brown_photostudio_02_1k.exr',
+      'scene27_reflectance.exr'
     ]);
     expect(onGalleryImageSelected.mock.calls.map(([galleryId]) => galleryId)).toEqual([
       'cbox-rgb',
       'beachball-multipart-0001',
-      'brown-photostudio-02-1k'
+      'brown-photostudio-02-1k',
+      'kaist-scene27-reflectance'
     ]);
   });
 
@@ -3830,7 +3832,8 @@ describe('view menu', () => {
     expect(galleryItems.map((item) => item.dataset.galleryId)).toEqual([
       'cbox-rgb',
       'beachball-multipart-0001',
-      'brown-photostudio-02-1k'
+      'brown-photostudio-02-1k',
+      'kaist-scene27-reflectance'
     ]);
     expect(galleryItems.every((item) => item.disabled)).toBe(true);
     expect((document.getElementById('display-control-heading') as HTMLHeadingElement).getAttribute('aria-disabled')).toBe('false');

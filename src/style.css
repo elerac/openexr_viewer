@@ -1461,8 +1461,7 @@ input[type='range'] {
     flex: none;
     min-width: 0;
     align-self: stretch;
-    overflow-x: auto;
-    overflow-y: visible;
+    overflow: visible;
     scrollbar-width: none;
   }
 

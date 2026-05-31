@@ -25,6 +25,8 @@ const BEACHBALL_MULTIPART_URL =
   'https://raw.githubusercontent.com/AcademySoftwareFoundation/openexr-images/main/Beachball/multipart.0001.exr';
 const BROWN_PHOTOSTUDIO_02_1K_URL =
   'https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/1k/brown_photostudio_02_1k.exr';
+const KAIST_SCENE27_REFLECTANCE_URL =
+  'https://huggingface.co/datasets/danaroth/kaist-hyperspectral/resolve/main/exr/scene27_reflectance.exr';
 
 const rulerFitInsets = {
   top: 24,
@@ -241,6 +243,11 @@ describe('session controller shim', () => {
       galleryId: 'brown-photostudio-02-1k',
       filename: 'brown_photostudio_02_1k.exr',
       url: BROWN_PHOTOSTUDIO_02_1K_URL
+    },
+    {
+      galleryId: 'kaist-scene27-reflectance',
+      filename: 'scene27_reflectance.exr',
+      url: KAIST_SCENE27_REFLECTANCE_URL
     }
   ])('loads $filename from its configured raw URL', async ({ galleryId, filename, url }) => {
     const encodedBytes = new Uint8Array([9, 8, 7]);

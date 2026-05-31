@@ -7,7 +7,7 @@ Browser-based OpenEXR viewer for graphics/computer-vision workflows, with tev-li
 ## Features
 
 - OpenEXR decode via a browser-safe `exrs` WASM adapter with full layer/channel extraction.
-- Gallery samples: local `Gallery > cbox_rgb.exr`, plus remote `Gallery > multipart.0001.exr` and `Gallery > brown_photostudio_02_1k.exr` samples that require network access.
+- Gallery samples: local `Gallery > cbox_rgb.exr`, plus remote `Gallery > multipart.0001.exr`, `Gallery > brown_photostudio_02_1k.exr`, and `Gallery > scene27_reflectance.exr` samples that require network access.
 - Local EXR load via `File > Open...` or drag/drop (drag-and-drop supports multiple files and recursive folder drops in one action).
 - Recursive folder EXR load via `File > Open Folder...`; all `.exr` files under the selected folder are appended as sessions.
 - `File > Export...` exports the full active display to PNG at display image size with configurable PNG compression and current channel/stokes, exposure/gamma, colormap, and alpha settings applied.
@@ -240,7 +240,7 @@ Controller methods:
 
 - `Open Files` list: switch active image session by filename, filter rows, rename rows inline, or drag rows to reorder/assign to a split pane.
 - `Alt/Option+Up/Down`: reorder the active `Open Files` row.
-- `Gallery > cbox_rgb.exr` / `multipart.0001.exr` / `brown_photostudio_02_1k.exr`: open a gallery sample and append it as a new session. Remote samples require network access.
+- `Gallery > cbox_rgb.exr` / `multipart.0001.exr` / `brown_photostudio_02_1k.exr` / `scene27_reflectance.exr`: open a gallery sample and append it as a new session. Remote samples require network access.
 - `File > Open...`: open one EXR file and append it as a new session.
 - `File > Open Folder...`: recursively open every `.exr` file under the selected folder and append them as new sessions.
 - Drag/drop: drop one or more `.exr` files, or drop a folder to recursively load every `.exr` under it.

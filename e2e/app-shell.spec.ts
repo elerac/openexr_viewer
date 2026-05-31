@@ -196,6 +196,7 @@ test('boots an empty app shell with menu actions gated until an image opens @smo
   const galleryCboxItem = page.getByRole('menuitem', { name: 'cbox_rgb.exr', exact: true });
   const galleryMultipartItem = page.getByRole('menuitem', { name: 'multipart.0001.exr', exact: true });
   const galleryBrownPhotostudioItem = page.getByRole('menuitem', { name: 'brown_photostudio_02_1k.exr', exact: true });
+  const galleryKaistScene27Item = page.getByRole('menuitem', { name: 'scene27_reflectance.exr', exact: true });
   const openMenuItem = page.locator('#open-file-button');
   const exportMenuItem = page.locator('#export-image-button');
   const reloadAllMenuItem = page.locator('#reload-all-opened-images-button');
@@ -282,6 +283,8 @@ test('boots an empty app shell with menu actions gated until an image opens @smo
   await expect(galleryMultipartItem).toBeEnabled();
   await expect(galleryBrownPhotostudioItem).toBeVisible();
   await expect(galleryBrownPhotostudioItem).toBeEnabled();
+  await expect(galleryKaistScene27Item).toBeVisible();
+  await expect(galleryKaistScene27Item).toBeEnabled();
   await page.keyboard.press('Escape');
   await expect(galleryMenu).toBeHidden();
 

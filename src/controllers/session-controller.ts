@@ -58,6 +58,12 @@ const GALLERY_IMAGES = [
     label: 'brown_photostudio_02_1k.exr',
     filename: 'brown_photostudio_02_1k.exr',
     url: 'https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/1k/brown_photostudio_02_1k.exr'
+  },
+  {
+    id: 'kaist-scene27-reflectance',
+    label: 'scene27_reflectance.exr',
+    filename: 'scene27_reflectance.exr',
+    url: 'https://huggingface.co/datasets/danaroth/kaist-hyperspectral/resolve/main/exr/scene27_reflectance.exr'
   }
 ] as const;
 
