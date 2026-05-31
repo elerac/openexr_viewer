@@ -30,12 +30,22 @@ import type {
 } from '../types';
 import type { ViewerPanePath } from '../viewer-pane-layout';
 
+const DESKTOP_CBOX_RGB_URL = 'https://raw.githubusercontent.com/elerac/openexr_viewer/main/public/cbox_rgb.exr';
+const CBOX_RGB_GALLERY_IMAGE = import.meta.env.MODE === 'desktop'
+  ? {
+      id: 'cbox-rgb',
+      label: 'cbox_rgb.exr',
+      filename: 'cbox_rgb.exr',
+      url: DESKTOP_CBOX_RGB_URL
+    }
+  : {
+      id: 'cbox-rgb',
+      label: 'cbox_rgb.exr',
+      filename: 'cbox_rgb.exr'
+    };
+
 const GALLERY_IMAGES = [
-  {
-    id: 'cbox-rgb',
-    label: 'cbox_rgb.exr',
-    filename: 'cbox_rgb.exr'
-  },
+  CBOX_RGB_GALLERY_IMAGE,
   {
     id: 'beachball-multipart-0001',
     label: 'multipart.0001.exr',
@@ -858,7 +868,9 @@ export class SessionController implements Disposable {
 }
 
 function getGalleryImageUrl(galleryImage: (typeof GALLERY_IMAGES)[number]): string {
-  return 'url' in galleryImage ? galleryImage.url : `${import.meta.env.BASE_URL}${galleryImage.filename}`;
+  return 'url' in galleryImage && typeof galleryImage.url === 'string'
+    ? galleryImage.url
+    : `${import.meta.env.BASE_URL}${galleryImage.filename}`;
 }
 
 function inferFilenameFromUrl(url: string): string {

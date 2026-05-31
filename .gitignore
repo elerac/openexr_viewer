@@ -9,6 +9,16 @@ test-results
 .vscode
 .DS_Store
 
+# Tauri desktop build outputs
+src-tauri/target/
+src-tauri/gen/
+src-tauri/**/*.app
+src-tauri/**/*.dmg
+src-tauri/**/*.msi
+src-tauri/**/*.AppImage
+src-tauri/**/*.deb
+src-tauri/**/*.rpm
+
 # Python
 .venv
 pyproject.toml

@@ -3,9 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20 <26",
+    "npm": ">=10"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:desktop-web": "vite build --mode desktop && node scripts/stage-desktop-assets.mjs",
     "build:e2e": "VITE_E2E=true vite build",
     "capture:thumbnail": "node scripts/capture-thumbnail.mjs",
     "lint": "eslint src tests e2e playwright.config.ts vite.config.ts vitest.config.ts --max-warnings=0",
@@ -16,7 +21,10 @@
     "test:e2e": "VITE_E2E=true playwright test",
     "test:e2e:ci": "VITE_E2E=true playwright test --grep @smoke",
     "test:e2e:timing": "node scripts/report-playwright-timing.mjs",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build"
   },
   "dependencies": {
     "exrs": "^1.0.3",
@@ -25,6 +33,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.50.0",
+    "@tauri-apps/cli": "^2.11.2",
     "@types/node": "^22.10.2",
     "@vitest/coverage-v8": "^2.1.5",
     "eslint": "^9.39.4",
