@@ -133,18 +133,38 @@ describe('channel recognition', () => {
   });
 
   it('recognizes normal maps and suppresses duplicate XYZ groups while enabled', () => {
-    const channelNames = ['R', 'G', 'B', 'N.X', 'N.Y', 'N.Z', 'normal.X', 'normal.Y', 'normal.Z', 'normal.A', 'vector.X', 'vector.Y', 'vector.Z'];
+    const channelNames = [
+      'R',
+      'G',
+      'B',
+      'N.X',
+      'N.Y',
+      'N.Z',
+      'normal.X',
+      'normal.Y',
+      'normal.Z',
+      'normal.A',
+      'surface_normal.X',
+      'surface_normal.Y',
+      'surface_normal.Z',
+      'vector.X',
+      'vector.Y',
+      'vector.Z'
+    ];
     const n = findCandidate(channelNames, 'normalMap:N');
     const normal = findCandidate(channelNames, 'normalMap:normal');
+    const suffixedNormal = findCandidate(channelNames, 'normalMap:surface_normal');
 
     expect(visibleKeys(channelNames)).toEqual([
       'group:',
       'normalMap:N',
       'normalMap:normal',
+      'normalMap:surface_normal',
       'groupXYZ:vector'
     ]);
     expect(visibleKeys(channelNames)).not.toContain('groupXYZ:N');
     expect(visibleKeys(channelNames)).not.toContain('groupXYZ:normal');
+    expect(visibleKeys(channelNames)).not.toContain('groupXYZ:surface_normal');
     expect(visibleKeys(channelNames, true)).toEqual([
       'channel:R',
       'channel:G',
@@ -156,6 +176,9 @@ describe('channel recognition', () => {
       'channel:normal.Y',
       'channel:normal.Z',
       'channel:normal.A',
+      'channel:surface_normal.X',
+      'channel:surface_normal.Y',
+      'channel:surface_normal.Z',
       'channel:vector.X',
       'channel:vector.Y',
       'channel:vector.Z'
@@ -173,6 +196,13 @@ describe('channel recognition', () => {
       channels: ['normal.X', 'normal.Y', 'normal.Z', 'normal.A']
     });
     expect(selectionKey(normal)).toBe('channelRgb:normal.X:normal.Y:normal.Z:normal.A:normalMap');
+    expect(suffixedNormal).toMatchObject({
+      kind: 'normalMap',
+      channels: ['surface_normal.X', 'surface_normal.Y', 'surface_normal.Z']
+    });
+    expect(selectionKey(suffixedNormal)).toBe(
+      'channelRgb:surface_normal.X:surface_normal.Y:surface_normal.Z::normalMap'
+    );
   });
 
   it('falls back to generic XYZ grouping when normal-map recognition is disabled', () => {

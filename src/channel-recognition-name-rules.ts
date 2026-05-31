@@ -185,7 +185,7 @@ const DEFAULT_CHANNEL_RECOGNITION_NAME_RULES: ChannelRecognitionNameRules = {
     caseInsensitive: false
   },
   'normal.map': {
-    pattern: '^(?<base>N|normal)\\.(?:(?<x>X)|(?<y>Y)|(?<z>Z))$',
+    pattern: '^(?<base>N|normal|.+_normal)\\.(?:(?<x>X)|(?<y>Y)|(?<z>Z))$',
     caseInsensitive: false
   },
   'spectral.series': {
