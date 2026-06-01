@@ -48,7 +48,6 @@ describe('stokes', () => {
       'Stokes S1/S0',
       'Stokes S2/S0',
       'Stokes AoLP',
-      'Stokes DoP',
       'Stokes DoLP'
     ]);
 
@@ -79,14 +78,12 @@ describe('stokes', () => {
       'S1/S0.(R,G,B)',
       'S2/S0.(R,G,B)',
       'AoLP.(R,G,B)',
-      'DoP.(R,G,B)',
       'DoLP.(R,G,B)'
     ]);
     expect(getStokesDisplayOptions([...linearRgbNames, 'S3.R']).map((option) => option.label)).toEqual([
       'S1/S0.(R,G,B)',
       'S2/S0.(R,G,B)',
       'AoLP.(R,G,B)',
-      'DoP.(R,G,B)',
       'DoLP.(R,G,B)'
     ]);
     expect(getStokesDisplayOptions(linearRgbNames, {
@@ -102,9 +99,6 @@ describe('stokes', () => {
       'AoLP.R',
       'AoLP.G',
       'AoLP.B',
-      'DoP.R',
-      'DoP.G',
-      'DoP.B',
       'DoLP.R',
       'DoLP.G',
       'DoLP.B'
@@ -233,7 +227,6 @@ describe('stokes', () => {
       'S1/S0.Y',
       'S2/S0.Y',
       'AoLP.Y',
-      'DoP.Y',
       'DoLP.Y'
     ]);
     expect(getStokesDisplayOptions(['S0.400nm', 'S1.400nm', 'S2.400nm', 'S3.400nm']).map((option) => option.label))
@@ -351,7 +344,7 @@ describe('stokes', () => {
     expect(options.map((option) => option.label)).not.toContain('S1/S0 Spectral RGB');
   });
 
-  it('exposes linear-only spectral Stokes options without S3-derived entries', () => {
+  it('exposes linear-only spectral Stokes options without full-vector entries', () => {
     const channelNames = [
       'S0.400nm', 'S1.400nm', 'S2.400nm',
       'S0.500nm', 'S1.500nm', 'S2.500nm'
@@ -363,7 +356,6 @@ describe('stokes', () => {
       'S1/S0 Spectral RGB',
       'S2/S0 Spectral RGB',
       'AoLP Spectral RGB',
-      'DoP Spectral RGB',
       'DoLP Spectral RGB'
     ]);
 
@@ -375,14 +367,31 @@ describe('stokes', () => {
       'S1/S0.400nm',
       'S2/S0.400nm',
       'AoLP.400nm',
-      'DoP.400nm',
       'DoLP.400nm',
       'S1/S0.500nm',
       'S2/S0.500nm',
       'AoLP.500nm',
-      'DoP.500nm',
       'DoLP.500nm'
     ]);
+  });
+
+  it('omits DoP for partial spectral Stokes sets with incomplete S3 wavelengths', () => {
+    const channelNames = [
+      'S0.400nm', 'S1.400nm', 'S2.400nm', 'S3.400nm',
+      'S0.500nm', 'S1.500nm', 'S2.500nm'
+    ];
+    const groupedLabels = getStokesDisplayOptions(channelNames).map((option) => option.label);
+    const splitLabels = getStokesDisplayOptions(channelNames, {
+      includeRgbGroups: false,
+      includeSplitChannels: true
+    }).map((option) => option.label);
+
+    expect(groupedLabels).toContain('DoLP Spectral RGB');
+    expect(groupedLabels).not.toContain('DoP Spectral RGB');
+    expect(splitLabels).toContain('DoLP.400nm');
+    expect(splitLabels).toContain('DoLP.500nm');
+    expect(splitLabels).not.toContain('DoP.400nm');
+    expect(splitLabels).not.toContain('DoP.500nm');
   });
 
   it('groups Stokes parameters by default colormap behavior', () => {

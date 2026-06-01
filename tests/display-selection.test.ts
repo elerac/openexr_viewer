@@ -464,8 +464,11 @@ describe('display selection', () => {
     expect(resolveDisplaySelectionForLayer(['S0', 'S1', 'S2', 'S3'], createStokesSelection('aolp'))).toEqual(
       createStokesSelection('aolp')
     );
+    expect(resolveDisplaySelectionForLayer(['S0', 'S1', 'S2'], createStokesSelection('dolp'))).toEqual(
+      createStokesSelection('dolp')
+    );
     expect(resolveDisplaySelectionForLayer(['S0', 'S1', 'S2'], createStokesSelection('dop'))).toEqual(
-      createStokesSelection('dop')
+      createChannelMonoSelection('S0')
     );
     expect(resolveDisplaySelectionForLayer(['S0', 'S1', 'S2'], createStokesSelection('s3_over_s0'))).toEqual(
       createChannelMonoSelection('S0')

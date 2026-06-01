@@ -254,6 +254,32 @@ describe('spectral channel helpers', () => {
     expect(dop[1]?.intensity).toBeCloseTo(1, 6);
   });
 
+  it('omits spectral Stokes DoP plot points for partial S3 wavelength sets', () => {
+    const groups = detectSpectralStokesChannelGroups([
+      'S0.400nm', 'S1.400nm', 'S2.400nm',
+      'S0.500nm', 'S1.500nm', 'S2.500nm', 'S3.500nm'
+    ]);
+    const sample = {
+      x: 0,
+      y: 0,
+      values: {
+        'S0.400nm': 2,
+        'S1.400nm': 1,
+        'S2.400nm': Math.sqrt(3),
+        'S0.500nm': 2,
+        'S1.500nm': 1,
+        'S2.500nm': 1,
+        'S3.500nm': Math.sqrt(2)
+      }
+    };
+
+    expect(buildSpectralStokesPlotPoints(sample, groups, 'dolp').map((point) => point.channelName)).toEqual([
+      'DoLP.400nm',
+      'DoLP.500nm'
+    ]);
+    expect(buildSpectralStokesPlotPoints(sample, groups, 'dop')).toEqual([]);
+  });
+
   it('builds spectral RGB display options for each valid wavelength series', () => {
     const options = getSpectralRgbDisplayOptions([
       'hoge.450nm',

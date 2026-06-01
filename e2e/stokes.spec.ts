@@ -231,14 +231,14 @@ test('loads linear-only scalar Stokes channels without S3-derived options', asyn
   await expect(channelTileByLabel(page, 'Stokes S1/S0')).toHaveCount(1);
   await expect(channelTileByLabel(page, 'Stokes S2/S0')).toHaveCount(1);
   await expect(channelTileByLabel(page, 'Stokes AoLP')).toHaveCount(1);
-  await expect(channelTileByLabel(page, 'Stokes DoP')).toHaveCount(1);
+  await expect(channelTileByLabel(page, 'Stokes DoP')).toHaveCount(0);
   await expect(channelTileByLabel(page, 'Stokes DoLP')).toHaveCount(1);
   await expect(channelTileByLabel(page, 'Stokes S3/S0')).toHaveCount(0);
   await expect(channelTileByLabel(page, 'Stokes DoCP')).toHaveCount(0);
   await expect(channelTileByLabel(page, 'Stokes CoP')).toHaveCount(0);
   await expect(channelTileByLabel(page, 'Stokes ToP')).toHaveCount(0);
 
-  await selectChannelTile(page, 'Stokes DoP');
+  await selectChannelTile(page, 'Stokes DoLP');
   await expect(stokesDegreeModulationButton).toBeHidden();
   await expect(stokesAolpModeControl).toBeHidden();
   await expect(colormapSelect).toHaveValue(blackRedId);

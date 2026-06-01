@@ -95,8 +95,9 @@ const STOKES_PARAMETER_ORDER: StokesParameter[] = [
   'top'
 ];
 
-const S3_STOKES_PARAMETERS = new Set<StokesParameter>([
+const STOKES_PARAMETERS_REQUIRING_S3 = new Set<StokesParameter>([
   's3_over_s0',
+  'dop',
   'docp',
   'cop',
   'top'
@@ -400,16 +401,19 @@ export function getStokesDisplayOptions(
     detectSpectralStokesSuffixValues(channelNames, nameRuleConfig)
   );
   for (const scalarChannels of scalarChannelSets) {
-    const isSplitSpectralStokesSet = Boolean(
+    const isSpectralStokesSet = Boolean(
       scalarChannels.suffix &&
-      hasSpectralStokesRgbOptions &&
+      spectralStokesCapabilities.available &&
       isSpectralStokesSuffixValue(scalarChannels.suffix, spectralStokesSuffixes)
     );
-    if (isSplitSpectralStokesSet && !includeSplitChannels) {
+    if (isSpectralStokesSet && hasSpectralStokesRgbOptions && !includeSplitChannels) {
       continue;
     }
 
-    for (const parameter of getAvailableStokesParameters(hasCompleteScalarStokesS3(scalarChannels), parameterVisibility)) {
+    const hasS3 = isSpectralStokesSet
+      ? spectralStokesCapabilities.hasS3
+      : hasCompleteScalarStokesS3(scalarChannels);
+    for (const parameter of getAvailableStokesParameters(hasS3, parameterVisibility)) {
       options.push(buildScalarStokesDisplayOption(parameter, scalarChannels));
     }
   }
@@ -888,8 +892,8 @@ function getAvailableStokesParameters(
   ));
 }
 
-function isStokesParameterAvailable(parameter: StokesParameter, hasS3: boolean): boolean {
-  return hasS3 || !S3_STOKES_PARAMETERS.has(parameter);
+export function isStokesParameterAvailable(parameter: StokesParameter, hasS3: boolean): boolean {
+  return hasS3 || !STOKES_PARAMETERS_REQUIRING_S3.has(parameter);
 }
 
 function hasCompleteScalarStokesS3(channels: ScalarStokesChannels): boolean {

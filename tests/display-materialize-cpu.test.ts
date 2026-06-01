@@ -206,7 +206,7 @@ describe('display CPU materialization', () => {
     expect(sample?.values.DoLP).toBe(0);
   });
 
-  it('builds linear-only Stokes DoP with missing S3 treated as zero', () => {
+  it('does not build linear-only Stokes DoP without S3', () => {
     const layer = createLayerFromChannels({
       S0: [2],
       S1: [1],
@@ -215,12 +215,20 @@ describe('display CPU materialization', () => {
 
     const texture = buildSelectedDisplayTexture(layer, 1, 1, createStokesSelection('dop'));
     const sample = samplePixelValuesForDisplay(layer, 1, 1, { ix: 0, iy: 0 }, createStokesSelection('dop'));
+    const dolpTexture = buildSelectedDisplayTexture(layer, 1, 1, createStokesSelection('dolp'));
+    const dolpSample = samplePixelValuesForDisplay(layer, 1, 1, { ix: 0, iy: 0 }, createStokesSelection('dolp'));
 
-    expect(texture[0]).toBeCloseTo(1, 6);
-    expect(texture[1]).toBeCloseTo(1, 6);
-    expect(texture[2]).toBeCloseTo(1, 6);
+    expect(Array.from(texture)).toEqual([0, 0, 0, 1]);
+    expect(sample?.values.DoP).toBeUndefined();
+    expect(dolpTexture[0]).toBeCloseTo(1, 6);
+    expect(dolpTexture[1]).toBeCloseTo(1, 6);
+    expect(dolpTexture[2]).toBeCloseTo(1, 6);
+    expect(dolpTexture[3]).toBe(1);
+    expect(dolpSample?.values.DoLP).toBeCloseTo(1, 6);
+    expect(sample?.values.S0).toBe(2);
+    expect(sample?.values.S1).toBe(1);
+    expect(sample?.values.S2).toBeCloseTo(Math.sqrt(3), 6);
     expect(texture[3]).toBe(1);
-    expect(sample?.values.DoP).toBeCloseTo(1, 6);
   });
 
   it('builds suffixed scalar Stokes display textures', () => {

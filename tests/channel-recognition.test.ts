@@ -269,10 +269,9 @@ describe('channel recognition', () => {
       'stokesScalar:s1_over_s0',
       'stokesScalar:s2_over_s0',
       'stokesScalar:aolp',
-      'stokesScalar:dop',
       'stokesScalar:dolp'
     ]);
-    expect(findCandidate(linearStokes, 'stokesScalar:dop')?.metadata.hasS3).toBe(false);
+    expect(findCandidate(linearStokes, 'stokesScalar:dop')).toBeNull();
     expect(visibleKeys(fullStokes).filter((key) => key.startsWith('stokesScalar:'))).toEqual([
       'stokesScalar:s1_over_s0',
       'stokesScalar:s2_over_s0',

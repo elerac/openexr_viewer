@@ -6,7 +6,7 @@ import {
   type SpectralRgbSelection,
   type StokesParameter
 } from './display-model';
-import type { StokesComputationOptions } from './stokes';
+import { isStokesParameterAvailable, type StokesComputationOptions } from './stokes';
 import { computeRawStokesDisplayValue } from './stokes/stokes-display';
 import type { DisplayChannelMapping, PixelSample } from './types';
 import {
@@ -419,6 +419,10 @@ export function buildSpectralStokesPlotPoints(
   options: StokesComputationOptions = {}
 ): SpectralPlotPoint[] {
   if (!sample) {
+    return [];
+  }
+
+  if (!isStokesParameterAvailable(parameter, groups.every((group) => group.s3 !== null))) {
     return [];
   }
 

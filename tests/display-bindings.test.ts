@@ -211,7 +211,7 @@ describe('display bindings', () => {
     ).mode).toBe('empty');
   });
 
-  it('binds missing S3 as a zero slot for linear-only Stokes selections', () => {
+  it('binds linear-only Stokes selections except full-vector parameters', () => {
     const scalarLayer = createLayerFromChannels({
       S0: [2],
       S1: [1],
@@ -237,16 +237,23 @@ describe('display bindings', () => {
       'S2.500nm': [Math.sqrt(3)]
     });
 
-    const scalarBinding = buildDisplaySourceBinding(scalarLayer, createStokesSelection('dop'));
+    const scalarBinding = buildDisplaySourceBinding(scalarLayer, createStokesSelection('dolp'));
+    const scalarDopBinding = buildDisplaySourceBinding(scalarLayer, createStokesSelection('dop'));
     const scalarHiddenBinding = buildDisplaySourceBinding(scalarLayer, createStokesSelection('docp'));
-    const rgbBinding = buildDisplaySourceBinding(rgbLayer, createStokesSelection('dop', 'stokesRgb'));
+    const rgbBinding = buildDisplaySourceBinding(rgbLayer, createStokesSelection('dolp', 'stokesRgb'));
+    const rgbDopBinding = buildDisplaySourceBinding(rgbLayer, createStokesSelection('dop', 'stokesRgb'));
     const spectralBinding = buildDisplaySourceBinding(
+      spectralLayer,
+      createStokesSelection('dolp', 'stokesSpectralRgb')
+    );
+    const spectralDopBinding = buildDisplaySourceBinding(
       spectralLayer,
       createStokesSelection('dop', 'stokesSpectralRgb')
     );
 
     expect(scalarBinding.mode).toBe('stokesDirect');
     expect(scalarBinding.slots.slice(0, 4)).toEqual(['S0', 'S1', 'S2', null]);
+    expect(scalarDopBinding.mode).toBe('empty');
     expect(scalarHiddenBinding.mode).toBe('empty');
     expect(rgbBinding.mode).toBe('stokesRgb');
     expect(rgbBinding.slots).toEqual([
@@ -254,6 +261,7 @@ describe('display bindings', () => {
       'S0.G', 'S1.G', 'S2.G', null,
       'S0.B', 'S1.B', 'S2.B', null
     ]);
+    expect(rgbDopBinding.mode).toBe('empty');
     expect(spectralBinding.mode).toBe('stokesSpectralRgb');
     expect(spectralBinding.slots.slice(0, 4)).toEqual([
       '__spectralStokesRgb:S0',
@@ -261,5 +269,6 @@ describe('display bindings', () => {
       '__spectralStokesRgb:S2',
       null
     ]);
+    expect(spectralDopBinding.mode).toBe('empty');
   });
 });
