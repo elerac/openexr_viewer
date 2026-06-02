@@ -24,7 +24,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "tauri": "tauri",
     "desktop:dev": "tauri dev",
-    "desktop:check": "cd src-tauri && cargo fmt --check && cargo check --locked && cargo test --locked && cargo fmt --manifest-path thumbnail-provider/Cargo.toml --check && cargo test --manifest-path thumbnail-provider/Cargo.toml --locked",
+    "desktop:check": "node scripts/build-windows-thumbnail-provider.mjs --locked && cd src-tauri && cargo fmt --check && cargo check --locked && cargo test --locked && cargo fmt --manifest-path thumbnail-provider/Cargo.toml --check && cargo test --manifest-path thumbnail-provider/Cargo.toml --locked",
     "desktop:build": "tauri build"
   },
   "dependencies": {

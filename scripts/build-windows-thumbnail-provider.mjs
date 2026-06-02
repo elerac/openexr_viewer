@@ -6,6 +6,13 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const manifestPath = resolve(repoRoot, 'src-tauri/thumbnail-provider/Cargo.toml');
 const stagingPath = resolve(repoRoot, 'src-tauri/target/thumbnail-provider/prismifold_exr_thumbnail.dll');
+const cargoFlags = process.argv.slice(2);
+
+for (const flag of cargoFlags) {
+  if (flag !== '--locked') {
+    throw new Error(`Unsupported argument: ${flag}`);
+  }
+}
 
 const explicitTarget =
   process.env.CARGO_BUILD_TARGET ??
@@ -24,7 +31,7 @@ if (!shouldBuild) {
   process.exit(0);
 }
 
-const args = ['build', '--manifest-path', manifestPath, '--release'];
+const args = ['build', ...cargoFlags, '--manifest-path', manifestPath, '--release'];
 if (explicitTarget) {
   args.push('--target', explicitTarget);
 }
