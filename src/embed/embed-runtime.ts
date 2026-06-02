@@ -20,7 +20,7 @@ export function registerEmbedMessageBridge(app: AppHandle): () => void {
     }
     void app.loadFile(event.data.file, {
       name: event.data.name,
-      state: null
+      state: event.data.state ?? null
     });
   };
 

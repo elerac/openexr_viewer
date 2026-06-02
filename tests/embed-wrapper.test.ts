@@ -17,14 +17,14 @@ const originalIframeContentWindow = Object.getOwnPropertyDescriptor(
 interface PrismifoldViewerElementForTest extends HTMLElement {
   viewerOrigin: string;
   viewerTargetOrigin: string;
-  loadFile(file: File, options?: { name?: string }): Promise<void>;
+  loadFile(file: File, options?: { name?: string; view?: string }): Promise<void>;
   loadUrl(src: string, options?: { name?: string; sourceOrigin?: string; view?: string }): Promise<void>;
   setView(view: string): void;
 }
 
 interface PrismifoldControllerForTest {
   element: PrismifoldViewerElementForTest;
-  loadFile(file: File, options?: { name?: string }): Promise<void>;
+  loadFile(file: File, options?: { name?: string; view?: string }): Promise<void>;
   loadUrl(src: string, options?: { name?: string; sourceOrigin?: string; view?: string }): Promise<void>;
   setView(view: string): PrismifoldControllerForTest;
   destroy(): void;
@@ -141,7 +141,8 @@ describe('embed wrapper public script', () => {
       src: './public/cbox_rgb.exr',
       name: 'Cornell Box',
       width: 300,
-      height: 300
+      height: 300,
+      view: 'panorama'
     });
     const iframe = getViewerIframe(controller.element);
     const postMessage = spyOnIframePostMessage(iframe);
@@ -149,12 +150,21 @@ describe('embed wrapper public script', () => {
     dispatchEmbedReady(controller.element, iframe);
     await flushPromises();
 
-    const posted = postMessage.mock.calls[0]?.[0] as { type: string; file: File; name?: string };
+    const posted = postMessage.mock.calls[0]?.[0] as {
+      type: string;
+      file: File;
+      name?: string;
+      state?: { viewerMode?: string } | null;
+    };
     expect(fetchMock).toHaveBeenCalledWith(new URL('./public/cbox_rgb.exr', document.baseURI).toString());
     expect(new URL(iframe.src).searchParams.get('src')).toBeNull();
+    expect(new URL(iframe.src).searchParams.get('view')).toBe('panorama');
     expect(posted).toMatchObject({
       type: EMBED_LOAD_FILE_MESSAGE,
-      name: 'Cornell Box'
+      name: 'Cornell Box',
+      state: {
+        viewerMode: 'panorama'
+      }
     });
     expect(posted.file).toBeInstanceOf(File);
     expect(posted.file.name).toBe('Cornell Box');
@@ -168,6 +178,7 @@ describe('embed wrapper public script', () => {
     const controller = getPrismifold().create('#target', {
       src: './public/cbox_rgb.exr',
       name: 'Deferred Cornell Box',
+      view: 'panorama',
       autoLoad: false
     });
     const iframe = getViewerIframe(controller.element);
@@ -187,11 +198,19 @@ describe('embed wrapper public script', () => {
     dispatchEmbedDeferredLoad(controller.element, iframe);
     await flushPromises();
 
-    const posted = postMessage.mock.calls[0]?.[0] as { type: string; file: File; name?: string };
+    const posted = postMessage.mock.calls[0]?.[0] as {
+      type: string;
+      file: File;
+      name?: string;
+      state?: { viewerMode?: string } | null;
+    };
     expect(fetchMock).toHaveBeenCalledWith(new URL('./public/cbox_rgb.exr', document.baseURI).toString());
     expect(posted).toMatchObject({
       type: EMBED_LOAD_FILE_MESSAGE,
-      name: 'Deferred Cornell Box'
+      name: 'Deferred Cornell Box',
+      state: {
+        viewerMode: 'panorama'
+      }
     });
     expect(posted.file.name).toBe('Deferred Cornell Box');
   });
@@ -245,6 +264,7 @@ describe('embed wrapper public script', () => {
 
     const loadPromise = controller.loadUrl('https://example.com/render.exr', {
       name: 'Parent fetched',
+      view: 'panorama',
       sourceOrigin: 'parent'
     });
     const iframe = getViewerIframe(controller.element);
@@ -253,11 +273,20 @@ describe('embed wrapper public script', () => {
     dispatchEmbedReady(controller.element, iframe);
     await loadPromise;
 
-    const posted = postMessage.mock.calls[0]?.[0] as { type: string; file: File; name?: string };
+    const posted = postMessage.mock.calls[0]?.[0] as {
+      type: string;
+      file: File;
+      name?: string;
+      state?: { viewerMode?: string } | null;
+    };
     expect(fetchMock).toHaveBeenCalledWith('https://example.com/render.exr');
     expect(new URL(iframe.src).searchParams.get('src')).toBeNull();
+    expect(new URL(iframe.src).searchParams.get('view')).toBe('panorama');
     expect(posted.type).toBe(EMBED_LOAD_FILE_MESSAGE);
     expect(posted.name).toBe('Parent fetched');
+    expect(posted.state).toEqual({
+      viewerMode: 'panorama'
+    });
   });
 
   it('supports controller loadFile, loadUrl, setView, and destroy', async () => {
@@ -270,13 +299,22 @@ describe('embed wrapper public script', () => {
 
     dispatchEmbedReady(controller.element, initialIframe);
     await controller.loadFile(new File(['pixels'], 'local.exr'), {
-      name: 'Local plate'
+      name: 'Local plate',
+      view: 'panorama'
     });
 
-    const posted = postMessage.mock.calls[0]?.[0] as { type: string; file: File; name?: string };
+    const posted = postMessage.mock.calls[0]?.[0] as {
+      type: string;
+      file: File;
+      name?: string;
+      state?: { viewerMode?: string } | null;
+    };
     expect(posted.type).toBe(EMBED_LOAD_FILE_MESSAGE);
     expect(posted.file.name).toBe('local.exr');
     expect(posted.name).toBe('Local plate');
+    expect(posted.state).toEqual({
+      viewerMode: 'panorama'
+    });
     expect(controller).not.toHaveProperty('loadGallery');
 
     await controller.loadUrl('https://example.com/next.exr', {

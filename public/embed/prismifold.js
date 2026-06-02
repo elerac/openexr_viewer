@@ -80,7 +80,8 @@
 
       if (shouldParentFetchSource(sourceUrl, nextSourceOrigin)) {
         return this.loadParentFetchedUrl(sourceUrl, {
-          name: normalizeNonEmpty(this.getAttribute('name'))
+          name: normalizeNonEmpty(this.getAttribute('name')),
+          state: this.createAttributeViewerState()
         });
       }
 
@@ -95,7 +96,10 @@
       this.deferredFileLoad = null;
       this.sourceLoadId += 1;
       return this.enqueueFileLoad(file, {
-        name: normalizeNonEmpty(options.name)
+        name: normalizeNonEmpty(options.name),
+        state: hasOwn(options, 'view')
+          ? createViewerModeState(options.view)
+          : this.createAttributeViewerState()
       });
     }
 
@@ -202,6 +206,10 @@
       return parseAutoLoad(this.getAttribute('autoload'));
     }
 
+    createAttributeViewerState() {
+      return createViewerModeState(this.getAttribute('view'));
+    }
+
     updateAttributes(attributes) {
       this.updatingAttributes = true;
       try {
@@ -234,7 +242,8 @@
       }
 
       return this.loadParentFetchedUrl(src, {
-        name: normalizeNonEmpty(this.getAttribute('name'))
+        name: normalizeNonEmpty(this.getAttribute('name')),
+        state: this.createAttributeViewerState()
       }).catch((error) => {
         logEmbedError(`Failed to load ${src} from the embedding page.`, error);
       });
@@ -246,7 +255,8 @@
         this.deferredFileLoad = null;
         this.sourceLoadId += 1;
         return this.enqueueFileLoad(pending.file, {
-          name: pending.name
+          name: pending.name,
+          state: pending.state
         });
       }
 
@@ -258,7 +268,8 @@
       }
 
       return this.loadParentFetchedUrl(src, {
-        name: normalizeNonEmpty(this.getAttribute('name'))
+        name: normalizeNonEmpty(this.getAttribute('name')),
+        state: this.createAttributeViewerState()
       }).catch((error) => {
         logEmbedError(`Failed to load ${src} from the embedding page.`, error);
       });
@@ -283,14 +294,18 @@
         type: blob.type || 'application/octet-stream'
       });
       await this.enqueueFileLoad(file, {
-        name: normalizeNonEmpty(options.name)
+        name: normalizeNonEmpty(options.name),
+        state: normalizeViewerState(options.state)
       });
     }
 
     setDeferredFileLoad(file, options = {}) {
       this.deferredFileLoad = {
         file,
-        name: normalizeNonEmpty(options.name)
+        name: normalizeNonEmpty(options.name),
+        state: hasOwn(options, 'view')
+          ? createViewerModeState(options.view)
+          : this.createAttributeViewerState()
       };
     }
 
@@ -299,6 +314,7 @@
         this.pendingFileLoads.push({
           file,
           name: normalizeNonEmpty(options.name),
+          state: normalizeViewerState(options.state),
           resolve,
           reject
         });
@@ -317,7 +333,8 @@
           this.iframe.contentWindow.postMessage({
             type: EMBED_LOAD_FILE_MESSAGE,
             file: pending.file,
-            name: pending.name || undefined
+            name: pending.name || undefined,
+            state: pending.state
           }, this.viewerTargetOrigin);
           pending.resolve();
         } catch (error) {
@@ -341,7 +358,8 @@
     }
     if (!autoLoad && options.file) {
       element.setDeferredFileLoad(options.file, {
-        name: options.name
+        name: options.name,
+        view: options.view
       });
     }
     container.appendChild(element);
@@ -360,7 +378,7 @@
     };
 
     if (autoLoad && options.file) {
-      void controller.loadFile(options.file, { name: options.name }).catch((error) => {
+      void controller.loadFile(options.file, { name: options.name, view: options.view }).catch((error) => {
         logEmbedError('Failed to load the provided Prismifold file.', error);
       });
     } else if (autoLoad && options.src) {
@@ -439,6 +457,23 @@
       return normalized;
     }
     return SOURCE_ORIGIN_AUTO;
+  }
+
+  function createViewerModeState(value) {
+    const viewerMode = normalizeViewerMode(value);
+    return viewerMode ? { viewerMode } : null;
+  }
+
+  function normalizeViewerState(value) {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  }
+
+  function normalizeViewerMode(value) {
+    const normalized = normalizeNonEmpty(value);
+    if (normalized === 'image' || normalized === 'panorama' || normalized === 'depth') {
+      return normalized;
+    }
+    return null;
   }
 
   function serializeAutoLoad(value) {

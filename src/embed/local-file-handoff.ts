@@ -19,6 +19,7 @@ export interface EmbedLoadFileMessage {
   type: typeof EMBED_LOAD_FILE_MESSAGE;
   file: File;
   name?: string;
+  state?: EmbedViewerStateSnapshot | null;
 }
 
 export interface EmbedDeferredLoadMessage {
@@ -61,7 +62,8 @@ export function isEmbedLoadFileMessage(value: unknown): value is EmbedLoadFileMe
   const record = value as Record<string, unknown>;
   return record.type === EMBED_LOAD_FILE_MESSAGE &&
     isFileLike(record.file) &&
-    isOptionalString(record.name);
+    isOptionalString(record.name) &&
+    isOptionalEmbedState(record.state);
 }
 
 export function isEmbedDeferredLoadMessage(value: unknown): value is EmbedDeferredLoadMessage {
@@ -257,4 +259,10 @@ function isFileLike(value: unknown): value is File {
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string';
+}
+
+function isOptionalEmbedState(value: unknown): value is EmbedViewerStateSnapshot | null | undefined {
+  return value === undefined ||
+    value === null ||
+    (typeof value === 'object' && !Array.isArray(value));
 }

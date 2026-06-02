@@ -10,6 +10,7 @@ interface E2EStateSnapshot {
   selectionTransitionPending: boolean;
   sessionCount: number;
   thumbnailPendingCount: number;
+  viewerMode: ViewerAppState['sessionState']['viewerMode'];
 }
 
 interface E2EHooks {
@@ -138,7 +139,8 @@ function createSnapshot(state: ViewerAppState, appReady: boolean): E2EStateSnaps
     pendingOpenedImageCount: state.pendingOpenedImages.length,
     selectionTransitionPending: state.pendingSelectionTransitionRequestId !== null,
     sessionCount: state.sessions.length,
-    thumbnailPendingCount: countPendingThumbnails(state)
+    thumbnailPendingCount: countPendingThumbnails(state),
+    viewerMode: state.sessionState.viewerMode
   };
 }
 

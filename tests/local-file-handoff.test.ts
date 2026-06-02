@@ -22,7 +22,10 @@ describe('local file handoff messages', () => {
     expect(isEmbedLoadFileMessage({
       type: EMBED_LOAD_FILE_MESSAGE,
       file,
-      name: 'Beauty pass'
+      name: 'Beauty pass',
+      state: {
+        viewerMode: 'panorama'
+      }
     })).toBe(true);
     expect(isEmbedLoadFileMessage({
       type: EMBED_LOAD_FILE_MESSAGE,
@@ -32,6 +35,11 @@ describe('local file handoff messages', () => {
       type: EMBED_LOAD_FILE_MESSAGE,
       file,
       name: {}
+    })).toBe(false);
+    expect(isEmbedLoadFileMessage({
+      type: EMBED_LOAD_FILE_MESSAGE,
+      file,
+      state: []
     })).toBe(false);
   });
 

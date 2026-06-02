@@ -75,7 +75,7 @@ describe('embed runtime', () => {
     });
   });
 
-  it('passes wrapper-provided local file names to app file loads', () => {
+  it('passes wrapper-provided local file names and state to app file loads', () => {
     const app = createAppHandle();
     const cleanup = registerEmbedMessageBridge(app);
     const file = new File(['pixels'], 'beauty.exr');
@@ -85,13 +85,18 @@ describe('embed runtime', () => {
       data: {
         type: EMBED_LOAD_FILE_MESSAGE,
         file,
-        name: 'Beauty local'
+        name: 'Beauty local',
+        state: {
+          viewerMode: 'panorama'
+        }
       }
     }));
 
     expect(app.loadFile).toHaveBeenCalledWith(file, {
       name: 'Beauty local',
-      state: null
+      state: {
+        viewerMode: 'panorama'
+      }
     });
     cleanup();
   });
