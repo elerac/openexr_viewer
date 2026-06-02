@@ -137,6 +137,8 @@ npm run desktop:build
 
 On macOS, the local unsigned app and DMG are generated under `src-tauri/target/release/bundle/`. Generated desktop bundles and build outputs should stay uncommitted.
 
+On Windows, the installed executable is `Prismifold.exe`. The installer registers Prismifold as an OpenEXR `.exr` handler candidate, but Windows requires the user to choose the default app: open **Settings > Apps > Default apps > Choose defaults by file type > .exr** and select Prismifold, or right-click an `.exr` file and use **Open with**. Older builds may not appear automatically; browse to the installed `Prismifold.exe` if needed.
+
 ## GitHub Pages
 
 This project is prepared for GitHub Pages with a project page and app route:

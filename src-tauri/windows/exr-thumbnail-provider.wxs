@@ -1,11 +1,56 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?define ExrThumbnailProviderClsid = "{4D64B0F7-4E7E-49E2-8F8C-1DB4B1EF6C15}" ?>
 <?define ThumbnailProviderHandler = "{e357fccd-a995-4576-b01f-234630154e96}" ?>
+<?define ExrProgId = "Prismifold.OpenEXR" ?>
 
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Fragment>
     <DirectoryRef Id="INSTALLDIR">
       <Component Id="ExrThumbnailProviderRegistry" Guid="{A8E26068-4E77-4435-9BA8-FF9D3E80C724}" Win64="$(var.Win64)">
+        <RegistryKey Root="HKLM" Key="Software\Classes\.exr\OpenWithProgids">
+          <RegistryValue Name="$(var.ExrProgId)" Type="string" Value="" />
+        </RegistryKey>
+        <RegistryKey Root="HKLM" Key="Software\Classes\$(var.ExrProgId)">
+          <RegistryValue Type="string" Value="OpenEXR Image" />
+          <RegistryKey Key="DefaultIcon">
+            <RegistryValue Type="string" Value="&quot;[INSTALLDIR]Prismifold.exe&quot;,0" />
+          </RegistryKey>
+          <RegistryKey Key="shell">
+            <RegistryValue Type="string" Value="open" />
+            <RegistryKey Key="open">
+              <RegistryValue Type="string" Value="Open with Prismifold" />
+              <RegistryKey Key="command">
+                <RegistryValue Type="string" Value="&quot;[INSTALLDIR]Prismifold.exe&quot; &quot;%1&quot;" />
+              </RegistryKey>
+            </RegistryKey>
+          </RegistryKey>
+        </RegistryKey>
+        <RegistryKey Root="HKLM" Key="Software\Prismifold\Capabilities">
+          <RegistryValue Name="ApplicationName" Type="string" Value="Prismifold" />
+          <RegistryValue Name="ApplicationDescription" Type="string" Value="Prismifold OpenEXR image viewer" />
+          <RegistryKey Key="FileAssociations">
+            <RegistryValue Name=".exr" Type="string" Value="$(var.ExrProgId)" />
+          </RegistryKey>
+        </RegistryKey>
+        <RegistryKey Root="HKLM" Key="Software\RegisteredApplications">
+          <RegistryValue Name="Prismifold" Type="string" Value="Software\Prismifold\Capabilities" />
+        </RegistryKey>
+        <RegistryKey Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\App Paths\Prismifold.exe">
+          <RegistryValue Type="string" Value="[INSTALLDIR]Prismifold.exe" />
+          <RegistryValue Name="Path" Type="string" Value="[INSTALLDIR]" />
+        </RegistryKey>
+        <RegistryKey Root="HKLM" Key="Software\Classes\Applications\Prismifold.exe">
+          <RegistryValue Name="FriendlyAppName" Type="string" Value="Prismifold" />
+          <RegistryKey Key="DefaultIcon">
+            <RegistryValue Type="string" Value="&quot;[INSTALLDIR]Prismifold.exe&quot;,0" />
+          </RegistryKey>
+          <RegistryKey Key="SupportedTypes">
+            <RegistryValue Name=".exr" Type="string" Value="" />
+          </RegistryKey>
+          <RegistryKey Key="shell\open\command">
+            <RegistryValue Type="string" Value="&quot;[INSTALLDIR]Prismifold.exe&quot; &quot;%1&quot;" />
+          </RegistryKey>
+        </RegistryKey>
         <RegistryKey Root="HKLM" Key="Software\Classes\.exr\ShellEx\$(var.ThumbnailProviderHandler)">
           <RegistryValue Type="string" Value="$(var.ExrThumbnailProviderClsid)" KeyPath="yes" />
         </RegistryKey>
@@ -19,7 +64,6 @@
         <RegistryKey Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Approved">
           <RegistryValue Name="$(var.ExrThumbnailProviderClsid)" Type="string" Value="Prismifold EXR Thumbnail Provider" />
         </RegistryKey>
-        <RemoveRegistryKey Root="HKLM" Key="Software\Classes\OpenEXR Image" Action="removeOnInstall" />
         <RemoveRegistryKey Root="HKLM" Key="Software\Classes\Prismifold.exr" Action="removeOnInstall" />
       </Component>
     </DirectoryRef>

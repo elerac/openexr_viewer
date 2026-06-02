@@ -3,6 +3,7 @@
   "productName": "Prismifold",
   "version": "0.1.0",
   "identifier": "com.elerac.prismifold",
+  "mainBinaryName": "Prismifold",
   "build": {
     "frontendDist": "../dist-desktop",
     "devUrl": "http://localhost:5173/app/",
