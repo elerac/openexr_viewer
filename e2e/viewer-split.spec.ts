@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './helpers/test';
 import { gotoViewerApp, openGalleryCbox } from './helpers/app';
 import { buildScalarChannelExr } from './helpers/exr-fixtures';
 import { resolveViewerPoint } from './helpers/viewer';

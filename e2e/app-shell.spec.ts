@@ -1,4 +1,4 @@
-import { expect, test, type Download, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Download, type Locator, type Page } from './helpers/test';
 import { unzipSync } from 'fflate';
 import { Buffer } from 'node:buffer';
 import { gotoViewerApp, openGalleryCbox, waitForE2ERenderIdle } from './helpers/app';

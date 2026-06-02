@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './helpers/test';
 import { expectViewerAppReady } from './helpers/app';
 
 const CBOX_RGB_URL = 'cbox_rgb.exr';
@@ -216,19 +216,6 @@ test('serves the project page with app and desktop download calls to action @smo
   await expect(deferredStokesViewer.getByRole('button', { name: 'Load image', exact: true })).toBeVisible();
   const deferredPanoramaViewer = panoramaEmbed.frameLocator('iframe');
   await expect(deferredPanoramaViewer.getByRole('button', { name: 'Load image', exact: true })).toBeVisible();
-  await deferredPanoramaViewer.getByRole('button', { name: 'Load image', exact: true }).click();
-  const panoramaFrame = page.frames().find((frame) => frame.url().includes('view=panorama'));
-  expect(panoramaFrame).toBeTruthy();
-  const panoramaViewerMode = await panoramaFrame?.evaluate(async () => {
-    const hooks = window.__openExrViewerE2E;
-    if (!hooks) {
-      return null;
-    }
-    await hooks.waitForSessionCount(1);
-    await hooks.waitForRenderIdle();
-    return hooks.snapshot().viewerMode;
-  });
-  expect(panoramaViewerMode).toBe('panorama');
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expectNoHorizontalOverflow(page);

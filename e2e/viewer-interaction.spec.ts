@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './helpers/test';
 import { gotoViewerApp, openGalleryCbox, waitForE2ERenderIdle } from './helpers/app';
 import { buildScalarChannelExr, buildSpectralExr } from './helpers/exr-fixtures';
 import { dragViewerRoi, readProbeCoords } from './helpers/viewer';

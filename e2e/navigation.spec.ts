@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from './helpers/test';
 import { gotoViewerApp, openGalleryCbox } from './helpers/app';
 import { buildLongNamedRgbExr, buildScalarChannelExr, buildSizedRgbExr, buildSpectralExr } from './helpers/exr-fixtures';
 import { installIdleCallbackController } from './helpers/idle-callbacks';

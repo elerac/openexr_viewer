@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './helpers/test';
 import { expectViewerAppReady, gotoViewerApp, openGalleryCbox } from './helpers/app';
 import { dragBy } from './helpers/viewer';
 

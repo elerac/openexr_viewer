@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from './helpers/test';
 import { gotoViewerApp, waitForE2ERenderIdle } from './helpers/app';
 import {
   buildLinearScalarStokesExr,
