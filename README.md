@@ -1,6 +1,6 @@
 # Prismifold
 
-Prismifold is a multichannel image viewer for computational imaging, rendering, and vision workflows. It unfolds spectra, polarization, panoramas, depth, AOVs, and exact pixel values from images with more than color.
+Prismifold is a multichannel image viewer for computational imaging, rendering, and vision workflows. It unfolds polarization, spectral, panoramas, depth, AoVs and exact pixel values from images with more than color.
 
 [![Prismifold thumbnail](https://elerac.github.io/prismifold/thumbnail.jpg)](https://elerac.github.io/prismifold/app/)
 
