@@ -27,7 +27,9 @@ pyproject.toml
 .python-version
 uv.lock
 *.py
+!download_convert_rgb_depth_exr.py
 
-# OpenEXR files (ignore all .exr files except for public/cbox_rgb.exr)
+# OpenEXR files (ignore all .exr files except for committed public gallery samples)
 *.exr
 !public/cbox_rgb.exr
+!public/middlebury_chess1_rgb_z.exr

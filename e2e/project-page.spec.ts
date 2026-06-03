@@ -3,6 +3,8 @@ import { expect, test, type Page } from './helpers/test';
 import { expectViewerAppReady } from './helpers/app';
 
 const CBOX_RGB_URL = 'cbox_rgb.exr';
+const MIDDLEBURY_CHESS1_RGB_Z_URL = 'middlebury_chess1_rgb_z.exr';
+const MIDDLEBURY_SCENES2021_URL = 'https://vision.middlebury.edu/stereo/data/scenes2021/';
 const BROWN_PHOTOSTUDIO_PANORAMA_URL =
   'https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/1k/brown_photostudio_02_1k.exr';
 const BROWN_PHOTOSTUDIO_PANORAMA_FILENAME = 'brown_photostudio_02_1k.exr';
@@ -116,6 +118,12 @@ test('serves the project page with app and desktop download calls to action @smo
     { exact: true }
   )).toBeVisible();
   await expect(page.getByText('RGB image inspection', { exact: true })).toBeVisible();
+  await expect(page.getByText('Depth map inspection', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Inspect RGB plus metric Z depth from the Middlebury 2021 mobile stereo/)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Middlebury Stereo Datasets', exact: true })).toHaveAttribute(
+    'href',
+    MIDDLEBURY_SCENES2021_URL
+  );
   await expect(page.getByText(
     'Inspect KAIST scene27 reflectance data across wavelength channels with spectral probes and derived display views.',
     { exact: true }
@@ -164,7 +172,7 @@ test('serves the project page with app and desktop download calls to action @smo
   });
   expect(desktopGalleryLayout).toBe(true);
   const embeds = page.locator('prismifold-viewer');
-  await expect(embeds).toHaveCount(4);
+  await expect(embeds).toHaveCount(5);
 
   const cornellEmbed = embeds.first();
   await expect(cornellEmbed).toHaveAttribute('src', CBOX_RGB_URL);
@@ -172,14 +180,23 @@ test('serves the project page with app and desktop download calls to action @smo
   await expect(cornellEmbed).toHaveAttribute('width', '100%');
   await expect(cornellEmbed).toHaveAttribute('height', '360');
 
-  const kaistEmbed = embeds.nth(1);
+  const middleburyDepthEmbed = embeds.nth(1);
+  await expect(middleburyDepthEmbed).toHaveAttribute('src', MIDDLEBURY_CHESS1_RGB_Z_URL);
+  await expect(middleburyDepthEmbed).not.toHaveAttribute('name');
+  await expect(middleburyDepthEmbed).toHaveAttribute('view', 'depth');
+  await expect(middleburyDepthEmbed).toHaveAttribute('width', '100%');
+  await expect(middleburyDepthEmbed).toHaveAttribute('height', '360');
+  await expect(middleburyDepthEmbed).toHaveAttribute('bottom-panel', 'channels');
+  await expect(middleburyDepthEmbed).toHaveAttribute('auto-load', 'false');
+
+  const kaistEmbed = embeds.nth(2);
   await expect(kaistEmbed).toHaveAttribute('src', KAIST_SCENE27_REFLECTANCE_URL);
   await expect(kaistEmbed).not.toHaveAttribute('name');
   await expect(kaistEmbed).toHaveAttribute('width', '100%');
   await expect(kaistEmbed).toHaveAttribute('height', '360');
   await expect(kaistEmbed).toHaveAttribute('auto-load', 'false');
 
-  const stokesEmbed = embeds.nth(2);
+  const stokesEmbed = embeds.nth(3);
   await expect(stokesEmbed).toHaveAttribute('src', OWL_SPHERES_LINEAR_STOKES_URL);
   await expect(stokesEmbed).not.toHaveAttribute('name');
   await expect(stokesEmbed).toHaveAttribute('width', '100%');
@@ -187,7 +204,7 @@ test('serves the project page with app and desktop download calls to action @smo
   await expect(stokesEmbed).toHaveAttribute('bottom-panel', 'channels');
   await expect(stokesEmbed).toHaveAttribute('auto-load', 'false');
 
-  const panoramaEmbed = embeds.nth(3);
+  const panoramaEmbed = embeds.nth(4);
   await expect(panoramaEmbed).toHaveAttribute('src', BROWN_PHOTOSTUDIO_PANORAMA_URL);
   await expect(panoramaEmbed).not.toHaveAttribute('name');
   await expect(panoramaEmbed).toHaveAttribute('view', 'panorama');
@@ -202,6 +219,17 @@ test('serves the project page with app and desktop download calls to action @smo
   expect(iframeSrc).toContain('/app/?ui=embed');
   expect(iframeSrc).not.toContain('src=');
   expect(iframeSrc).not.toContain('name=');
+
+  const middleburyDepthIframeSrc = await middleburyDepthEmbed.evaluate((element) => {
+    const iframe = element.shadowRoot?.querySelector('iframe');
+    return iframe instanceof HTMLIFrameElement ? iframe.src : '';
+  });
+  expect(middleburyDepthIframeSrc).toContain('/app/?ui=embed');
+  expect(middleburyDepthIframeSrc).toContain('view=depth');
+  expect(middleburyDepthIframeSrc).toContain('bottomPanel=channels');
+  expect(middleburyDepthIframeSrc).toContain('autoLoad=false');
+  expect(middleburyDepthIframeSrc).not.toContain('src=');
+  expect(middleburyDepthIframeSrc).not.toContain('name=');
 
   const kaistIframeSrc = await kaistEmbed.evaluate((element) => {
     const iframe = element.shadowRoot?.querySelector('iframe');
@@ -239,7 +267,9 @@ test('serves the project page with app and desktop download calls to action @smo
   await expect(embeddedViewer.getByRole('button', { name: 'Open full viewer', exact: true })).toBeEnabled();
 
   const deferredStokesViewer = stokesEmbed.frameLocator('iframe');
+  const deferredMiddleburyDepthViewer = middleburyDepthEmbed.frameLocator('iframe');
   const deferredKaistViewer = kaistEmbed.frameLocator('iframe');
+  await expect(deferredMiddleburyDepthViewer.getByRole('button', { name: 'Click to load image', exact: true })).toBeVisible();
   await expect(deferredKaistViewer.getByRole('button', { name: 'Click to load image', exact: true })).toBeVisible();
   await expect(deferredStokesViewer.getByRole('button', { name: 'Click to load image', exact: true })).toBeVisible();
   const deferredPanoramaViewer = panoramaEmbed.frameLocator('iframe');
@@ -248,11 +278,18 @@ test('serves the project page with app and desktop download calls to action @smo
   await page.setViewportSize({ width: 390, height: 844 });
   await expectNoHorizontalOverflow(page);
   await expect(cornellEmbed).toHaveAttribute('height', '280');
+  await expect(middleburyDepthEmbed).toHaveAttribute('height', '280');
   await expect(kaistEmbed).toHaveAttribute('height', '280');
   await expect(stokesEmbed).toHaveAttribute('height', '280');
   await expect(panoramaEmbed).toHaveAttribute('height', '280');
   await expect.poll(async () => (
     await cornellEmbed.evaluate((element) => {
+      const iframe = element.shadowRoot?.querySelector('iframe');
+      return iframe instanceof HTMLIFrameElement ? iframe.style.height : '';
+    })
+  )).toBe('280px');
+  await expect.poll(async () => (
+    await middleburyDepthEmbed.evaluate((element) => {
       const iframe = element.shadowRoot?.querySelector('iframe');
       return iframe instanceof HTMLIFrameElement ? iframe.style.height : '';
     })
@@ -278,6 +315,27 @@ test('serves the project page with app and desktop download calls to action @smo
   expect(unexpectedErrors).toEqual([]);
 });
 
+test('loads the deferred depth embed from its local source when clicked', async ({ page }) => {
+  const unexpectedErrors = watchUnexpectedErrors(page);
+
+  await page.goto('/');
+  const depthEmbed = page.locator('prismifold-viewer').nth(1);
+  await depthEmbed.scrollIntoViewIfNeeded();
+
+  const embeddedViewer = depthEmbed.frameLocator('iframe');
+  const loadButton = embeddedViewer.getByRole('button', { name: 'Click to load image', exact: true });
+  const openFullButton = embeddedViewer.getByRole('button', { name: 'Open full viewer', exact: true });
+
+  await expect(loadButton).toBeVisible();
+  await expect(openFullButton).toBeDisabled();
+  await loadButton.click();
+
+  await expect(loadButton).toBeHidden({ timeout: 30000 });
+  await expect(openFullButton).toBeEnabled({ timeout: 30000 });
+  await expect(embeddedViewer.locator('.embed-status')).toBeHidden();
+  expect(unexpectedErrors).toEqual([]);
+});
+
 test('loads the deferred panorama embed from its remote source when clicked', async ({ page }) => {
   const unexpectedErrors = watchUnexpectedErrors(page);
   const fixtureBytes = readFileSync(new URL('../public/cbox_rgb.exr', import.meta.url));
@@ -290,7 +348,7 @@ test('loads the deferred panorama embed from its remote source when clicked', as
   });
 
   await page.goto('/');
-  const panoramaEmbed = page.locator('prismifold-viewer').nth(3);
+  const panoramaEmbed = page.locator('prismifold-viewer').nth(4);
   await panoramaEmbed.scrollIntoViewIfNeeded();
 
   const embeddedViewer = panoramaEmbed.frameLocator('iframe');

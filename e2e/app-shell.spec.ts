@@ -197,6 +197,12 @@ test('boots an empty app shell with menu actions gated until an image opens @smo
   const galleryBeachballItem = page.locator('#gallery-beachball-menu-button');
   const galleryBeachballMenu = page.locator('#gallery-beachball-menu');
   const galleryMultipartItem = page.getByRole('menuitem', { name: 'multipart.0001.exr', exact: true });
+  const galleryMiddleburyItem = page.locator('#gallery-middlebury-menu-button');
+  const galleryMiddleburyMenu = page.locator('#gallery-middlebury-menu');
+  const galleryMiddleburyChess1Item = page.getByRole('menuitem', {
+    name: 'middlebury_chess1_rgb_z.exr',
+    exact: true
+  });
   const galleryPolyHavenItem = page.locator('#gallery-polyhaven-menu-button');
   const galleryPolyHavenMenu = page.locator('#gallery-polyhaven-menu');
   const galleryArtistWorkshopItem = page.locator('#gallery-polyhaven-artist-workshop-1k-button');
@@ -303,6 +309,15 @@ test('boots an empty app shell with menu actions gated until an image opens @smo
   await expect(galleryMultipartItem).toBeEnabled();
   await page.keyboard.press('Escape');
   await expect(galleryBeachballMenu).toBeHidden();
+  await expect(galleryMiddleburyItem).toBeVisible();
+  await expect(galleryMiddleburyItem).toBeEnabled();
+  await expect(galleryMiddleburyMenu).toBeHidden();
+  await galleryMiddleburyItem.click();
+  await expect(galleryMiddleburyMenu).toBeVisible();
+  await expect(galleryMiddleburyChess1Item).toBeVisible();
+  await expect(galleryMiddleburyChess1Item).toBeEnabled();
+  await page.keyboard.press('Escape');
+  await expect(galleryMiddleburyMenu).toBeHidden();
   await expect(galleryPolyHavenItem).toBeVisible();
   await expect(galleryPolyHavenItem).toBeEnabled();
   await expect(galleryPolyHavenMenu).toBeHidden();

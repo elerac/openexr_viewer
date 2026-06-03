@@ -219,6 +219,29 @@
             <figure class="gallery-item">
               <figcaption>
                 <div class="gallery-caption-copy">
+                  <strong>Depth map inspection</strong>
+                  <span>
+                    Inspect RGB plus metric Z depth from the Middlebury 2021 mobile stereo
+                    <code>chess1</code> scene, converted to OpenEXR. Source:
+                    <a class="gallery-source-link" href="https://vision.middlebury.edu/stereo/data/scenes2021/">Middlebury Stereo Datasets</a>.
+                  </span>
+                </div>
+              </figcaption>
+              <div class="exr-embed-frame">
+                <prismifold-viewer
+                  data-responsive-height
+                  src="middlebury_chess1_rgb_z.exr"
+                  view="depth"
+                  width="100%"
+                  height="360"
+                  bottom-panel="channels"
+                  auto-load="false">
+                </prismifold-viewer>
+              </div>
+            </figure>
+            <figure class="gallery-item">
+              <figcaption>
+                <div class="gallery-caption-copy">
                   <strong>Hyperspectral reflectance inspection</strong>
                   <span>
                     Inspect KAIST scene27 reflectance data across wavelength channels with spectral

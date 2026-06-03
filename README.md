@@ -7,7 +7,7 @@ Prismifold is a multichannel image viewer for computational imaging, rendering, 
 ## Features
 
 - OpenEXR decode via a browser-safe `exrs` WASM adapter with full layer/channel extraction.
-- Gallery samples: local `Gallery > cbox_rgb.exr`, plus remote `Gallery > Beachball > multipart.0001.exr`, Poly Haven HDRIs under `Gallery > Poly Haven`, KAIST hyperspectral samples under `Gallery > KAIST Hyperspectral`, and Polanalyser Stokes samples under `Gallery > Polanalyser`; remote samples require network access.
+- Gallery samples: local `Gallery > cbox_rgb.exr` and `Gallery > Middlebury Stereo > middlebury_chess1_rgb_z.exr`, plus remote `Gallery > Beachball > multipart.0001.exr`, Poly Haven HDRIs under `Gallery > Poly Haven`, KAIST hyperspectral samples under `Gallery > KAIST Hyperspectral`, and Polanalyser Stokes samples under `Gallery > Polanalyser`; remote samples require network access.
 - Local EXR load via `File > Open...` or drag/drop (drag-and-drop supports multiple files and recursive folder drops in one action).
 - Recursive folder EXR load via `File > Open Folder...`; all `.exr` files under the selected folder are appended as sessions.
 - `File > Export...` exports the full active display to PNG at display image size with configurable PNG compression and current channel/stokes, exposure/gamma, colormap, and alpha settings applied.
@@ -80,6 +80,10 @@ Prismifold is a multichannel image viewer for computational imaging, rendering, 
   - Mueller matrix layers with complete `M00` through `M33` channel sets expose a `Mueller Matrix` entry rendered as a row-major 4x4 grayscale grid with no separator pixels. Complete non-RGB suffixed sets such as `M00.Y` through `M33.Y` expose suffixed entries such as `Mueller Matrix.Y`. RGB Mueller sets with `M00.R/G/B` through `M33.R/G/B` expose a grouped `Mueller Matrix.RGB` entry, and expanded stacks expose per-component entries such as `Mueller Matrix.R`.
   - When a selected layer does not expose the previous channel mapping, the viewer falls back to the first non-Mueller RGB group, then RGB Mueller, then the first RGB group, then XYZ/UV, then spectral RGB when available, then exact `Y`, then grayscale, then a complete Mueller matrix grid, then the first non-alpha channel.
 - Double-clicking the Display heading resets visualization mode/palette, RGB exposure/gamma, colormap EV/gamma/range/zero-center/reverse, without changing channel selection or view.
+
+## Sample data attribution
+
+`public/middlebury_chess1_rgb_z.exr` is a half-resolution OpenEXR conversion of RGB plus metric depth from the `chess1` scene in the [Middlebury 2021 mobile stereo datasets](https://vision.middlebury.edu/stereo/data/scenes2021/). Middlebury grants permission to use and publish images and disparity maps on its dataset site and requests citing paper [5] for the 2014/2021 datasets; see the [Middlebury stereo dataset citation guidance](https://vision.middlebury.edu/stereo/data/).
 
 ## UI Layout
 
@@ -256,7 +260,7 @@ Controller methods:
 
 - `Open Files` list: switch active image session by filename, filter rows, rename rows inline, or drag rows to reorder/assign to a split pane.
 - `Alt/Option+Up/Down`: reorder the active `Open Files` row.
-- `Gallery > cbox_rgb.exr` / `Beachball > multipart.0001.exr` / `Poly Haven` / `KAIST Hyperspectral` / `Polanalyser`: open a gallery sample and append it as a new session. Remote samples require network access.
+- `Gallery > cbox_rgb.exr` / `Middlebury Stereo > middlebury_chess1_rgb_z.exr` / `Beachball > multipart.0001.exr` / `Poly Haven` / `KAIST Hyperspectral` / `Polanalyser`: open a gallery sample and append it as a new session. Remote samples require network access.
 - `File > Open...`: open one EXR file and append it as a new session.
 - `File > Open Folder...`: recursively open every `.exr` file under the selected folder and append them as new sessions.
 - Drag/drop: drop one or more `.exr` files, or drop a folder to recursively load every `.exr` under it.

@@ -23,6 +23,8 @@ const RGB_STOKES_CHANNEL_NAMES = [
 
 const BEACHBALL_MULTIPART_URL =
   'https://raw.githubusercontent.com/AcademySoftwareFoundation/openexr-images/main/Beachball/multipart.0001.exr';
+const MIDDLEBURY_CHESS1_RGB_Z_FILENAME = 'middlebury_chess1_rgb_z.exr';
+const MIDDLEBURY_CHESS1_RGB_Z_URL = `${import.meta.env.BASE_URL}${MIDDLEBURY_CHESS1_RGB_Z_FILENAME}`;
 const POLY_HAVEN_HDRI_BASE_URL = 'https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/1k/';
 const KAIST_HYPERSPECTRAL_BASE_URL =
   'https://huggingface.co/datasets/danaroth/kaist-hyperspectral/resolve/main/exr/';
@@ -319,6 +321,49 @@ describe('session controller shim', () => {
         kind: 'url',
         url
       });
+    } finally {
+      Object.defineProperty(globalThis, 'fetch', {
+        configurable: true,
+        writable: true,
+        value: originalFetch
+      });
+    }
+  });
+
+  it('loads the Middlebury chess depth sample locally and opens depth mode', async () => {
+    const encodedBytes = new Uint8Array([6, 5, 4]);
+    const decodeBytes = vi.fn<(
+      bytes: Uint8Array,
+      options?: DecodeBytesOptions
+    ) => Promise<DecodedExrImage>>(async () => createDecodedImage(8, 4, ['R', 'G', 'B', 'Z']));
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(encodedBytes));
+    const originalFetch = globalThis.fetch;
+    Object.defineProperty(globalThis, 'fetch', {
+      configurable: true,
+      writable: true,
+      value: fetchMock
+    });
+
+    try {
+      const { controller, core } = createController({ decodeBytes });
+
+      await controller.enqueueGalleryImage('middlebury-chess1-rgb-z');
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(MIDDLEBURY_CHESS1_RGB_Z_URL, { signal: expect.any(AbortSignal) });
+      expect(decodeBytes.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+        filename: MIDDLEBURY_CHESS1_RGB_Z_FILENAME,
+        signal: expect.any(AbortSignal)
+      }));
+
+      const session = controller.getActiveSession();
+      expect(session?.filename).toBe(MIDDLEBURY_CHESS1_RGB_Z_FILENAME);
+      expect(session?.source).toEqual({
+        kind: 'url',
+        url: MIDDLEBURY_CHESS1_RGB_Z_URL
+      });
+      expect(core.getState().sessionState.viewerMode).toBe('depth');
+      expect(core.getState().sessionState.depthChannel).toBe('Z');
     } finally {
       Object.defineProperty(globalThis, 'fetch', {
         configurable: true,

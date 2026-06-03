@@ -494,6 +494,19 @@ main {
   line-height: 1.55;
 }
 
+.gallery-source-link {
+  color: var(--accent-dark);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.gallery-source-link:hover,
+.gallery-source-link:focus-visible {
+  color: var(--accent-blue);
+}
+
 .exr-embed-frame {
   overflow: hidden;
   background: #05070a;

@@ -2498,6 +2498,8 @@ describe('view menu', () => {
   ];
   const POLY_HAVEN_GALLERY_IDS = POLY_HAVEN_GALLERY_FILES.map(([galleryId]) => galleryId);
   const POLY_HAVEN_GALLERY_LABELS = POLY_HAVEN_GALLERY_FILES.map(([, label]) => label);
+  const MIDDLEBURY_CHESS1_RGB_Z_GALLERY_ID = 'middlebury-chess1-rgb-z';
+  const MIDDLEBURY_CHESS1_RGB_Z_GALLERY_LABEL = 'middlebury_chess1_rgb_z.exr';
 
   it('dispatches gallery selections for every gallery menu item', () => {
     installUiFixture();
@@ -2520,6 +2522,7 @@ describe('view menu', () => {
     expect(galleryTopLevelLabels).toEqual([
       'cbox_rgb.exr',
       'Beachball',
+      'Middlebury Stereo',
       'Poly Haven',
       'KAIST Hyperspectral',
       'Polanalyser'
@@ -2527,6 +2530,7 @@ describe('view menu', () => {
     expect(galleryItems.map((item) => item.textContent?.trim())).toEqual([
       'cbox_rgb.exr',
       'multipart.0001.exr',
+      MIDDLEBURY_CHESS1_RGB_Z_GALLERY_LABEL,
       ...POLY_HAVEN_GALLERY_LABELS,
       ...KAIST_GALLERY_LABELS,
       'avocado.exr',
@@ -2549,6 +2553,7 @@ describe('view menu', () => {
     expect(onGalleryImageSelected.mock.calls.map(([galleryId]) => galleryId)).toEqual([
       'cbox-rgb',
       'beachball-multipart-0001',
+      MIDDLEBURY_CHESS1_RGB_Z_GALLERY_ID,
       ...POLY_HAVEN_GALLERY_IDS,
       ...KAIST_GALLERY_IDS,
       'polanalyser-avocado',
@@ -4083,6 +4088,7 @@ describe('view menu', () => {
     expect(galleryItems.map((item) => item.dataset.galleryId)).toEqual([
       'cbox-rgb',
       'beachball-multipart-0001',
+      MIDDLEBURY_CHESS1_RGB_Z_GALLERY_ID,
       ...POLY_HAVEN_GALLERY_IDS,
       ...KAIST_GALLERY_IDS,
       'polanalyser-avocado',

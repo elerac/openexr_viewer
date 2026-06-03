@@ -25,6 +25,7 @@ import type {
   OpenedImageSession,
   PendingOpenedImageReservation,
   SessionSource,
+  ViewerMode,
   ViewportInfo,
   ViewportInsets
 } from '../types';
@@ -36,9 +37,12 @@ interface GalleryImage {
   label: string;
   filename: string;
   url?: string;
+  viewerMode?: ViewerMode;
 }
 
 const DESKTOP_CBOX_RGB_URL = 'https://raw.githubusercontent.com/elerac/prismifold/main/public/cbox_rgb.exr';
+const DESKTOP_MIDDLEBURY_CHESS1_RGB_Z_URL =
+  'https://raw.githubusercontent.com/elerac/prismifold/main/public/middlebury_chess1_rgb_z.exr';
 const POLANALYSER_STOKES_BASE_URL =
   'https://huggingface.co/datasets/elerac/polanalyser/resolve/main/data/stokes/imx250mzr/stokes/';
 const KAIST_HYPERSPECTRAL_BASE_URL =
@@ -112,6 +116,21 @@ const CBOX_RGB_GALLERY_IMAGE = import.meta.env.MODE === 'desktop'
       filename: 'cbox_rgb.exr'
     };
 
+const MIDDLEBURY_CHESS1_RGB_Z_GALLERY_IMAGE: GalleryImage = import.meta.env.MODE === 'desktop'
+  ? {
+      id: 'middlebury-chess1-rgb-z',
+      label: 'middlebury_chess1_rgb_z.exr',
+      filename: 'middlebury_chess1_rgb_z.exr',
+      url: DESKTOP_MIDDLEBURY_CHESS1_RGB_Z_URL,
+      viewerMode: 'depth'
+    }
+  : {
+      id: 'middlebury-chess1-rgb-z',
+      label: 'middlebury_chess1_rgb_z.exr',
+      filename: 'middlebury_chess1_rgb_z.exr',
+      viewerMode: 'depth'
+    };
+
 const POLY_HAVEN_GALLERY_IMAGES: GalleryImage[] = POLY_HAVEN_GALLERY_FILES.map(([id, filename]) => ({
   id,
   label: filename,
@@ -140,7 +159,8 @@ const GALLERY_IMAGES: GalleryImage[] = [
     label: 'multipart.0001.exr',
     filename: 'multipart.0001.exr',
     url: 'https://raw.githubusercontent.com/AcademySoftwareFoundation/openexr-images/main/Beachball/multipart.0001.exr'
-  }
+  },
+  MIDDLEBURY_CHESS1_RGB_Z_GALLERY_IMAGE
 ].concat(POLY_HAVEN_GALLERY_IMAGES, KAIST_GALLERY_IMAGES, POLANALYSER_GALLERY_IMAGES);
 
 const LOAD_CATEGORY_OPEN_FILES = 'open-files';
@@ -1211,6 +1231,12 @@ export class SessionController implements Disposable {
         filename: galleryImage.filename,
         displayName: options.displayName
       });
+      if (galleryImage.viewerMode) {
+        this.core.dispatch({
+          type: 'viewerModeSet',
+          viewerMode: galleryImage.viewerMode
+        });
+      }
     } catch (error) {
       if (!isAbortError(error) && !this.disposed) {
         this.core.dispatch({
