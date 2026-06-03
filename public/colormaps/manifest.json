@@ -5,6 +5,26 @@
       "file": "viridis.npy"
     },
     {
+      "label": "plasma",
+      "file": "plasma.npy"
+    },
+    {
+      "label": "inferno",
+      "file": "inferno.npy"
+    },
+    {
+      "label": "magma",
+      "file": "magma.npy"
+    },
+    {
+      "label": "cividis",
+      "file": "cividis.npy"
+    },
+    {
+      "label": "twilight",
+      "file": "twilight.npy"
+    },
+    {
       "label": "RdBu",
       "file": "RdBu.npy",
       "diverging": true

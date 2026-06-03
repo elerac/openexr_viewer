@@ -13,6 +13,11 @@ def main():
 
     colormap_defs = [
         {"name": "viridis", "label": "Viridis", "file": "viridis.npy"},
+        {"name": "plasma", "label": "plasma", "file": "plasma.npy"},
+        {"name": "inferno", "label": "inferno", "file": "inferno.npy"},
+        {"name": "magma", "label": "magma", "file": "magma.npy"},
+        {"name": "cividis", "label": "cividis", "file": "cividis.npy"},
+        {"name": "twilight", "label": "twilight", "file": "twilight.npy"},
         {"name": "RdBu", "label": "RdBu", "file": "RdBu.npy", "diverging": True},
         {"name": "hsv", "label": "HSV", "file": "hsv.npy"},
         {"name": "dop", "label": "Black-Red", "file": "black-red.npy"},
