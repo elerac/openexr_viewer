@@ -1,6 +1,10 @@
 node_modules
 dist
 dist-desktop
+vscode-extension/out
+vscode-extension/media/prismifold
+vscode-extension/.vscode-test
+vscode-extension/*.vsix
 .vite
 .playwright
 playwright-report

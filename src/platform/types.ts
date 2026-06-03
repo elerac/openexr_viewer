@@ -126,7 +126,7 @@ export interface AppFullscreenHost {
 }
 
 export interface ViewerHost extends ExportSink {
-  kind: 'web' | 'tauri';
+  kind: 'web' | 'tauri' | 'vscode';
   pathFileProvider: PathFileProvider | null;
   appFullscreen: AppFullscreenHost;
   openFiles(options: HostOpenFileOptions): void;

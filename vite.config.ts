@@ -9,9 +9,11 @@ const projectHtml = resolve(rootDir, 'index.html');
 
 export default defineConfig(({ mode }) => {
   const desktopBuild = mode === 'desktop';
+  const vscodeBuild = mode === 'vscode';
+  const appOnlyBuild = desktopBuild || vscodeBuild;
   const tauriDevHost = process.env.TAURI_DEV_HOST;
   const tauriPlatform = process.env.TAURI_ENV_PLATFORM;
-  const buildInput = desktopBuild
+  const buildInput = appOnlyBuild
     ? {
         app: appHtml
       }
@@ -21,10 +23,10 @@ export default defineConfig(({ mode }) => {
       };
 
   return {
-    base: desktopBuild
+    base: appOnlyBuild
       ? './'
       : process.env.GITHUB_PAGES === 'true' ? githubPagesBase : '/',
-    publicDir: desktopBuild ? false : 'public',
+    publicDir: appOnlyBuild ? false : 'public',
     clearScreen: !tauriPlatform,
     server: {
       port: 5173,
@@ -50,6 +52,13 @@ export default defineConfig(({ mode }) => {
             minify: process.env.TAURI_ENV_DEBUG ? false : 'esbuild',
             sourcemap: Boolean(process.env.TAURI_ENV_DEBUG)
           }
+        : vscodeBuild
+          ? {
+              outDir: 'vscode-extension/media/prismifold',
+              target: 'chrome120',
+              minify: 'esbuild',
+              sourcemap: false
+            }
         : {}),
       rollupOptions: {
         input: buildInput

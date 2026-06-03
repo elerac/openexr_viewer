@@ -1,6 +1,7 @@
 import { zipSync } from 'fflate';
 import { createPngBytesFromPixels } from '../export-image';
 import { createAbortError, isAbortError, throwIfAborted } from '../lifecycle';
+import ExportWorker from './export-worker.ts?worker&inline';
 import type { ExportImagePixels } from './export-pixels';
 import type { PngCompressionLevel } from '../types';
 
@@ -166,7 +167,7 @@ function ensureExportWorkerSlot(): ExportWorkerSlot {
     return workerSlot;
   }
 
-  const worker = new Worker(new URL('./export-worker.ts', import.meta.url), { type: 'module' });
+  const worker = new ExportWorker();
   const slot: ExportWorkerSlot = {
     worker,
     active: null,

@@ -1,9 +1,16 @@
 import { tauriHost } from './tauri-host';
+import { vscodeHost } from './vscode-host';
 import { webHost } from './web-host';
 import type { ViewerHost } from './types';
 
 export function createViewerHost(): ViewerHost {
-  return import.meta.env.MODE === 'desktop' ? tauriHost : webHost;
+  if (import.meta.env.MODE === 'desktop') {
+    return tauriHost;
+  }
+  if (import.meta.env.MODE === 'vscode') {
+    return vscodeHost;
+  }
+  return webHost;
 }
 
 export type {

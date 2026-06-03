@@ -103,7 +103,9 @@ const KAIST_HYPERSPECTRAL_FILENAMES = [
   'scene29_reflectance.exr',
   'scene30_reflectance.exr'
 ] as const;
-const CBOX_RGB_GALLERY_IMAGE = import.meta.env.MODE === 'desktop'
+const useRemotePackagedGallerySamples = import.meta.env.MODE === 'desktop' || import.meta.env.MODE === 'vscode';
+
+const CBOX_RGB_GALLERY_IMAGE = useRemotePackagedGallerySamples
   ? {
       id: 'cbox-rgb',
       label: 'cbox_rgb.exr',
@@ -116,7 +118,7 @@ const CBOX_RGB_GALLERY_IMAGE = import.meta.env.MODE === 'desktop'
       filename: 'cbox_rgb.exr'
     };
 
-const MIDDLEBURY_CHESS1_RGB_Z_GALLERY_IMAGE: GalleryImage = import.meta.env.MODE === 'desktop'
+const MIDDLEBURY_CHESS1_RGB_Z_GALLERY_IMAGE: GalleryImage = useRemotePackagedGallerySamples
   ? {
       id: 'middlebury-chess1-rgb-z',
       label: 'middlebury_chess1_rgb_z.exr',

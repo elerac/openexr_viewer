@@ -1,0 +1,7 @@
+src/**
+test/**
+*.vsix
+tsconfig.json
+node_modules/**
+out/**/*.map
+media/prismifold/**/*.map

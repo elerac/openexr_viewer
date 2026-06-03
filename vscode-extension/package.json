@@ -1,0 +1,155 @@
+{
+  "name": "prismifold-vscode",
+  "displayName": "Prismifold",
+  "description": "OpenEXR viewer for computational imaging, rendering, and vision workflows.",
+  "icon": "icon.png",
+  "version": "0.1.0",
+  "publisher": "elerac",
+  "license": "MIT",
+  "homepage": "https://elerac.github.io/prismifold/app/",
+  "bugs": {
+    "url": "https://github.com/elerac/openexr_viewer/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/elerac/openexr_viewer.git",
+    "directory": "vscode-extension"
+  },
+  "keywords": [
+    "openexr",
+    "exr",
+    "hdr",
+    "image viewer",
+    "visualization",
+    "rendering",
+    "computational imaging"
+  ],
+  "galleryBanner": {
+    "color": "#0b1020",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.120.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "activationEvents": [
+    "onCustomEditor:prismifold.exrViewer",
+    "onCommand:prismifold.openFile",
+    "onCommand:prismifold.openFolder"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "prismifold.exrViewer",
+        "displayName": "Prismifold OpenEXR Viewer",
+        "selector": [
+          {
+            "filenamePattern": "*.exr"
+          },
+          {
+            "filenamePattern": "*.EXR"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "prismifold.openFile",
+        "title": "Prismifold: Open EXR File"
+      },
+      {
+        "command": "prismifold.openFolder",
+        "title": "Prismifold: Open EXR Folder"
+      },
+      {
+        "command": "prismifold.exportImage",
+        "title": "Prismifold: Export Image"
+      },
+      {
+        "command": "prismifold.exportScreenshot",
+        "title": "Prismifold: Export Screenshot"
+      },
+      {
+        "command": "prismifold.exportBatch",
+        "title": "Prismifold: Export Batch"
+      },
+      {
+        "command": "prismifold.exportColormap",
+        "title": "Prismifold: Export Colormap"
+      },
+      {
+        "command": "prismifold.reloadAll",
+        "title": "Prismifold: Reload All"
+      },
+      {
+        "command": "prismifold.closeAll",
+        "title": "Prismifold: Close All"
+      },
+      {
+        "command": "prismifold.showMetadata",
+        "title": "Prismifold: Show Metadata"
+      },
+      {
+        "command": "prismifold.openSettings",
+        "title": "Prismifold: Open Settings"
+      },
+      {
+        "command": "prismifold.viewImage",
+        "title": "Prismifold: Image Viewer"
+      },
+      {
+        "command": "prismifold.viewPanorama",
+        "title": "Prismifold: Panorama Viewer"
+      },
+      {
+        "command": "prismifold.viewDepth",
+        "title": "Prismifold: Depth Viewer"
+      },
+      {
+        "command": "prismifold.toggleRulers",
+        "title": "Prismifold: Toggle Rulers"
+      },
+      {
+        "command": "prismifold.splitVertical",
+        "title": "Prismifold: Split Viewer Vertically"
+      },
+      {
+        "command": "prismifold.splitHorizontal",
+        "title": "Prismifold: Split Viewer Horizontally"
+      },
+      {
+        "command": "prismifold.resetPanes",
+        "title": "Prismifold: Reset Viewer Panes"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "prismifold.openFile",
+          "when": "resourceExtname == .exr || resourceExtname == .EXR",
+          "group": "navigation@20"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "test": "npm run compile && node ./out/test/runTest.js",
+    "package": "npm run compile && vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.10.2",
+    "@types/vscode": "^1.120.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.9.1",
+    "mocha": "^11.7.6",
+    "typescript": "^5.7.2"
+  }
+}

@@ -124,6 +124,14 @@ npm run preview
 
 Output is generated in `dist/` and is static-hosting ready.
 
+## VS Code Extension
+
+Prismifold is available as a Visual Studio Code extension for opening `.exr` files directly inside VS Code as readonly custom editors.
+
+Marketplace: https://marketplace.visualstudio.com/items?itemName=elerac.prismifold-vscode
+
+The extension reuses the Prismifold viewer UI and supports local EXR file/folder loading, metadata inspection, viewer modes, rulers, pane layouts, and derived PNG/ZIP exports. Source `.exr` files are not modified.
+
 ## Desktop App
 
 Prerequisites:

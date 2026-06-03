@@ -214,7 +214,7 @@ export async function bootstrapApp(options: BootstrapAppOptions = {}): Promise<A
       },
       isDisposed
     });
-    if (host.kind === 'tauri') {
+    if (host.kind !== 'web') {
       const recentMenu = host.installRecentFilesMenu({
         onOpenEntry: (entry) => {
           void getServices().sessionController.enqueuePathEntries([entry]);

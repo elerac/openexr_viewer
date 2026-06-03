@@ -1,4 +1,5 @@
 import { loadExr } from './exr';
+import ExrDecodeWorker from './exr-worker.ts?worker&inline';
 import {
   createAbortError,
   isAbortError,
@@ -73,6 +74,7 @@ let nextRequestId = 1;
 let nextWorkerSlotId = 1;
 let maxDecodeWorkers = getDefaultImageLoadWorkers();
 let decodeWorkersUnavailable = false;
+const decodeWorkersSupported = import.meta.env.MODE !== 'vscode';
 const queuedDecodes: DecodeRequest[] = [];
 const workerSlots: DecodeWorkerSlot[] = [];
 
@@ -85,7 +87,7 @@ export async function loadExrOffMainThread(
     throwIfAborted(options.signal, 'EXR decode was aborted.');
   }
 
-  if (typeof Worker === 'undefined' || decodeWorkersUnavailable) {
+  if (!decodeWorkersSupported || typeof Worker === 'undefined' || decodeWorkersUnavailable) {
     return await decodeOnMainThread(bytes, options.signal, context);
   }
 
@@ -176,7 +178,7 @@ function ensureInitialDecodeWorkerSlot(): void {
 }
 
 function createDecodeWorkerSlot(): DecodeWorkerSlot {
-  const worker = new Worker(new URL('./exr-worker.ts', import.meta.url), { type: 'module' });
+  const worker = new ExrDecodeWorker();
   const slot: DecodeWorkerSlot = {
     id: nextWorkerSlotId++,
     worker,
