@@ -272,12 +272,11 @@ main {
 
 .download-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
 }
 
-.download-option,
-.download-release-link {
+.download-option {
   transition:
     color 160ms ease,
     border-color 160ms ease,
@@ -316,6 +315,16 @@ main {
   stroke-linejoin: round;
 }
 
+.download-option--vscode svg {
+  fill: currentColor;
+  opacity: 0.82;
+  paint-order: fill stroke;
+  stroke: var(--surface);
+  stroke-width: 0.75;
+  transform: scale(0.78);
+  transform-origin: center;
+}
+
 .download-platform {
   min-width: 0;
   color: var(--text-strong);
@@ -338,24 +347,6 @@ main {
   font-size: 13px;
   line-height: 1.35;
   font-weight: 740;
-}
-
-.download-release-link {
-  display: inline-flex;
-  align-items: center;
-  justify-self: start;
-  min-height: 34px;
-  color: var(--accent-dark);
-  font-size: 13px;
-  font-weight: 740;
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
-
-.download-release-link:hover,
-.download-release-link:focus-visible {
-  color: var(--accent-blue);
 }
 
 .features-section {

@@ -15,11 +15,11 @@ const OWL_SPHERES_LINEAR_STOKES_URL =
   'https://huggingface.co/datasets/elerac/polanalyser/resolve/main/data/stokes/imx250mzr/stokes/owl_spheres.exr';
 const KAIST_SCENE27_REFLECTANCE_URL =
   'https://huggingface.co/datasets/danaroth/kaist-hyperspectral/resolve/main/exr/scene27_reflectance.exr';
-const RELEASES_URL = 'https://github.com/elerac/prismifold/releases/latest';
 const WINDOWS_DESKTOP_URL =
   'https://github.com/elerac/prismifold/releases/latest/download/Prismifold-windows-x64-setup.exe';
 const MACOS_DESKTOP_URL =
   'https://github.com/elerac/prismifold/releases/latest/download/Prismifold-macos-arm64.dmg';
+const VSCODE_MARKETPLACE_URL = 'https://marketplace.visualstudio.com/items?itemName=elerac.prismifold-vscode';
 const EXPECTED_BOOTSTRAP_ABORT = 'Viewer application has not finished initializing.';
 
 function watchUnexpectedErrors(page: Page): string[] {
@@ -98,7 +98,7 @@ async function expectGalleryCardLaunch(
   }
 }
 
-test('serves the project page with app and desktop download calls to action @smoke', async ({ page }) => {
+test('serves the project page with app, desktop, and VS Code download calls to action @smoke', async ({ page }) => {
   const unexpectedErrors = watchUnexpectedErrors(page);
   await page.goto('/');
 
@@ -142,7 +142,7 @@ test('serves the project page with app and desktop download calls to action @smo
 
   await expect(page.getByRole('heading', { name: 'Downloads', level: 2 })).toBeVisible();
   await expect(page.getByText(
-    'Desktop installers are published from the latest GitHub Release. These unsigned builds may show Windows or macOS security prompts.',
+    'Desktop installers are published from the latest GitHub Release, and the VS Code extension is available from the Visual Studio Marketplace. Unsigned desktop builds may show Windows or macOS security prompts.',
     { exact: true }
   )).toBeVisible();
   await expect(page.getByRole('link', { name: 'Download Prismifold for Windows x64', exact: true })).toHaveAttribute(
@@ -153,10 +153,14 @@ test('serves the project page with app and desktop download calls to action @smo
     'href',
     MACOS_DESKTOP_URL
   );
-  await expect(page.getByRole('link', { name: 'Release notes and checksums', exact: true })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: 'Install Prismifold VS Code extension', exact: true })).toHaveAttribute(
     'href',
-    RELEASES_URL
+    VSCODE_MARKETPLACE_URL
   );
+  await expect(page.getByText('VS Code', { exact: true })).toBeVisible();
+  await expect(page.getByText('Marketplace extension', { exact: true })).toBeVisible();
+  await expect(page.getByText('Open Marketplace', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Release notes and checksums', exact: true })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Features', level: 2 })).toBeVisible();
   await expect(page.getByText(
     'Tools for inspecting, visualizing, exporting, and embedding channel-heavy EXR data.',
