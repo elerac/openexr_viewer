@@ -83,7 +83,7 @@ Prismifold is a multichannel image viewer for computational imaging, rendering, 
 
 ## Sample data attribution
 
-`public/middlebury_chess1_rgb_z.exr` is a half-resolution OpenEXR conversion of RGB plus metric depth from the `chess1` scene in the [Middlebury 2021 mobile stereo datasets](https://vision.middlebury.edu/stereo/data/scenes2021/). Middlebury grants permission to use and publish images and disparity maps on its dataset site and requests citing paper [5] for the 2014/2021 datasets; see the [Middlebury stereo dataset citation guidance](https://vision.middlebury.edu/stereo/data/).
+`public/middlebury_chess1_rgb_z.exr` is a half-resolution OpenEXR conversion of RGB plus metric depth from the `chess1` scene in the Middlebury 2021 mobile stereo datasets.
 
 ## UI Layout
 
