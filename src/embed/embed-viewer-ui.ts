@@ -75,6 +75,32 @@ const EMBED_CHANNEL_PANEL_STOP_EVENTS = [
   'keyup'
 ];
 
+function createOpenFullIcon(): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 20 20');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+
+  const frame = document.createElementNS(SVG_NS, 'path');
+  frame.setAttribute('d', 'M8.5 5.5H6A2.5 2.5 0 0 0 3.5 8v6A2.5 2.5 0 0 0 6 16.5h6a2.5 2.5 0 0 0 2.5-2.5v-2.5');
+  frame.setAttribute('fill', 'none');
+  frame.setAttribute('stroke', 'currentColor');
+  frame.setAttribute('stroke-linecap', 'round');
+  frame.setAttribute('stroke-linejoin', 'round');
+  frame.setAttribute('stroke-width', '1.7');
+
+  const arrow = document.createElementNS(SVG_NS, 'path');
+  arrow.setAttribute('d', 'M10.5 3.5h6v6m0-6L9.5 10.5');
+  arrow.setAttribute('fill', 'none');
+  arrow.setAttribute('stroke', 'currentColor');
+  arrow.setAttribute('stroke-linecap', 'round');
+  arrow.setAttribute('stroke-linejoin', 'round');
+  arrow.setAttribute('stroke-width', '1.7');
+
+  svg.append(frame, arrow);
+  return svg;
+}
+
 export class EmbedViewerUi implements ViewerRuntimeUi {
   readonly viewerContainer: HTMLElement;
   readonly glCanvas: HTMLCanvasElement;
@@ -150,7 +176,9 @@ export class EmbedViewerUi implements ViewerRuntimeUi {
     this.openFullButton = document.createElement('button');
     this.openFullButton.className = 'embed-open-full-button';
     this.openFullButton.type = 'button';
-    this.openFullButton.textContent = 'Open full viewer';
+    this.openFullButton.setAttribute('aria-label', 'Open full viewer');
+    this.openFullButton.title = 'Open full viewer';
+    this.openFullButton.append(createOpenFullIcon());
     this.openFullButton.disabled = true;
     this.openFullButton.addEventListener('pointerdown', stopViewerInteractionEvent);
     this.openFullButton.addEventListener('click', this.handleOpenFullClick);

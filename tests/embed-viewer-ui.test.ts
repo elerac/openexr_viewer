@@ -130,6 +130,11 @@ describe('EmbedViewerUi', () => {
     expect(document.querySelector('.embed-source-label')?.textContent).toBe('Beauty pass');
 
     const button = document.querySelector<HTMLButtonElement>('.embed-open-full-button');
+    expect(button).toBeInstanceOf(HTMLButtonElement);
+    expect(button?.getAttribute('aria-label')).toBe('Open full viewer');
+    expect(button?.getAttribute('title')).toBe('Open full viewer');
+    expect(button?.textContent).toBe('');
+    expect(button?.querySelector('svg')).toBeInstanceOf(SVGSVGElement);
     expect(button?.disabled).toBe(false);
     button?.click();
     expect(onOpenFull).toHaveBeenCalledTimes(1);

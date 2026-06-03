@@ -188,11 +188,22 @@ body.embed-body {
 }
 
 .embed-open-full-button {
-  flex: 0 0 auto;
-  padding: 6px 8px;
+  flex: 0 0 30px;
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   border-radius: 4px;
   cursor: pointer;
+  line-height: 0;
   pointer-events: auto;
+}
+
+.embed-open-full-button svg {
+  display: block;
+  width: 16px;
+  height: 16px;
 }
 
 .embed-open-full-button:disabled {
