@@ -1,4 +1,8 @@
 import { loadExr } from './exr';
+import {
+  configureExrRuntime,
+  resolveExrRuntimeWasmUrl
+} from './exr-runtime';
 import ExrDecodeWorker from './exr-worker.ts?worker&inline';
 import {
   createAbortError,
@@ -31,6 +35,7 @@ interface DecodeWorkerRequest {
   bytes: Uint8Array;
   filename: string | null;
   context: DecodeErrorContext;
+  wasmUrl: string;
 }
 
 type DecodeWorkerResponse =
@@ -77,6 +82,9 @@ let decodeWorkersUnavailable = false;
 const decodeWorkersSupported = import.meta.env.MODE !== 'vscode';
 const queuedDecodes: DecodeRequest[] = [];
 const workerSlots: DecodeWorkerSlot[] = [];
+const exrWasmUrl = resolveExrRuntimeWasmUrl();
+
+configureExrRuntime({ wasmUrl: exrWasmUrl });
 
 export async function loadExrOffMainThread(
   bytes: Uint8Array,
@@ -344,7 +352,8 @@ function startDecodeRequest(slot: DecodeWorkerSlot, request: DecodeRequest): voi
         id: request.id,
         bytes: transferableBytes.bytes,
         filename: request.filename,
-        context: request.context
+        context: request.context,
+        wasmUrl: exrWasmUrl
       } satisfies DecodeWorkerRequest,
       transferableBytes.transferables
     );

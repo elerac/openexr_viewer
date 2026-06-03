@@ -71,7 +71,9 @@ describe('exr worker client', () => {
     const next = loadExrOffMainThread(new Uint8Array([4, 5, 6]));
     expect(workers).toHaveLength(2);
 
-    const request = workers[1]?.postMessage.mock.calls[0]?.[0] as { id: number };
+    const request = workers[1]?.postMessage.mock.calls[0]?.[0] as PostedDecodeRequest;
+    expect(request.wasmUrl).toMatch(/exrs_raw_wasm_bindgen_bg\.wasm$/u);
+    expect(() => new URL(request.wasmUrl)).not.toThrow();
     workers[1]?.emitMessage({
       id: request.id,
       ok: true,
@@ -327,4 +329,9 @@ function createDecodedImage(width = 1): DecodedExrImage {
     height: 1,
     layers: []
   };
+}
+
+interface PostedDecodeRequest {
+  id: number;
+  wasmUrl: string;
 }

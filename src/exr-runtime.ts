@@ -3,6 +3,18 @@ import wasmUrl from './vendor/exrs_raw_wasm_bindgen_bg.wasm?url';
 
 let initialized = false;
 let initializing: Promise<void> | null = null;
+let configuredWasmUrl: string | null = null;
+
+export function configureExrRuntime(options: { wasmUrl?: string | null }): void {
+  configuredWasmUrl = normalizeConfiguredWasmUrl(options.wasmUrl);
+}
+
+export function resolveExrRuntimeWasmUrl(
+  assetUrl: string = wasmUrl,
+  baseUrl: string = import.meta.url
+): string {
+  return new URL(assetUrl, baseUrl).href;
+}
 
 export async function decodeRawExr(bytes: Uint8Array): Promise<ExrDecoder> {
   await ensureInitialized();
@@ -21,9 +33,9 @@ async function ensureInitialized(): Promise<void> {
 
   initializing = (async () => {
     try {
-      await initRawWasm({ module_or_path: wasmUrl });
+      await initRawWasm({ module_or_path: getWasmModuleUrl() });
     } catch (error) {
-      if (typeof window !== 'undefined') {
+      if (isBrowserRuntime()) {
         throw error;
       }
 
@@ -39,6 +51,38 @@ async function ensureInitialized(): Promise<void> {
   } finally {
     initializing = null;
   }
+}
+
+function getWasmModuleUrl(): string {
+  return configuredWasmUrl ?? resolveExrRuntimeWasmUrl();
+}
+
+function normalizeConfiguredWasmUrl(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function isBrowserRuntime(): boolean {
+  if (typeof window !== 'undefined') {
+    return true;
+  }
+
+  if (typeof self === 'undefined') {
+    return false;
+  }
+
+  const workerLikeSelf = self as unknown as {
+    fetch?: unknown;
+    location?: { href?: unknown };
+    navigator?: unknown;
+  };
+  return typeof workerLikeSelf.fetch === 'function' &&
+    typeof workerLikeSelf.location?.href === 'string' &&
+    typeof workerLikeSelf.navigator !== 'undefined';
 }
 
 async function loadNodeWasmBytes(): Promise<Uint8Array> {

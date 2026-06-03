@@ -1,6 +1,7 @@
 import { loadExr } from './exr';
 import { createPlanarChannelStorageFromInterleaved } from './channel-storage';
 import { collectDecodedImageTransferables } from './decode-transferables';
+import { configureExrRuntime } from './exr-runtime';
 import {
   createDecodeErrorContext,
   createDecodeErrorPayload,
@@ -14,6 +15,7 @@ interface DecodeWorkerRequest {
   bytes: Uint8Array;
   filename: string | null;
   context: DecodeErrorContext;
+  wasmUrl: string;
 }
 
 type DecodeWorkerResponse =
@@ -41,6 +43,7 @@ worker.addEventListener('message', (event: MessageEvent<DecodeWorkerRequest>) =>
 
 async function decodeAndReply(request: DecodeWorkerRequest): Promise<void> {
   try {
+    configureExrRuntime({ wasmUrl: request.wasmUrl });
     const image = convertDecodedImageToPlanar(await loadExr(request.bytes));
     worker.postMessage(
       {
