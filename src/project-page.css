@@ -394,7 +394,7 @@ main {
 
 .feature-catalog {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 18px;
 }
 
@@ -457,12 +457,12 @@ main {
 .gallery-grid {
   display: grid;
   gap: 28px;
-  max-width: 1040px;
+  width: 100%;
 }
 
 .gallery-item {
   display: grid;
-  grid-template-columns: minmax(220px, 0.34fr) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
   gap: 22px;
   align-items: start;
   min-width: 0;
@@ -494,17 +494,41 @@ main {
   line-height: 1.55;
 }
 
+.gallery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.gallery-web-app-link {
+  color: #04131c;
+  background: var(--accent);
+  box-shadow: 0 12px 28px rgba(25, 191, 242, 0.2);
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.gallery-web-app-link:hover,
+.gallery-web-app-link:focus-visible {
+  background: #66dfff;
+  box-shadow: 0 14px 34px rgba(25, 191, 242, 0.28);
+}
+
 .gallery-source-link {
-  color: var(--accent-dark);
-  font-weight: 700;
+  color: inherit;
+  font-weight: 400;
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
+  overflow-wrap: anywhere;
 }
 
 .gallery-source-link:hover,
 .gallery-source-link:focus-visible {
-  color: var(--accent-blue);
+  color: var(--text);
 }
 
 .exr-embed-frame {
@@ -518,6 +542,61 @@ main {
 .exr-embed-frame prismifold-viewer {
   display: block;
   width: 100%;
+}
+
+.gallery-screenshot-frame {
+  min-width: 0;
+}
+
+.gallery-screenshot {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+
+.gallery-screenshot--wide {
+  aspect-ratio: 2 / 1;
+}
+
+.gallery-item--embed-demo figcaption {
+  display: grid;
+  gap: 14px;
+}
+
+.gallery-code-frame {
+  min-width: 0;
+  overflow: hidden;
+  color: #d9e7f6;
+  background: #08101b;
+  border: 1px solid #1d2735;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.gallery-code-frame pre {
+  min-width: 0;
+  padding: 16px;
+  margin: 0;
+  overflow-x: auto;
+}
+
+.gallery-code-frame code {
+  color: inherit;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.gallery-live-embed-frame {
+  min-width: 0;
+}
+
+.gallery-live-embed {
+  min-height: 280px;
 }
 
 .site-footer {

@@ -257,6 +257,7 @@ export type ViewerIntent =
   | { type: 'maskInvalidStokesVectorsSet'; enabled: boolean }
   | { type: 'spectralRgbGroupingSet'; enabled: boolean }
   | { type: 'invalidValueWarningSet'; enabled: boolean }
+  | { type: 'lockedPixelSet'; pixel: ViewerSessionState['lockedPixel'] }
   | { type: 'lockedPixelToggled'; pixel: ViewerSessionState['lockedPixel'] }
   | { type: 'roiSet'; roi: ViewerSessionState['roi'] }
   | { type: 'viewerStateEdited'; patch: Partial<ViewerViewState> }

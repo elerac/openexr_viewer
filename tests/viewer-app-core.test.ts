@@ -5,6 +5,7 @@ import { createDefaultChannelRecognitionNameRules } from '../src/channel-recogni
 import { createDefaultChannelRecognitionSettings } from '../src/channel-recognition-settings';
 import { DEFAULT_DISPLAY_GAMMA } from '../src/color';
 import { DEFAULT_DEPTH_ZOOM } from '../src/depth';
+import { applyEmbedViewerStateSnapshot } from '../src/embed/embed-state';
 import { ViewerAppCore } from '../src/app/viewer-app-core';
 import { DEFAULT_PANORAMA_HFOV_DEG } from '../src/interaction/panorama-geometry';
 import { createInteractionState } from '../src/view-state';
@@ -94,6 +95,60 @@ describe('viewer app core', () => {
 
     core.dispatch({ type: 'rulersVisibleSet', enabled: false });
     expect(core.getState().rulersVisible).toBe(false);
+  });
+
+  it('sets locked pixels deterministically without toggling matching pixels off', () => {
+    const core = new ViewerAppCore();
+    const session = createSession('session-1');
+    core.dispatch({ type: 'sessionLoaded', session });
+
+    core.dispatch({ type: 'lockedPixelSet', pixel: { ix: 1, iy: 0 } });
+    expect(core.getState().sessionState.lockedPixel).toEqual({ ix: 1, iy: 0 });
+
+    core.dispatch({ type: 'lockedPixelSet', pixel: { ix: 1, iy: 0 } });
+    expect(core.getState().sessionState.lockedPixel).toEqual({ ix: 1, iy: 0 });
+
+    core.dispatch({ type: 'lockedPixelSet', pixel: null });
+    expect(core.getState().sessionState.lockedPixel).toBeNull();
+  });
+
+  it('applies serialized depth settings and locked pixels deterministically', () => {
+    const core = new ViewerAppCore();
+    core.dispatch({
+      type: 'sessionLoaded',
+      session: createSession('session-1', createDecodedImage(['R', 'G', 'B', 'Z']))
+    });
+
+    const snapshot = {
+      viewerMode: 'depth' as const,
+      depthChannel: 'Z',
+      depthFocalLengthPx: 960,
+      depthPointSizePx: 2,
+      lockedPixel: { ix: 1, iy: 0 },
+      view: {
+        depthYawDeg: -5.3,
+        depthPitchDeg: 0.65,
+        depthZoom: 2
+      }
+    };
+
+    applyEmbedViewerStateSnapshot(core, snapshot);
+    expect(core.getState().sessionState).toMatchObject({
+      viewerMode: 'depth',
+      depthChannel: 'Z',
+      depthFocalLengthPx: 960,
+      depthPointSizePx: 2,
+      lockedPixel: { ix: 1, iy: 0 },
+      depthYawDeg: -5.3,
+      depthPitchDeg: 0.65,
+      depthZoom: 2
+    });
+
+    applyEmbedViewerStateSnapshot(core, snapshot);
+    expect(core.getState().sessionState.lockedPixel).toEqual({ ix: 1, iy: 0 });
+
+    applyEmbedViewerStateSnapshot(core, { lockedPixel: null });
+    expect(core.getState().sessionState.lockedPixel).toBeNull();
   });
 
   it('applies channel recognition settings and falls back from disabled candidates', () => {

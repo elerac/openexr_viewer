@@ -2,12 +2,16 @@
 
 import { describe, expect, it } from 'vitest';
 import { buildFullViewerUrl, parseViewerBootstrapParams } from '../src/embed/embed-params';
-import { encodeEmbedViewerState } from '../src/embed/embed-state';
+import { decodeEmbedViewerState, encodeEmbedViewerState } from '../src/embed/embed-state';
 
 describe('embed params', () => {
   it('parses embed source, handoff, view, and serialized state', () => {
     const state = {
       viewerMode: 'panorama' as const,
+      lockedPixel: { ix: 195, iy: 169 },
+      depthChannel: 'Z',
+      depthFocalLengthPx: 960,
+      depthPointSizePx: 2,
       view: {
         panoramaYawDeg: 20,
         panoramaPitchDeg: -4
@@ -30,6 +34,34 @@ describe('embed params', () => {
       state
     });
     expect('gallery' in parsed).toBe(false);
+  });
+
+  it('round-trips locked pixels and depth inspection settings through serialized state', () => {
+    const state = {
+      viewerMode: 'depth' as const,
+      depthChannel: 'Z',
+      depthFocalLengthPx: 960,
+      depthPointSizePx: 2,
+      lockedPixel: { ix: 406, iy: 300 },
+      view: {
+        depthYawDeg: -5.3,
+        depthPitchDeg: 0.65,
+        depthZoom: 2
+      }
+    };
+
+    const encodedState = encodeEmbedViewerState(state);
+    expect(decodeEmbedViewerState(encodedState)).toEqual(state);
+    expect(decodeEmbedViewerState(encodeEmbedViewerState({
+      lockedPixel: null,
+      depthChannel: null,
+      depthFocalLengthPx: null
+    }))).toEqual({
+      lockedPixel: null,
+      depthChannel: null,
+      depthFocalLengthPx: null,
+      view: {}
+    });
   });
 
   it('builds static-hosting friendly full viewer URLs', () => {

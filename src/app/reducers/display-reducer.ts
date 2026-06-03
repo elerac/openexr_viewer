@@ -349,6 +349,10 @@ export function displayReducer(
         colormapReversed: !state.sessionState.colormapReversed
       });
     }
+    case 'lockedPixelSet':
+      return patchSessionState(state, {
+        lockedPixel: intent.pixel ? { ...intent.pixel } : null
+      });
     case 'lockedPixelToggled': {
       const current = state.sessionState.lockedPixel;
       return patchSessionState(state, {

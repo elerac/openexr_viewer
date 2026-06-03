@@ -131,7 +131,7 @@
         <div class="section-inner">
           <div class="section-heading">
             <h2 id="features-title">Features</h2>
-            <p>Tools for inspecting, visualizing, measuring, and exporting channel-heavy EXR data.</p>
+            <p>Tools for inspecting, visualizing, exporting, and embedding channel-heavy EXR data.</p>
           </div>
 
           <div class="feature-catalog">
@@ -142,9 +142,9 @@
               </svg>
               <h3 id="inspect-title">Inspect</h3>
               <ul class="feature-list">
-                <li>Open EXR files from disk, drag and drop, or sample scenes.</li>
-                <li>Probe raw source pixel values before display transforms.</li>
-                <li>Review EXR metadata, channel lists, and image windows.</li>
+                <li>Open files and sample scenes; review metadata and channels.</li>
+                <li>Probe exact source values with zoom and rulers.</li>
+                <li>Inspect ROIs, valid samples, and image statistics.</li>
               </ul>
             </section>
 
@@ -154,22 +154,9 @@
               </svg>
               <h3 id="visualize-title">Visualize</h3>
               <ul class="feature-list">
-                <li>Browse RGB, alpha, AOV, spectral, Stokes, and grouped channels.</li>
+                <li>Browse RGB, alpha, AOV, spectral, polarization, and grouped channels.</li>
                 <li>Apply colormaps, exposure, gamma, range, and zero-center controls.</li>
                 <li>Switch between image, panorama, and depth viewing modes.</li>
-              </ul>
-            </section>
-
-            <section class="feature-card" aria-labelledby="measure-title">
-              <svg class="feature-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 4h16v16H4z" />
-                <path d="M8 4v4M12 4v3M16 4v4M4 8h4M4 12h3M4 16h4" />
-              </svg>
-              <h3 id="measure-title">Measure</h3>
-              <ul class="feature-list">
-                <li>Draw ROIs and inspect bounds, size, and valid sample counts.</li>
-                <li>Read min, mean, and max statistics for active channel selections.</li>
-                <li>Use rulers and image stats while zooming into exact pixels.</li>
               </ul>
             </section>
 
@@ -186,6 +173,20 @@
                 <li>Generate standalone PNG gradients for registered colormaps.</li>
               </ul>
             </section>
+
+            <section class="feature-card" aria-labelledby="embed-title">
+              <svg class="feature-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 8 4 12l4 4" />
+                <path d="M16 8l4 4-4 4" />
+                <path d="M14 4 10 20" />
+              </svg>
+              <h3 id="embed-title">Embed</h3>
+              <ul class="feature-list">
+                <li>Add <code>&lt;prismifold-viewer&gt;</code> to HTML pages.</li>
+                <li>Load the viewer with the hosted JavaScript web component.</li>
+                <li>Share EXR views in docs, papers, and project pages.</li>
+              </ul>
+            </section>
           </div>
         </div>
       </section>
@@ -194,69 +195,82 @@
         <div class="section-inner">
           <div class="section-heading">
             <h2 id="gallery-title">Gallery</h2>
-            <p>Embedded examples stay inspectable on the page and can open into the full viewer.</p>
+            <p>
+              Gallery examples highlight source-value inspection, screenshot export,
+              visualization across RGB, depth, hyperspectral, polarization, and panorama EXR data,
+              plus an embeddable HTML viewer demo.
+            </p>
           </div>
 
           <div class="gallery-grid">
             <figure class="gallery-item">
               <figcaption>
                 <div class="gallery-caption-copy">
-                  <strong>RGB image inspection</strong>
+                  <strong>Source value inspection</strong>
                   <span>
-                    Inspect a simple RGB OpenEXR image with pixel probes for exact source values.
+                    Zoom into image data with pixel rulers and lock a probe to read exact source
+                    channel values directly from the OpenEXR pixels.
                   </span>
                 </div>
+                <div class="gallery-actions">
+                  <a
+                    class="button gallery-web-app-link"
+                    data-gallery-launch="rgb"
+                    href="app/"
+                    target="_blank"
+                    rel="noopener">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M14 5h5v5" />
+                      <path d="M10 14 19 5" />
+                      <path d="M19 14v5H5V5h5" />
+                    </svg>
+                    <span>Try Web App</span>
+                  </a>
+                </div>
               </figcaption>
-              <div class="exr-embed-frame">
-                <prismifold-viewer
-                  data-responsive-height
-                  src="cbox_rgb.exr"
-                  width="100%"
-                  height="360">
-                </prismifold-viewer>
+              <div class="exr-embed-frame gallery-screenshot-frame">
+                <img
+                  class="gallery-screenshot"
+                  src="project-page/cbox-rgb-inspection.png"
+                  alt="Prismifold zoomed into an RGB OpenEXR image with a locked pixel probe and pixel rulers at x 195 y 169"
+                  width="1440"
+                  height="900"
+                />
               </div>
             </figure>
             <figure class="gallery-item">
               <figcaption>
                 <div class="gallery-caption-copy">
-                  <strong>Depth map inspection</strong>
+                  <strong>Screenshot export</strong>
                   <span>
-                    Inspect RGB plus metric Z depth from the Middlebury 2021 mobile stereo
-                    <code>chess1</code> scene, converted to OpenEXR. Source:
-                    <a class="gallery-source-link" href="https://vision.middlebury.edu/stereo/data/scenes2021/">Middlebury Stereo Datasets</a>.
+                    Select and crop multiple regions from the current view, keep a region active
+                    for adjustment, and export pixel exact screenshot crops without interpolation.
                   </span>
                 </div>
-              </figcaption>
-              <div class="exr-embed-frame">
-                <prismifold-viewer
-                  data-responsive-height
-                  src="middlebury_chess1_rgb_z.exr"
-                  view="depth"
-                  width="100%"
-                  height="360"
-                  bottom-panel="channels"
-                  auto-load="false">
-                </prismifold-viewer>
-              </div>
-            </figure>
-            <figure class="gallery-item">
-              <figcaption>
-                <div class="gallery-caption-copy">
-                  <strong>Hyperspectral reflectance inspection</strong>
-                  <span>
-                    Inspect KAIST scene27 reflectance data across wavelength channels with spectral
-                    probes and derived display views.
-                  </span>
+                <div class="gallery-actions">
+                  <a
+                    class="button gallery-web-app-link"
+                    data-gallery-launch="spoons"
+                    href="app/"
+                    target="_blank"
+                    rel="noopener">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M14 5h5v5" />
+                      <path d="M10 14 19 5" />
+                      <path d="M19 14v5H5V5h5" />
+                    </svg>
+                    <span>Try Web App</span>
+                  </a>
                 </div>
               </figcaption>
-              <div class="exr-embed-frame">
-                <prismifold-viewer
-                  data-responsive-height
-                  src="https://huggingface.co/datasets/danaroth/kaist-hyperspectral/resolve/main/exr/scene27_reflectance.exr"
-                  width="100%"
-                  height="360"
-                  auto-load="false">
-                </prismifold-viewer>
+              <div class="exr-embed-frame gallery-screenshot-frame">
+                <img
+                  class="gallery-screenshot gallery-screenshot--wide"
+                  src="project-page/spoons-screenshot-export.png"
+                  alt="Prismifold screenshot export mode with two selected screenshot regions and R1 active"
+                  width="2048"
+                  height="1024"
+                />
               </div>
             </figure>
             <figure class="gallery-item">
@@ -264,41 +278,180 @@
                 <div class="gallery-caption-copy">
                   <strong>Stokes vector visualization</strong>
                   <span>
-                    Visualize linear polarization data by deriving AoLP and DoLP views from S0, S1,
-                    and S2 Stokes channels.
+                    A source EXR with <code>S0</code>, <code>S1</code>, and <code>S2</code>
+                    can be visualized as computed <code>S1/S0</code>, <code>S2/S0</code>,
+                    <code>AoLP</code>, and <code>DoLP</code> images, with a dedicated colormap
+                    applied automatically. Full-Stokes vector images that include the circular
+                    <code>S3</code> component are supported too.
                   </span>
                 </div>
+                <div class="gallery-actions">
+                  <a
+                    class="button gallery-web-app-link"
+                    data-gallery-launch="stokes"
+                    href="app/"
+                    target="_blank"
+                    rel="noopener">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M14 5h5v5" />
+                      <path d="M10 14 19 5" />
+                      <path d="M19 14v5H5V5h5" />
+                    </svg>
+                    <span>Try Web App</span>
+                  </a>
+                </div>
               </figcaption>
-              <div class="exr-embed-frame">
-                <prismifold-viewer
-                  data-responsive-height
-                  src="https://huggingface.co/datasets/elerac/polanalyser/resolve/main/data/stokes/imx250mzr/stokes/owl_spheres.exr"
-                  width="100%"
-                  height="360"
-                  bottom-panel="channels"
-                  auto-load="false">
-                </prismifold-viewer>
+              <div class="exr-embed-frame gallery-screenshot-frame">
+                <img
+                  class="gallery-screenshot"
+                  src="project-page/polanalyser-stokes-aolp-y.png"
+                  alt="Prismifold visualizing a Stokes vector image with computed AoLP and an automatically applied dedicated colormap"
+                  width="1440"
+                  height="900"
+                />
               </div>
             </figure>
             <figure class="gallery-item">
               <figcaption>
                 <div class="gallery-caption-copy">
-                  <strong>Panorama environment viewing</strong>
+                  <strong>Hyperspectral visualization</strong>
                   <span>
-                    Explore equirectangular HDRI data in panorama mode, orbiting the view while
-                    probes map screen rays back to source pixels.
+                    Hyperspectral channels are automatically computed into RGB for visualization,
+                    while still supporting per-wavelength inspection with a spectral plot and
+                    expanded 31-channel thumbnails.
+                    <br />
+                    Source:
+                    <a class="gallery-source-link" href="https://vclab.kaist.ac.kr/siggraphasia2017p1/kaistdataset.html">KAIST Hyperspectral Image Dataset</a>.
                   </span>
                 </div>
+                <div class="gallery-actions">
+                  <a
+                    class="button gallery-web-app-link"
+                    data-gallery-launch="hyperspectral"
+                    href="app/"
+                    target="_blank"
+                    rel="noopener">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M14 5h5v5" />
+                      <path d="M10 14 19 5" />
+                      <path d="M19 14v5H5V5h5" />
+                    </svg>
+                    <span>Try Web App</span>
+                  </a>
+                </div>
               </figcaption>
-              <div class="exr-embed-frame">
+              <div class="exr-embed-frame gallery-screenshot-frame">
+                <img
+                  class="gallery-screenshot"
+                  src="project-page/kaist-hyperspectral-inspection.png"
+                  alt="Prismifold visualizing hyperspectral EXR data with a locked pixel probe, Display collapsed, and 31 spectral channel thumbnails expanded"
+                  width="1440"
+                  height="900"
+                />
+              </div>
+            </figure>
+            <figure class="gallery-item">
+              <figcaption>
+                <div class="gallery-caption-copy">
+                  <strong>Depth map view</strong>
+                  <span>
+                    Switch RGB plus Z data into a depth-map view that converts depth into a 3D
+                    point cloud, tune focal length, camera angles, and point size, and sample exact
+                    color and depth values from the source pixels.
+                    <br />
+                    Source:
+                    <a class="gallery-source-link" href="https://vision.middlebury.edu/stereo/data/scenes2021/">Middlebury Stereo Datasets</a>.
+                  </span>
+                </div>
+                <div class="gallery-actions">
+                  <a
+                    class="button gallery-web-app-link"
+                    data-gallery-launch="depth"
+                    href="app/"
+                    target="_blank"
+                    rel="noopener">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M14 5h5v5" />
+                      <path d="M10 14 19 5" />
+                      <path d="M19 14v5H5V5h5" />
+                    </svg>
+                    <span>Try Web App</span>
+                  </a>
+                </div>
+              </figcaption>
+              <div class="exr-embed-frame gallery-screenshot-frame">
+                <img
+                  class="gallery-screenshot"
+                  src="project-page/middlebury-depth-inspection.png"
+                  alt="Prismifold depth map view with focal length 960 and a locked pixel probe at x 406 y 300"
+                  width="1440"
+                  height="900"
+                />
+              </div>
+            </figure>
+            <figure class="gallery-item">
+              <figcaption>
+                <div class="gallery-caption-copy">
+                  <strong>Panorama view</strong>
+                  <span>
+                    Navigate HDRI data in equirectangular format with panorama mode and a wide fov,
+                    while sampled view rays still resolve back to exact OpenEXR source pixels.
+                    <br />
+                    Source:
+                    <a class="gallery-source-link" href="https://polyhaven.com/a/brown_photostudio_02">Poly Haven HDRIs</a>.
+                  </span>
+                </div>
+                <div class="gallery-actions">
+                  <a
+                    class="button gallery-web-app-link"
+                    data-gallery-launch="panorama"
+                    href="app/"
+                    target="_blank"
+                    rel="noopener">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M14 5h5v5" />
+                      <path d="M10 14 19 5" />
+                      <path d="M19 14v5H5V5h5" />
+                    </svg>
+                    <span>Try Web App</span>
+                  </a>
+                </div>
+              </figcaption>
+              <div class="exr-embed-frame gallery-screenshot-frame">
+                <img
+                  class="gallery-screenshot"
+                  src="project-page/polyhaven-panorama-inspection.png"
+                  alt="Prismifold panorama view with yaw 5.37 pitch -34 and fov 180"
+                  width="1440"
+                  height="900"
+                />
+              </div>
+            </figure>
+            <figure class="gallery-item gallery-item--embed-demo">
+              <figcaption>
+                <div class="gallery-caption-copy">
+                  <strong>HTML embed</strong>
+                  <span>
+                    Add the hosted JavaScript file and a <code>&lt;prismifold-viewer&gt;</code>
+                    tag to publish an interactive OpenEXR viewer directly inside documentation,
+                    papers, and project pages.
+                  </span>
+                </div>
+                <div class="gallery-code-frame" aria-label="HTML embed code">
+                  <pre><code>&lt;script src="https://elerac.github.io/prismifold/embed/prismifold.js"&gt;&lt;/script&gt;
+
+&lt;prismifold-viewer
+  src="cbox_rgb.exr"
+  height="360"&gt;
+&lt;/prismifold-viewer&gt;</code></pre>
+                </div>
+              </figcaption>
+              <div class="exr-embed-frame gallery-live-embed-frame">
                 <prismifold-viewer
-                  data-responsive-height
-                  src="https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/1k/brown_photostudio_02_1k.exr"
-                  view="panorama"
-                  width="100%"
+                  class="gallery-live-embed"
+                  src="cbox_rgb.exr"
                   height="360"
-                  auto-load="false">
-                </prismifold-viewer>
+                  data-responsive-height></prismifold-viewer>
               </div>
             </figure>
           </div>

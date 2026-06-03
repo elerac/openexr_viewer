@@ -1,8 +1,9 @@
-import { ViewerAppCore } from '../app/viewer-app-core';
+import type { ViewerAppCore } from '../app/viewer-app-core';
 import type { ViewerAppState } from '../app/viewer-app-types';
 import type {
   DisplayLuminanceRange,
   DisplaySelection,
+  ImagePixel,
   ViewerSessionState,
   ViewerViewState
 } from '../types';
@@ -20,6 +21,10 @@ export interface EmbedViewerStateSnapshot {
   colormapRange?: DisplayLuminanceRange | null;
   colormapZeroCentered?: boolean;
   colormapReversed?: boolean;
+  depthChannel?: string | null;
+  depthFocalLengthPx?: number | null;
+  depthPointSizePx?: number;
+  lockedPixel?: ImagePixel | null;
   view?: Partial<ViewerViewState>;
 }
 
@@ -39,6 +44,10 @@ export function createEmbedViewerStateSnapshot(state: ViewerAppState): EmbedView
     colormapRange: session.colormapRange ? { ...session.colormapRange } : null,
     colormapZeroCentered: session.colormapZeroCentered,
     colormapReversed: session.colormapReversed,
+    depthChannel: session.depthChannel,
+    depthFocalLengthPx: session.depthFocalLengthPx,
+    depthPointSizePx: session.depthPointSizePx,
+    lockedPixel: session.lockedPixel ? { ...session.lockedPixel } : null,
     view: {
       zoom: view.zoom,
       panX: view.panX,
@@ -127,6 +136,23 @@ export function applyEmbedViewerStateSnapshot(
   if (snapshot.colormapReversed === true && !core.getState().sessionState.colormapReversed) {
     core.dispatch({ type: 'colormapReverseToggled' });
   }
+  if (snapshot.lockedPixel !== undefined) {
+    core.dispatch({ type: 'lockedPixelSet', pixel: snapshot.lockedPixel });
+  }
+  if (
+    snapshot.depthChannel !== undefined ||
+    snapshot.depthFocalLengthPx !== undefined ||
+    snapshot.depthPointSizePx !== undefined
+  ) {
+    core.dispatch({
+      type: 'depthSettingsEdited',
+      patch: {
+        ...(snapshot.depthChannel !== undefined ? { depthChannel: snapshot.depthChannel } : {}),
+        ...(snapshot.depthFocalLengthPx !== undefined ? { depthFocalLengthPx: snapshot.depthFocalLengthPx } : {}),
+        ...(snapshot.depthPointSizePx !== undefined ? { depthPointSizePx: snapshot.depthPointSizePx } : {})
+      }
+    });
+  }
 
   const viewPatch = normalizeViewPatch(snapshot.view);
   if (Object.keys(viewPatch).length > 0) {
@@ -158,6 +184,14 @@ function normalizeEmbedViewerStateSnapshot(value: unknown): EmbedViewerStateSnap
     colormapRange: isDisplayLuminanceRange(record.colormapRange) ? record.colormapRange : undefined,
     colormapZeroCentered: typeof record.colormapZeroCentered === 'boolean' ? record.colormapZeroCentered : undefined,
     colormapReversed: typeof record.colormapReversed === 'boolean' ? record.colormapReversed : undefined,
+    depthChannel: typeof record.depthChannel === 'string' || record.depthChannel === null
+      ? record.depthChannel
+      : undefined,
+    depthFocalLengthPx: isFiniteNumber(record.depthFocalLengthPx) || record.depthFocalLengthPx === null
+      ? record.depthFocalLengthPx
+      : undefined,
+    depthPointSizePx: isFiniteNumber(record.depthPointSizePx) ? record.depthPointSizePx : undefined,
+    lockedPixel: normalizeImagePixel(record.lockedPixel),
     view: normalizeViewPatch(record.view)
   };
 }
@@ -185,6 +219,20 @@ function normalizeViewPatch(value: unknown): Partial<ViewerViewState> {
     }
   }
   return patch;
+}
+
+function normalizeImagePixel(value: unknown): ImagePixel | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  return isNonNegativeInteger(record.ix) && isNonNegativeInteger(record.iy)
+    ? { ix: record.ix, iy: record.iy }
+    : undefined;
 }
 
 function normalizeDisplaySelection(value: unknown): DisplaySelection | null | undefined {
