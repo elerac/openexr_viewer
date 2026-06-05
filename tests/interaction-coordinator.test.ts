@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ViewerInteractionCoordinator } from '../src/interaction-coordinator';
-import { createEmptyRoiInteractionState } from '../src/view-state';
+import { createEmptyRoiInteractionState, createInteractionState } from '../src/view-state';
 import { createInitialState } from '../src/viewer-store';
-import type { ViewerSessionState } from '../src/types';
+import type { ViewerSessionState, ViewerViewState } from '../src/types';
+
+function createExpectedView(overrides: Partial<ViewerViewState> = {}): ViewerViewState {
+  return {
+    ...createInteractionState(createInitialState()).view,
+    ...overrides
+  };
+}
 
 function createHarness(initialSessionState: Partial<ViewerSessionState> = {}) {
   let sessionState = {
@@ -67,50 +74,28 @@ describe('interaction coordinator', () => {
     expect(harness.onInteractionChange).toHaveBeenCalledTimes(1);
     expect(harness.onInteractionChange).toHaveBeenCalledWith(
       {
-        view: {
+        view: createExpectedView({
           zoom: 2,
           panX: 4,
-          panY: 5,
-          panoramaYawDeg: 0,
-          panoramaPitchDeg: 0,
-          panoramaHfovDeg: 100,
-          depthYawDeg: 0,
-          depthPitchDeg: 0,
-          depthZoom: 1
-        },
+          panY: 5
+        }),
         hoveredPixel: { ix: 2, iy: 1 },
         draftRoi: null,
         roiInteraction: createEmptyRoiInteractionState()
       },
       {
-        view: {
-          zoom: 1,
-          panX: 0,
-          panY: 0,
-          panoramaYawDeg: 0,
-          panoramaPitchDeg: 0,
-          panoramaHfovDeg: 100,
-          depthYawDeg: 0,
-          depthPitchDeg: 0,
-          depthZoom: 1
-        },
+        view: createExpectedView(),
         hoveredPixel: null,
         draftRoi: null,
         roiInteraction: createEmptyRoiInteractionState()
       }
     );
     expect(harness.commitViewState).toHaveBeenCalledTimes(1);
-    expect(harness.commitViewState).toHaveBeenCalledWith({
+    expect(harness.commitViewState).toHaveBeenCalledWith(createExpectedView({
       zoom: 2,
       panX: 4,
-      panY: 5,
-      panoramaYawDeg: 0,
-      panoramaPitchDeg: 0,
-      panoramaHfovDeg: 100,
-      depthYawDeg: 0,
-      depthPitchDeg: 0,
-      depthZoom: 1
-    });
+      panY: 5
+    }));
   });
 
   it('ignores same-pixel hover updates even when object identity changes', () => {
@@ -167,17 +152,14 @@ describe('interaction coordinator', () => {
 
     expect(sync.changed).toBe(true);
     expect(sync.state).toEqual({
-      view: {
+      view: createExpectedView({
         zoom: 7,
         panX: 8,
         panY: 9,
         panoramaYawDeg: 15,
         panoramaPitchDeg: 10,
-        panoramaHfovDeg: 70,
-        depthYawDeg: 0,
-        depthPitchDeg: 0,
-        depthZoom: 1
-      },
+        panoramaHfovDeg: 70
+      }),
       hoveredPixel: null,
       draftRoi: null,
       roiInteraction: createEmptyRoiInteractionState()
