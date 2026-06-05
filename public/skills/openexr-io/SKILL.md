@@ -21,7 +21,8 @@ Use exact suffixes and complete groups. Prefixes such as `hoge` and `fuga` are p
 - Named color group: `hoge.R`, `hoge.G`, `hoge.B`, optional `hoge.A`.
 - Alpha companions: bare `A`, or matching-prefix names such as `hoge.A` for `hoge.R/G/B` and `fuga.A` for `fuga.Z`.
 - Depth: prefer `Z`; depth-like names ending in `.Z`, such as `hogeDepth.Z`, are recognized by default. Use positive finite values for depth projection.
-- XYZ component groups: `hoge.X`, `hoge.Y`, `hoge.Z`.
+- XYZ component groups: `hoge.X`, `hoge.Y`, `hoge.Z`. Generic XYZ groups are displayed as component groups.
+- Position maps: prefer complete triplets `P.X`, `P.Y`, `P.Z` for canonical 3D position data. `Position.X/Y/Z` and `position.X/Y/Z` are also recognized by default.
 - Normal maps: `N.X/Y/Z`, `normal.X/Y/Z`, or names ending in `_normal.X/Y/Z`. Normal-map recognition takes precedence over generic XYZ grouping.
 - UV component groups: `fuga.U`, `fuga.V`, optional `fuga.A`.
 - Mueller matrices: complete `M00` through `M33`; suffixed scalar Mueller can use `M00.hoge` through `M33.hoge`; RGB Mueller uses `M00.R/G/B` through `M33.R/G/B`.
@@ -29,6 +30,7 @@ Use exact suffixes and complete groups. Prefixes such as `hoge` and `fuga` are p
 ## Regex Recommendations
 
 - RGB group patterns should include `base`, `r`, `g`, `b`, and `a` captures, and match names like `R/G/B/A` and `hoge.R/G/B/A`.
+- Position-map patterns should include `base`, `x`, `y`, and `z` captures, and match complete triplets like `P.X/Y/Z`, `Position.X/Y/Z`, and `position.X/Y/Z`.
 - Spectral-series patterns should include `wavelength`, with optional `series`, and match names like `400nm`, `hoge.400nm`, and `hoge400nm`.
 - Scalar Stokes patterns should include one or more of `s0`, `s1`, `s2`, `s3`, with optional `suffix`.
 - RGB Stokes patterns should include one or more of `s0`, `s1`, `s2`, `s3`, plus one or more of `r`, `g`, `b`.
