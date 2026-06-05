@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from './helpers/test';
 
 const EXPECTED_BOOTSTRAP_ABORT = 'Viewer application has not finished initializing.';
@@ -5,6 +6,10 @@ const EMBED_GUIDE_TITLE = 'Prismifold Embed Guide | OpenEXR Image Viewer';
 const EMBED_GUIDE_DESCRIPTION =
   'Embed Prismifold OpenEXR viewers in HTML pages with the prismifold-viewer web component, declarative attributes, deferred loading, channel panels, and the JavaScript API.';
 const EMBED_GUIDE_URL = 'https://elerac.github.io/prismifold/embed/';
+const POLYHAVEN_BROWN_PHOTOSTUDIO_URL =
+  'https://dl.polyhaven.org/file/ph-assets/HDRIs/exr/1k/brown_photostudio_02_1k.exr';
+const POLYHAVEN_BROWN_PHOTOSTUDIO_NAME = 'Poly Haven Brown Photostudio 02';
+const CBOX_RGB_EXR_FIXTURE = readFileSync(new URL('../public/cbox_rgb.exr', import.meta.url));
 
 function watchUnexpectedErrors(page: Page): string[] {
   const errors: string[] = [];
@@ -46,6 +51,12 @@ async function expectEmbedIframeUiMode(page: Page, locatorText: string): Promise
 
 test('serves the embed guide with live examples and reference content @smoke', async ({ page }) => {
   const unexpectedErrors = watchUnexpectedErrors(page);
+  await page.route(POLYHAVEN_BROWN_PHOTOSTUDIO_URL, async (route) => {
+    await route.fulfill({
+      contentType: 'application/octet-stream',
+      body: CBOX_RGB_EXR_FIXTURE
+    });
+  });
   await page.goto('/embed/');
 
   await expect(page).toHaveTitle(EMBED_GUIDE_TITLE);
@@ -98,8 +109,8 @@ test('serves the embed guide with live examples and reference content @smoke', a
     .locator('.embed-example')
     .filter({ hasText: 'Panorama view' })
     .locator('.gallery-code-frame code');
-  await expect(panoramaCode).toContainText('src="../cbox_rgb.exr"');
-  await expect(panoramaCode).toContainText('name="Cornell Box panorama mode"');
+  await expect(panoramaCode).toContainText(`src="${POLYHAVEN_BROWN_PHOTOSTUDIO_URL}"`);
+  await expect(panoramaCode).toContainText(`name="${POLYHAVEN_BROWN_PHOTOSTUDIO_NAME}"`);
   await expect(panoramaCode).toContainText('view="panorama"');
   await expect(panoramaCode).toContainText('bottom-panel="none"');
   await expect(panoramaCode).toContainText('source-origin="viewer"');
@@ -136,10 +147,10 @@ test('serves the embed guide with live examples and reference content @smoke', a
   expect(channelsUrl.searchParams.get('bottomPanel')).toBe('channels');
   expect(channelsUrl.searchParams.get('name')).toBe('Cornell Box RGB');
   const panoramaUrl = await expectEmbedIframeUiMode(page, 'Panorama view');
-  expect(panoramaUrl.searchParams.get('src')).toBe('../cbox_rgb.exr');
+  expect(panoramaUrl.searchParams.get('src')).toBe(POLYHAVEN_BROWN_PHOTOSTUDIO_URL);
   expect(panoramaUrl.searchParams.get('view')).toBe('panorama');
   expect(panoramaUrl.searchParams.get('bottomPanel')).toBe('none');
-  expect(panoramaUrl.searchParams.get('name')).toBe('Cornell Box panorama mode');
+  expect(panoramaUrl.searchParams.get('name')).toBe(POLYHAVEN_BROWN_PHOTOSTUDIO_NAME);
   const threeDUrl = await expectEmbedIframeUiMode(page, '3D view');
   expect(threeDUrl.searchParams.get('src')).toBe('../middlebury_chess1_rgb_z.exr');
   expect(threeDUrl.searchParams.get('view')).toBe('3d');
