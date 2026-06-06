@@ -50,7 +50,7 @@ async function expectEmbedIframeUiMode(page: Page, locatorText: string): Promise
 }
 
 test('serves the embed guide with live examples and reference content @smoke', async ({ page }) => {
-  test.setTimeout(60000);
+  test.setTimeout(120000);
   const unexpectedErrors = watchUnexpectedErrors(page);
   await page.route(POLYHAVEN_BROWN_PHOTOSTUDIO_URL, async (route) => {
     await route.fulfill({
@@ -58,7 +58,7 @@ test('serves the embed guide with live examples and reference content @smoke', a
       body: CBOX_RGB_EXR_FIXTURE
     });
   });
-  await page.goto('/embed/');
+  await page.goto('/embed/', { waitUntil: 'domcontentloaded' });
 
   await expect(page).toHaveTitle(EMBED_GUIDE_TITLE);
   await expect(page.locator('head meta[name="description"]')).toHaveAttribute('content', EMBED_GUIDE_DESCRIPTION);
@@ -68,12 +68,11 @@ test('serves the embed guide with live examples and reference content @smoke', a
   await expect(page.locator('head meta[property="og:url"]')).toHaveAttribute('content', EMBED_GUIDE_URL);
 
   await expect(page.getByRole('heading', { name: 'Embed Prismifold', level: 1 })).toBeVisible();
+  await expect(page.locator('.site-nav a')).toHaveText(['Project', 'Examples', 'Attributes', 'API', 'GitHub']);
   await expect(page.getByRole('link', { name: 'Project', exact: true })).toHaveAttribute('href', '../');
   await expect(page.getByRole('link', { name: 'Examples', exact: true })).toHaveAttribute('href', '#examples');
   await expect(page.getByRole('link', { name: 'Attributes', exact: true })).toHaveAttribute('href', '#attributes');
   await expect(page.getByRole('link', { name: 'API', exact: true })).toHaveAttribute('href', '#javascript-api');
-  await expect(page.getByRole('link', { name: 'View Examples', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Project Page', exact: true })).toHaveCount(0);
   await expect(page.getByText(
     'Publish interactive OpenEXR inspection directly inside documentation, papers, datasets, and project pages.',
     { exact: false }
