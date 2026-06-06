@@ -159,9 +159,9 @@ test('serves the embed guide static content and reference docs @smoke', async ({
   await expect(panoramaCode).toContainText(`name="${POLYHAVEN_BROWN_PHOTOSTUDIO_NAME}"`);
   await expect(panoramaCode).toContainText('view="panorama"');
   await expect(panoramaCode).toContainText('panorama-auto-rotate="true"');
-  await expect(panoramaCode).toContainText('panorama-rotation-speed="6"');
   await expect(panoramaCode).toContainText('bottom-panel="none"');
-  await expect(panoramaCode).toContainText('source-origin="viewer"');
+  await expect(panoramaCode).not.toContainText('panorama-rotation-speed');
+  await expect(panoramaCode).not.toContainText('source-origin');
 
   const threeDCode = embedExampleCode(page, EXAMPLE_TITLE_IDS.threeD);
   await expect(threeDCode).toContainText('src="../middlebury_chess1_rgb_p.exr"');
@@ -169,7 +169,7 @@ test('serves the embed guide static content and reference docs @smoke', async ({
   await expect(threeDCode).toContainText('view="3d"');
   await expect(threeDCode).toContainText('three-d-auto-orbit="true"');
   await expect(threeDCode).toContainText('bottom-panel="none"');
-  await expect(threeDCode).toContainText('source-origin="viewer"');
+  await expect(threeDCode).not.toContainText('source-origin');
 
   const deferredCode = embedExampleCode(page, EXAMPLE_TITLE_IDS.deferred);
   await expect(deferredCode).toContainText('auto-load="false"');
@@ -196,9 +196,7 @@ test('serves the embed guide static content and reference docs @smoke', async ({
     name: POLYHAVEN_BROWN_PHOTOSTUDIO_NAME,
     view: 'panorama',
     'panorama-auto-rotate': 'true',
-    'panorama-rotation-speed': '6',
     'bottom-panel': 'none',
-    'source-origin': 'viewer',
     height: '360'
   });
   await expectExampleViewerAttributes(page, EXAMPLE_TITLE_IDS.threeD, {
@@ -207,7 +205,6 @@ test('serves the embed guide static content and reference docs @smoke', async ({
     view: '3d',
     'three-d-auto-orbit': 'true',
     'bottom-panel': 'none',
-    'source-origin': 'viewer',
     height: '360'
   });
   await expectExampleViewerAttributes(page, EXAMPLE_TITLE_IDS.deferred, {
