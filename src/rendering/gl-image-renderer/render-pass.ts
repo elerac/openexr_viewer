@@ -156,9 +156,11 @@ export function renderDepthPass(
     return;
   }
 
+  const depthPointSizePx = normalizeDepthPointSize(viewerState.depthPointSizePx);
   const maxPoints = state.resolveDepthPointBudget({
     width: options.viewportWidth ?? state.viewport.width,
-    height: options.viewportHeight ?? state.viewport.height
+    height: options.viewportHeight ?? state.viewport.height,
+    pointSizePx: depthPointSizePx
   });
   const sampling = resolveDepthPointSampling(sourceSize.width, sourceSize.height, maxPoints);
   if (sampling.pointCount <= 0) {
@@ -209,7 +211,7 @@ export function renderDepthPass(
     normalizeDepthTarget(viewerState.depthTargetY),
     normalizeDepthTarget(viewerState.depthTargetZ)
   );
-  gl.uniform1f(program.uniforms.depthPointSizePx, normalizeDepthPointSize(viewerState.depthPointSizePx));
+  gl.uniform1f(program.uniforms.depthPointSizePx, depthPointSizePx);
   gl.uniform2f(
     program.uniforms.depthOutputOrigin,
     options.depthOutputOriginX ?? options.screenOriginX ?? 0,

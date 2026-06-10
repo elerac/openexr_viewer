@@ -1,7 +1,9 @@
-import { MAX_DEPTH_POINTS } from './depth';
+import { MAX_DEPTH_POINTS, normalizeDepthPointSize } from './depth';
 
 export const CONSTRAINED_DEPTH_POINTS = 350_000;
 
+const DEPTH_POINTS_PER_VIEWPORT_PIXEL = 4;
+const DEPTH_POINT_SIZE_BUDGET_REFERENCE_PX = 2;
 const CONSTRAINED_DEVICE_MEMORY_GB = 4;
 const CONSTRAINED_HARDWARE_CONCURRENCY = 4;
 const CONSTRAINED_JS_HEAP_SIZE_LIMIT_BYTES = 1536 * 1024 * 1024;
@@ -12,6 +14,7 @@ const MOBILE_USER_AGENT_PATTERN =
 export interface DepthPointBudgetViewport {
   width: number;
   height: number;
+  pointSizePx?: number | null;
 }
 
 export interface DepthPointBudgetEnvironmentHints {
@@ -23,6 +26,7 @@ export interface DepthPointBudgetEnvironmentHints {
   anyCoarsePointer?: boolean | null;
   viewportWidth?: number | null;
   viewportHeight?: number | null;
+  pointSizePx?: number | null;
   userAgentDataMobile?: boolean | null;
   userAgent?: string | null;
 }
@@ -32,34 +36,41 @@ export type DepthPointBudgetResolver = (viewport?: DepthPointBudgetViewport) => 
 export function resolveAdaptiveDepthPointBudget(
   hints: DepthPointBudgetEnvironmentHints = collectDepthPointBudgetEnvironmentHints()
 ): number {
+  let deviceBudget = MAX_DEPTH_POINTS;
   const deviceMemoryGb = normalizePositiveNumber(hints.deviceMemoryGb);
   if (deviceMemoryGb !== null && deviceMemoryGb <= CONSTRAINED_DEVICE_MEMORY_GB) {
-    return CONSTRAINED_DEPTH_POINTS;
+    deviceBudget = CONSTRAINED_DEPTH_POINTS;
+    return resolveViewportAwareDepthPointBudget(deviceBudget, hints);
   }
 
   const hardwareConcurrency = normalizePositiveNumber(hints.hardwareConcurrency);
   if (hardwareConcurrency !== null && hardwareConcurrency <= CONSTRAINED_HARDWARE_CONCURRENCY) {
-    return CONSTRAINED_DEPTH_POINTS;
+    deviceBudget = CONSTRAINED_DEPTH_POINTS;
+    return resolveViewportAwareDepthPointBudget(deviceBudget, hints);
   }
 
   const jsHeapSizeLimitBytes = normalizePositiveNumber(hints.jsHeapSizeLimitBytes);
   if (jsHeapSizeLimitBytes !== null && jsHeapSizeLimitBytes <= CONSTRAINED_JS_HEAP_SIZE_LIMIT_BYTES) {
-    return CONSTRAINED_DEPTH_POINTS;
+    deviceBudget = CONSTRAINED_DEPTH_POINTS;
+    return resolveViewportAwareDepthPointBudget(deviceBudget, hints);
   }
 
   if (isConstrainedTouchViewport(hints)) {
-    return CONSTRAINED_DEPTH_POINTS;
+    deviceBudget = CONSTRAINED_DEPTH_POINTS;
+    return resolveViewportAwareDepthPointBudget(deviceBudget, hints);
   }
 
   if (hints.userAgentDataMobile === true) {
-    return CONSTRAINED_DEPTH_POINTS;
+    deviceBudget = CONSTRAINED_DEPTH_POINTS;
+    return resolveViewportAwareDepthPointBudget(deviceBudget, hints);
   }
 
   if (typeof hints.userAgent === 'string' && MOBILE_USER_AGENT_PATTERN.test(hints.userAgent)) {
-    return CONSTRAINED_DEPTH_POINTS;
+    deviceBudget = CONSTRAINED_DEPTH_POINTS;
+    return resolveViewportAwareDepthPointBudget(deviceBudget, hints);
   }
 
-  return MAX_DEPTH_POINTS;
+  return resolveViewportAwareDepthPointBudget(deviceBudget, hints);
 }
 
 export function collectDepthPointBudgetEnvironmentHints(
@@ -81,6 +92,7 @@ export function collectDepthPointBudgetEnvironmentHints(
     anyCoarsePointer: readMatchMedia(globalRecord, '(any-pointer: coarse)'),
     viewportWidth: normalizePositiveNumber(viewport?.width) ?? normalizePositiveNumber(globalRecord.innerWidth),
     viewportHeight: normalizePositiveNumber(viewport?.height) ?? normalizePositiveNumber(globalRecord.innerHeight),
+    pointSizePx: normalizePositiveNumber(viewport?.pointSizePx),
     userAgentDataMobile: typeof userAgentDataRecord.mobile === 'boolean' ? userAgentDataRecord.mobile : null,
     userAgent: typeof navigatorRecord.userAgent === 'string' ? navigatorRecord.userAgent : null
   };
@@ -109,6 +121,28 @@ function isConstrainedTouchViewport(hints: DepthPointBudgetEnvironmentHints): bo
   }
 
   return Math.min(viewportWidth, viewportHeight) <= CONSTRAINED_TOUCH_VIEWPORT_SIDE_PX;
+}
+
+function resolveViewportAwareDepthPointBudget(
+  deviceBudget: number,
+  hints: DepthPointBudgetEnvironmentHints
+): number {
+  const viewportWidth = normalizePositiveNumber(hints.viewportWidth);
+  const viewportHeight = normalizePositiveNumber(hints.viewportHeight);
+  if (viewportWidth === null || viewportHeight === null) {
+    return deviceBudget;
+  }
+
+  const pointSizePx = normalizeDepthPointSize(hints.pointSizePx ?? DEPTH_POINT_SIZE_BUDGET_REFERENCE_PX);
+  const pointSizeScale = DEPTH_POINT_SIZE_BUDGET_REFERENCE_PX / pointSizePx;
+  const screenBudget = Math.max(
+    1,
+    Math.min(
+      MAX_DEPTH_POINTS,
+      Math.floor(viewportWidth * viewportHeight * DEPTH_POINTS_PER_VIEWPORT_PIXEL * pointSizeScale * pointSizeScale)
+    )
+  );
+  return Math.min(deviceBudget, screenBudget);
 }
 
 function readMatchMedia(globalRecord: Record<string, unknown>, query: string): boolean | null {

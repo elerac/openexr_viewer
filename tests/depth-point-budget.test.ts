@@ -14,6 +14,45 @@ describe('depth point budget', () => {
     expect(resolveAdaptiveDepthPointBudget({})).toBe(MAX_DEPTH_POINTS);
   });
 
+  it('keeps the desktop ceiling for large default-point-size viewports', () => {
+    expect(resolveAdaptiveDepthPointBudget({
+      viewportWidth: 1920,
+      viewportHeight: 1080,
+      pointSizePx: 2
+    })).toBe(MAX_DEPTH_POINTS);
+  });
+
+  it('caps the budget for small viewports by screen-space density', () => {
+    expect(resolveAdaptiveDepthPointBudget({
+      viewportWidth: 320,
+      viewportHeight: 180,
+      pointSizePx: 2
+    })).toBe(230_400);
+  });
+
+  it('lowers the screen-space budget for larger point sizes', () => {
+    expect(resolveAdaptiveDepthPointBudget({
+      viewportWidth: 1920,
+      viewportHeight: 1080,
+      pointSizePx: 8
+    })).toBe(518_400);
+  });
+
+  it('uses the lower of constrained-device and screen-space budgets', () => {
+    expect(resolveAdaptiveDepthPointBudget({
+      deviceMemoryGb: 4,
+      viewportWidth: 1920,
+      viewportHeight: 1080,
+      pointSizePx: 2
+    })).toBe(CONSTRAINED_DEPTH_POINTS);
+    expect(resolveAdaptiveDepthPointBudget({
+      deviceMemoryGb: 4,
+      viewportWidth: 320,
+      viewportHeight: 180,
+      pointSizePx: 2
+    })).toBe(230_400);
+  });
+
   it('uses the constrained budget for low device memory', () => {
     expect(resolveAdaptiveDepthPointBudget({ deviceMemoryGb: 4 })).toBe(CONSTRAINED_DEPTH_POINTS);
     expect(resolveAdaptiveDepthPointBudget({ deviceMemoryGb: 4.1 })).toBe(MAX_DEPTH_POINTS);
@@ -113,6 +152,7 @@ describe('depth point budget', () => {
       anyCoarsePointer: true,
       viewportWidth: 1440,
       viewportHeight: 900,
+      pointSizePx: null,
       userAgentDataMobile: false,
       userAgent: 'Mozilla/5.0'
     });

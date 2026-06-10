@@ -117,7 +117,10 @@ export function createViewerInteraction({
         depthTargetY: state.depthTargetY,
         depthTargetZ: state.depthTargetZ,
         depthPointSizePx: state.depthPointSizePx,
-        maxPoints: depthPointBudgetResolver(viewport)
+        maxPoints: depthPointBudgetResolver({
+          ...viewport,
+          pointSizePx: state.depthPointSizePx
+        })
       });
     },
     onViewChange: (next) => {

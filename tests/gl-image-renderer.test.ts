@@ -442,6 +442,43 @@ describe('gl image renderer', () => {
     expect(lastUniform1iValue(gl, 'uDepthSampleStep')).toBe(2);
   });
 
+  it('caps desktop 3D point-cloud sampling by viewport and point size', () => {
+    const { renderer, gl } = createHarness();
+    const state = {
+      ...createInitialState(),
+      viewerMode: '3d' as const,
+      depthChannel: 'Z',
+      depthFocalLengthPx: null,
+      depthPointSizePx: 2,
+      hoveredPixel: null,
+      draftRoi: null,
+      roiInteraction: createEmptyRoiInteractionState()
+    };
+
+    renderer.setDisplaySelectionBindings(
+      'session-1',
+      0,
+      2000,
+      2000,
+      createEmptyDisplaySourceBinding()
+    );
+    renderer.setDepthSourceBinding(
+      'session-1',
+      0,
+      2000,
+      2000,
+      { kind: 'scalarDepth', channelName: 'Z' },
+      { kind: 'scalarDepth', range: { min: 1, max: 4 } }
+    );
+    renderer.resize(320, 180);
+
+    renderer.render(state);
+
+    expect(gl.drawArrays).toHaveBeenLastCalledWith(gl.POINTS, 0, 160_000);
+    expect(lastUniform2iValue(gl, 'uDepthGridSize')).toEqual([400, 400]);
+    expect(lastUniform1iValue(gl, 'uDepthSampleStep')).toBe(5);
+  });
+
   it('renders XYZ position sources through the point-cloud pass', () => {
     const { renderer, gl } = createHarness();
     const layer = createInterleavedLayerFromChannels({
